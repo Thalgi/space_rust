@@ -166,6 +166,83 @@ pub fn est_rare(nom: &str) -> bool {
     RARES.contains(&nom)
 }
 
+/// Planètes colonisables en plein air — climat supportable par les humains
+/// sans infrastructure pressurisée (type Terre, superhabitables, climats tempérés).
+const COLONISABLES: &[&str] = &[
+    "Terre", "Forest", "Mediterraneenne", "Tepid", "Mangrove", "Atoll", "Coastal",
+    "Pampa", "Steppe", "Acacia", "Bushveld", "Toundra", "Boreal", "Taiga", "Fjord",
+    "Dune Forest", "Megaflora",
+    // Gaïa & Superhabitables
+    "Dry Gaia", "Cold Gaia", "Wet Superhabitable", "Dry Superhabitable", "Cold Superhabitable",
+];
+
+/// Planètes habitables uniquement en colonies fermées — atmosphère non respirable,
+/// climat extrême mais surface stable (dômes pressurisés requis).
+const HABITABLES_FERMEES: &[&str] = &[
+    // Humides / océaniques
+    "Monde-ocean", "Lacs", "Marais", "Algues roses", "Recif", "Columnar",
+    "Swamp", "Kelp", "Tidepool",
+    // Végétation exotique / sombre
+    "Sakura", "Retinal", "Carotene", "Mousse", "Bioluminescent",
+    // Météo hostile
+    "Brumeux", "Orageux", "Cyclone", "Tempete de poussiere",
+    // Déserts / arides
+    "Desert", "Dune (erg)", "Sable ferreux", "Salines", "Mesa", "Striped",
+    "Oasis", "Outback", "Aquifer", "Fungi", "Succulent", "Cactus", "Fog Desert",
+    "Coral (aride)", "Superbloom", "Geoglyph", "Termite", "Amber",
+    "Scrubland", "Heath", "Veldt", "Baobab", "Badlands", "Amethyst", "Opal", "Sodalite",
+    // Froids / glacés
+    "Arctique", "Boule de neige", "Alpin", "Pics de glace",
+    "Glacial", "Ice Dunes", "Cold Desert", "Iceberg", "Antarctic", "Storm",
+    "Cryovolcan", "Crevasse", "Tuya", "Ferrosprings",
+    "Bog", "Mud", "Peatland", "Treeline", "Ravine", "Craton",
+    "Cryoflora", "Lichen", "Supraglacial", "Aeolian", "Travertine",
+    "Highland", "Snow", "Blossom", "Glaciovolcanic",
+    // Relief extrême / humides complexes
+    "Barnacle", "Cenote", "Aerial", "Lilypad", "Geothermal", "Tepui", "Obsidian",
+    "Archipelago", "Crag", "Cascadian",
+    // Végétation dense exotique
+    "Petrified", "Mushroom", "Fungal",
+    // Eyeball partiellement viable
+    "Eyeball Archipelago",
+    // Spéciaux
+    "Pandora",
+];
+
+/// Planètes inhabitables — surface trop hostile, pas de colonies viables
+/// (lave active, voile total, radiations, absence d'atmosphère, toxicité extrême).
+const INHABITABLES: &[&str] = &[
+    // Lave / étuve
+    "Lave", "Venus (etuve)",
+    // Cryo / hydrocarbures
+    "Titan", "Subglaciaire",
+    // Sans atmosphère / bombardées
+    "Fer (Mercure)", "Carbone", "Diamant", "Lune",
+    // Volcanisme global
+    "Chthonien", "Ash (volcanique)", "Io (soufre)", "Primal",
+    // Verrouillées par marée — gradient insurmontable
+    "Eyeball gele", "Eyeball sec", "Eyeball humide",
+    // Mondes-grottes (surface non-viable)
+    "Wet Cave", "Dry Cave", "Cold Cave",
+    // Radioactif / toxique
+    "Lanthanide",
+];
+
+/// Une planète est-elle colonisable en plein air ?
+pub fn est_colonisable(nom: &str) -> bool {
+    COLONISABLES.contains(&nom)
+}
+
+/// Une planète n'est habitable qu'en colonies fermées ?
+pub fn est_habitable_fermee(nom: &str) -> bool {
+    HABITABLES_FERMEES.contains(&nom)
+}
+
+/// Une planète est-elle inhabitable pour les humains ?
+pub fn est_inhabitable(nom: &str) -> bool {
+    INHABITABLES.contains(&nom)
+}
+
 pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
     let bleu = vec3(0.35, 0.55, 1.0) * 0.9; // atmosphère océanique
     let voile = vec3(0.6, 0.8, 1.0) * 0.2; // voile glacé
@@ -255,7 +332,7 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
     push("Mushroom", tellurique(vec3(0.4, 0.36, 0.3), vec3(0.3, 0.27, 0.24), vec3(0.12, 0.34, 0.6), 0.45, 1.0, 0.4, 0.85, bleu).avec_vegetation(vec3(0.45, 0.3, 0.45), 0.85).avec_nuages(0.3, blanc));
     push("Tepid", tellurique(vec3(0.45, 0.42, 0.28), vec3(0.34, 0.3, 0.22), vec3(0.1, 0.36, 0.66), 0.5, 1.0, 0.4, 0.84, bleu).avec_vegetation(vec3(0.5, 0.62, 0.15), 0.9).avec_rivieres(0.4));
     push("Swamp", tellurique(vec3(0.34, 0.36, 0.22), vec3(0.26, 0.26, 0.18), vec3(0.2, 0.36, 0.32), 0.55, 3.0, 0.4, 0.88, bleu).avec_vegetation(vec3(0.28, 0.4, 0.2), 0.75).avec_nuages(0.4, blanc));
-    push("Kelp", tellurique(vec3(0.3, 0.45, 0.3), vec3(0.28, 0.3, 0.24), vec3(0.1, 0.4, 0.4), 0.85, 0.0, 0.4, 0.85, bleu).avec_vegetation(vec3(0.2, 0.5, 0.25), 0.4));
+    push("Kelp", tellurique(vec3(0.3, 0.45, 0.3), vec3(0.28, 0.3, 0.24), vec3(0.1, 0.4, 0.4), 0.85, 2.0, 0.4, 0.85, bleu).avec_vegetation(vec3(0.2, 0.5, 0.25), 0.4));
     push("Tidepool", tellurique(vec3(0.42, 0.42, 0.36), vec3(0.32, 0.3, 0.26), vec3(0.12, 0.42, 0.55), 0.6, 1.0, 0.4, 0.85, bleu).avec_relief(0.5).avec_vegetation(vec3(0.25, 0.45, 0.25), 0.4));
     // Tropical
     push("Atoll", tellurique(vec3(0.3, 0.5, 0.3), vec3(0.3, 0.32, 0.24), vec3(0.1, 0.5, 0.65), 0.82, 0.0, 0.35, 0.95, bleu).avec_recifs(0.85).avec_vegetation(vec3(0.2, 0.55, 0.2), 0.5).avec_nuages(0.4, blanc));
@@ -283,7 +360,7 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
     push("Petrified", tellurique(vec3(0.6, 0.55, 0.45), vec3(0.42, 0.38, 0.32), z, 0.0, 1.0, 0.3, 0.9, sec).avec_mesa(0.4).avec_relief(0.4));
     // Océan
     push("Cascadian", tellurique(vec3(0.35, 0.42, 0.3), vec3(0.3, 0.32, 0.26), vec3(0.1, 0.34, 0.55), 0.6, 1.0, 0.45, 0.7, bleu).avec_vegetation(vec3(0.16, 0.42, 0.2), 0.7).avec_relief(0.8).avec_nuages(0.6, vec3(0.8, 0.82, 0.85)));
-    push("Archipelago", tellurique(vec3(0.3, 0.45, 0.3), vec3(0.28, 0.3, 0.24), vec3(0.06, 0.32, 0.6), 0.88, 0.0, 0.4, 0.85, bleu).avec_vegetation(vec3(0.2, 0.5, 0.2), 0.5).avec_relief(0.4));
+    push("Archipelago", tellurique(vec3(0.3, 0.45, 0.3), vec3(0.28, 0.3, 0.24), vec3(0.06, 0.32, 0.6), 0.88, 3.0, 0.4, 0.85, bleu).avec_vegetation(vec3(0.2, 0.5, 0.2), 0.5).avec_relief(0.4));
     push("Crag", tellurique(vec3(0.45, 0.45, 0.42), vec3(0.34, 0.34, 0.32), vec3(0.1, 0.36, 0.55), 0.7, 1.0, 0.55, 0.5, voile).avec_relief(0.7));
     // Tropical
     push("Geothermal", tellurique(vec3(0.5, 0.55, 0.55), vec3(0.4, 0.44, 0.46), vec3(0.3, 0.5, 0.6), 0.15, 1.0, 0.55, 0.45, voile).avec_vegetation(vec3(0.2, 0.5, 0.25), 0.35).avec_relief(0.5).avec_rivieres(0.35).avec_riv_lave());

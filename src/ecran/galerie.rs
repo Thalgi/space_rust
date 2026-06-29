@@ -1,15 +1,44 @@
 use crate::astre::{Astre, CameraInfo};
-use crate::genese::{catalogue_gazeuses, catalogue_telluriques};
+use crate::genese::{catalogue_gazeuses, catalogue_telluriques, est_colonisable, est_habitable_fermee};
 use crate::planete::Planete;
 use crate::ui::minitel_ligne;
 use macroquad::prelude::*;
 use macroquad::rand::srand;
 
+/// Statut d'habitabilité humaine pour l'affichage en galerie.
+#[derive(Clone, Copy)]
+enum Habitation {
+    Colonisable,      // 🟢 plein air
+    HabitableFermee,  // 🟡 colonies scellées
+    Inhabitable,      // ❌ trop hostile
+}
+
+impl Habitation {
+    fn from_nom(nom: &str) -> Self {
+        if est_colonisable(nom) {
+            Habitation::Colonisable
+        } else if est_habitable_fermee(nom) {
+            Habitation::HabitableFermee
+        } else {
+            Habitation::Inhabitable
+        }
+    }
+
+    /// Retourne le texte du jeton + sa couleur.
+    fn token(&self) -> (&str, Color) {
+        match self {
+            Habitation::Colonisable => ("[O] ", Color::new(0.2, 1.0, 0.3, 1.0)),   // vert vif
+            Habitation::HabitableFermee => ("[0] ", Color::new(1.0, 0.85, 0.1, 1.0)), // jaune doré
+            Habitation::Inhabitable => ("[X] ", Color::new(1.0, 0.2, 0.2, 1.0)),   // rouge gras
+        }
+    }
+}
+
 /// Galerie « planche-contact » : affiche en grille tous les types de telluriques
 /// générables, nom dessous. Sert à valider visuellement les changements de rendu.
 pub struct Galerie {
     seed: u64,
-    cellules: Vec<(String, bool, Planete)>, // (nom, rare, planète)
+    cellules: Vec<(String, bool, Habitation, Planete)>, // (nom, rare, habitation, planète)
     scroll: f32,
     jour: bool,
     villes: u8, // index 0..4 -> niveau 0, 0.5, 1, 1.5, 2
@@ -41,7 +70,8 @@ impl Galerie {
             .into_iter()
             .map(|(nom, app)| {
                 let rare = crate::genese::est_rare(&nom);
-                (nom, rare, Planete::new(Vec3::ZERO, Vec3::ZERO, 1.0, 1.0, app, Vec::new()))
+                let habitation = Habitation::from_nom(&nom);
+                (nom, rare, habitation, Planete::new(Vec3::ZERO, Vec3::ZERO, 1.0, 1.0, app, Vec::new()))
             })
             .collect();
     }
@@ -96,8 +126,8 @@ impl Galerie {
         };
 
         // --- Phase 3D : dessiner les planètes (viewport par cellule). Aucun texte ici. ---
-        let mut labels: Vec<(String, bool, f32, f32)> = Vec::new();
-        for (i, (nom, rare, planete)) in self.cellules.iter_mut().enumerate() {
+        let mut labels: Vec<(String, bool, Habitation, f32, f32)> = Vec::new();
+        for (i, (nom, rare, habitation, planete)) in self.cellules.iter_mut().enumerate() {
             let cell_x = (i % cols) as f32 * cw;
             let cell_y = top + (i / cols) as f32 * ch - self.scroll;
             // Hors écran -> on saute (pas de viewport inutile).
@@ -142,24 +172,37 @@ impl Galerie {
             };
             planete.set_villes(self.villes as f32 * 0.5);
             planete.draw(&cam);
-            labels.push((nom.clone(), *rare, cell_x, cell_y + render_h + 16.0));
+            labels.push((nom.clone(), *rare, *habitation, cell_x, cell_y + render_h + 16.0));
         }
 
         // --- Phase 2D : on remet la caméra écran UNE fois, puis tout le texte. ---
         set_default_camera();
         let nom_col = Color::new(0.7, 0.9, 0.8, 1.0);
         let violet = Color::new(0.72, 0.45, 1.0, 1.0);
-        for (nom, rare, cell_x, y) in &labels {
-            let prefix = if *rare { "[R] " } else { "" };
-            let tw = measure_text(&format!("{}{}", prefix, nom), None, 18, 1.0).width;
-            let x = cell_x + (cw - tw) * 0.5;
+
+        for (nom, rare, habitation, cell_x, y) in &labels {
+            // Construction du label complet : [habitation] [R] Nom
+            let (token_text, token_col) = habitation.token();
+            let rare_prefix = if *rare { "[R] " } else { "" };
+
+            // Calculer la largeur totale pour centrer dans la cellule.
+            let token_w = measure_text(token_text, None, 18, 1.0).width;
+            let rare_w = if *rare { measure_text("[R] ", None, 18, 1.0).width } else { 0.0 };
+            let nom_w = measure_text(nom, None, 18, 1.0).width;
+            let total_w = token_w + rare_w + nom_w;
+
+            let x_base = cell_x + (cw - total_w) * 0.5;
+
+            // Dessin séquentiel : jeton d'habitabilité → badge rare → nom
+            draw_text(token_text, x_base, *y, 18.0, token_col);
+            let mut x_cur = x_base + token_w;
+
             if *rare {
-                draw_text("[R] ", x, *y, 18.0, violet);
-                let pw = measure_text("[R] ", None, 18, 1.0).width;
-                draw_text(nom, x + pw, *y, 18.0, nom_col);
-            } else {
-                draw_text(nom, x, *y, 18.0, nom_col);
+                draw_text("[R] ", x_cur, *y, 18.0, violet);
+                x_cur += rare_w;
             }
+
+            draw_text(nom, x_cur, *y, 18.0, nom_col);
         }
 
         // Barre de titre + boutons par-dessus la grille.
@@ -175,11 +218,17 @@ impl Galerie {
             };
             minitel_ligne(btn_villes, label_villes, m);
         }
+
+        // Légende en bas à gauche.
+        let leg_x = 12.0;
+        let leg_y = 56.0;
+        draw_text("[O] Colonisable   [0] Colonies fermées   [X] Inhabitable   [R] Rare", leg_x, leg_y, 20.0, Color::new(0.6, 0.8, 0.8, 1.0));
+
         draw_text(
             "molette: defiler   G: regenerer   R: shaders   Echap: menu",
             12.0,
-            56.0,
-            16.0,
+            72.0,
+            20.0,
             Color::new(0.6, 0.8, 0.8, 1.0),
         );
         false
