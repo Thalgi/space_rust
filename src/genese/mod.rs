@@ -156,7 +156,7 @@ pub(crate) fn app_simple(type_p: TypePlanete, c1: Vec3, c2: Vec3, c3: Vec3, eau:
 const RARES: &[&str] = &[
     "Megaflora", "Petrified", "Recif", "Archipelago", "Geothermal", "Bioluminescent",
     "Salines", "Aquifer", "Coral (aride)", "Primal", "Baobab", "Geoglyph", "Storm",
-    "Iceberg", "Cryflora", "Lichen", "Glaciovolcanic", "Lanthanide", "Eyeball humide",
+    "Iceberg", "Cryoflora", "Lichen", "Glaciovolcanic", "Lanthanide", "Eyeball humide",
     "Eyeball sec", "Eyeball gele", "Wet Superhabitable", "Dry Superhabitable",
     "Cold Superhabitable", "Pandora", "Polyphemus (Avatar)",
 ];
@@ -315,7 +315,7 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
     push("Mud", mud);
     push("Travertine", tellurique(vec3(0.88, 0.85, 0.78), vec3(0.6, 0.58, 0.52), vec3(0.3, 0.5, 0.55), 0.1, 2.0, 0.5, 0.55, voile).avec_mesa(0.85));
     push("Lichen", tellurique(vec3(0.5, 0.52, 0.42), vec3(0.38, 0.4, 0.34), z, 0.0, 1.0, 0.55, 0.5, voile).avec_vegetation(vec3(0.45, 0.5, 0.3), 0.45).avec_relief(0.6));
-    push("Cryflora", tellurique(vec3(0.6, 0.7, 0.78), vec3(0.45, 0.55, 0.65), z, 0.05, 1.0, 0.6, 0.4, voile).avec_vegetation(vec3(0.2, 0.7, 0.5), 0.4).avec_biolum(0.7));
+    push("Cryoflora", tellurique(vec3(0.6, 0.7, 0.78), vec3(0.45, 0.55, 0.65), z, 0.05, 1.0, 0.0, 0.4, voile).avec_vegetation(vec3(0.0, 0.9, 1.0), 0.4).avec_rivieres(0.4).avec_biolum(0.7));
     // Alpin
     push("Highland", tellurique(vec3(0.45, 0.46, 0.4), vec3(0.34, 0.36, 0.32), vec3(0.15, 0.4, 0.5), 0.2, 1.0, 0.5, 0.55, voile).avec_vegetation(vec3(0.3, 0.42, 0.25), 0.45).avec_relief(0.6).avec_nuages(0.7, vec3(0.85, 0.87, 0.9)));
     push("Snow", tellurique(vec3(0.7, 0.76, 0.84), vec3(0.55, 0.6, 0.7), vec3(0.2, 0.4, 0.6), 0.15, 1.0, 0.65, 0.35, voile).avec_vegetation(vec3(0.16, 0.4, 0.22), 0.5));
@@ -366,11 +366,14 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
 
     // --- Verrouillées par marée (eyeball : jour brûlé / nuit gelée) ---
     // Gelé : la zone subsolaire reste une forêt avec étendues d'eau, le reste gèle.
-    push("Eyeball gele", tellurique(vec3(0.3, 0.5, 0.28), vec3(0.32, 0.34, 0.24), vec3(0.08, 0.4, 0.7), 0.4, 1.0, 0.0, 1.0, bleu).avec_vegetation(vec3(0.18, 0.5, 0.2), 0.75).avec_eyeball_zones(0.35, 0.0, 0.0));
+    push("Eyeball gele", tellurique(vec3(0.3, 0.5, 0.28), vec3(0.32, 0.34, 0.24), vec3(0.08, 0.4, 0.7), 0.4, 1.0, 0.0, 1.0, bleu).avec_vegetation(vec3(0.18, 0.5, 0.2), 0.75).avec_eyeball_zones(0.35, -0.1, 0.0));
     // Sec : subsolaire en lave/obsidienne, anneau de forêt au terminateur, désert, puis glace.
-    push("Eyeball sec", tellurique(vec3(0.72, 0.56, 0.34), vec3(0.5, 0.38, 0.24), z, 0.0, 1.0, 0.0, 1.0, sec).avec_dunes(0.4).avec_eyeball_zones(-0.05, 1.0, 1.0));
+    push("Eyeball sec", tellurique(vec3(0.72, 0.56, 0.34), vec3(0.5, 0.38, 0.24), z, 0.0, 1.0, 0.0, 1.0, sec).avec_dunes(0.4).avec_eyeball_zones(-0.05, 1.0, 0.0));
     // Humide : subsolaire desséché en désert, zone moins exposée en calotte glaciaire.
-    push("Eyeball humide", tellurique(vec3(0.78, 0.6, 0.36), vec3(0.56, 0.42, 0.26), z, 0.0, 1.0, 0.0, 1.0, sec).avec_dunes(0.3).avec_eyeball_zones(0.08, 0.0, 0.0));
+    push("Eyeball humide", tellurique(vec3(0.78, 0.6, 0.36), vec3(0.32, 0.34, 0.24), vec3(0.08, 0.4, 0.7), 0.4, 3.0, 0.0, 1.0, bleu).avec_relief(0.85).avec_dunes(0.0).avec_eyeball_zones(-0.05,0.0, 2.0));
+    // eyeball archipel
+    push("Eyeball Archipelago", tellurique(vec3(0.3, 0.45, 0.3), vec3(0.28, 0.3, 0.24), vec3(0.06, 0.32, 0.6), 0.88, 3.0, 0.4, 0.85, bleu).avec_vegetation(vec3(0.2, 0.5, 0.2), 0.5).avec_relief(0.9).avec_eyeball_zones(0.35, -0.1, 0.0));
+
 
     v
 }
