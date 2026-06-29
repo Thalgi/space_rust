@@ -43,10 +43,12 @@ pub struct Galerie {
     jour: bool,
     villes: u8, // index 0..4 -> niveau 0, 0.5, 1, 1.5, 2
     gazeuse: bool, // false = telluriques, true = géantes gazeuses
+    font: Font,    // police Minitel (chargée async dans main.rs)
 }
 
 impl Galerie {
-    pub fn new(gazeuse: bool) -> Self {
+    /// Crée une galerie avec la police fournie.
+    pub fn new(gazeuse: bool, font: Font) -> Self {
         let mut g = Self {
             seed: 1,
             cellules: Vec::new(),
@@ -54,6 +56,7 @@ impl Galerie {
             jour: false,
             villes: 2, // démarre sur « actuel » (niveau 1.0)
             gazeuse,
+            font,
         };
         g.construire();
         g
@@ -179,30 +182,45 @@ impl Galerie {
         set_default_camera();
         let nom_col = Color::new(0.7, 0.9, 0.8, 1.0);
         let violet = Color::new(0.72, 0.45, 1.0, 1.0);
+        let font_size: u16 = 12;
 
         for (nom, rare, habitation, cell_x, y) in &labels {
             // Construction du label complet : [habitation] [R] Nom
             let (token_text, token_col) = habitation.token();
-            let rare_prefix = if *rare { "[R] " } else { "" };
 
-            // Calculer la largeur totale pour centrer dans la cellule.
-            let token_w = measure_text(token_text, None, 18, 1.0).width;
-            let rare_w = if *rare { measure_text("[R] ", None, 18, 1.0).width } else { 0.0 };
-            let nom_w = measure_text(nom, None, 18, 1.0).width;
+            // Calculer la largeur totale pour centrer dans la cellule (avec police Minitel).
+            let token_w = measure_text(token_text, Some(&self.font), font_size, 1.0).width;
+            let rare_w = if *rare { measure_text("[R] ", Some(&self.font), font_size, 1.0).width } else { 0.0 };
+            let nom_w = measure_text(nom, Some(&self.font), font_size, 1.0).width;
             let total_w = token_w + rare_w + nom_w;
 
             let x_base = cell_x + (cw - total_w) * 0.5;
 
-            // Dessin séquentiel : jeton d'habitabilité → badge rare → nom
-            draw_text(token_text, x_base, *y, 18.0, token_col);
+            // Dessin séquentiel avec police Minitel : jeton d'habitabilité → badge rare → nom
+            draw_text_ex(token_text, x_base, *y, TextParams {
+                font: Some(&self.font),
+                font_size,
+                color: token_col,
+                ..Default::default()
+            });
             let mut x_cur = x_base + token_w;
 
             if *rare {
-                draw_text("[R] ", x_cur, *y, 18.0, violet);
+                draw_text_ex("[R] ", x_cur, *y, TextParams {
+                    font: Some(&self.font),
+                    font_size,
+                    color: violet,
+                    ..Default::default()
+                });
                 x_cur += rare_w;
             }
 
-            draw_text(nom, x_cur, *y, 18.0, nom_col);
+            draw_text_ex(nom, x_cur, *y, TextParams {
+                font: Some(&self.font),
+                font_size,
+                color: nom_col,
+                ..Default::default()
+            });
         }
 
         // Barre de titre + boutons par-dessus la grille.
@@ -219,18 +237,23 @@ impl Galerie {
             minitel_ligne(btn_villes, label_villes, m);
         }
 
-        // Légende en bas à gauche.
+        // Légende en bas à gauche (police Minitel).
         let leg_x = 12.0;
         let leg_y = 56.0;
-        draw_text("[O] Colonisable   [0] Colonies fermées   [X] Inhabitable   [R] Rare", leg_x, leg_y, 20.0, Color::new(0.6, 0.8, 0.8, 1.0));
+        draw_text_ex("[O] Colonisable   [0] Colonies fermées   [X] Inhabitable   [R] Rare", leg_x, leg_y, TextParams {
+            font: Some(&self.font),
+            font_size: 10,
+            color: Color::new(0.6, 0.8, 0.8, 1.0),
+            ..Default::default()
+        });
 
-        draw_text(
-            "molette: defiler   G: regenerer   R: shaders   Echap: menu",
-            12.0,
-            72.0,
-            20.0,
-            Color::new(0.6, 0.8, 0.8, 1.0),
-        );
+        draw_text_ex("molette: defiler   G: regenerer   R: shaders   Echap: menu", 12.0, 72.0, TextParams {
+            font: Some(&self.font),
+            font_size: 10,
+            color: Color::new(0.6, 0.8, 0.8, 1.0),
+            ..Default::default()
+        });
+
         false
     }
 }

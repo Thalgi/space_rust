@@ -16,6 +16,9 @@ mod ui;
 use ecran::{Accueil, Cible, Galerie, GalerieEtoiles, Objet, Skymap};
 use macroquad::prelude::*;
 
+/// Police Minitel embarquée au binaire (assets/fonts/Minitel.ttf)
+const MINITEL_FONT_BYTES: &[u8] = include_bytes!("assets/fonts/Minitel.ttf");
+
 fn window_conf() -> Conf {
     Conf {
         window_title: "Systeme solaire".to_owned(),
@@ -36,6 +39,10 @@ enum Etat {
 
 #[macroquad::main(window_conf)]
 async fn main() {
+    // Chargement synchrone de la police depuis les bytes embarquées
+    let minitel_font = load_ttf_font_from_bytes(MINITEL_FONT_BYTES)
+        .expect("Erreur: assets/fonts/Minitel.ttf introuvable ou corrompu");
+
     let mut etat = Etat::Accueil(Accueil::new());
 
     loop {
@@ -45,8 +52,16 @@ async fn main() {
                     etat = match cible {
                         Cible::Skymap => Etat::Skymap(Box::new(Skymap::new())),
                         Cible::Objet => Etat::Objet(Box::new(Objet::new())),
-                        Cible::Galerie => Etat::Galerie(Box::new(Galerie::new(false))),
-                        Cible::GalerieGaz => Etat::Galerie(Box::new(Galerie::new(true))),
+                        // On passe la police SEULEMENT à la galerie planétaire
+                        Cible::Galerie => {
+                            let font = minitel_font.clone();
+                            Etat::Galerie(Box::new(Galerie::new(false, font)))
+                        }
+                        Cible::GalerieGaz => {
+                            let font = minitel_font.clone();
+                            Etat::Galerie(Box::new(Galerie::new(true, font)))
+                        }
+                        // Les autres écrans ne touchent pas à la police pour l'instant
                         Cible::GalerieEtoiles => {
                             Etat::GalerieEtoiles(Box::new(GalerieEtoiles::new()))
                         }
