@@ -11,6 +11,7 @@ uniform vec3 lumiere;
 uniform vec3 couleur;
 uniform vec3 couleur2;
 uniform vec3 couleur3;
+uniform vec3 couleur_mont; // tellurique : roche de montagne (haute altitude)
 uniform vec3 light_color;
 uniform float type_p;
 uniform float eau;
@@ -41,6 +42,7 @@ uniform float calotte;    // latitude (0..1) de début de banquise (1 = aucune)
 uniform vec3 veg_couleur; // teinte de la végétation
 uniform float veg_couv;   // couverture végétale (0 = aucune, sol nu)
 uniform float rivieres;   // densité de rivières sur les terres (0 = aucune)
+uniform float riv_fracture; // finesse/branchement du réseau de rivières (0..1)
 uniform float nuages;     // densité de la couche nuageuse (0 = ciel clair)
 uniform vec3 nuages_couleur; // teinte des nuages (blanc, gris orage, sable...)
 uniform float nuages_type; // 0 = classique, 1 = tempête sombre, 2 = cyclone spiralé
@@ -95,6 +97,26 @@ float fbm(vec3 p) {
     return v;
 }
 
+// Ridged multifractal (Musgrave) : on replie le bruit (1-|2n-1|) pour des CRÊTES nettes,
+// et chaque octave est pondérée par la crête de la précédente -> chaînes montagneuses,
+// vallées aplaties, forte dynamique d'altitude (vs fBm mou).
+float ridged_mf(vec3 p) {
+    float sum = 0.0;
+    float amp = 0.5;
+    float freq = 1.0;
+    float prev = 1.0;
+    for (int k = 0; k < 5; k++) {
+        float n = 1.0 - abs(2.0 * vnoise(p * freq) - 1.0); // pli -> arête
+        n *= n;        // affine les crêtes
+        n *= prev;     // multifractal : modulé par l'octave précédente
+        prev = clamp(n * 2.2, 0.0, 1.0);
+        sum += n * amp;
+        amp *= 0.5;
+        freq *= 2.0;
+    }
+    return clamp(sum * 1.3, 0.0, 1.0);
+}
+
 // Bruit cellulaire (Worley F1) : distance au point le plus proche d'une grille
 // jitterée -> cellules (colonnes de basalte, écailles...).
 float worley(vec3 p) {
@@ -111,6 +133,61 @@ float worley(vec3 p) {
         }
     }
     return d;
+}
+
+// Altitude tellurique BRUTE (0..1) en un point du domaine de bruit, par domain
+// warping (IQ). Factorisée pour pouvoir échantillonner les voisins (rivières).
+// Socle des continents : le MOTIF (eau_motif) pilote le CARACTÈRE du terrain, pas juste
+// l'échelle. Faible = grandes masses lisses (côtes douces) ; élevé = warp + détail + une
+// remise en forme fragmentante -> côtes déchiquetées, masses séparées (archipels).
+float base_alt(vec3 pp) {
+    float frag = clamp(eau_motif, 0.0, 3.0) / 3.0;
+    vec3 q = vec3(fbm(pp + 1.3), fbm(pp + 7.2), fbm(pp + 3.4));
+    float h = fbm(pp + (1.7 + 1.8 * frag) * q);            // warp croissant -> côtes sinueuses/brisées
+    h = mix(h, fbm(pp * 3.2 + 17.0), 0.10 + 0.32 * frag);  // détail fin croissant
+    h = mix(h, smoothstep(0.30, 0.72, h), frag * 0.45);    // fragmentation -> masses séparées
+    return h;
+}
+
+float altit(vec3 pp) {
+    float base_h = base_alt(pp);
+    float mtn = pow(ridged_mf(pp * 1.7 + 11.0), 1.4);      // chaînes plus concentrées (moins partout)
+    float terres = smoothstep(0.52, 0.70, base_h);         // montagnes : intérieurs élevés seulement
+    float relief_amt = 0.12 + 0.45 * relief;               // ampleur réduite (moins de montagne)
+    float h = base_h + mtn * terres * relief_amt;
+    return clamp(0.5 + (h - 0.5) * (1.0 + 0.6 * relief), 0.0, 1.0); // contraste (mers/sommets)
+}
+
+// Socle lissé (sans chaînes) : drainage des rivières -> elles suivent les grandes vallées.
+float altit_base(vec3 pp) {
+    return base_alt(pp);
+}
+
+// Réseau hydrographique ARBORESCENT (racines). Bruit ridgé multi-octave où chaque octave
+// fine est BRIDÉE par la précédente (`prev`) : un petit affluent n'apparaît que le long
+// d'un chenal plus gros -> ramification hiérarchique tronc/branches au lieu d'une toile
+// uniforme. Renvoie une "force" de chenal : élevée sur les troncs, faible sur les fins
+// affluents (-> largeurs variées une fois seuillée).
+float reseau_riv(vec3 p) {
+    float net = 0.0;
+    float fr = 1.0;
+    float prev = 1.0; // ouverture héritée de l'octave précédente (hiérarchie)
+    float w = 1.0;
+    const float lw = 0.88;                          // largeur de ligne FIXE et fine -> jamais d'aplat
+    float decay = mix(0.52, 0.90, riv_fracture);    // fracture haute -> affluents fins + présents/longs
+    for (int i = 0; i < 6; i++) {
+        float n = fbm(p * fr + 21.0);
+        float ch = 1.0 - abs(n * 2.0 - 1.0);        // proche de 1 sur la ligne-crête (chenal)
+        ch = smoothstep(lw, lw + 0.06, ch);         // -> FILAMENT étroit : 0 partout ailleurs
+        // L'octave la plus grosse est atténuée (pas de large « fracture d'eau ») mais reste
+        // présente comme tronc fin, pour que les affluents s'y raccordent et filent vers la mer.
+        float ow = (i == 0) ? 0.45 : 1.0;
+        net = max(net, ch * w * ow * prev);
+        prev = clamp(ch + 0.18, 0.0, 1.0);          // ouverture -> les fins se prolongent au-delà des gros
+        fr *= 1.95;
+        w *= decay;
+    }
+    return net;
 }
 
 vec3 surface(vec3 d, vec3 k, out float wet) {
@@ -370,13 +447,16 @@ vec3 surface(vec3 d, vec3 k, out float wet) {
         // Champ d'altitude par DOMAIN WARPING (IQ) : on déforme l'échantillonnage du
         // bruit par du bruit -> côtes/reliefs sinueux, sans répétition « copier-collé ».
         // La fréquence de base donne la taille des masses d'eau (motif).
-        float freq = eau_motif < 0.5 ? 1.6 : (eau_motif < 1.5 ? 2.4 : (eau_motif < 2.5 ? 1.5 : 4.5));
+        // Motif (échelle des masses) : continu 0..3, interpolé entre les paliers d'origine
+        // (0 = océan global, 1 = continents, 2 = mers intérieures, 3 = marais/archipels).
+        float mtf = clamp(eau_motif, 0.0, 3.0);
+        float freq = mtf < 1.0 ? mix(1.6, 2.4, mtf)
+                   : (mtf < 2.0 ? mix(2.4, 1.5, mtf - 1.0) : mix(1.5, 4.5, mtf - 2.0));
         // `seed` décale le champ de bruit -> chaque planète a sa propre géographie.
         vec3 sd = vec3(seed, seed * 1.7, seed * 0.3);
         vec3 p = d * freq + sd;
-        vec3 q = vec3(fbm(p + 1.3), fbm(p + 7.2), fbm(p + 3.4));
-        float h = fbm(p + 1.9 * q);          // altitude 0..1 (déformée)
-        h = mix(h, fbm(p * 3.0 + 17.0), 0.18); // un peu de détail haute fréquence
+        float h0 = altit(p);                 // altitude (heightmap complet : socle + chaînes ridged)
+        float h = h0;
         float moist = fbm(p * 0.8 + 30.0);   // humidité grande échelle
 
         // Glace texturée (banquise + sommets) : plaques, réseau de fractures bleutées
@@ -396,6 +476,10 @@ vec3 surface(vec3 d, vec3 k, out float wet) {
             float prof = clamp((sea - h) / max(sea, 0.001), 0.0, 1.0);
             vec3 cotier = mix(couleur3, vec3(0.55, 0.85, 0.85), 0.35);
             base = mix(cotier, couleur3 * 0.5, prof);
+            // Liseré côtier léger : un fin trait clair sur les tout premiers hauts-fonds
+            // souligne le trait de côte (rôle « visualisation des côtes »), sans empâter.
+            float shore = 1.0 - smoothstep(0.0, 0.07, prof);
+            base = mix(base, vec3(0.62, 0.90, 0.88), shore * 0.25);
             wet = 1.0; // océan -> reflet spéculaire dans main()
             // Récifs / atolls : taches turquoise vives sur les hauts-fonds.
             if (recifs > 0.0) {
@@ -404,13 +488,12 @@ vec3 surface(vec3 d, vec3 k, out float wet) {
                 base = mix(base, vec3(0.45, 0.92, 0.85), reef * recifs);
             }
         } else {
-            // Terre : étagement par altitude (côte -> plaine -> roche -> pic).
+            // Terre : étagement par altitude (le heightmap porte déjà de vraies chaînes).
             float lh = (h - sea) / max(1.0 - sea, 0.001); // 0 au littoral .. 1 au sommet
-            // Montagnes : bruit « ridged » (crêtes nettes) qui s'intensifie en altitude.
-            float rg = 1.0 - abs(2.0 * fbm(p * 2.2 + 9.0) - 1.0);
-            float mont = relief * smoothstep(0.30, 0.78, lh) * rg;
+            float mont = smoothstep(0.50, 0.82, lh);      // masque montagne (végé, crêtes, rivières)
 
-            vec3 rock = mix(couleur2, couleur, smoothstep(0.0, 0.55, lh));
+            vec3 rock = mix(couleur2, couleur, smoothstep(0.0, 0.35, lh));
+            rock = mix(rock, couleur_mont, smoothstep(0.42, 0.80, lh)); // roche de montagne en altitude
             // Liseré de plage juste au-dessus du niveau de la mer.
             rock = mix(mix(couleur, vec3(0.85, 0.8, 0.6), 0.4), rock, smoothstep(0.0, 0.05, lh));
             // Végétation étagée : prairie claire en plaine -> forêt sombre vers les reliefs,
@@ -462,35 +545,49 @@ vec3 surface(vec3 d, vec3 k, out float wet) {
                 land *= 1.0 - 0.40 * fond * crateres;
                 land += couleur * 0.20 * rim * crateres;
             }
-            // Pics rocheux dénudés + assombrissement des crêtes (volume).
-            land = mix(land, mix(couleur2, vec3(0.55), 0.4), smoothstep(0.62, 0.85, lh));
+            // Crêtes dénudées : on assombrit la roche de montagne (volume).
+            land = mix(land, couleur_mont * 0.8, smoothstep(0.55, 0.9, lh) * 0.7);
             land = mix(land, land * 0.72 + vec3(0.05), mont * 0.5);
             // Neige de sommet (descend plus bas aux hautes latitudes).
-            float snow = smoothstep(0.62, 0.85, lh + mont * 0.4) * (0.35 + 0.65 * lat) * relief;
+            float snow = smoothstep(0.58, 0.84, lh) * (0.35 + 0.65 * lat) * relief;
             land = mix(land, glace, clamp(snow, 0.0, 1.0));
 
-            // Rivières : fines lignes d'eau sinueuses, surtout en plaine.
+            // Rivières : réseau hydrographique ARBORESCENT (cf. reseau_riv) — bruit ridgé
+            // multi-octave piqué en filaments fins, bridé en hiérarchie tronc/affluents.
+            // Densité -> seuil (combien de chenaux) ; Fracture -> finesse/persistance des
+            // affluents. Champ piqué (0 hors lignes) : abaisser le seuil n'ajoute que des
+            // chenaux fins, sans jamais noyer le continent.
             if (rivieres > 0.0) {
-                float rv = fbm(p * 1.5 + 50.0);
-                float chan = 1.0 - smoothstep(0.0, 0.05, abs(rv - 0.5));
-                float riv = chan * smoothstep(0.55, 0.18, lh) * rivieres;
+                // Méandres : on déforme le domaine d'échantillonnage par un champ fractal
+                // -> chenaux sinueux (pas rectilignes). `riv_fracture` pilote l'amplitude.
+                float meand = 0.06 + 0.20 * riv_fracture;
+                vec3 w1 = vec3(fbm(p * 2.3 + 4.0), fbm(p * 2.3 + 8.0), fbm(p * 2.3 + 1.0)) - 0.5;
+                vec3 pr = p + meand * w1;
+                // Réseau arborescent (tronc + affluents), échelle liée au motif des continents.
+                float net = reseau_riv(pr * (0.85 + 0.5 * clamp(eau_motif, 0.0, 3.0)));
+                // Le réseau est PIQUÉ (0 hors des lignes) : abaisser le seuil ne fait donc
+                // qu'ajouter des chenaux, sans noyer le continent. La DENSITÉ pilote ce seuil.
+                float vers_mer = 1.0 - smoothstep(0.0, 0.7, lh);
+                float t0 = mix(0.55, 0.12, clamp(rivieres, 0.0, 1.0)) - 0.05 * vers_mer;
+                float chan = smoothstep(t0, t0 + 0.06, net); // bord franc -> ligne nette
+                float gate = (1.0 - smoothstep(0.42, 0.74, lh)) * (1.0 - mont);
+                float riv = chan * gate;
                 if (riv_lave > 0.5) {
                     land = mix(land, vec3(0.9, 0.35, 0.08), riv);       // coulée de lave
                     land = mix(land, vec3(1.0, 0.85, 0.4), riv * riv * 0.7); // cœur incandescent
                 } else {
+                    // Berges verdoyantes (débordement large) puis lit d'eau sombre étroit.
+                    land = mix(land, veg_couleur, smoothstep(0.0, 0.5, chan) * gate * 0.3 * veg_couv);
                     land = mix(land, couleur3 * 0.9, riv);
-                    land = mix(land, veg_couleur, riv * 0.35 * veg_couv); // berges verdoyantes
                 }
             }
             base = land;
 
-            // Relief : ombrage directionnel par la pente de l'altitude effective
-            // (h + crêtes) -> les versants accrochent la lumière, volume des montagnes.
+            // Relief : ombrage directionnel par la pente du heightmap (versants éclairés,
+            // volume des montagnes). On échantillonne l'altitude au point décalé en tangente.
             vec3 tang = normalize(cross(k, d) + vec3(1e-4));
-            float e = h + relief * 0.3 * rg;
-            float rgl = 1.0 - abs(2.0 * fbm((p + tang * 0.30) * 2.2 + 9.0) - 1.0);
-            float el = fbm(p + 1.9 * q + tang * 0.30) + relief * 0.3 * rgl;
-            shade = 1.0 + clamp((e - el) * (4.0 + 6.0 * relief), -0.32, 0.32);
+            float el = altit(p + tang * 0.30);
+            shade = 1.0 + clamp((h0 - el) * (5.0 + 7.0 * relief), -0.34, 0.34);
         }
 
         // Refroidissement latitudinal.

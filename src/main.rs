@@ -51,7 +51,7 @@ async fn main() {
                 if let Some(cible) = a.frame() {
                     etat = match cible {
                         Cible::Skymap => Etat::Skymap(Box::new(Skymap::new())),
-                        Cible::Objet => Etat::Objet(Box::new(Objet::new())),
+                        Cible::Objet => Etat::Objet(Box::new(Objet::new(minitel_font.clone()))),
                         // On passe la police SEULEMENT à la galerie planétaire
                         Cible::Galerie => {
                             let font = minitel_font.clone();

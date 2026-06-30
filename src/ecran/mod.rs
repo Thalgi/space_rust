@@ -7,6 +7,7 @@ mod galerie;
 mod galerie_etoiles;
 mod objet;
 mod skymap;
+mod widgets;
 
 pub use accueil::{Accueil, Cible};
 pub use galerie::Galerie;

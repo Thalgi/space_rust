@@ -8,7 +8,10 @@ uniform vec3 to_cam;
 uniform vec3 teinte;   // couleur de l'étoile (selon son type spectral)
 uniform float couronne;        // extension de la couronne (× rayon)
 uniform float couronne_irreg;  // irrégularité (rayons/spicules)
-uniform float couronne_type;   // 0 = halo, 1 = jets bipolaires (pulsar), 2 = vent stellaire (WR)
+uniform float couronne_type;   // 0=halo 1=jets 2=vent(WR) 3=pulsar 4=magnetar 5=trou noir
+uniform vec3 axe;              // axe du pôle (monde) -> ancrage des jets/arcs hors caméra
+uniform float gran_scale;      // taille des cellules de granulation (1 = défaut, >1 = fines)
+uniform float gran_contraste;  // contraste de la convection (1 = défaut, <1 = lisse)
 uniform vec4 spots[8]; // xyz = direction (repère surface), w = rayon effectif
 
 float hash(vec3 p) {
@@ -40,7 +43,46 @@ void main() {
     float rr = length(v_q);
     if (rr > couronne) discard;
 
-    if (rr <= 1.0) {
+    if (couronne_type > 4.5) {
+        // TROU NOIR : horizon des evenements + disque d'accretion incline.
+        // Stylise (pas de vrai ray-tracing) : rim chaud en guise de lentille,
+        // disque aplati selon l'inclinaison de l'axe, turbulence fbm + asymetrie
+        // Doppler (cote qui approche plus brillant). Cout = 1 quad + 1 fbm, comme
+        // les autres couronnes.
+        if (rr <= 1.0) {
+            float rim = smoothstep(0.78, 1.0, rr);
+            vec3 ring = mix(teinte, vec3(1.0), 0.7);
+            gl_FragColor = vec4(ring * rim * 1.4, 1.0);
+        } else {
+            vec2 pax = vec2(dot(axe, cam_right), dot(axe, cam_up));
+            float fs = length(pax);                        // 0 = pole face camera (disque rond), 1 = de profil
+            vec2 adir = fs > 0.001 ? pax / fs : vec2(0.0, 1.0);
+            vec2 pdir = vec2(-adir.y, adir.x);
+            float along = dot(v_q, adir);                  // le long du pole projete -> comprime
+            float perp = dot(v_q, pdir);                    // grand axe du disque -> inchange
+            float flat = mix(1.0, 0.16, fs);                // aplatissement selon l'inclinaison
+            vec2 dq = vec2(along / max(flat, 0.05), perp);
+            float dr = length(dq);
+            float ang = atan(dq.y, dq.x);
+            float inner = 1.05;
+            float outer = couronne;
+            float band = smoothstep(inner, inner + 0.22, dr) * (1.0 - smoothstep(outer * 0.65, outer, dr));
+            float spin = time * 0.6;
+            float turb = fbm(vec3(cos(ang - spin) * dr * 2.2, sin(ang - spin) * dr * 2.2, dr * 1.4 + time * 0.1));
+            float t = clamp((dr - inner) / max(outer - inner, 0.01), 0.0, 1.0);
+            vec3 cHot = mix(teinte, vec3(1.0), 0.65);
+            vec3 cMid = teinte;
+            vec3 cCold = teinte * 0.35;
+            vec3 disccol = mix(cHot, cMid, smoothstep(0.0, 0.45, t));
+            disccol = mix(disccol, cCold, smoothstep(0.45, 1.0, t));
+            // Doppler beaming : nul de face (fs=0), maximal de profil (fs=1) ; cote
+            // qui approche (un bord du grand axe) plus brillant que celui qui s'eloigne.
+            float beam = mix(0.35, 1.8, smoothstep(-1.0, 1.0, sin(ang)));
+            float dop = mix(1.0, beam, fs);
+            float bright = band * (0.55 + 0.65 * turb) * dop;
+            gl_FragColor = vec4(disccol, clamp(bright, 0.0, 1.0));
+        }
+    } else if (rr <= 1.0) {
         float z = sqrt(max(0.0, 1.0 - rr * rr));
         vec3 n = normalize(v_q.x * cam_right + v_q.y * cam_up + z * to_cam);
 
@@ -49,21 +91,25 @@ void main() {
         float ca = cos(a); float sa = sin(a);
         vec3 d = vec3(n.x * ca - n.z * sa, n.y, n.x * sa + n.z * ca);
 
-        // Convection fine et bouillonnante (domain warping animé, rapide).
-        vec3 w = d * 5.0 + vec3(0.0, time * 0.22, time * 0.13);
+        // Convection : la taille des cellules dépend du type (gran_scale).
+        // Naines = cellules fines/serrées ; supergéantes = grosses cellules molles.
+        float gs = max(gran_scale, 0.2);
+        vec3 w = d * 5.0 * gs + vec3(0.0, time * 0.22, time * 0.13);
         vec3 warp = vec3(fbm(w), fbm(w + 5.2), fbm(w + 9.1)) - 0.5;
-        float gran = fbm(d * 11.0 + warp * 1.2 + vec3(0.0, time * 0.30, 0.0));
+        float gran = fbm(d * 11.0 * gs + warp * 1.2 + vec3(0.0, time * 0.30, 0.0));
 
         // Palette dérivée de la couleur de l'étoile : sombre -> teinte -> chaud (vers blanc).
         vec3 cLow = teinte * 0.45;
         vec3 cMid = teinte;
         vec3 cHot = mix(teinte, vec3(1.0), 0.6);
-        vec3 col = mix(cLow, cMid, smoothstep(0.30, 0.55, gran));
-        col = mix(col, cHot, smoothstep(0.55, 0.78, gran));
+        // Contraste de la convection : étroit = net (étoiles actives), large = lisse (chaudes).
+        float spread = 0.22 / max(gran_contraste, 0.3);
+        vec3 col = mix(cLow, cMid, smoothstep(0.5 - spread, 0.5, gran));
+        col = mix(col, cHot, smoothstep(0.5, 0.5 + spread, gran));
 
-        // Petits points brillants (campfires).
-        float camp = fbm(d * 16.0 + 50.0);
-        col += smoothstep(0.66, 0.72, camp) * teinte * 0.5;
+        // Petits points brillants (campfires), à la même échelle.
+        float camp = fbm(d * 16.0 * gs + 50.0);
+        col += smoothstep(0.66, 0.72, camp) * teinte * 0.5 * gran_contraste;
 
         // Taches actives (venant du CPU) : assombrissement local.
         float dark = 0.0;
@@ -83,20 +129,31 @@ void main() {
 
         gl_FragColor = vec4(col, 1.0);
     } else if (couronne_type > 0.5 && couronne_type < 1.5) {
-        // JETS bipolaires (pulsar / protoétoile) le long de l'axe vertical (v_q.y).
-        float ax = abs(v_q.x);
-        float ay = abs(v_q.y);
+        // JETS bipolaires (étoile à neutrons / protoétoile) ancrés sur l'axe du pôle PROJETÉ.
+        vec2 pax = vec2(dot(axe, cam_right), dot(axe, cam_up));
+        float fs = length(pax);                              // 0 = pôle vers caméra, 1 = de profil
+        vec2 adir = fs > 0.001 ? pax / fs : vec2(0.0, 1.0);
+        vec2 pdir = vec2(-adir.y, adir.x);
+        float s = dot(v_q, adir);                            // le long de l'axe
+        float perp = dot(v_q, pdir);                         // perpendiculaire
+        float ax = abs(perp);
+        float ay = abs(s);
         float width = 0.10 + 0.12 * (ay - 1.0);              // cône qui s'évase
         float core = 1.0 - smoothstep(0.0, width, ax);
-        float along = smoothstep(couronne, 1.0, ay) * step(1.0, ay); // le long du jet
-        float flow = fbm(vec3(v_q.x * 9.0, v_q.y * 3.5 - sign(v_q.y) * time * 2.4, time * 0.2));
+        float along = smoothstep(couronne, 1.0, ay) * step(1.0, ay);
+        float flow = fbm(vec3(perp * 9.0, s * 3.5 - sign(s) * time * 2.4, time * 0.2));
         float jet = core * along * (0.45 + 0.9 * flow);
-        vec3 jetcol = mix(teinte, vec3(0.6, 0.8, 1.0), 0.55); // jets bleutés énergétiques
-        gl_FragColor = vec4(jetcol, clamp(jet, 0.0, 1.0) * 0.9);
+        vec3 jetcol = mix(teinte, vec3(0.6, 0.8, 1.0), 0.55);
+        gl_FragColor = vec4(jetcol, clamp(jet, 0.0, 1.0) * 0.9 * fs); // foreshorten si pôle de face
     } else if (couronne_type > 3.5) {
-        // MAGNETAR : arcs de champ magnétique DIPOLAIRE (boucles brillantes, violettes).
+        // MAGNETAR : arcs de champ magnétique DIPOLAIRE (boucles brillantes, violettes), ancrés.
+        vec2 pax = vec2(dot(axe, cam_right), dot(axe, cam_up));
+        float fs = length(pax);
+        vec2 adir = fs > 0.001 ? pax / fs : vec2(0.0, 1.0);
+        vec2 pdir = vec2(-adir.y, adir.x);
+        float perp = dot(v_q, pdir);                          // distance à l'axe du pôle
         float g = clamp(1.0 - (rr - 1.0) / (couronne - 1.0), 0.0, 1.0);
-        float sinth = abs(v_q.x) / max(rr, 0.001);            // colatitude (axe vertical)
+        float sinth = abs(perp) / max(rr, 0.001);             // colatitude depuis l'axe projeté
         float L = rr / max(sinth * sinth, 0.05);              // paramètre de ligne de champ (r = L sin²θ)
         float lines = abs(fract(L * 0.55 + time * 0.08) - 0.5) * 2.0; // 0 au cœur d'une boucle
         float arc = smoothstep(0.16, 0.0, lines) * g;
@@ -104,10 +161,16 @@ void main() {
         vec3 mcol = mix(teinte, vec3(0.72, 0.5, 1.0), 0.6);   // violet magnétique
         gl_FragColor = vec4(mcol, clamp(arc, 0.0, 1.0) * 0.85);
     } else if (couronne_type > 2.5) {
-        // PULSAR : faisceau bipolaire qui TOURNE sur lui-même (effet phare) + flash périodique.
+        // PULSAR : faisceau bipolaire qui TOURNE sur lui-même (phare), ancré sur l'axe projeté.
+        vec2 pax = vec2(dot(axe, cam_right), dot(axe, cam_up));
+        float fs = length(pax);
+        vec2 adir = fs > 0.001 ? pax / fs : vec2(0.0, 1.0);
+        vec2 pdir = vec2(-adir.y, adir.x);
+        float s0 = dot(v_q, adir);
+        float perp0 = dot(v_q, pdir);
         float spin = time * 1.1;
         float cs = cos(spin), sn = sin(spin);
-        vec2 q = vec2(v_q.x * cs - v_q.y * sn, v_q.x * sn + v_q.y * cs);
+        vec2 q = vec2(perp0 * cs - s0 * sn, perp0 * sn + s0 * cs);
         float ax = abs(q.x);
         float ay = abs(q.y);
         float width = 0.08 + 0.10 * (ay - 1.0);

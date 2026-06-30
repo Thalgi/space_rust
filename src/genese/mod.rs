@@ -2,7 +2,7 @@ mod apparences;
 mod persistance;
 mod presets;
 
-pub use persistance::{charger_presets, sauver_presets, PresetSauve};
+pub use persistance::{charger_edits, charger_presets, sauver_edits, sauver_presets, PresetEdit, PresetSauve};
 pub use presets::{construire_preset_solaire, construire_preset_tau_ceti};
 
 use crate::ceinture::{Ceinture, CeintureConfig};
@@ -31,6 +31,7 @@ pub fn construire_systeme(seed: u64) -> (Systeme, String) {
         4 => soleil.avec_magnetar(),
         _ => soleil,
     };
+    let soleil = if profil.flares > 0.5 { soleil.avec_flares() } else { soleil };
     sys.ajouter(Box::new(soleil));
 
     // Planètes : distances en UA suivant une loi de Titius-Bode.
@@ -196,17 +197,22 @@ const HABITABLES_FERMEES: &[&str] = &[
     "Glacial", "Ice Dunes", "Cold Desert", "Iceberg", "Antarctic", "Storm",
     "Cryovolcan", "Crevasse", "Tuya", "Ferrosprings",
     "Bog", "Mud", "Peatland", "Treeline", "Ravine", "Craton",
-    "Cryoflora", "Lichen", "Supraglacial", "Aeolian", "Travertine",
-    "Highland", "Snow", "Blossom", "Glaciovolcanic",
-    // Relief extrême / humides complexes
-    "Barnacle", "Cenote", "Aerial", "Lilypad", "Geothermal", "Tepui", "Obsidian",
-    "Archipelago", "Crag", "Cascadian",
     // Végétation dense exotique
     "Petrified", "Mushroom", "Fungal",
     // Eyeball partiellement viable
     "Eyeball Archipelago",
     // Spéciaux
     "Pandora",
+];
+
+/// Planètes habitables uniquement après rechere — atmosphère extrême, toxicité, radiations, climat extrême mais surface stable (dômes pressurisés requis).
+/// climat extrême mais surface stable (dômes pressurisés requis).
+const HABITABLES_EXTREMES: &[&str] = &[
+    "Cryoflora", "Lichen", "Supraglacial", "Aeolian", "Travertine",
+    "Highland", "Snow", "Blossom", "Glaciovolcanic",
+    // Relief extrême / humides complexes
+    "Barnacle", "Cenote", "Aerial", "Lilypad", "Geothermal", "Tepui", "Obsidian",
+    "Archipelago", "Crag", "Cascadian",
 ];
 
 /// Planètes inhabitables — surface trop hostile, pas de colonies viables
@@ -243,7 +249,61 @@ pub fn est_inhabitable(nom: &str) -> bool {
     INHABITABLES.contains(&nom)
 }
 
-pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
+/// Catégorie d'habitabilité d'un preset (reprend le découpage par listes de noms).
+#[derive(Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum Habitabilite {
+    Colonisable,   // plein air, climat supportable (type Terre)
+    ColonieFermee, // dômes pressurisés requis
+    Extreme,       // viable seulement après recherche / conditions extrêmes
+    Inhabitable,   // surface trop hostile
+}
+
+impl Habitabilite {
+    pub fn label(self) -> &'static str {
+        match self {
+            Habitabilite::Colonisable => "Colonisable (plein air)",
+            Habitabilite::ColonieFermee => "Colonie fermee (domes)",
+            Habitabilite::Extreme => "Extreme (apres recherche)",
+            Habitabilite::Inhabitable => "Inhabitable",
+        }
+    }
+    /// Couleur d'affichage (panneau d'infos) : vert -> jaune -> orange -> rouge.
+    pub fn couleur(self) -> Vec3 {
+        match self {
+            Habitabilite::Colonisable => vec3(0.4, 0.9, 0.45),
+            Habitabilite::ColonieFermee => vec3(0.9, 0.85, 0.4),
+            Habitabilite::Extreme => vec3(0.95, 0.6, 0.3),
+            Habitabilite::Inhabitable => vec3(0.85, 0.4, 0.4),
+        }
+    }
+}
+
+/// Catégorie d'habitabilité d'un preset, d'après son nom (défaut : Inhabitable).
+pub fn habitabilite(nom: &str) -> Habitabilite {
+    if COLONISABLES.contains(&nom) {
+        Habitabilite::Colonisable
+    } else if HABITABLES_FERMEES.contains(&nom) {
+        Habitabilite::ColonieFermee
+    } else if HABITABLES_EXTREMES.contains(&nom) {
+        Habitabilite::Extreme
+    } else {
+        Habitabilite::Inhabitable
+    }
+}
+
+/// Un preset de planète du catalogue : métadonnées éditables + apparence.
+/// `id` = nom d'origine (immuable), clé des edits sauvegardés ; `nom` est éditable.
+#[derive(Clone)]
+pub struct PresetPlanete {
+    pub id: String,
+    pub nom: String,
+    pub apparence: Apparence,
+    pub habitabilite: Habitabilite,
+    pub rare: bool,
+}
+
+
+pub fn catalogue_telluriques() -> Vec<PresetPlanete> {
     let bleu = vec3(0.35, 0.55, 1.0) * 0.9; // atmosphère océanique
     let voile = vec3(0.6, 0.8, 1.0) * 0.2; // voile glacé
     let sec = vec3(0.8, 0.7, 0.5) * 0.12; // atmosphère sèche légère
@@ -452,12 +512,41 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
     push("Eyeball Archipelago", tellurique(vec3(0.3, 0.45, 0.3), vec3(0.28, 0.3, 0.24), vec3(0.06, 0.32, 0.6), 0.88, 3.0, 0.4, 0.85, bleu).avec_vegetation(vec3(0.2, 0.5, 0.2), 0.5).avec_relief(0.9).avec_eyeball_zones(0.35, -0.1, 0.0));
 
 
-    v
+    en_presets(v)
+}
+
+/// Convertit la liste interne (nom, apparence) en presets enrichis (habitabilité + rareté),
+/// puis applique les edits sauvegardés (nom / habitabilité / rareté / apparence).
+fn en_presets(v: Vec<(String, Apparence)>) -> Vec<PresetPlanete> {
+    let mut presets: Vec<PresetPlanete> = v
+        .into_iter()
+        .map(|(nom, apparence)| PresetPlanete {
+            id: nom.clone(),
+            rare: est_rare(&nom),
+            habitabilite: habitabilite(&nom),
+            nom,
+            apparence,
+        })
+        .collect();
+    appliquer_edits(&mut presets, &persistance::charger_edits());
+    presets
+}
+
+/// Écrase les métadonnées + l'apparence d'un preset par son edit (clé = `id`).
+fn appliquer_edits(presets: &mut [PresetPlanete], edits: &[persistance::PresetEdit]) {
+    for p in presets.iter_mut() {
+        if let Some(e) = edits.iter().find(|e| e.id == p.id) {
+            p.nom = e.nom.clone();
+            p.habitabilite = e.habitabilite;
+            p.rare = e.rare;
+            p.apparence = e.apparence;
+        }
+    }
 }
 
 /// Catalogue des géantes gazeuses pour la galerie dédiée. Basé sur la classification
 /// de Sudarsky (classes I–V par température/nuages) + géantes de glace + naines brunes.
-pub fn catalogue_gazeuses() -> Vec<(String, Apparence)> {
+pub fn catalogue_gazeuses() -> Vec<PresetPlanete> {
     let mut v: Vec<(String, Apparence)> = Vec::new();
     let mut push = |nom: &str, mut app: Apparence| {
         app.seed = gen_range(0.0, 1000.0);
@@ -505,7 +594,7 @@ pub fn catalogue_gazeuses() -> Vec<(String, Apparence)> {
     push("Anneaux en arcs (type Neptune)", gazeuse(vec3(0.45, 0.56, 0.86), vec3(0.08, 0.16, 0.44), vec3(0.66, 0.8, 0.99), 9.0, 1.5, vec3(0.3, 0.45, 0.9) * 0.3).avec_tempetes(0.8).avec_pole(vec3(0.3, 0.46, 0.74)).avec_anneau_neptune(vec3(0.6, 0.66, 0.85)));
     push("Anneau de debris recent", gazeuse(vec3(0.62, 0.4, 0.3), vec3(0.38, 0.22, 0.16), vec3(0.82, 0.6, 0.45), 11.0, 1.8, vec3(0.7, 0.45, 0.3) * 0.3).avec_thermique(0.4, vec3(0.7, 0.25, 0.08)).avec_tempetes(0.6).avec_pole(vec3(0.4, 0.26, 0.2)).avec_anneau_debris(vec3(0.85, 0.7, 0.55)));
 
-    v
+    en_presets(v)
 }
 
 /// Rayon + apparence d'une planète aléatoire (vue « objet » isolée). Couvre les

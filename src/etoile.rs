@@ -9,6 +9,7 @@ pub struct ProfilEtoile {
     pub luminosite: f32,  // relative (éclaire les planètes)
     pub nom: &'static str,
     pub couronne: f32,    // mode de couronne : 0 halo, 1 jets, 2 vent, 3 pulsar, 4 magnétar
+    pub flares: f32,      // 0 = calme, 1 = active (flares fréquents : naine M, T Tauri)
 }
 
 impl ProfilEtoile {
@@ -59,6 +60,12 @@ impl ProfilEtoile {
             }
         };
         let temperature = gen_range(tmin, tmax);
+        // Étoiles actives : naines M (très magnétiquement actives) et T Tauri jeunes.
+        let flares = if nom.contains("naine rouge") || nom.contains("Tauri") {
+            1.0
+        } else {
+            0.0
+        };
         Self {
             temperature,
             couleur: couleur_corps_noir(temperature),
@@ -66,6 +73,7 @@ impl ProfilEtoile {
             luminosite: lumi,
             nom,
             couronne,
+            flares,
         }
     }
 

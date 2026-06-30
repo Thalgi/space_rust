@@ -1,5 +1,5 @@
 use crate::astre::{Astre, CameraInfo};
-use crate::genese::{catalogue_gazeuses, catalogue_telluriques, est_colonisable, est_habitable_fermee};
+use crate::genese::{catalogue_gazeuses, catalogue_telluriques, Habitabilite};
 use crate::planete::Planete;
 use crate::ui::minitel_ligne;
 use macroquad::prelude::*;
@@ -8,28 +8,29 @@ use macroquad::rand::srand;
 /// Statut d'habitabilité humaine pour l'affichage en galerie.
 #[derive(Clone, Copy)]
 enum Habitation {
-    Colonisable,      // 🟢 plein air
-    HabitableFermee,  // 🟡 colonies scellées
-    Inhabitable,      // ❌ trop hostile
+    Colonisable,       // ∖ plein air
+    HabitableFermee,   // ∕ colonies scellées
+    HabitableExtreme,  // ∔ conditions extrêmes supportables
+    Inhabitable,       // ∗ trop hostile
 }
 
 impl Habitation {
-    fn from_nom(nom: &str) -> Self {
-        if est_colonisable(nom) {
-            Habitation::Colonisable
-        } else if est_habitable_fermee(nom) {
-            Habitation::HabitableFermee
-        } else {
-            Habitation::Inhabitable
+    fn from_hab(h: Habitabilite) -> Self {
+        match h {
+            Habitabilite::Colonisable => Habitation::Colonisable,
+            Habitabilite::ColonieFermee => Habitation::HabitableFermee,
+            Habitabilite::Extreme => Habitation::HabitableExtreme,
+            Habitabilite::Inhabitable => Habitation::Inhabitable,
         }
     }
 
     /// Retourne le texte du jeton + sa couleur.
     fn token(&self) -> (&str, Color) {
         match self {
-            Habitation::Colonisable => ("[O] ", Color::new(0.2, 1.0, 0.3, 1.0)),   // vert vif
-            Habitation::HabitableFermee => ("[0] ", Color::new(1.0, 0.85, 0.1, 1.0)), // jaune doré
-            Habitation::Inhabitable => ("[X] ", Color::new(1.0, 0.2, 0.2, 1.0)),   // rouge gras
+            Habitation::Colonisable => ("∖ ", Color::new(0.2, 1.0, 0.3, 1.0)),   // vert vif
+            Habitation::HabitableFermee => ("∕ ", Color::new(1.0, 0.85, 0.1, 1.0)), // jaune doré
+            Habitation::HabitableExtreme => ("∔ ", Color::new(1.0, 0.45, 0.1, 1.0)), // orange-rouge
+            Habitation::Inhabitable => ("∗ ", Color::new(1.0, 0.2, 0.2, 1.0)),   // rouge gras
         }
     }
 }
@@ -71,10 +72,14 @@ impl Galerie {
         };
         self.cellules = catalogue
             .into_iter()
-            .map(|(nom, app)| {
-                let rare = crate::genese::est_rare(&nom);
-                let habitation = Habitation::from_nom(&nom);
-                (nom, rare, habitation, Planete::new(Vec3::ZERO, Vec3::ZERO, 1.0, 1.0, app, Vec::new()))
+            .map(|p| {
+                let habitation = Habitation::from_hab(p.habitabilite);
+                (
+                    p.nom,
+                    p.rare,
+                    habitation,
+                    Planete::new(Vec3::ZERO, Vec3::ZERO, 1.0, 1.0, p.apparence, Vec::new()),
+                )
             })
             .collect();
     }
@@ -111,9 +116,9 @@ impl Galerie {
         let top = 64.0;
         let label_h = 22.0;
         // Cases de taille fixe -> grille défilable à la molette (lisible même à 60+ mondes).
-        let cols = ((screen_width() / 200.0).floor() as usize).clamp(1, n);
+        let cols = ((screen_width() / 400.0).floor() as usize).clamp(1, n);
         let cw = screen_width() / cols as f32;
-        let ch = 168.0;
+        let ch = 200.0;
         let render_h = ch - label_h;
         let rows = (n + cols - 1) / cols;
         let h_vue = screen_height() - top;
@@ -182,29 +187,48 @@ impl Galerie {
         set_default_camera();
         let nom_col = Color::new(0.7, 0.9, 0.8, 1.0);
         let violet = Color::new(0.72, 0.45, 1.0, 1.0);
+        let cyan = Color::new(0.3, 0.7, 1.0, 1.0);
         let font_size: u16 = 12;
 
         for (nom, rare, habitation, cell_x, y) in &labels {
-            // Construction du label complet : [habitation] [R] Nom
+            // Construction du label complet : [gazeuse] [habitation] [R] Nom
             let (token_text, token_col) = habitation.token();
 
-            // Calculer la largeur totale pour centrer dans la cellule (avec police Minitel).
+            // Largeurs individuelles pour centrer le bloc complet dans la cellule.
+            let gazeuse_w = if self.gazeuse {
+                measure_text("∓ ", Some(&self.font), font_size, 1.0).width
+            } else {
+                0.0
+            };
             let token_w = measure_text(token_text, Some(&self.font), font_size, 1.0).width;
             let rare_w = if *rare { measure_text("[R] ", Some(&self.font), font_size, 1.0).width } else { 0.0 };
             let nom_w = measure_text(nom, Some(&self.font), font_size, 1.0).width;
-            let total_w = token_w + rare_w + nom_w;
+            let total_w = gazeuse_w + token_w + rare_w + nom_w;
 
             let x_base = cell_x + (cw - total_w) * 0.5;
+            let mut x_cur = x_base;
 
-            // Dessin séquentiel avec police Minitel : jeton d'habitabilité → badge rare → nom
-            draw_text_ex(token_text, x_base, *y, TextParams {
+            // Badge gazeuse ∓ (si on est dans la galerie gazeuse).
+            if self.gazeuse {
+                draw_text_ex("∓ ", x_cur, *y, TextParams {
+                    font: Some(&self.font),
+                    font_size,
+                    color: cyan,
+                    ..Default::default()
+                });
+                x_cur += gazeuse_w;
+            }
+
+            // Jeton d'habitabilité.
+            draw_text_ex(token_text, x_cur, *y, TextParams {
                 font: Some(&self.font),
-                font_size,
+                font_size :20,
                 color: token_col,
                 ..Default::default()
             });
-            let mut x_cur = x_base + token_w;
+            x_cur += token_w;
 
+            // Badge rareté.
             if *rare {
                 draw_text_ex("[R] ", x_cur, *y, TextParams {
                     font: Some(&self.font),
@@ -215,6 +239,7 @@ impl Galerie {
                 x_cur += rare_w;
             }
 
+            // Nom de l'astre.
             draw_text_ex(nom, x_cur, *y, TextParams {
                 font: Some(&self.font),
                 font_size,
@@ -240,7 +265,7 @@ impl Galerie {
         // Légende en bas à gauche (police Minitel).
         let leg_x = 12.0;
         let leg_y = 56.0;
-        draw_text_ex("[O] Colonisable   [0] Colonies fermées   [X] Inhabitable   [R] Rare", leg_x, leg_y, TextParams {
+        draw_text_ex("∖ Colonisable   ∕ Fermée   ∔ Extrême   ∗ Inhabitable   ∓ Gazeuse   [R] Rare", leg_x, leg_y, TextParams {
             font: Some(&self.font),
             font_size: 10,
             color: Color::new(0.6, 0.8, 0.8, 1.0),

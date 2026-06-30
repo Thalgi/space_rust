@@ -1,6 +1,20 @@
 use macroquad::prelude::*;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, PartialEq)]
+/// Sérialisation des `Vec3` en `[f32; 3]` (glam n'a pas serde activé ici).
+mod v3 {
+    use macroquad::prelude::Vec3;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    pub fn serialize<S: Serializer>(v: &Vec3, s: S) -> Result<S::Ok, S::Error> {
+        [v.x, v.y, v.z].serialize(s)
+    }
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec3, D::Error> {
+        let a = <[f32; 3]>::deserialize(d)?;
+        Ok(Vec3::new(a[0], a[1], a[2]))
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum TypePlanete {
     Tellurique,
     Gazeuse,
@@ -18,41 +32,55 @@ impl TypePlanete {
 }
 
 /// Apparence d'une planète (construite façon builder).
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Apparence {
     pub type_p: TypePlanete,
+    #[serde(with = "v3")]
     pub couleur: Vec3,
+    #[serde(with = "v3")]
     pub couleur2: Vec3,
+    #[serde(with = "v3")]
     pub couleur3: Vec3, // tellurique: océan ; gazeuse: 3e bande
+    #[serde(with = "v3")]
+    pub couleur_mont: Vec3, // tellurique: roche de montagne (haute altitude)
     pub eau: f32,
     // Grande tache (gazeuses) : direction sur la sphère, taille angulaire, couleur.
+    #[serde(with = "v3")]
     pub tache_dir: Vec3,
     pub tache_taille: f32, // 0 = pas de tache
+    #[serde(with = "v3")]
     pub tache_couleur: Vec3,
     pub tache_type: f32, // 0 = tache rouge (GRS), 1 = tache sombre (Neptune)
     // Anneau.
     pub anneau: bool,
+    #[serde(with = "v3")]
     pub anneau_couleur: Vec3,
+    #[serde(with = "v3")]
     pub anneau_normal: Vec3, // axe perpendiculaire au plan de l'anneau
     pub anneau_in: f32,      // rayon interne (× rayon planète)
     pub anneau_out: f32,     // rayon externe (× rayon planète)
     pub anneau_style: f32,   // 0 = dense+lacunes (Saturne), 1 = fins (Uranus), 2 = arcs (Neptune), 3 = débris
+    #[serde(with = "v3")]
     pub axe: Vec3,           // axe de rotation (bandes/pôles s'alignent dessus)
     // Variabilité atmosphérique (gazeuses).
     pub band_scale: f32, // densité de bandes
     pub warp_amt: f32,   // force du domain warping
     pub seed: f32,       // décalage de bruit -> chaque géante est unique
     pub poly_cotes: f32, // vortex polaire : 0 = aucun, sinon nb de côtés (6 = hexagone Saturne)
+    #[serde(with = "v3")]
     pub atmo: Vec3,      // couleur*intensité du halo atmosphérique (0 = pas d'atmosphère)
     pub lave: f32,       // monde de lave : fissures incandescentes émissives (0 = aucun)
     // Telluriques — groupe climatique.
     pub eau_motif: f32,  // 0 océan global, 1 continents, 2 mers intérieures, 3 marais
     pub grad_lat: f32,   // contraste de biome équateur->pôle
     pub calotte: f32,    // latitude (0..1) de début de banquise (1 = aucune)
+    #[serde(with = "v3")]
     pub veg_couleur: Vec3, // teinte de la végétation
     pub veg_couv: f32,   // couverture végétale (0 = sol nu)
     pub rivieres: f32,   // densité de rivières (0 = aucune)
+    pub riv_fracture: f32, // finesse/branchement du réseau de rivières (0..1)
     pub nuages: f32,     // densité de la couche nuageuse (0 = ciel clair)
+    #[serde(with = "v3")]
     pub nuages_couleur: Vec3, // teinte des nuages
     pub nuages_type: f32, // 0 classique, 1 tempête, 2 cyclone
     pub relief: f32,     // amplitude des montagnes (0 = plat)
@@ -62,6 +90,7 @@ pub struct Apparence {
     pub recifs: f32,     // récifs/atolls sur les hauts-fonds (0 = aucun)
     pub basalt: f32,     // orgues basaltiques (0 = aucun)
     pub voile: f32,      // voile atmosphérique opaque (0 = aucun)
+    #[serde(with = "v3")]
     pub voile_couleur: Vec3, // teinte du voile
     pub crateres: f32,   // cratères d'impact (0 = aucun)
     pub eyeball: f32,    // verrouillage de marée (0 = aucun)
@@ -74,12 +103,16 @@ pub struct Apparence {
     // Géantes gazeuses (features dédiées).
     pub cyclones_pol: f32, // amas de cyclones aux pôles (0 = aucun)
     pub thermique: f32,    // émission thermique nocturne (géantes chaudes)
+    #[serde(with = "v3")]
     pub thermique_couleur: Vec3,
     pub tempetes: f32,     // densité de petites tempêtes (0 = aucune)
     pub aurore: f32,       // aurores polaires émissives (0 = aucune)
+    #[serde(with = "v3")]
     pub aurore_couleur: Vec3,
     pub brume: f32,        // voile de brume qui adoucit les bandes (0 = aucun)
+    #[serde(with = "v3")]
     pub brume_couleur: Vec3,
+    #[serde(with = "v3")]
     pub g_pole: Vec3,      // teinte des régions polaires (dégradé latitudinal gazeuses)
     pub jet_profil: f32,   // profil latitudinal type Jupiter (EZ large + NEB/SEB) (0 = aucun)
     // Mode d'affichage (global, piloté par l'UI ; pas par la génération).
@@ -93,6 +126,8 @@ impl Apparence {
             couleur,
             couleur2,
             couleur3,
+            // Par défaut : roche de montagne = roche assombrie/désaturée (auto, sans toucher les presets).
+            couleur_mont: couleur2 * 0.62,
             eau,
             tache_dir: Vec3::Y,
             tache_taille: 0.0,
@@ -117,6 +152,7 @@ impl Apparence {
             veg_couleur: vec3(0.2, 0.5, 0.2),
             veg_couv: 0.0,
             rivieres: 0.0,
+            riv_fracture: 0.4,
             nuages: 0.0,
             nuages_couleur: vec3(1.0, 1.0, 1.0),
             nuages_type: 0.0,

@@ -4,7 +4,8 @@ use crate::soleil::Soleil;
 use crate::ui::minitel_ligne;
 use macroquad::prelude::*;
 
-/// Catalogue des étoiles : (nom, rayon, température K, luminosité, couronne 0=halo 1=jets 2=vent).
+/// Catalogue des étoiles : (nom, rayon, température K, luminosité, couronne
+/// 0=halo 1=jets 2=vent 3=pulsar 4=magnetar 5=trou noir).
 fn catalogue() -> Vec<(&'static str, f32, f32, f32, f32)> {
     vec![
         // Séquence principale O -> M.
@@ -30,6 +31,9 @@ fn catalogue() -> Vec<(&'static str, f32, f32, f32, f32)> {
         ("Etoile a neutrons", 0.42, 40000.0, 0.2, 1.0), // jets fixes
         ("Pulsar", 0.42, 40000.0, 0.25, 3.0),           // jets qui tournent (phare)
         ("Magnetar", 0.45, 40000.0, 0.3, 4.0), // arcs magnétiques
+        // Trous noirs : disque d'accrétion incliné (mode 5) -> temp = couleur du disque.
+        ("Trou noir (stellaire)", 0.42, 30000.0, 0.0, 5.0),
+        ("Trou noir (supermassif)", 0.85, 9000.0, 0.0, 5.0),
     ]
 }
 
@@ -45,7 +49,10 @@ impl GalerieEtoiles {
             .into_iter()
             .map(|(nom, rayon, temp, lumi, mode)| {
                 let s = Soleil::new(Vec3::ZERO, rayon, couleur_corps_noir(temp), lumi);
-                let s = if mode > 3.5 {
+                let s = if mode > 4.5 {
+                    // Inclinaison 3/4 (ni face, ni profil) -> bien lisible en vignette.
+                    s.avec_trou_noir().avec_axe(vec3(0.0, 0.7, 0.7))
+                } else if mode > 3.5 {
                     s.avec_magnetar()
                 } else if mode > 2.5 {
                     s.avec_pulsar()
@@ -53,6 +60,19 @@ impl GalerieEtoiles {
                     s.avec_vent()
                 } else if mode > 0.5 {
                     s.avec_jets()
+                } else {
+                    s
+                };
+                // Étoiles actives (naine M à flares, T Tauri jeune) : flash + rubans + arcade + CME.
+                let s = if nom.contains("flares") || nom.contains("Tauri") {
+                    s.avec_flares()
+                } else {
+                    s
+                };
+                // Granulation : la galerie normalise les rayons, donc on force de GROSSES cellules
+                // molles pour les géantes/supergéantes (sinon dérivée du rayon d'affichage).
+                let s = if nom.contains("eante") {
+                    s.avec_granulation(0.5, 0.9)
                 } else {
                     s
                 };

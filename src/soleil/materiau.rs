@@ -40,6 +40,9 @@ fn charger_soleil() -> Material {
         UniformDesc::new("couronne", UniformType::Float1),
         UniformDesc::new("couronne_irreg", UniformType::Float1),
         UniformDesc::new("couronne_type", UniformType::Float1),
+        UniformDesc::new("axe", UniformType::Float3),
+        UniformDesc::new("gran_scale", UniformType::Float1),
+        UniformDesc::new("gran_contraste", UniformType::Float1),
         UniformDesc::array(UniformDesc::new("spots", UniformType::Float4), super::MAX_TACHES),
     ]);
     load_material(

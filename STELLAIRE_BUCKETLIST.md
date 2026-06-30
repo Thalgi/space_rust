@@ -42,9 +42,14 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
 - [x] **Wolf-Rayet** : **vent stellaire** turbulent en expansion, bleu-violet (`couronne_type 2`).
 - [x] **Étoile carbonée (C)** : preset galerie (rouge sombre profond).
 - [ ] **Variable céphéide / Mira** : **pulsation** (rayon + luminosité qui oscillent).
-- [~] **Étoile à flares** (naine M active) : preset galerie présent ; sursauts/CME pas encore (cf. recherche).
+- [x] **Étoile à flares** (naine M active) : flash impulsif + deux rubans qui s'écartent + arcade
+      post-flare + CME (`avec_flares()`, câblé sur le preset galerie via `taux_flare`).
 - [ ] **Naine blanche pulsante (ZZ Ceti)** : oscillation rapide de luminosité.
-- [ ] **Trou noir** (accrétion) : disque + lentille gravitationnelle (gros morceau à part).
+- [x] **Trou noir** (accrétion) : `couronne_type 5` — horizon noir + rim chaud stylisé
+      (lentille gravitationnelle approchée, pas de vrai ray-tracing) + disque incliné
+      (aplati selon l'axe, turbulence fbm, asymétrie Doppler). `avec_trou_noir()`,
+      2 presets galerie (stellaire / supermassif). Reste : jets relativistes, intégration
+      au tirage aléatoire skymap (masse/gravité/éclairage à décider).
 - [x] **Magnétar** : arcs de champ magnétique dipolaire brillants, violets (`couronne_type 4`).
 
 ---
@@ -55,14 +60,19 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
       de l'axe (cônes évasés + turbulence fbm advectée vers l'extérieur). Mode `couronne_type`
       (0 = halo, 1 = jets fixes, 2 = vent WR, 3 = jets tournants pulsar, 4 = arcs magnétar).
       Builders `avec_jets()` / `avec_vent()` / `avec_pulsar()` / `avec_magnetar()`.
-- [ ] **Éruptions solaires (flares / CME)** — RECHERCHE À FAIRE : aujourd'hui on a des
-      proéminences en arches (`Boucle`) + taches. Manque le **flare** proprement dit : sursaut
-      lumineux soudain (pic d'éclat localisé près d'une tache) et **éjection de masse coronale**
-      (bulle de plasma qui se détache et s'éloigne). À rechercher : déclenchement (reconnexion
-      magnétique au-dessus des taches), forme (ruban + boucle post-flare), animation, couleur.
-      Plus fréquent sur naines M actives / T Tauri / étoiles jeunes.
-- [ ] **Granulation paramétrée** : échelle/contraste selon le type (fine pour naines,
-      grossière pour supergéantes), `gran_scale`/`gran_contraste`.
+- [x] **Éruptions solaires (flares / CME)** : `struct Flare` (eruptions.rs) ancré sur la plus
+      grosse tache (reconnexion). Phases dérivées de `age` côté rendu : **flash** impulsif
+      blanc-bleu (montée ~50 ms, décroissance exp) + embrasement global léger ; **deux rubans**
+      Hα roses qui s'écartent de la ligne d'inversion ; **arcade** de boucles post-flare qui
+      s'élève entre les rubans ; **CME** = bulle de plasma douce (halo + cœur + front de choc,
+      plus d'anneau de points) qui se détache et s'estompe avec la distance. Activé sur naines M
+      / T Tauri, **câblé galerie + skymap + objet** (`ProfilEtoile.flares`).
+- [x] **Proéminences en nappes (loft)** : arches rendues en rubans triangulés (profil doux via
+      l'alpha radial du halo, uv vertical 0→1), ancrées dans le **plan de la boucle** -> pas de
+      vrillage quand la caméra tourne ; l'éjection (`Rupture`) évase la nappe.
+- [x] **Granulation paramétrée** : `gran_scale` (taille des cellules) + `gran_contraste`,
+      dérivés du rayon (fines pour naines, grosses pour géantes) et de la couleur (net pour
+      froides, lisse pour chaudes). Override `avec_granulation()` (géantes de la galerie).
 - [ ] **Pulsation** : rayon et luminosité modulés par le temps (`pulse_amp`, `pulse_freq`).
 - [ ] **Taux d'activité** : densité de taches/éruptions selon le type (naines M & jeunes = +).
 - [x] **Vent stellaire** (WR/supergéantes bleues) : couronne épaisse turbulente colorée (`couronne_type 2`).
@@ -95,7 +105,8 @@ Sources :
    d'accueil + aiguillage `main`.
 2. [x] **Couronne paramétrée** : `couronne_type` (halo / jets / vent / pulsar / magnétar).
 3. [x] **Couronne → jets** (étoile à neutrons/protoétoile) + **pulsar** + **vent WR** + **magnétar**.
-4. [ ] **Flares & CME** (RECHERCHE) : sursaut lumineux + éjection de masse coronale.
+4. [x] **Flares & CME** : flash + rubans + arcade post-flare + CME (`avec_flares()`, preset galerie).
 5. [ ] **Pulsation** (céphéides/Mira) + **granulation paramétrée** + **taux d'activité** par type.
 6. [ ] Intégrer ces types au tirage `ProfilEtoile::aleatoire` (skymap) + axe de rotation 3D des jets.
-7. [ ] Gros morceaux à part : **trou noir** (disque + lentille), **naine blanche pulsante**.
+7. [~] Gros morceaux à part : **trou noir** (fait, version stylisée bon marché — voir
+   ci-dessus), **naine blanche pulsante** (reste à faire).
