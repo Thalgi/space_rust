@@ -11,6 +11,12 @@ pub struct Galerie {
     seed: u64,
     cellules: Vec<(String, bool, Planete)>, // (nom, rare, planète)
     scroll: f32,
+    scroll_cible: f32, // le scroll réel converge vers la cible (défilement doux)
+    // Filtre pixel (P) : phase 3D rendue en basse résolution puis upscalée
+    // en plus proche voisin ; les textes restent nets.
+    pixelise: bool,
+    cible: Option<RenderTarget>,
+    rt_dims: (u32, u32),
     jour: bool,
     villes: u8, // index 0..4 -> niveau 0, 0.5, 1, 1.5, 2
     gazeuse: bool, // false = telluriques, true = géantes gazeuses
@@ -22,6 +28,10 @@ impl Galerie {
             seed: 1,
             cellules: Vec::new(),
             scroll: 0.0,
+            scroll_cible: 0.0,
+            pixelise: false,
+            cible: None,
+            rt_dims: (0, 0),
             jour: false,
             villes: 2, // démarre sur « actuel » (niveau 1.0)
             gazeuse,
@@ -59,6 +69,18 @@ impl Galerie {
             crate::planete::vider_cache_materials();
             self.construire();
         }
+        if is_key_pressed(KeyCode::P) {
+            self.pixelise = !self.pixelise; // filtre pixel ON/OFF
+        }
+        if is_key_pressed(KeyCode::B) {
+            // Bench complet en tâche de fond -> bench_terrain.txt + console.
+            let presets: Vec<(String, crate::planete::Apparence)> = self
+                .cellules
+                .iter()
+                .map(|(nom, _, p)| (nom.clone(), p.apparence()))
+                .collect();
+            crate::planete::terrain::bench(presets);
+        }
 
         // Boutons Minitel (jour/nuit, lumières de villes) en haut à gauche.
         let m = vec2(mouse_position().0, mouse_position().1);
@@ -85,7 +107,14 @@ impl Galerie {
         let rows = (n + cols - 1) / cols;
         let h_vue = screen_height() - top;
         let max_scroll = (rows as f32 * ch - h_vue).max(0.0);
-        self.scroll = (self.scroll - mouse_wheel().1 * 48.0).clamp(0.0, max_scroll);
+        // Défilement doux : la molette déplace une CIBLE, le scroll réel y
+        // converge exponentiellement (indépendant du framerate).
+        self.scroll_cible = (self.scroll_cible - mouse_wheel().1 * 84.0).clamp(0.0, max_scroll);
+        let lisse = 1.0 - (-get_frame_time() * 10.0).exp();
+        self.scroll += (self.scroll_cible - self.scroll) * lisse;
+        if (self.scroll_cible - self.scroll).abs() < 0.3 {
+            self.scroll = self.scroll_cible; // évite le tremblement sub-pixel en pixel-art
+        }
 
         // Jour = lumière devant la caméra (face éclairée) ; nuit = lumière derrière
         // (on voit la face nuit -> villes et lueurs visibles). Une seule lumière.
@@ -94,6 +123,28 @@ impl Galerie {
         } else {
             vec3(-3.0, 1.2, -7.0)
         };
+
+        // Filtre pixel : cible basse résolution (recréée si la fenêtre change).
+        const PIX: u32 = 2;
+        if self.pixelise {
+            let dims = (
+                (screen_width() as u32 / PIX).max(2),
+                (screen_height() as u32 / PIX).max(2),
+            );
+            if self.rt_dims != dims || self.cible.is_none() {
+                let rt = render_target(dims.0, dims.1);
+                rt.texture.set_filter(FilterMode::Nearest);
+                self.cible = Some(rt);
+                self.rt_dims = dims;
+            }
+            // Nettoyage de la cible au fond d'écran.
+            set_camera(&Camera2D {
+                render_target: self.cible.clone(),
+                ..Default::default()
+            });
+            clear_background(Color::new(0.02, 0.02, 0.05, 1.0));
+            set_default_camera();
+        }
 
         // --- Phase 3D : dessiner les planètes (viewport par cellule). Aucun texte ici. ---
         let mut labels: Vec<(String, bool, f32, f32)> = Vec::new();
@@ -113,7 +164,7 @@ impl Galerie {
                 (3.0, 0.0) // vue inchangée pour les planètes sans anneau
             };
             let pos = vec3(0.0, haut, dist);
-            let cam3d = Camera3D {
+            let mut cam3d = Camera3D {
                 position: pos,
                 target: Vec3::ZERO,
                 up: Vec3::Y,
@@ -127,6 +178,18 @@ impl Galerie {
                 )),
                 ..Default::default()
             };
+            if self.pixelise {
+                // Rendu dans la cible basse-déf : le blit final (flip_y) remet
+                // l'image à l'endroit, on adresse donc la cible en repère haut-bas.
+                let p = PIX as f32;
+                cam3d.render_target = self.cible.clone();
+                cam3d.viewport = Some((
+                    (cell_x / p) as i32,
+                    (cell_y / p) as i32,
+                    (cw / p) as i32,
+                    (render_h / p) as i32,
+                ));
+            }
             set_camera(&cam3d);
 
             let forward = (Vec3::ZERO - pos).normalize();
@@ -147,6 +210,21 @@ impl Galerie {
 
         // --- Phase 2D : on remet la caméra écran UNE fois, puis tout le texte. ---
         set_default_camera();
+        if self.pixelise {
+            if let Some(rt) = &self.cible {
+                draw_texture_ex(
+                    &rt.texture,
+                    0.0,
+                    0.0,
+                    WHITE,
+                    DrawTextureParams {
+                        dest_size: Some(vec2(screen_width(), screen_height())),
+                        flip_y: true,
+                        ..Default::default()
+                    },
+                );
+            }
+        }
         let nom_col = Color::new(0.7, 0.9, 0.8, 1.0);
         let violet = Color::new(0.72, 0.45, 1.0, 1.0);
         for (nom, rare, cell_x, y) in &labels {
@@ -176,12 +254,80 @@ impl Galerie {
             minitel_ligne(btn_villes, label_villes, m);
         }
         draw_text(
-            "molette: defiler   G: regenerer   R: shaders   Echap: menu",
+            "molette: defiler   G: regenerer   R: shaders   P: filtre pixel   C: capturer   B: bench   Echap: menu",
             12.0,
             56.0,
             16.0,
             Color::new(0.6, 0.8, 0.8, 1.0),
         );
+
+        // Overlay de PERFORMANCES : FPS + statistiques de génération de terrain.
+        let (nb, dernier, total) = crate::planete::terrain::stats();
+        let moyen = if nb > 0 { total / nb } else { 0 };
+        draw_text(
+            &format!(
+                "{} FPS   pixel: {}   terrains: {}   dernier: {} ms   moyen: {} ms   (B -> bench_terrain.txt)",
+                get_fps(),
+                if self.pixelise { "ON" } else { "off" },
+                nb,
+                dernier,
+                moyen,
+            ),
+            12.0,
+            screen_height() - 10.0,
+            16.0,
+            Color::new(0.55, 0.75, 0.75, 1.0),
+        );
+
+        // Capture de NON-RÉGRESSION (C) : exporte chaque cellule visible en
+        // PNG dans captures/<horodatage>_seed<N>/. Avant/après une évolution
+        // du pipeline, on compare les dossiers -> rien ne casse en silence.
+        if is_key_pressed(KeyCode::C) {
+            self.capturer(top, cols, cw, ch, render_h);
+        }
         false
+    }
+
+    /// Exporte les cellules visibles (terrain prêt uniquement) en PNG.
+    fn capturer(&self, top: f32, cols: usize, cw: f32, ch: f32, render_h: f32) {
+        let img = get_screen_data();
+        let (sw, sh) = (img.width as i32, img.height as i32);
+        let tag = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let dossier = format!("captures/{}_seed{}", tag, self.seed);
+        if std::fs::create_dir_all(&dossier).is_err() {
+            return;
+        }
+        // get_screen_data() est renversée verticalement (repère GL) : on lit
+        // les lignes en miroir. Passer à `false` si les PNG sortent à l'envers.
+        const RENVERSEE: bool = true;
+        let mut nb = 0;
+        for (i, (nom, _, planete)) in self.cellules.iter().enumerate() {
+            let cell_x = (i % cols) as f32 * cw;
+            let cell_y = top + (i / cols) as f32 * ch - self.scroll;
+            if cell_y < top || cell_y + render_h > screen_height() || !planete.terrain_pret() {
+                continue; // hors écran, partiel, ou placeholder en cours
+            }
+            let (x0, y0, w, h) = (cell_x as i32, cell_y as i32, cw as i32, render_h as i32);
+            if x0 + w > sw || y0 + h > sh {
+                continue;
+            }
+            let mut out = Image::gen_image_color(w as u16, h as u16, BLANK);
+            for ry in 0..h {
+                let sy = if RENVERSEE { sh - 1 - (y0 + ry) } else { y0 + ry };
+                for rx in 0..w {
+                    out.set_pixel(rx as u32, ry as u32, img.get_pixel((x0 + rx) as u32, sy as u32));
+                }
+            }
+            let slug: String = nom
+                .chars()
+                .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+                .collect();
+            out.export_png(&format!("{}/{}.png", dossier, slug));
+            nb += 1;
+        }
+        println!("capture: {} cellule(s) -> {}", nb, dossier);
     }
 }

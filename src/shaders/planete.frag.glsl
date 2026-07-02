@@ -61,6 +61,9 @@ uniform float cryo;       // cryovolcanisme : fractures cyan émissives (0 = auc
 uniform float biolum;     // bioluminescence : lueur verte côté nuit (0 = aucun)
 uniform float riv_lave;   // rivières de lave (incandescentes) au lieu d'eau (0 = eau)
 uniform float villes;     // 1 = lumières de villes côté nuit, 0 = non colonisé
+uniform sampler2D terrain; // atlas cube-sphere précalculé : R+G=altitude, B=flux, A=humidité
+uniform float niveau_mer;  // niveau de la mer (quantile précalculé, -1 = pas d'océan)
+uniform float atlas_n;     // résolution d'une face de l'atlas (texels)
 
 // Distance signée à un polygone régulier à `n` côtés (négatif à l'intérieur).
 float poly_dist(vec2 p, float r, float n) {
@@ -113,7 +116,33 @@ float worley(vec3 p) {
     return d;
 }
 
-vec3 surface(vec3 d, vec3 k, out float wet) {
+// Direction sphère -> uv dans l'atlas cube-sphere 3×2 (gouttière de 1 texel).
+// Doit rester le miroir exact de `planete/terrain.rs` (table FACES + warp tan).
+vec2 dir_vers_atlas(vec3 d) {
+    vec3 a = abs(d);
+    float face; vec2 uv; float inv;
+    if (a.x >= a.y && a.x >= a.z) {
+        face = d.x >= 0.0 ? 0.0 : 1.0; inv = 1.0 / a.x;
+        uv = vec2(d.x >= 0.0 ? -d.z : d.z, d.y) * inv;
+    } else if (a.y >= a.z) {
+        face = d.y >= 0.0 ? 2.0 : 3.0; inv = 1.0 / a.y;
+        uv = vec2(d.x, d.y >= 0.0 ? -d.z : d.z) * inv;
+    } else {
+        face = d.z >= 0.0 ? 4.0 : 5.0; inv = 1.0 / a.z;
+        uv = vec2(d.z >= 0.0 ? d.x : -d.x, d.y) * inv;
+    }
+    uv = atan(uv) * 1.2732395; // ×4/π : warp équi-angulaire inverse -> [-1,1]
+    vec2 cell = vec2(mod(face, 3.0), floor(face / 3.0 + 0.001));
+    float cote = atlas_n + 2.0;
+    return (cell * cote + 1.0 + (uv * 0.5 + 0.5) * atlas_n) / vec2(cote * 3.0, cote * 2.0);
+}
+
+// Altitude 16 bits packée sur R (octet fort) + G (octet faible).
+float altitude_atlas(vec4 t) {
+    return (t.r * 255.0 * 256.0 + t.g * 255.0) / 65535.0;
+}
+
+vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
     wet = 0.0; // surface d'eau (pour le reflet spéculaire) ; mise à 1 sur l'océan
     if (type_p > 1.5) {
         // Glacée.
@@ -367,17 +396,17 @@ vec3 surface(vec3 d, vec3 k, out float wet) {
         // Tellurique. Latitude : 0 à l'équateur, 1 aux pôles (par rapport à l'axe).
         float lat = abs(dot(d, k));
 
-        // Champ d'altitude par DOMAIN WARPING (IQ) : on déforme l'échantillonnage du
-        // bruit par du bruit -> côtes/reliefs sinueux, sans répétition « copier-collé ».
-        // La fréquence de base donne la taille des masses d'eau (motif).
+        // GÉOGRAPHIE PRÉCALCULÉE (atlas cube-sphere, cf. conception_planete_v2.md) :
+        // altitude 16 bits, flux d'écoulement et humidité viennent du CPU.
+        // `p`/`sd` restent pour les features de style haute fréquence (dunes,
+        // mesa, glace, cratères...) qui demeurent procédurales.
         float freq = eau_motif < 0.5 ? 1.6 : (eau_motif < 1.5 ? 2.4 : (eau_motif < 2.5 ? 1.5 : 4.5));
-        // `seed` décale le champ de bruit -> chaque planète a sa propre géographie.
         vec3 sd = vec3(seed, seed * 1.7, seed * 0.3);
         vec3 p = d * freq + sd;
-        vec3 q = vec3(fbm(p + 1.3), fbm(p + 7.2), fbm(p + 3.4));
-        float h = fbm(p + 1.9 * q);          // altitude 0..1 (déformée)
-        h = mix(h, fbm(p * 3.0 + 17.0), 0.18); // un peu de détail haute fréquence
-        float moist = fbm(p * 0.8 + 30.0);   // humidité grande échelle
+        vec4 geo = texture2D(terrain, dir_vers_atlas(d));
+        float h = altitude_atlas(geo);       // altitude 0..1 (érodée à terme)
+        float fluxr = geo.b;                 // flux d'eau (rivières/lacs, § 10)
+        float moist = geo.a;                 // humidité grande échelle
 
         // Glace texturée (banquise + sommets) : plaques, réseau de fractures bleutées
         // profondes et éclats brillants (sastrugi) -> banquise vivante, pas un aplat.
@@ -388,8 +417,7 @@ vec3 surface(vec3 d, vec3 k, out float wet) {
         glace = mix(glace, vec3(0.5, 0.66, 0.85), crack * 0.6);  // crevasses profondes
         glace += vec3(0.05, 0.06, 0.07) * spark;                 // éclats de neige
 
-        float sea = mix(0.36, 0.60, eau);    // niveau de la mer selon la couverture d'eau
-        float shade = 1.0; // relief, appliqué en fin pour que la glace l'ait aussi
+        float sea = niveau_mer;              // quantile précalculé : couverture EXACTE (§ 9.1)
         vec3 base;
         if (eau > 0.001 && h < sea) {
             // Océan : sombre au large, plus clair (turquoise) sur les hauts-fonds côtiers.
@@ -418,9 +446,13 @@ vec3 surface(vec3 d, vec3 k, out float wet) {
             vec3 prairie = veg_couleur * 1.2 + vec3(0.06, 0.09, 0.0);
             vec3 foret = veg_couleur * 0.65;
             vec3 vcol = mix(prairie, foret, smoothstep(0.10, 0.42, lh));
-            float veg = veg_couv
+            // `moist` est un RANG 0..1 (§ 11.2 bis) : seuil à 1-veg_couv ->
+            // la végétation couvre la fraction demandée, sur les zones les
+            // PLUS humides (berges, côtes, cuvettes) -> forêts-galeries.
+            float sv = 1.0 - veg_couv;
+            float veg = smoothstep(0.0, 0.2, veg_couv)
                       * smoothstep(0.60, 0.40, lh)
-                      * smoothstep(0.34, 0.52, moist)
+                      * smoothstep(sv - 0.10, sv + 0.06, moist)
                       * (1.0 - lat * 0.55) * (1.0 - mont);
             vec3 land = mix(rock, vcol, veg);
             // Dunes : ondulations parallèles déformées par le bruit (ergs), en plaine.
@@ -469,41 +501,81 @@ vec3 surface(vec3 d, vec3 k, out float wet) {
             float snow = smoothstep(0.62, 0.85, lh + mont * 0.4) * (0.35 + 0.65 * lat) * relief;
             land = mix(land, glace, clamp(snow, 0.0, 1.0));
 
-            // Rivières : fines lignes d'eau sinueuses, surtout en plaine.
-            if (rivieres > 0.0) {
-                float rv = fbm(p * 1.5 + 50.0);
-                float chan = 1.0 - smoothstep(0.0, 0.05, abs(rv - 0.5));
-                float riv = chan * smoothstep(0.55, 0.18, lh) * rivieres;
-                if (riv_lave > 0.5) {
+            // RÉGIME hydrologique (§ 10.2) : le flux précalculé s'interprète.
+            // Pas d'atmosphère ni de voile -> pas de liquide, JAMAIS (la Lune
+            // ne doit pas avoir de flaques) ; air mais pas d'eau -> salines et
+            // lits à sec ; riv_lave -> lave.
+            float a_air = step(0.02, atmo.r + atmo.g + atmo.b + voile);
+            float a_eau = step(0.0015, eau);
+            // Régime lave : riv_lave explicite OU monde de lave (coulées § 11 bis).
+            float regime_lave = max(riv_lave, step(0.3, lave));
+            // Rivières : réseau d'écoulement PRÉCALCULÉ (flux D8, § 10).
+            // Seuil piloté par `rivieres` -> contrôle artistique conservé ;
+            // la largeur croît vers l'aval (le flux monte, la bande s'élargit).
+            if ((rivieres > 0.0 || regime_lave > 0.5) && (a_air > 0.5 || regime_lave > 0.5)) {
+                float seuil = mix(0.78, 0.50, max(rivieres, regime_lave * 0.7));
+                float riv = smoothstep(seuil, seuil + 0.08, fluxr) * (1.0 - smoothstep(0.90, 0.94, fluxr));
+                if (regime_lave > 0.5) {
                     land = mix(land, vec3(0.9, 0.35, 0.08), riv);       // coulée de lave
                     land = mix(land, vec3(1.0, 0.85, 0.4), riv * riv * 0.7); // cœur incandescent
-                } else {
+                } else if (a_eau > 0.5) {
                     land = mix(land, couleur3 * 0.9, riv);
                     land = mix(land, veg_couleur, riv * 0.35 * veg_couv); // berges verdoyantes
+                } else {
+                    land = mix(land, couleur2 * 0.72, riv * 0.8); // oued : lit à sec sombre
+                }
+            }
+            // Eau stagnante (lacs/mers de lave/salines, § 9.2) : flux saturé.
+            float lac = smoothstep(0.93, 0.965, fluxr) * max(a_air, regime_lave);
+            if (lac > 0.0) {
+                if (regime_lave > 0.5) {
+                    land = mix(land, vec3(0.95, 0.4, 0.1), lac);
+                } else if (a_eau > 0.5) {
+                    land = mix(land, couleur3 * 0.6, lac);
+                    wet = max(wet, lac);
+                } else {
+                    // Saline / playa : croûte minérale claire, mate.
+                    land = mix(land, mix(couleur, vec3(0.93, 0.9, 0.84), 0.7), lac);
                 }
             }
             base = land;
-
-            // Relief : ombrage directionnel par la pente de l'altitude effective
-            // (h + crêtes) -> les versants accrochent la lumière, volume des montagnes.
-            vec3 tang = normalize(cross(k, d) + vec3(1e-4));
-            float e = h + relief * 0.3 * rg;
-            float rgl = 1.0 - abs(2.0 * fbm((p + tang * 0.30) * 2.2 + 9.0) - 1.0);
-            float el = fbm(p + 1.9 * q + tang * 0.30) + relief * 0.3 * rgl;
-            shade = 1.0 + clamp((e - el) * (4.0 + 6.0 * relief), -0.32, 0.32);
+            // (L'ombrage de pente est désormais fait par la NORMALE PERTURBÉE
+            // dans main() : les versants réagissent à la vraie position du soleil.)
         }
 
-        // Refroidissement latitudinal.
-        base = mix(base, mix(base, vec3(0.78, 0.83, 0.90), 0.7), lat * grad_lat);
-        // Calottes polaires : on seuille une "latitude froide" perturbée par du bruit
-        // multi-échelle (grandes anses + détail fin) -> côte de glace déchiquetée, jamais
-        // une ligne droite ; quelques plaques de glace isolées descendent plus bas.
-        float bord = lat
+        // TEMPÉRATURE locale (§ 11) : latitude + refroidissement en ALTITUDE
+        // -> la neige descend sur les montagnes, les calottes suivent le climat.
+        float froid = lat + max(h - max(sea, 0.0), 0.0) * 0.5 * relief;
+        base = mix(base, mix(base, vec3(0.78, 0.83, 0.90), 0.7), froid * grad_lat);
+        // Calottes : seuil sur la "température froide" perturbée par du bruit
+        // multi-échelle -> côte de glace déchiquetée, jamais une ligne droite.
+        float bord = froid
                    + (fbm(p * 1.3 + 40.0) - 0.5) * 0.42
                    + (fbm(p * 3.5 + 55.0) - 0.5) * 0.18;
-        base = mix(base, glace, smoothstep(calotte, calotte + 0.05, bord));
-        // Relief appliqué en fin -> la banquise/neige reçoit aussi l'ombrage.
-        base *= shade;
+        float gel = smoothstep(calotte, calotte + 0.05, bord);
+        if (gel > 0.0) {
+            // La glace N'EST PAS un autocollant : elle lit l'eau et le relief.
+            vec3 gcol;
+            if (eau > 0.001 && h < sea) {
+                // BANQUISE : plaques et fractures (texture `glace`), liseré
+                // bleuté le long des côtes -> le trait de côte reste lisible,
+                // vieille banquise bleutée au large.
+                float pr = clamp((sea - h) / max(sea, 0.001), 0.0, 1.0);
+                gcol = mix(glace, vec3(0.62, 0.75, 0.9), smoothstep(0.25, 0.0, pr) * 0.5);
+                gcol = mix(gcol, glace * vec3(0.82, 0.9, 1.03), smoothstep(0.5, 1.0, pr) * 0.3);
+            } else {
+                // GLACE TERRESTRE : neige éclatante sur les hauteurs, langues
+                // glaciaires bleutées dans les vallées -> le relief transparaît.
+                float lh2 = (h - max(sea, 0.0)) / max(1.0 - max(sea, 0.0), 0.001);
+                gcol = mix(vec3(0.62, 0.74, 0.9), glace, smoothstep(0.10, 0.48, lh2));
+                // Rivières et lacs GELÉS : veines de glace vive qui suivent le
+                // réseau d'écoulement -> la géographie transparaît sous la calotte.
+                float veine = max(smoothstep(0.55, 0.75, fluxr), smoothstep(0.93, 0.965, fluxr));
+                gcol = mix(gcol, vec3(0.52, 0.7, 0.9), veine * 0.65);
+            }
+            base = mix(base, gcol, gel);
+            wet *= 1.0 - gel; // la glace est solide : plus de reflet d'eau libre
+        }
 
         // Couche de nuages : un bruit qui dérive au-dessus de la surface (par-dessus tout).
         if (nuages > 0.0) {
@@ -537,6 +609,15 @@ vec3 surface(vec3 d, vec3 k, out float wet) {
                 seuil_bas = 0.40;
                 seuil_haut = 0.70;
             }
+            // OMBRES PORTÉES des nuages au sol : même champ échantillonné
+            // décalé vers le soleil -> le sol s'assombrit sous les nuages.
+            vec3 lt = ld - d * dot(ld, d);
+            vec3 dsh = normalize(d + normalize(lt + vec3(1e-5)) * 0.05);
+            float o1 = fbm(dsh * 2.2 + sd + vec3(t1, 0.0, t1 * 0.7));
+            float o2 = fbm(dsh * 4.8 + sd + vec3(t2, 0.0, -t2 * 0.6));
+            float ombre = smoothstep(seuil_bas, seuil_haut, o1 * 0.65 + o2 * 0.35);
+            base *= 1.0 - 0.30 * ombre * nuages;
+
             float c = smoothstep(seuil_bas, seuil_haut, cov);
             base = mix(base, ccol, c * nuages);
         }
@@ -566,8 +647,11 @@ void main() {
     float ca = cos(a); float sa = sin(a);
     vec3 d = n * ca + cross(k, n) * sa + k * dot(k, n) * (1.0 - ca);
 
+    // Lumière exprimée dans le repère TOURNÉ de la surface (même rotation que
+    // n -> d) : nécessaire aux ombres de nuages calculées dans surface().
+    vec3 ld = L * ca + cross(k, L) * sa + k * dot(k, L) * (1.0 - ca);
     float wet;
-    vec3 albedo = surface(d, k, wet);
+    vec3 albedo = surface(d, k, ld, wet);
     // Verrouillage de marée (eyeball) : la surface de base fait le "jour" ; on ajoute une
     // calotte glaciaire irrégulière côté nuit, un anneau de forêt au terminateur (option),
     // et une zone lave/obsidienne au point subsolaire (option, émissif plus bas).
@@ -586,7 +670,24 @@ void main() {
             albedo = mix(albedo, vec3(0.05, 0.045, 0.06), eye_hot * 0.85); // obsidienne
         }
     }
-    vec3 lit = vec3(0.35) + light_color * (0.65 * diff);
+    // NORMALE PERTURBÉE (telluriques) : le gradient d'altitude bosselle la
+    // sphère -> les versants accrochent la lumière selon la position réelle
+    // du soleil. L'eau (wet) reste lisse.
+    float diffb = diff;
+    if (type_p < 0.5) {
+        vec3 tb1 = normalize(cross(k, d) + vec3(1e-4));
+        vec3 tb2 = cross(d, tb1);
+        float eb = 0.012;
+        float hb0 = altitude_atlas(texture2D(terrain, dir_vers_atlas(d)));
+        float hb1 = altitude_atlas(texture2D(terrain, dir_vers_atlas(normalize(d + tb1 * eb))));
+        float hb2 = altitude_atlas(texture2D(terrain, dir_vers_atlas(normalize(d + tb2 * eb))));
+        float amp = relief * 5.0 * (1.0 - wet);
+        vec3 db = normalize(d - tb1 * (hb1 - hb0) * amp - tb2 * (hb2 - hb0) * amp);
+        // Retour au repère monde : rotation inverse (angle -a autour de k).
+        vec3 nb = db * ca - cross(k, db) * sa + k * dot(k, db) * (1.0 - ca);
+        diffb = max(dot(nb, L), 0.0);
+    }
+    vec3 lit = vec3(0.35) + light_color * (0.65 * diffb);
     vec3 col = albedo * lit;
     // Assombrissement du limbe (géantes gazeuses) : trajet atmosphérique vers les bords.
     if (type_p > 0.5 && type_p < 1.5) {
@@ -613,6 +714,17 @@ void main() {
         vec3 col_lave = mix(vec3(1.0, 0.32, 0.04), vec3(1.0, 0.7, 0.18), fract(seed * 0.5));
         col += col_lave * glow * lave;
     }
+    // COULÉES ET LACS DE LAVE ÉMISSIFS (§ 11 bis) : le réseau d'écoulement
+    // brille la nuit (une rivière de lave n'est jamais sombre), avec une
+    // pulsation lente -> volcanisme vivant. Suit le canal flux, pas un bruit.
+    if (max(riv_lave, step(0.3, lave)) > 0.5 && type_p < 0.5) {
+        vec4 g3 = texture2D(terrain, dir_vers_atlas(d));
+        float sl = mix(0.78, 0.50, max(rivieres, 0.7));
+        float coulee = smoothstep(sl, sl + 0.08, g3.b) * (1.0 - smoothstep(0.90, 0.94, g3.b));
+        float lacl = smoothstep(0.93, 0.965, g3.b);
+        float puls = 0.8 + 0.2 * sin(time * 0.7 + fbm(d * 3.0 + vec3(seed)) * 9.0);
+        col += vec3(1.0, 0.42, 0.08) * (coulee * 0.85 + lacl * 0.7) * puls;
+    }
     // Eyeball : coulées de lave incandescentes dans la zone subsolaire.
     if (eye_hot > 0.0) {
         float nh = fbm(d * 6.0 + 3.0);
@@ -624,11 +736,20 @@ void main() {
         float v = 1.0 - abs(2.0 * fbm(d * 5.0 + 12.0) - 1.0);
         col += vec3(0.3, 0.7, 1.0) * smoothstep(0.82, 0.98, v) * cryo;
     }
-    // Bioluminescence : lueur verte organique sur la face nuit.
-    if (biolum > 0.0) {
+    // Bioluminescence : la lueur SUIT LA GÉOGRAPHIE (§ 12) — forêts (humidité),
+    // fleuves et côtes deviennent des réseaux de lumière côté nuit, au lieu de
+    // taches plaquées au hasard.
+    if (biolum > 0.0 && type_p < 0.5) {
         float nuit = 1.0 - smoothstep(0.0, 0.25, diff);
-        float b = smoothstep(0.55, 0.8, fbm(d * 4.0 + 22.0));
-        col += vec3(0.2, 0.9, 0.55) * b * nuit * biolum;
+        vec4 g2 = texture2D(terrain, dir_vers_atlas(d));
+        float h2 = altitude_atlas(g2);
+        float grain = smoothstep(0.35, 0.75, fbm(d * 7.0 + 22.0)); // texture organique
+        float veg2 = smoothstep(1.0 - veg_couv - 0.10, 1.0 - veg_couv + 0.06, g2.a)
+                   * step(niveau_mer, h2) * grain;                  // forêts luminescentes
+        float riv2 = smoothstep(0.55, 0.70, g2.b);                  // fleuves/lacs de lumière
+        float cote = smoothstep(0.035, 0.0, abs(h2 - niveau_mer)) * step(0.0015, eau); // plancton côtier
+        float lueur = max(max(veg2 * 0.55, riv2 * 0.9), cote * 0.8);
+        col += vec3(0.2, 0.9, 0.55) * lueur * nuit * biolum;
     }
     // Lumières de villes (colonisation) : sur toute tellurique habitable (pas lave/voile),
     // propres à chaque planète (graine), sur la terre (1 - wet), côté nuit, regroupées en

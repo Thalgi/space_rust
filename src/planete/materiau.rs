@@ -111,8 +111,32 @@ pub(super) fn vider_cache() {
     TPL_ANNEAU.with(|c| *c.borrow_mut() = None);
 }
 
+// Texture de secours (1×1) : corps sans terrain précalculé (gazeuses, glacées)
+// et telluriques dont la génération asynchrone n'a pas fini (placeholder :
+// h ≈ 0.55 -> sol plat uni, ni océan global ni noir).
+thread_local! {
+    static TEX_VIDE: RefCell<Option<Texture2D>> = RefCell::new(None);
+}
+
+fn tex_vide() -> Texture2D {
+    TEX_VIDE.with(|c| {
+        if c.borrow().is_none() {
+            *c.borrow_mut() = Some(Texture2D::from_rgba8(1, 1, &[140, 0, 0, 128]));
+        }
+        c.borrow().as_ref().unwrap().clone()
+    })
+}
+
 /// Pousse tous les uniforms : communs (socle) + dynamiques (caméra/corps) + table.
-pub(super) fn appliquer_uniforms(mat: &Material, a: &Apparence, cam: &CameraInfo, c: Vec3, r: f32) {
+/// `terrain` : atlas cube-sphere précalculé + niveau de mer (telluriques).
+pub(super) fn appliquer_uniforms(
+    mat: &Material,
+    a: &Apparence,
+    cam: &CameraInfo,
+    c: Vec3,
+    r: f32,
+    terrain: Option<(&Texture2D, f32)>,
+) {
     impostor::uniforms_standard(mat, cam, get_time() as f32, DISC);
     mat.set_uniform("centre", (c.x, c.y, c.z));
     mat.set_uniform("rayon", r);
@@ -121,6 +145,18 @@ pub(super) fn appliquer_uniforms(mat: &Material, a: &Apparence, cam: &CameraInfo
         "light_color",
         (cam.light_color.x, cam.light_color.y, cam.light_color.z),
     );
+    match terrain {
+        Some((tex, niveau)) => {
+            mat.set_texture("terrain", tex.clone());
+            mat.set_uniform("niveau_mer", niveau);
+            mat.set_uniform("atlas_n", super::terrain::N_ATLAS as f32);
+        }
+        None => {
+            mat.set_texture("terrain", tex_vide());
+            mat.set_uniform("niveau_mer", 0.5f32);
+            mat.set_uniform("atlas_n", 1.0f32);
+        }
+    }
     for (nom, _, get) in TABLE {
         set_val(mat, nom, get(a));
     }
@@ -134,6 +170,8 @@ fn charger_corps() -> Material {
         UniformDesc::new("rayon", UniformType::Float1),
         UniformDesc::new("lumiere", UniformType::Float3),
         UniformDesc::new("light_color", UniformType::Float3),
+        UniformDesc::new("niveau_mer", UniformType::Float1),
+        UniformDesc::new("atlas_n", UniformType::Float1),
     ]);
     uniforms.extend(TABLE.iter().map(|(nom, t, _)| UniformDesc::new(nom, *t)));
     load_material(
@@ -143,6 +181,7 @@ fn charger_corps() -> Material {
         },
         MaterialParams {
             uniforms,
+            textures: vec!["terrain".to_string()],
             pipeline_params: PipelineParams {
                 depth_test: Comparison::LessOrEqual,
                 depth_write: true,

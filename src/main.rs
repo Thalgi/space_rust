@@ -12,8 +12,9 @@ mod rendu;
 mod soleil;
 mod systeme;
 mod ui;
+mod vaisseau;
 
-use ecran::{Accueil, Cible, Galerie, GalerieEtoiles, Objet, Skymap};
+use ecran::{Accueil, Cible, Galerie, GalerieEtoiles, Objet, Skymap, Vaisseaux};
 use macroquad::prelude::*;
 
 fn window_conf() -> Conf {
@@ -32,6 +33,7 @@ enum Etat {
     Objet(Box<Objet>),
     Galerie(Box<Galerie>),
     GalerieEtoiles(Box<GalerieEtoiles>),
+    Vaisseaux(Box<Vaisseaux>),
 }
 
 #[macroquad::main(window_conf)]
@@ -50,6 +52,7 @@ async fn main() {
                         Cible::GalerieEtoiles => {
                             Etat::GalerieEtoiles(Box::new(GalerieEtoiles::new()))
                         }
+                        Cible::Vaisseaux => Etat::Vaisseaux(Box::new(Vaisseaux::new())),
                     };
                 }
             }
@@ -70,6 +73,11 @@ async fn main() {
             }
             Etat::GalerieEtoiles(g) => {
                 if g.frame() {
+                    etat = Etat::Accueil(Accueil::new());
+                }
+            }
+            Etat::Vaisseaux(v) => {
+                if v.frame() {
                     etat = Etat::Accueil(Accueil::new());
                 }
             }

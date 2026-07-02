@@ -1,6 +1,7 @@
 mod anneau;
 mod apparence;
 mod materiau;
+pub mod terrain;
 
 pub use apparence::{Apparence, TypePlanete};
 
@@ -27,6 +28,11 @@ pub struct Planete {
     anneau_sv: Vec<Vertex>,
     anneau_si: Vec<u16>,
     mat_anneau: Option<Material>,
+    // Terrain précalculé (telluriques) : atlas cube-sphere + niveau de mer.
+    // Généré en ASYNCHRONE au premier draw (budget global de jobs -> pas de gel,
+    // la galerie affiche un placeholder le temps que le terrain arrive).
+    terrain_tex: Option<(Texture2D, f32)>,
+    terrain_job: Option<std::thread::JoinHandle<terrain::DonneesTerrain>>,
     // Lune : si parent défini, orbite analytique autour de l'astre `parent`.
     parent: Option<usize>,
     l_angle: f32,
@@ -69,6 +75,8 @@ impl Planete {
             anneau_sv: Vec::new(),
             anneau_si: Vec::new(),
             mat_anneau,
+            terrain_tex: None,
+            terrain_job: None,
             parent: None,
             l_angle: 0.0,
             l_omega: 0.0,
@@ -86,6 +94,17 @@ impl Planete {
     /// Vrai si la planète possède un anneau (la galerie recule la caméra pour le cadrer).
     pub fn a_un_anneau(&self) -> bool {
         self.app.anneau
+    }
+
+    /// Vrai si le rendu est définitif (terrain généré, ou corps sans terrain).
+    /// Sert aux captures de non-régression : on ne fige pas un placeholder.
+    pub fn terrain_pret(&self) -> bool {
+        self.app.type_p != TypePlanete::Tellurique || self.terrain_tex.is_some()
+    }
+
+    /// Copie de l'apparence (pour le bench de génération).
+    pub fn apparence(&self) -> Apparence {
+        self.app
     }
 
     /// Rayon externe de l'anneau (× rayon planète) ; 0 si aucun anneau.
@@ -204,12 +223,28 @@ impl Astre for Planete {
         let c = self.base.position;
         let r = self.base.rayon;
 
+        // Terrain précalculé (telluriques) : génération en thread de fond,
+        // upload GPU quand le job aboutit. En attendant, placeholder (tex 1×1).
+        if self.terrain_tex.is_none() && self.app.type_p == TypePlanete::Tellurique {
+            if self.terrain_job.as_ref().is_some_and(|j| j.is_finished()) {
+                if let Ok(d) = self.terrain_job.take().unwrap().join() {
+                    let tex = Texture2D::from_rgba8(d.largeur, d.hauteur, &d.atlas);
+                    tex.set_filter(FilterMode::Linear);
+                    self.terrain_tex = Some((tex, d.niveau_mer));
+                }
+            } else if self.terrain_job.is_none() && terrain::reserver_job() {
+                let app = self.app;
+                self.terrain_job = Some(std::thread::spawn(move || terrain::generer_job(&app)));
+            }
+        }
+
         // --- Corps (impostor) ---
         self.verts.clear();
         self.inds.clear();
         crate::impostor::push_quad(&mut self.verts, &mut self.inds, c, cam.right, cam.up, r * 1.05, WHITE);
 
-        appliquer_uniforms(&self.mat, &self.app, cam, c, r);
+        let terr = self.terrain_tex.as_ref().map(|(t, nm)| (t, *nm));
+        appliquer_uniforms(&self.mat, &self.app, cam, c, r, terr);
 
         // Anneau : moitié arrière AVANT le corps (la planète la masquera).
         if self.mat_anneau.is_some() {
