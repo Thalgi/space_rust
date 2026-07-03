@@ -73,10 +73,12 @@ impl Galerie {
             self.pixelise = !self.pixelise; // filtre pixel ON/OFF
         }
         if is_key_pressed(KeyCode::B) {
-            // Bench complet en tâche de fond -> bench_terrain.txt + console.
+            // Bench complet en tâche de fond (telluriques uniquement) ->
+            // bench_terrain.txt ; progression affichée dans l'overlay du bas.
             let presets: Vec<(String, crate::planete::Apparence)> = self
                 .cellules
                 .iter()
+                .filter(|(_, _, p)| p.apparence().type_p == crate::planete::TypePlanete::Tellurique)
                 .map(|(nom, _, p)| (nom.clone(), p.apparence()))
                 .collect();
             crate::planete::terrain::bench(presets);
@@ -179,13 +181,14 @@ impl Galerie {
                 ..Default::default()
             };
             if self.pixelise {
-                // Rendu dans la cible basse-déf : le blit final (flip_y) remet
-                // l'image à l'endroit, on adresse donc la cible en repère haut-bas.
+                // Rendu dans la cible basse-déf : MÊME repère GL (bas-gauche)
+                // que le chemin écran, à l'échelle près — le blit flip_y de la
+                // phase 2D remet l'ensemble à l'endroit.
                 let p = PIX as f32;
                 cam3d.render_target = self.cible.clone();
                 cam3d.viewport = Some((
                     (cell_x / p) as i32,
-                    (cell_y / p) as i32,
+                    ((screen_height() - (cell_y + render_h)) / p) as i32,
                     (cw / p) as i32,
                     (render_h / p) as i32,
                 ));
@@ -261,17 +264,20 @@ impl Galerie {
             Color::new(0.6, 0.8, 0.8, 1.0),
         );
 
-        // Overlay de PERFORMANCES : FPS + statistiques de génération de terrain.
+        // Overlay de PERFORMANCES : FPS + stats de génération + état du bench.
         let (nb, dernier, total) = crate::planete::terrain::stats();
         let moyen = if nb > 0 { total / nb } else { 0 };
+        let bench_txt = crate::planete::terrain::bench_etat()
+            .unwrap_or_else(|| "B: lancer le bench".to_string());
         draw_text(
             &format!(
-                "{} FPS   pixel: {}   terrains: {}   dernier: {} ms   moyen: {} ms   (B -> bench_terrain.txt)",
+                "{} FPS   pixel: {}   terrains: {}   dernier: {} ms   moyen: {} ms   |   {}",
                 get_fps(),
                 if self.pixelise { "ON" } else { "off" },
                 nb,
                 dernier,
                 moyen,
+                bench_txt,
             ),
             12.0,
             screen_height() - 10.0,

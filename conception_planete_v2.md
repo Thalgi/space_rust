@@ -415,8 +415,33 @@ Restantes (ordre de conception) :
    - **Température locale** : calotte et refroidissement seuillent
      `froid = latitude + altitude·relief` -> la neige descend sur les
      montagnes, plus seulement aux pôles.
-7. Benchmark de `QUALITE` et de la résolution (256 vs 512) — à faire sur la
-   machine cible (les mesures sandbox ne sont pas représentatives).
+7. ~~Outillage de benchmark~~ **FAIT** — mesures à réaliser sur machine cible :
+   - **Touche B** (galerie telluriques) : bench complet en tâche de fond —
+     tout le catalogue en 256² avec détail par étape (bruit / volcans /
+     érosion / hydro / bake), stats (min/médiane/moyenne/max), top 5 lents,
+     échantillon 512². Rapport écrit dans `bench_terrain.txt` + console.
+   - **Overlay permanent** en bas de la galerie : FPS, filtre pixel ON/off,
+     nb de terrains générés, dernier temps, temps moyen.
+   - Répartition typique du coût (VM 2 cœurs, monde tempéré 256²) : érosion
+     ~62 %, bruit ~26 %, hydrologie ~11 %, bake <1 %. Le levier n° 1 est donc
+     `QUALITE` (gouttes/texel) dans `params_depuis_apparence`.
+   - 512² ≈ 4× le temps du 256² et 4× la mémoire GPU (~6 Mo/planète).
+   - ⚠ Bencher en RELEASE (`cargo run --release`) : le rapport indique le
+     profil utilisé.
+   - **Bench du 2026-07-02 (8 cœurs, release)** : médiane 1061 ms, max 2040 ms
+     (Barnacle), érosion dominante (~62 %), bruit ~430 ms non scalé.
+   - **Optimisations appliquées suite au bench** : bruit découpé en bandes de
+     lignes sur tous les cœurs (`available_parallelism`, plus seulement 6
+     threads) + warp à 3 octaves (−30 % de bruit) ; érosion : `hauteur_bi`
+     pour le point d'arrivée (2× moins de lectures/pas), `QUALITE` 0.25→0.15
+     avec taux d'érosion 0.30→0.38 (creusement préservé), 48 pas max.
+     Mesure VM 2 cœurs : monde tempéré 1,54 s → 0,85 s (−45 %) ; attendu
+     mieux encore sur 8 cœurs (le bruit scale enfin). À re-bencher (touche B)
+     et comparer les captures C avant/après (l'érosion est un peu plus douce).
+
+Bonus galerie : **P** = filtre pixel ON/OFF (phase 3D rendue en demi-résolution
+upscalée en plus proche voisin, textes nets — préfigure le style pixel final),
+**C** = captures de non-régression, **B** = bench.
 8. ~~Mini-chantier « anti-autocollant » (glace + bioluminescence)~~ **FAIT** :
    - **Glace** : la calotte distingue BANQUISE (liseré bleuté le long des
      côtes -> le trait de côte reste lisible, vieille banquise au large, plus

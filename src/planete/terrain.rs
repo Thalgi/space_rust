@@ -170,15 +170,19 @@ fn vnoise(x: Vec3) -> f32 {
     )
 }
 
-fn fbm(mut p: Vec3) -> f32 {
+fn fbm_n(mut p: Vec3, octaves: u32) -> f32 {
     let mut v = 0.0;
     let mut a = 0.5;
-    for _ in 0..5 {
+    for _ in 0..octaves {
         v += a * vnoise(p);
         p *= 2.0;
         a *= 0.5;
     }
     v
+}
+
+fn fbm(p: Vec3) -> f32 {
+    fbm_n(p, 5)
 }
 
 fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
@@ -204,7 +208,9 @@ pub struct DonneesTerrain {
 /// mais les crêtes ridged sont intégrées DANS h -> l'eau et l'érosion les voient.
 fn altitude_base(d: Vec3, freq: f32, relief: f32, sd: Vec3) -> f32 {
     let p = d * freq + sd;
-    let q = vec3(fbm(p + 1.3), fbm(p + 7.2), fbm(p + 3.4));
+    // Le champ de warp ne sert qu'à déformer : 3 octaves suffisent (le détail
+    // fin du warp est invisible) -> ~30 % de bruit en moins.
+    let q = vec3(fbm_n(p + 1.3, 3), fbm_n(p + 7.2, 3), fbm_n(p + 3.4, 3));
     let mut h = fbm(p + 1.9 * q);
     h = h + (fbm(p * 3.0 + 17.0) - h) * 0.18;
     let rg = 1.0 - (2.0 * fbm(p * 2.2 + 9.0) - 1.0).abs();
@@ -270,15 +276,18 @@ fn params_depuis_apparence(app: &Apparence, n: usize) -> ParamsErosion {
         (0.15 + app.eau * 0.9).min(1.0) * (1.0 - 0.5 * app.voile)
     };
     let glaciaire = app.calotte < 0.35;
-    const QUALITE: f32 = 0.25; // gouttes par texel à intensité 1 (curseur perf/beauté)
+    // Curseur perf/beauté n° 1. 0.15 goutte/texel avec un taux d'érosion
+    // relevé (0.38) sculpte quasiment comme 0.25/0.30 pour ~40 % du coût en
+    // moins (calibré au bench du 2026-07-02 : l'érosion dominait à ~62 %).
+    const QUALITE: f32 = 0.15;
     ParamsErosion {
         nb_gouttes: (QUALITE * intensite * (NB_FACES * n * n) as f32) as u32,
         inertie: if glaciaire { 0.35 } else { 0.05 },
         capacite: 6.0,
-        erosion: 0.3,
+        erosion: 0.38,
         depot: 0.3,
-        evaporation: if app.eau < 0.15 { 0.06 } else { 0.015 },
-        pas_max: 64,
+        evaporation: if app.eau < 0.15 { 0.06 } else { 0.02 },
+        pas_max: 48,
         talus: (4.0 / n as f32) * if app.dunes > 0.0 { 0.6 } else { 1.0 },
     }
 }
@@ -294,6 +303,20 @@ fn lire_h(t: &Terrain, face: usize, xi: i32, yi: i32) -> f32 {
         sphere_vers_texel(d, t.n)
     };
     t.h[t.idx(f, x, y)]
+}
+
+/// Hauteur seule par interpolation bilinéaire (2× moins de lectures que
+/// `hauteur_gradient` : pour le point d'ARRIVÉE d'un pas de goutte).
+fn hauteur_bi(t: &Terrain, face: usize, fx: f32, fy: f32) -> f32 {
+    let x0 = fx.floor() as i32;
+    let y0 = fy.floor() as i32;
+    let u = fx - x0 as f32;
+    let v = fy - y0 as f32;
+    let h00 = lire_h(t, face, x0, y0);
+    let h10 = lire_h(t, face, x0 + 1, y0);
+    let h01 = lire_h(t, face, x0, y0 + 1);
+    let h11 = lire_h(t, face, x0 + 1, y0 + 1);
+    h00 * (1.0 - u) * (1.0 - v) + h10 * u * (1.0 - v) + h01 * (1.0 - u) * v + h11 * u * v
 }
 
 /// Hauteur + gradient (repère de la face) par interpolation bilinéaire.
@@ -405,7 +428,7 @@ pub fn eroder_hydraulique(t: &mut Terrain, p: &ParamsErosion, rng: &mut Rng) {
             }
             pos = (pos + vel.normalize() * pas).normalize();
             let (nf, nfx, nfy) = sphere_vers_texel_f(pos, n);
-            let (h1, _, _) = hauteur_gradient(t, nf, nfx, nfy);
+            let h1 = hauteur_bi(t, nf, nfx, nfy);
             let dh = h1 - h0;
 
             let cap = (-dh).max(0.01) * eau * p.capacite;
@@ -423,7 +446,7 @@ pub fn eroder_hydraulique(t: &mut Terrain, p: &ParamsErosion, rng: &mut Rng) {
             }
 
             eau *= 1.0 - p.evaporation;
-            if eau < 0.05 {
+            if eau < 0.08 {
                 break;
             }
             face = nf;
@@ -716,26 +739,34 @@ pub fn generer_chrono(app: &Apparence, n: usize) -> (DonneesTerrain, EtapesMs) {
     let sd = vec3(app.seed, app.seed * 1.7, app.seed * 0.3);
     let freq = frequence_motif(app.eau_motif);
 
-    // Remplissage parallèle : une face par thread (les couches sont contiguës
-    // par face, on découpe en tranches disjointes -> pas de synchronisation).
+    // Remplissage parallèle par BANDES DE LIGNES réparties sur tous les cœurs
+    // disponibles (mieux équilibré que « une face par thread », et exploite
+    // les machines à 8+ cœurs). Tranches disjointes -> zéro synchronisation.
     let relief = app.relief;
+    let nb_th = std::thread::available_parallelism().map(|c| c.get()).unwrap_or(4).clamp(2, 16);
+    let lignes_tot = NB_FACES * n; // ligne globale l -> (face l/n, y l%n)
+    let par_bande = (lignes_tot + nb_th - 1) / nb_th;
     std::thread::scope(|s| {
         let mut restes_h: &mut [f32] = &mut t.h;
         let mut restes_hum: &mut [f32] = &mut t.hum;
-        for f in 0..NB_FACES {
-            let (h_f, h_reste) = restes_h.split_at_mut(n * n);
-            let (hum_f, hum_reste) = restes_hum.split_at_mut(n * n);
+        let mut l0 = 0usize;
+        while l0 < lignes_tot {
+            let nb_l = par_bande.min(lignes_tot - l0);
+            let (h_b, h_reste) = restes_h.split_at_mut(nb_l * n);
+            let (hum_b, hum_reste) = restes_hum.split_at_mut(nb_l * n);
             restes_h = h_reste;
             restes_hum = hum_reste;
             s.spawn(move || {
-                for y in 0..n {
+                for li in 0..nb_l {
+                    let (f, y) = ((l0 + li) / n, (l0 + li) % n);
                     for x in 0..n {
                         let d = texel_vers_sphere(f, x, y, n);
-                        h_f[y * n + x] = altitude_base(d, freq, relief, sd);
-                        hum_f[y * n + x] = fbm(d * freq * 0.8 + sd + 30.0);
+                        h_b[li * n + x] = altitude_base(d, freq, relief, sd);
+                        hum_b[li * n + x] = fbm_n(d * freq * 0.8 + sd + 30.0, 4);
                     }
                 }
             });
+            l0 += nb_l;
         }
     });
 
@@ -796,18 +827,48 @@ pub fn stats() -> (usize, usize, usize) {
     )
 }
 
+// État du bench, affiché par l'overlay de la galerie.
+static BENCH_FAIT: AtomicUsize = AtomicUsize::new(0);
+static BENCH_TOTAL: AtomicUsize = AtomicUsize::new(0);
+static BENCH_MSG: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// Texte d'état du bench pour l'UI : progression, puis chemin du rapport.
+pub fn bench_etat() -> Option<String> {
+    let total = BENCH_TOTAL.load(Ordering::Relaxed);
+    if total == 0 {
+        return None;
+    }
+    let fait = BENCH_FAIT.load(Ordering::Relaxed);
+    if fait < total {
+        Some(format!("bench en cours: {}/{}", fait, total))
+    } else {
+        BENCH_MSG.lock().ok().map(|m| m.clone())
+    }
+}
+
 /// Bench complet en tâche de fond : tout le catalogue en 256², un échantillon
-/// en 512². Rapport dans `bench_terrain.txt` (cwd) + console.
+/// en 512². Rapport écrit dans `bench_terrain.txt` (chemin absolu affiché à
+/// l'écran et en console). Le fichier est écrit dès la fin de la passe 256².
 pub fn bench(presets: Vec<(String, Apparence)>) {
+    // Un seul bench à la fois.
+    let total = BENCH_TOTAL.load(Ordering::Relaxed);
+    if total != 0 && BENCH_FAIT.load(Ordering::Relaxed) < total {
+        return;
+    }
+    BENCH_TOTAL.store(presets.len().max(1), Ordering::Relaxed);
+    BENCH_FAIT.store(0, Ordering::Relaxed);
     std::thread::spawn(move || {
         use std::fmt::Write as _;
+        let chemin = std::env::current_dir()
+            .map(|d| d.join("bench_terrain.txt"))
+            .unwrap_or_else(|_| std::path::PathBuf::from("bench_terrain.txt"));
         let coeurs = std::thread::available_parallelism().map(|c| c.get()).unwrap_or(1);
         let profil = if cfg!(debug_assertions) { "debug" } else { "release" };
         let mut r = String::new();
         let _ = writeln!(r, "=== BENCH TERRAIN ===");
         let _ = writeln!(
             r,
-            "coeurs logiques: {} | profil: {} | atlas: {}x{} ({} texels) | QUALITE erosion: 0.25",
+            "coeurs logiques: {} | profil: {} | atlas: {}x{} ({} texels) | QUALITE erosion: 0.15",
             coeurs, profil, N_ATLAS, N_ATLAS, NB_FACES * N_ATLAS * N_ATLAS
         );
         let _ = writeln!(
@@ -826,6 +887,7 @@ pub fn bench(presets: Vec<(String, Apparence)>) {
                 nom, tot, e.bruit, e.volcans, e.erosion, e.hydro, e.bake
             );
             totaux.push((nom.clone(), tot));
+            BENCH_FAIT.store(idx + 1, Ordering::Relaxed);
             if idx % 10 == 9 {
                 println!("bench: {}/{}", idx + 1, presets.len());
             }
@@ -846,14 +908,20 @@ pub fn bench(presets: Vec<(String, Apparence)>) {
         for (nom, tms) in totaux.iter().take(5) {
             let _ = writeln!(r, "    {:<28} {:>6.0} ms", nom, tms);
         }
+        // Écriture INTERMÉDIAIRE : le rapport 256² existe même si on quitte
+        // pendant l'échantillon 512².
+        let _ = std::fs::write(&chemin, &r);
         let _ = writeln!(r, "--- echantillon 512x512 (x4 texels, x4 memoire GPU) :");
         for (nom, app) in presets.iter().take(4) {
             let t0 = std::time::Instant::now();
             let _ = generer_chrono(app, 512);
             let _ = writeln!(r, "    {:<28} {:>6.0} ms", nom, t0.elapsed().as_secs_f32() * 1000.0);
         }
-        let _ = std::fs::write("bench_terrain.txt", &r);
-        println!("{r}\nbench termine -> bench_terrain.txt");
+        let _ = std::fs::write(&chemin, &r);
+        if let Ok(mut m) = BENCH_MSG.lock() {
+            *m = format!("bench termine -> {}", chemin.display());
+        }
+        println!("{r}\nbench termine -> {}", chemin.display());
     });
 }
 
