@@ -13,6 +13,10 @@
 
 use macroquad::prelude::*;
 
+// Partage la police Minitel du projet (binaire séparé -> inclusion par chemin).
+#[path = "../police.rs"]
+mod police;
+
 const NX: usize = 200;
 const NY: usize = 200;
 const DX: f64 = 1.0 / NX as f64;
@@ -227,6 +231,8 @@ fn window_conf() -> Conf {
 
 #[macroquad::main(window_conf)]
 async fn main() {
+    police::charger().await;
+
     let mut u = reset();
     let mut temps = 0.0;
     let mut pause = false;
@@ -306,7 +312,7 @@ async fn main() {
             },
         );
 
-        draw_text(
+        police::texte(
             &format!(
                 "t = {:.2}   champ: {}   [1-4] champ  [espace] pause  [R] reset",
                 temps,

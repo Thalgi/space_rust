@@ -44,7 +44,9 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
 - [ ] **Variable céphéide / Mira** : **pulsation** (rayon + luminosité qui oscillent).
 - [~] **Étoile à flares** (naine M active) : preset galerie présent ; sursauts/CME pas encore (cf. recherche).
 - [ ] **Naine blanche pulsante (ZZ Ceti)** : oscillation rapide de luminosité.
-- [ ] **Trou noir** (accrétion) : disque + lentille gravitationnelle (gros morceau à part).
+- [~] **Trou noir** (accrétion) : preset galerie présent (`couronne_type 5` = horizon noir + anneau
+  de photons + disque d'accrétion incliné, Doppler + spirale, **stylisé**). Reste : lentille
+  gravitationnelle (arc du disque au-dessus de l'horizon) — le vrai gros morceau. *(2026-07-04)*
 - [x] **Magnétar** : arcs de champ magnétique dipolaire brillants, violets (`couronne_type 4`).
 
 ---

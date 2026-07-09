@@ -7,14 +7,21 @@ mod fond;
 mod genese;
 mod impostor;
 mod menu;
+mod orbite;
 mod planete;
+mod police;
 mod rendu;
+mod stabilite;
+mod starmap;
+mod stellaire;
 mod soleil;
 mod systeme;
 mod ui;
 mod vaisseau;
 
-use ecran::{Accueil, Cible, Galerie, GalerieEtoiles, Objet, Skymap, Vaisseaux};
+use ecran::{
+    Accueil, Cible, Galerie, GalerieEtoiles, Objet, Skymap, SortieStarmap, Starmap, Vaisseaux,
+};
 use macroquad::prelude::*;
 
 fn window_conf() -> Conf {
@@ -29,6 +36,7 @@ fn window_conf() -> Conf {
 /// Écran actif. Les vues lourdes sont boxées pour garder l'enum compact.
 enum Etat {
     Accueil(Accueil),
+    Starmap(Box<Starmap>),
     Skymap(Box<Skymap>),
     Objet(Box<Objet>),
     Galerie(Box<Galerie>),
@@ -38,6 +46,8 @@ enum Etat {
 
 #[macroquad::main(window_conf)]
 async fn main() {
+    police::charger().await;
+
     let mut etat = Etat::Accueil(Accueil::new());
 
     loop {
@@ -45,6 +55,7 @@ async fn main() {
             Etat::Accueil(a) => {
                 if let Some(cible) = a.frame() {
                     etat = match cible {
+                        Cible::Starmap => Etat::Starmap(Box::new(Starmap::new())),
                         Cible::Skymap => Etat::Skymap(Box::new(Skymap::new())),
                         Cible::Objet => Etat::Objet(Box::new(Objet::new())),
                         Cible::Galerie => Etat::Galerie(Box::new(Galerie::new(false))),
@@ -53,6 +64,16 @@ async fn main() {
                             Etat::GalerieEtoiles(Box::new(GalerieEtoiles::new()))
                         }
                         Cible::Vaisseaux => Etat::Vaisseaux(Box::new(Vaisseaux::new())),
+                    };
+                }
+            }
+            Etat::Starmap(s) => {
+                if let Some(sortie) = s.frame() {
+                    etat = match sortie {
+                        SortieStarmap::Accueil => Etat::Accueil(Accueil::new()),
+                        SortieStarmap::Systeme(dest) => {
+                            Etat::Skymap(Box::new(Skymap::depuis_destination(dest)))
+                        }
                     };
                 }
             }

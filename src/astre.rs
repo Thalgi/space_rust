@@ -12,6 +12,16 @@ pub enum Categorie {
     Comete,
 }
 
+/// Foyer d'une planète « sur rails » : autour de quoi elle orbite.
+/// - `Barycentre` : le centre de masse du système (origine) — type P (circumbinaire)
+///   ou étoile unique à l'origine.
+/// - `Etoile(idx)` : une étoile hôte précise (mobile) — type S (circumstellaire).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Foyer {
+    Barycentre,
+    Etoile(usize),
+}
+
 /// Données physiques communes à TOUS les astres.
 /// (Un trait ne peut pas stocker de champs : on factorise donc ici.)
 pub struct CorpsBase {
@@ -40,8 +50,12 @@ pub struct CameraInfo {
     pub right: Vec3,
     pub up: Vec3,
     pub forward: Vec3,     // de la caméra vers la cible
-    pub light_pos: Vec3,   // position de l'étoile (éclairage des planètes)
-    pub light_color: Vec3, // couleur * intensité de l'étoile
+    pub light_pos: Vec3,   // position de l'étoile PRIMAIRE (spéculaire, terminateur…)
+    pub light_color: Vec3, // couleur * intensité de l'étoile primaire
+    // Éclairage multi-source (systèmes à plusieurs étoiles). Indice 0 = primaire
+    // (= light_pos/light_color) ; entrées inutilisées : couleur nulle.
+    pub lights_pos: [Vec3; 4],
+    pub lights_color: [Vec3; 4],
 }
 
 /// La "superclasse" : tout ce qui est un astre sait se mettre à jour
@@ -72,6 +86,12 @@ pub trait Astre {
         None
     }
 
+    /// Luminosité scalaire (intensité relative) si l'astre est une étoile. Sert au
+    /// calcul de la zone habitable combinée (circumbinaire) des systèmes multiples.
+    fn luminosite(&self) -> Option<f32> {
+        None
+    }
+
     /// Bornes (interne, externe) de la zone habitable, si l'astre est une étoile.
     fn zone_viable(&self) -> Option<(f32, f32)> {
         None
@@ -89,4 +109,19 @@ pub trait Astre {
     }
     /// Place la lune autour de `centre` (position du parent) et avance son orbite.
     fn orbiter_autour(&mut self, _centre: Vec3, _dt: f32) {}
+
+    /// Mode « sur rails » : place le corps sur son orbite de Kepler analytique à
+    /// l'instant `t`, autour de `foyer` (position de l'astre central). No-op pour
+    /// les corps sans orbite de Kepler (étoiles, lunes, ceintures).
+    fn maj_rail(&mut self, _foyer: Vec3, _t: f64) {}
+
+    /// Hand-off vers le mode N-corps : amorce position/vitesse depuis l'orbite
+    /// analytique (état vis-viva à `t`), pour partir d'un état cohérent. No-op par défaut.
+    fn amorcer_ncorps(&mut self, _foyer_pos: Vec3, _foyer_vel: Vec3, _t: f64) {}
+
+    /// Foyer d'orbite si le corps est une planète « sur rails » (autour d'une étoile
+    /// hôte ou du barycentre). `None` par défaut (étoiles, lunes, ceintures).
+    fn foyer(&self) -> Option<Foyer> {
+        None
+    }
 }

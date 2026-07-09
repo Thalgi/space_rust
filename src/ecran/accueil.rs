@@ -3,6 +3,7 @@ use macroquad::prelude::*;
 
 /// Destination choisie depuis l'accueil.
 pub enum Cible {
+    Starmap,
     Skymap,
     Objet,
     Galerie,
@@ -27,8 +28,8 @@ impl Accueil {
 
         let cx = screen_width() * 0.5;
         let titre = "* GENERATEUR DE SYSTEMES *";
-        let tw = measure_text(titre, None, 36, 1.0).width;
-        draw_text(titre, cx - tw * 0.5, screen_height() * 0.28, 36.0, Color::new(0.0, 0.9, 0.9, 1.0));
+        let tw = crate::police::mesure(titre, 36);
+        crate::police::texte(titre, cx - tw * 0.5, screen_height() * 0.28, 36.0, Color::new(0.0, 0.9, 0.9, 1.0));
 
         let bw = 340.0;
         let bh = 40.0;
@@ -40,14 +41,19 @@ impl Accueil {
         let b4 = Rect::new(cx - bw * 0.5, y0 + 3.0 * (bh + gap), bw, bh);
         let b5 = Rect::new(cx - bw * 0.5, y0 + 4.0 * (bh + gap), bw, bh);
         let b6 = Rect::new(cx - bw * 0.5, y0 + 5.0 * (bh + gap), bw, bh);
+        let b7 = Rect::new(cx - bw * 0.5, y0 + 6.0 * (bh + gap), bw, bh);
         minitel_ligne(b1, "SKYMAP - SYSTEME COMPLET", m);
         minitel_ligne(b2, "OBJET CELESTE - VUE ISOLEE", m);
         minitel_ligne(b3, "GALERIE - TYPES TELLURIQUES", m);
         minitel_ligne(b4, "GALERIE - GEANTES GAZEUSES", m);
         minitel_ligne(b5, "GALERIE - ETOILES", m);
         minitel_ligne(b6, "VAISSEAUX - SONDES / NAVETTES / STATIONS", m);
+        minitel_ligne(b7, "STARMAP - VOISINAGE STELLAIRE", m);
 
         if clic {
+            if b7.contains(m) {
+                return Some(Cible::Starmap);
+            }
             if b1.contains(m) {
                 return Some(Cible::Skymap);
             }

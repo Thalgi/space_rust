@@ -26,6 +26,10 @@ impl Camera {
     pub fn reset_focus(&mut self) {
         self.focus = None;
     }
+    /// Focalise la caméra sur l'astre `idx` (le suit).
+    pub fn set_focus(&mut self, idx: usize) {
+        self.focus = Some(idx);
+    }
     pub fn focus_actif(&self) -> bool {
         self.focus.is_some()
     }
@@ -44,7 +48,7 @@ impl Camera {
         if !sur_ui {
             let mol = mouse_wheel().1;
             if mol != 0.0 {
-                self.dist = (self.dist * (1.0 - mol.signum() * 0.1)).clamp(4.0, 3600.0);
+                self.dist = (self.dist * (1.0 - mol.signum() * 0.1)).clamp(2.0, 30000.0);
             }
         }
     }
@@ -75,6 +79,8 @@ impl Camera {
             forward,
             light_pos: Vec3::ZERO,
             light_color: Vec3::ONE,
+            lights_pos: [Vec3::ZERO; 4],
+            lights_color: [Vec3::ZERO; 4],
         };
         let cam3d = Camera3D {
             position: pos,

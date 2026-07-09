@@ -1,12 +1,15 @@
 use crate::camera::Camera;
 use crate::fond::Fond;
 use crate::genese::{
-    charger_presets, construire_preset_solaire, construire_preset_tau_ceti, construire_systeme,
-    sauver_presets, PresetSauve,
+    charger_presets, construire_preset_alpha_centauri, construire_preset_avatar,
+    construire_preset_binaire, construire_preset_proxima, construire_preset_quadruple,
+    construire_preset_solaire, construire_preset_tau_ceti, construire_preset_trinaire,
+    construire_systeme, sauver_presets, PresetSauve,
 };
 use crate::menu::{ActionMenu, Menu};
 use crate::rendu::{Rendu, RenduStandard};
-use crate::systeme::Systeme;
+use crate::starmap::Destination;
+use crate::systeme::{ModePhysique, Systeme};
 use crate::{planete, soleil};
 use macroquad::prelude::*;
 
@@ -16,6 +19,12 @@ enum Source {
     Graine(u64),
     Solaire,
     TauCeti,
+    Avatar,
+    AlphaCentauri,
+    Proxima,
+    Binaire,
+    Trinaire,
+    Quadruple,
 }
 
 /// Vue système complète : étoile, planètes, lunes, ceintures, UI Minitel.
@@ -52,6 +61,27 @@ impl Skymap {
         }
     }
 
+    /// Ouvre directement la Skymap sur le système d'une étoile de la Starmap.
+    /// Presets nommés -> réutilise `appliquer` (cadrage caméra inclus) ; graine -> génère.
+    pub fn depuis_destination(dest: Destination) -> Self {
+        let mut s = Self::new();
+        match dest {
+            Destination::Solaire => s.appliquer(ActionMenu::Solaire),
+            Destination::Proxima => s.appliquer(ActionMenu::Proxima),
+            Destination::AlphaCentauri => s.appliquer(ActionMenu::AlphaCentauri),
+            Destination::TauCeti => s.appliquer(ActionMenu::TauCeti),
+            Destination::Graine(g) => {
+                s.seed = g;
+                let (sys, info) = construire_systeme(g);
+                s.sys = sys;
+                s.info = info;
+                s.source = Source::Graine(g);
+                s.appliquer_vue();
+            }
+        }
+        s
+    }
+
     /// Une frame. Renvoie `true` pour revenir à l'accueil (Échap).
     pub fn frame(&mut self) -> bool {
         let dt = get_frame_time().min(0.05);
@@ -75,7 +105,7 @@ impl Skymap {
                 let (s, i) = construire_systeme(self.seed);
                 self.sys = s;
                 self.info = i;
-                self.cam.reset_focus();
+                self.appliquer_vue();
             }
             if is_key_pressed(KeyCode::R) {
                 // Hot-reload : recompile les shaders et reconstruit à l'identique.
@@ -113,6 +143,12 @@ impl Skymap {
         }
 
         self.cam.input_orbite(sur_ui);
+        // Synchronise le mode physique avec le bouton (idempotent : hand-off au seul changement).
+        self.sys.regler_mode(if self.menu.phys_rails {
+            ModePhysique::SurRails
+        } else {
+            ModePhysique::NCorps
+        });
         let dt_sim = if self.pause { 0.0 } else { dt * self.vitesse };
         self.sys.update(dt_sim);
 
@@ -124,14 +160,22 @@ impl Skymap {
         }
 
         self.rendu
-            .rendre(cam3d, &cam_info, &mut self.fond, &mut self.sys, self.menu.orbites, self.menu.zone);
+            .rendre(
+                cam3d,
+                &cam_info,
+                &mut self.fond,
+                &mut self.sys,
+                self.menu.orbites,
+                self.menu.orbites_etoiles,
+                self.menu.zone,
+            );
 
         let temps = if self.pause {
             "PAUSE".to_string()
         } else {
             format!("x{:.2}", self.vitesse)
         };
-        draw_text(
+        crate::police::texte(
             &format!(
                 "{}   |   {} FPS   |   {}   clic: centrer   P: pixel   G: aleatoire   R: shaders   Espace: pause   Haut/Bas: vitesse   Echap: menu",
                 self.info,
@@ -147,12 +191,33 @@ impl Skymap {
         false
     }
 
+    /// Applique la vue par défaut du système : focalise l'étoile hôte (systèmes type S,
+    /// trop étalés pour tout cadrer) ou recule pour englober tout (type P / étoile unique).
+    fn appliquer_vue(&mut self) {
+        match self.sys.vue() {
+            Some((idx, d)) => {
+                self.cam.set_focus(idx);
+                self.cam.set_dist(d);
+            }
+            None => {
+                self.cam.reset_focus();
+                self.cam.set_dist((self.sys.rayon_englobant() * 1.5).clamp(350.0, 30000.0));
+            }
+        }
+    }
+
     /// Reconstruit le système courant à partir de sa source (sans toucher la caméra).
     fn reconstruire(&self) -> (Systeme, String) {
         match &self.source {
             Source::Graine(g) => construire_systeme(*g),
             Source::Solaire => construire_preset_solaire(),
             Source::TauCeti => construire_preset_tau_ceti(),
+            Source::Avatar => construire_preset_avatar(),
+            Source::AlphaCentauri => construire_preset_alpha_centauri(),
+            Source::Proxima => construire_preset_proxima(),
+            Source::Binaire => construire_preset_binaire(),
+            Source::Trinaire => construire_preset_trinaire(),
+            Source::Quadruple => construire_preset_quadruple(),
         }
     }
 
@@ -175,14 +240,61 @@ impl Skymap {
                 self.cam.set_dist(480.0);
                 self.cam.reset_focus();
             }
+            ActionMenu::Avatar => {
+                let (s, i) = construire_preset_avatar();
+                self.sys = s;
+                self.info = i;
+                self.source = Source::Avatar;
+                self.cam.set_dist(560.0);
+                self.cam.reset_focus();
+            }
+            ActionMenu::AlphaCentauri => {
+                let (s, i) = construire_preset_alpha_centauri();
+                self.sys = s;
+                self.info = i;
+                self.source = Source::AlphaCentauri;
+                // Binaire large : focaliser ACA sur sa zone planétaire (voir definir_vue du preset).
+                self.appliquer_vue();
+            }
+            ActionMenu::Proxima => {
+                let (s, i) = construire_preset_proxima();
+                self.sys = s;
+                self.info = i;
+                self.source = Source::Proxima;
+                self.cam.set_dist(320.0);
+                self.cam.reset_focus();
+            }
+            ActionMenu::Binaire => {
+                let (s, i) = construire_preset_binaire();
+                self.sys = s;
+                self.info = i;
+                self.source = Source::Binaire;
+                self.cam.set_dist(1300.0);
+                self.cam.reset_focus();
+            }
+            ActionMenu::Trinaire => {
+                let (s, i) = construire_preset_trinaire();
+                self.sys = s;
+                self.info = i;
+                self.source = Source::Trinaire;
+                self.cam.set_dist(1100.0);
+                self.cam.reset_focus();
+            }
+            ActionMenu::Quadruple => {
+                let (s, i) = construire_preset_quadruple();
+                self.sys = s;
+                self.info = i;
+                self.source = Source::Quadruple;
+                self.cam.set_dist(1400.0);
+                self.cam.reset_focus();
+            }
             ActionMenu::Charger(idx) => {
                 self.seed = self.presets[idx].graine;
                 let (s, _) = construire_systeme(self.seed);
                 self.sys = s;
                 self.info = self.presets[idx].nom.clone();
                 self.source = Source::Graine(self.seed);
-                self.cam.set_dist(360.0);
-                self.cam.reset_focus();
+                self.appliquer_vue();
             }
             ActionMenu::Aleatoire => {
                 self.seed = nouvelle_graine(self.seed);
@@ -190,8 +302,7 @@ impl Skymap {
                 self.sys = s;
                 self.info = i;
                 self.source = Source::Graine(self.seed);
-                self.cam.set_dist(360.0);
-                self.cam.reset_focus();
+                self.appliquer_vue();
             }
             ActionMenu::Retour => self.cam.reset_focus(),
             ActionMenu::Quitter => {

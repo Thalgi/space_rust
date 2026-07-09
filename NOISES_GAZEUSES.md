@@ -59,3 +59,20 @@ limb darkening + désaturation, profil de jets type Jupiter (`jet_profil` : EZ +
 2. **Ridged filaments (§6)** — relief fin dans zones/festons.
 3. **Curl warp cheap (§4)** — tourbillons plus fluides.
 4. **HSV palette (§7)** — variété des géantes générées aléatoirement.
+
+---
+
+## Post-scriptum V2 (juillet 2026)
+
+La V2 (CONCEPTION_GAZEUSES_V2.md) a rebattu ces cartes :
+- Le **double-offset (§3)** est remplacé pour la structure par le **profil zonal
+  1D précalculé** (`zonal.rs`) — les bandes viennent d'une somme de gaussiennes
+  de jets + vorticité, le fbm ne fait plus qu'onduler les frontières (dec2).
+- Le **curl warp (§4)** est conservé, et l'advection « cheap » est devenue une
+  **vraie rotation différentielle** par u(φ) — la référence Gaseous Giganticus
+  est approchée par transport zonal réel plutôt que par simulation.
+- La **palette HSV (§7)** est en place, poussée plus loin : 8 teintes dérivées
+  CPU (`palette.rs`) + archétypes structurels dans `apparence_gazeuse()`.
+- Le **ridged (§6)** n'a finalement pas été utilisé (les filaments passent par
+  des seuils multiples sur 2 fbm partagés) — reste une piste si besoin.
+- Le Worley (§5) est passé en **projection azimutale** aux pôles.

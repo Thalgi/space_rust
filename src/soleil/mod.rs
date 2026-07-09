@@ -34,6 +34,7 @@ pub struct Soleil {
     couronne: f32,       // extension de la couronne (× rayon) selon le type
     couronne_irreg: f32, // irrégularité (rayons/spicules) de la couronne
     couronne_type: f32,  // 0 = halo, 1 = jets bipolaires (pulsar), 2 = vent (WR)
+    zone_hab: bool,      // false = rémanent (pulsar/magnétar/étoile à neutrons) : pas de zone habitable
     mat: Material,        // shader du corps
     mat_plasma: Material, // billboards en blending additif (plasma lumineux)
     halo: Texture2D,
@@ -64,6 +65,7 @@ impl Soleil {
             couronne: (1.25 + 0.14 * luminosite).min(2.1),
             couronne_irreg: ((luminosite - 0.4) / 3.6).clamp(0.0, 1.0),
             couronne_type: 0.0,
+            zone_hab: true,
             mat,
             mat_plasma,
             halo: texture_halo(TAILLE_HALO),
@@ -95,10 +97,26 @@ impl Soleil {
         self
     }
 
+    /// Marque l'étoile comme rémanent compact (pulsar/magnétar/étoile à neutrons) :
+    /// aucune zone habitable ne sera tracée (`zone_viable` renvoie `None`).
+    pub fn sans_zone_habitable(mut self) -> Self {
+        self.zone_hab = false;
+        self
+    }
+
     /// Couronne en vent stellaire épais et turbulent (Wolf-Rayet, supergéante bleue).
     pub fn avec_vent(mut self) -> Self {
         self.couronne_type = 2.0;
         self.couronne = 2.7; // enveloppe étendue
+        self
+    }
+
+    /// Trou noir : horizon des événements noir + anneau de photons + disque d'accrétion
+    /// incliné (Doppler + spirale). Rendu **stylisé** (pas de lentille gravitationnelle).
+    pub fn avec_trou_noir(mut self) -> Self {
+        self.couronne_type = 5.0;
+        self.couronne = 3.4; // place pour le disque d'accrétion
+        self.couronne_irreg = 0.0;
         self
     }
 }
@@ -128,7 +146,13 @@ impl Astre for Soleil {
     fn lumiere(&self) -> Option<Vec3> {
         Some(self.couleur * self.luminosite)
     }
+    fn luminosite(&self) -> Option<f32> {
+        Some(self.luminosite)
+    }
     fn zone_viable(&self) -> Option<(f32, f32)> {
+        if !self.zone_hab {
+            return None; // rémanent : pas de zone habitable à tracer
+        }
         let (i, o) = crate::etoile::zone_habitable(self.luminosite);
         Some((i * crate::etoile::UA, o * crate::etoile::UA)) // UA -> unités monde
     }

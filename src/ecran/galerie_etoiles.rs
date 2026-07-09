@@ -30,6 +30,7 @@ fn catalogue() -> Vec<(&'static str, f32, f32, f32, f32)> {
         ("Etoile a neutrons", 0.42, 40000.0, 0.2, 1.0), // jets fixes
         ("Pulsar", 0.42, 40000.0, 0.25, 3.0),           // jets qui tournent (phare)
         ("Magnetar", 0.45, 40000.0, 0.3, 4.0), // arcs magnétiques
+        ("Trou noir", 0.62, 6500.0, 0.4, 5.0), // horizon + disque d'accretion (stylise)
     ]
 }
 
@@ -45,7 +46,9 @@ impl GalerieEtoiles {
             .into_iter()
             .map(|(nom, rayon, temp, lumi, mode)| {
                 let s = Soleil::new(Vec3::ZERO, rayon, couleur_corps_noir(temp), lumi);
-                let s = if mode > 3.5 {
+                let s = if mode > 4.5 {
+                    s.avec_trou_noir()
+                } else if mode > 3.5 {
                     s.avec_magnetar()
                 } else if mode > 2.5 {
                     s.avec_pulsar()
@@ -123,6 +126,8 @@ impl GalerieEtoiles {
                 forward,
                 light_pos: vec3(0.0, 0.0, 10.0),
                 light_color: Vec3::ONE,
+                lights_pos: [vec3(0.0, 0.0, 10.0), Vec3::ZERO, Vec3::ZERO, Vec3::ZERO],
+                lights_color: [Vec3::ONE, Vec3::ZERO, Vec3::ZERO, Vec3::ZERO],
             };
             soleil.draw(&cam);
             labels.push((nom.clone(), cell_x, cell_y + render_h + 16.0));
@@ -132,12 +137,12 @@ impl GalerieEtoiles {
         set_default_camera();
         let col = Color::new(0.9, 0.85, 0.6, 1.0);
         for (nom, cell_x, y) in &labels {
-            let tw = measure_text(nom, None, 18, 1.0).width;
-            draw_text(nom, cell_x + (cw - tw) * 0.5, *y, 18.0, col);
+            let tw = crate::police::mesure(nom, 18);
+            crate::police::texte(nom, cell_x + (cw - tw) * 0.5, *y, 18.0, col);
         }
 
         draw_rectangle(0.0, 0.0, screen_width(), top, Color::new(0.01, 0.01, 0.03, 1.0));
-        draw_text(
+        crate::police::texte(
             "GALERIE DES ETOILES   -   molette: defiler   R: shaders   Echap: menu",
             12.0,
             30.0,

@@ -56,7 +56,7 @@ impl Vaisseaux {
         self.courant.dessiner();
         set_default_camera();
 
-        draw_text(
+        crate::police::texte(
             &format!(
                 "{}   |   1: sonde   2: navette   3: station   Tab: suivant   Echap: menu",
                 self.courant.nom()

@@ -1,3 +1,4 @@
+use super::taille::ClasseTaille;
 use crate::planete::{Apparence, TypePlanete};
 use macroquad::prelude::*;
 use macroquad::rand::gen_range;
@@ -144,6 +145,9 @@ pub fn apparence_tellurique(t: f32) -> (f32, f32, Apparence) {
     app.nuages = nuages;
     app.nuages_couleur = nuages_couleur;
     app.nuages_type = nuages_type;
+    if nuages_type == 2.0 {
+        app.cyclones_nb = gen_range(0.3, 0.8); // quantité de vortex variable
+    }
     app.relief = relief;
     app.dunes = dunes;
     app.mesa = mesa;
@@ -156,7 +160,22 @@ pub fn apparence_tellurique(t: f32) -> (f32, f32, Apparence) {
     app.cryo = cryo;
     app.biolum = biolum;
     app.seed = gen_range(0.0, 1000.0);
-    (gen_range(0.4, 0.8), gen_range(1.0, 3.0), app)
+    // Taille : majorité de standards, avec des naines (rocheuses sèches) et quelques
+    // super-Terres pour la variété. La masse reste dans sa plage historique (physique
+    // inchangée) : seul le rayon visuel dépend désormais de la classe.
+    let classe = {
+        let r: f32 = gen_range(0.0, 1.0);
+        if r < 0.22 {
+            ClasseTaille::Naine
+        } else if r < 0.85 {
+            ClasseTaille::Tellurique
+        } else {
+            ClasseTaille::SuperTerre
+        }
+    };
+    let rayon = classe.rayon_aleatoire();
+    app.taille = rayon;
+    (rayon, gen_range(1.0, 3.0), app)
 }
 
 /// Construit une apparence tellurique à partir de paramètres explicites (presets
@@ -172,10 +191,11 @@ pub fn tellurique(c1: Vec3, c2: Vec3, c3: Vec3, eau: f32, motif: f32, grad: f32,
 }
 
 /// Construit un preset de géante gazeuse à partir de paramètres explicites.
-/// `c2` = ceintures sombres, `c1` = ton moyen, `c3` = zones claires.
-pub fn gazeuse(c1: Vec3, c2: Vec3, c3: Vec3, band: f32, warp: f32, atmo: Vec3) -> Apparence {
+/// `c2` = ceintures sombres, `c1` = accent (filaments chauds), `c3` = zones claires.
+/// `bandes` = paires de jets par hémisphère (2..9, profil zonal — voir zonal.rs).
+pub fn gazeuse(c1: Vec3, c2: Vec3, c3: Vec3, bandes: f32, warp: f32, atmo: Vec3) -> Apparence {
     let mut a = Apparence::new(TypePlanete::Gazeuse, c1, c2, c3, 0.0);
-    a.band_scale = band;
+    a.nb_bandes = bandes;
     a.warp_amt = warp;
     a.atmo = atmo;
     a
@@ -183,36 +203,64 @@ pub fn gazeuse(c1: Vec3, c2: Vec3, c3: Vec3, band: f32, warp: f32, atmo: Vec3) -
 
 pub fn apparence_gazeuse() -> (f32, f32, Apparence) {
     let h: f32 = gen_range(0.0, 1.0);
-    let hot = gen_range(0.0_f32, 1.0) < 0.35; // géante chaude (émission thermique, teintes rouges)
-    let icy = !hot && gen_range(0.0_f32, 1.0) < 0.4; // géante de glace (voilée, bleutée)
+    // ARCHÉTYPE STRUCTUREL (phase 7) : la variété vient d'abord de la
+    // structure (profil zonal, vortex, voile), pas seulement de la couleur.
+    let tirage: f32 = gen_range(0.0, 1.0);
+    let hot = tirage < 0.30; //                       chaude : contraste + thermique
+    let icy = !hot && tirage < 0.58; //               glace : voilée, tons moyens
+    let lisse = !hot && !icy && tirage < 0.70; //     « classe III » : quasi sans nuages
 
-    // Palette HSV : zones claires (teinte h), ceintures (teinte proche mais sombre/saturée),
-    // et un accent COMPLÉMENTAIRE (h+0.5) pour casser la monochromie (recherche : palette HSV).
-    let zone = hsv(h, gen_range(0.12_f32, 0.35), gen_range(0.85_f32, 1.0));
+    // Palette HSV : accent COMPLÉMENTAIRE (h+0.5) pour casser la monochromie.
+    // Géantes de glace : c3 reste un TON MOYEN SATURÉ (leçon Neptune — la
+    // palette éclaircit déjà ; un c3 pâle donne une « blanche inversée »).
+    let zone = if icy {
+        hsv(h, gen_range(0.45_f32, 0.75), gen_range(0.55_f32, 0.8))
+    } else {
+        hsv(h, gen_range(0.12_f32, 0.35), gen_range(0.85_f32, 1.0))
+    };
     let belt = hsv(h + gen_range(-0.05_f32, 0.05), gen_range(0.45_f32, 0.82), gen_range(0.32_f32, 0.58));
     let accent = hsv(h + 0.5, gen_range(0.3_f32, 0.6), gen_range(0.55_f32, 0.85));
 
-    let mut app = gazeuse(
-        accent,
-        belt,
-        zone,
-        gen_range(8.0, 20.0),
-        gen_range(1.0, 2.6),
-        zone * 0.32,
-    );
+    // Structure par archétype : (paires de jets, force, flou, warp).
+    let (bandes, jets, flou, warp) = if lisse {
+        (gen_range(2.0, 3.5), gen_range(0.15, 0.35), gen_range(0.4, 0.7), gen_range(0.3, 0.8))
+    } else if icy {
+        (gen_range(3.0, 5.0), gen_range(0.3, 0.6), gen_range(0.35, 0.65), gen_range(0.8, 1.8))
+    } else if hot {
+        (gen_range(4.0, 8.0), gen_range(0.8, 1.2), gen_range(0.05, 0.15), gen_range(1.4, 2.8))
+    } else {
+        (gen_range(4.0, 8.0), gen_range(0.5, 1.0), gen_range(0.05, 0.25), gen_range(1.0, 2.6))
+    };
+    let mut app = gazeuse(accent, belt, zone, bandes, warp, zone * 0.32);
     app.seed = gen_range(0.0, 1000.0);
+    app.jets_force = jets;
+    app.zonal_asym = gen_range(0.15, 0.55);
+    app.zonal_flou = flou;
     // Pôle : ceinture désaturée vers un gris-bleu feutré (brume polaire).
     app = app.avec_pole(belt.lerp(vec3(0.5, 0.52, 0.56), 0.55));
 
-    // Tache : rouge (anticyclone façon GRS) ou sombre (façon Neptune).
-    let mut tache_sombre = false;
-    if gen_range(0.0_f32, 1.0) < 0.5 {
+    // Tempêtes (slots de vortex) : aucune sur les lisses.
+    if !lisse && gen_range(0.0_f32, 1.0) < 0.6 {
+        app.tempetes = gen_range(0.4, 0.9);
+    }
+    // Variante RARE (§ 6 bis, ~6 % des classiques) : « Grande Tache Blanche »
+    // statique — tête convective blanche + activité de vortex maximale.
+    let gtb = !hot && !icy && !lisse && gen_range(0.0_f32, 1.0) < 0.06;
+    if gtb {
+        let phi: f32 = gen_range(0.0, TAU);
+        let cy: f32 = gen_range(0.15, 0.35); // hémisphère nord, comme les vraies
+        let st = (1.0 - cy * cy).sqrt();
+        let dir = vec3(st * phi.cos(), cy, st * phi.sin());
+        app = app.avec_tache_blanche(dir, gen_range(0.24_f32, 0.34));
+        app.tempetes = 1.0;
+        app.jets_force = gen_range(0.9, 1.2);
+    } else if !lisse && gen_range(0.0_f32, 1.0) < 0.5 {
+        // Tache : rouge (anticyclone façon GRS) ou sombre (façon Neptune).
         let phi: f32 = gen_range(0.0, TAU);
         let cy: f32 = gen_range(-0.3, -0.12); // hémisphère sud, latitude tempérée
         let st = (1.0 - cy * cy).sqrt();
         let dir = vec3(st * phi.cos(), cy, st * phi.sin());
         if icy || gen_range(0.0_f32, 1.0) < 0.4 {
-            tache_sombre = true;
             app = app.avec_tache_sombre(dir, gen_range(0.16_f32, 0.24), belt * 0.4);
         } else {
             let col = hsv(0.03, gen_range(0.7_f32, 0.9), gen_range(0.55_f32, 0.85)); // brique-orange
@@ -220,13 +268,6 @@ pub fn apparence_gazeuse() -> (f32, f32, Apparence) {
         }
     }
 
-    // Profil de jets (EZ + ceintures) — sauf tache sombre (la ceinture SEB est rougeâtre).
-    if !tache_sombre && gen_range(0.0_f32, 1.0) < 0.6 {
-        app = app.avec_jet_profil();
-    }
-    if gen_range(0.0_f32, 1.0) < 0.6 {
-        app.tempetes = gen_range(0.4, 0.9);
-    }
     if gen_range(0.0_f32, 1.0) < 0.4 {
         app = app.avec_cyclones_pol();
     }
@@ -254,18 +295,38 @@ pub fn apparence_gazeuse() -> (f32, f32, Apparence) {
         app.anneau_style = styles[gen_range(0.0_f32, 4.0).floor() as usize % 4];
     }
 
-    (gen_range(1.0, 1.8), gen_range(8.0, 20.0), app)
+    // Taille : géante gazeuse par défaut ; les géantes « de glace » (icy) prennent la
+    // classe correspondante (plus petites, bleutées), et une minorité tombe en
+    // sous-Neptune. Masse inchangée (plage historique).
+    let classe = if gen_range(0.0_f32, 1.0) < 0.15 {
+        ClasseTaille::SousNeptune
+    } else if icy {
+        ClasseTaille::GeanteGlace
+    } else {
+        ClasseTaille::GeanteGaz
+    };
+    let rayon = classe.rayon_aleatoire();
+    app.taille = rayon;
+    (rayon, gen_range(8.0, 20.0), app)
 }
 
 pub fn apparence_glacee() -> (f32, f32, Apparence) {
     let h: f32 = gen_range(0.0, 1.0);
     let c1 = hsv(h, gen_range(0.05_f32, 0.25), gen_range(0.85_f32, 1.0));
     let c2 = hsv(h, gen_range(0.1_f32, 0.3), gen_range(0.8_f32, 0.95));
+    // Mondes glacés : petits corps (parfois naine). Masse inchangée.
+    let classe = if gen_range(0.0_f32, 1.0) < 0.3 {
+        ClasseTaille::Naine
+    } else {
+        ClasseTaille::Glacee
+    };
+    let rayon = classe.rayon_aleatoire();
     (
-        gen_range(0.5, 0.9),
+        rayon,
         gen_range(2.0, 5.0),
         Apparence::new(TypePlanete::Glacee, c1, c2, Vec3::ZERO, 0.0)
-            .avec_atmo(vec3(0.7, 0.85, 1.0) * 0.25),
+            .avec_atmo(vec3(0.7, 0.85, 1.0) * 0.25)
+            .avec_taille(rayon),
     )
 }
 

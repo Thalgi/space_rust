@@ -50,6 +50,8 @@ Diversity sont couvertes, plus les non-habitables et les cas spéciaux.
 ## Humide › Océan
 - [x] Reef (R) · Cascadian · Swamp · Archipelago (R) · Crag · Fog · Kelp · Columnar ·
   Barnacle · Pink Algae · Tidepool
+- [x] **Ocean pur** (aucune terre émergée, eau = 1.0) · **Hycean** (océan global sous
+  atmosphère de vapeur épaisse) · **Ocean de magma** (mer de roche fondue, émissif la nuit)
 
 ## Humide › Tropical
 - [x] Geothermal (R) · Atoll · Mangrove · Bioluminescent (R) · Tepui · Cenote · Fungal ·

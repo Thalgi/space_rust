@@ -14,7 +14,7 @@ use std::f32::consts::FRAC_PI_4;
 pub const NB_FACES: usize = 6;
 
 /// Résolution d'une face (texels). 6×256² ≈ 400 k texels, atlas ~1,5 Mo.
-pub const N_ATLAS: usize = 256;
+pub const N_ATLAS: usize = 128;
 
 /// Repère de chaque face : (normale, right, up).
 /// L'ordre (+X, -X, +Y, -Y, +Z, -Z) est aussi celui de l'atlas (3 colonnes × 2 lignes).

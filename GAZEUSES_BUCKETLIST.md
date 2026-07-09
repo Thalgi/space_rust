@@ -8,15 +8,23 @@ Légende : `[ ]` à faire · `[x]` fait · `[~]` partiel · `(R)` rare
 
 ---
 
-## Bilan (à date)
+## Bilan (à date) — V2 livrée
 
-Galerie gazeuse en place avec un **catalogue de départ (~13 presets)**. Le shader gazeux
-existant gère déjà : **bandes** étirées + domain warping, **grande tache** (vortex façon
-tache rouge), **ovales blancs** épars, **vortex polaire polygonal** (hexagone de Saturne),
-**anneaux** (2 passes), halo atmosphérique, graine unique par planète.
+**V2 (juillet 2026, voir CONCEPTION_GAZEUSES_V2.md)** : profil zonal 1D précalculé
+(`zonal.rs` : jets u(φ), bandes b(φ) par vorticité, cisaillement s(φ)), **rotation
+différentielle réelle** (advection par u(φ)), **palette 100 % paramétrique**
+(`palette.rs`, `gaz_pal[8]`, plus aucune couleur en dur), **vortex unifiés en slots**
+(`vortex.rs` : GRS/sombre/ovale blanc/barge/chapelet, dérive le long de leur jet),
+**pôles V2** (projection azimutale, anneau de cyclones Juno N≠ par hémisphère,
+hexagone intégré au régime polaire), LOD `px_rayon`, brume inégale,
+~17 fbm/pixel (vs ~28 en V1). Catalogue : **~27 presets** + 3 tirages aléatoires
+en galerie, génération par archétypes structurels (classique/glace/chaude/lisse).
 
-Paramètres actuels (`Apparence`) : `couleur/2/3` (ceintures/zone/clair), `band_scale`,
-`warp_amt`, `seed`, `poly_cotes` (vortex polaire), `tache_*`, `anneau_*`, `axe`, `atmo`.
+Paramètres (`Apparence`) : `couleur/2/3` (accent/ceintures/zones — contrat
+palette), `nb_bandes`, `jets_force`, `zonal_asym`, `zonal_flou`, `warp_amt`,
+`seed`, `poly_cotes`, `cyclones_pol`, `tache_*` (type 2 = tête de GTB),
+`tempetes` (densité de slots), `brume_*`, `g_pole`, `thermique_*`, `aurore_*`,
+`anneau_*`, `axe`, `atmo`. Supprimés : `band_scale`, `jet_profil`.
 
 ---
 
@@ -67,13 +75,18 @@ Paramètres actuels (`Apparence`) : `couleur/2/3` (ceintures/zone/clair), `band_
 - [x] **Limb darkening** : assombrissement + désaturation sur tout le contour (volume 3D).
 - [x] **Anneaux variés** (`anneau_style`) : Saturne dense + lacunes Cassini/Encke, Uranus fins/étroits verticaux, Neptune arcs partiels (Adams), débris en amas. Galerie : caméra reculée + léger plongé pour cadrer l'anneau.
 - [ ] **Lunes/ombres** : ombre d'une lune projetée sur les bandes (plus tard).
-- [ ] **Scintillement de bandes** animé plus marqué (advection façon curl-noise).
+- [x] **Scintillement de bandes** animé : remplacé en mieux par la **rotation
+      différentielle** V2 (les bandes glissent réellement, advection u(φ)).
+- [x] **Grande Tache Blanche** statique (§ 6 bis V2) : preset rare
+      « Tempete planetaire (GTB) » + ~6 % des géantes classiques aléatoires.
+- [x] **Chapelet d'ovales** (« string of pearls ») : type de vortex dédié.
 
 ---
 
 ## Partie C — Idées / à trier
 
-- [ ] Géante « rayée » extrême (contraste de bandes très fort).
-- [ ] Géante jeune chaude qui rougeoie (proto-géante).
-- [ ] Géante à anneau de débris récent (anneau brillant, irrégulier).
-- [ ]
+- [x] Géante « rayée » extrême (contraste de bandes très fort) — preset, 9 paires de jets.
+- [x] Géante jeune chaude qui rougeoie (proto-géante) — preset.
+- [x] Géante à anneau de débris récent (anneau brillant, irrégulier) — preset.
+- [ ] Éclairs côté nuit (idée notée en V2 § 6 bis, post-V2).
+- [ ] Anneaux V2 : ombres croisées planète↔anneau, éclairage face nuit (chantier suivant).

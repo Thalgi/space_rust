@@ -38,8 +38,11 @@ pub struct Apparence {
     pub anneau_out: f32,     // rayon externe (× rayon planète)
     pub anneau_style: f32,   // 0 = dense+lacunes (Saturne), 1 = fins (Uranus), 2 = arcs (Neptune), 3 = débris
     pub axe: Vec3,           // axe de rotation (bandes/pôles s'alignent dessus)
-    // Variabilité atmosphérique (gazeuses).
-    pub band_scale: f32, // densité de bandes
+    // Variabilité atmosphérique (gazeuses) — profil zonal précalculé (zonal.rs).
+    pub nb_bandes: f32,  // paires de jets par hémisphère (2..9) -> nombre de bandes lisible
+    pub jets_force: f32, // amplitude du profil zonal (0 = calme type Uranus, 1 = Jupiter)
+    pub zonal_asym: f32, // asymétrie nord/sud du profil (0 = miroir, 1 = très différent)
+    pub zonal_flou: f32, // adoucissement des frontières de bandes (classes voilées)
     pub warp_amt: f32,   // force du domain warping
     pub seed: f32,       // décalage de bruit -> chaque géante est unique
     pub poly_cotes: f32, // vortex polaire : 0 = aucun, sinon nb de côtés (6 = hexagone Saturne)
@@ -55,6 +58,7 @@ pub struct Apparence {
     pub nuages: f32,     // densité de la couche nuageuse (0 = ciel clair)
     pub nuages_couleur: Vec3, // teinte des nuages
     pub nuages_type: f32, // 0 classique, 1 tempête, 2 cyclone
+    pub cyclones_nb: f32, // proportion (0..1) des emplacements de cyclones actifs (type 2)
     pub relief: f32,     // amplitude des montagnes (0 = plat)
     pub dunes: f32,      // ondulations de dunes (0 = aucune)
     pub mesa: f32,       // plateaux étagés / canyons / strates (0 = aucun)
@@ -81,9 +85,13 @@ pub struct Apparence {
     pub brume: f32,        // voile de brume qui adoucit les bandes (0 = aucun)
     pub brume_couleur: Vec3,
     pub g_pole: Vec3,      // teinte des régions polaires (dégradé latitudinal gazeuses)
-    pub jet_profil: f32,   // profil latitudinal type Jupiter (EZ large + NEB/SEB) (0 = aucun)
     // Mode d'affichage (global, piloté par l'UI ; pas par la génération).
     pub villes: f32,     // 1 = lumières de villes côté nuit, 0 = monde non colonisé
+    // Taille physique (rayon visuel en unités de jeu). Source unique de vérité,
+    // consommée par toutes les vues (galerie, objet, systèmes). N'est PAS un
+    // uniform shader : le rayon transite séparément via CorpsBase. Voir
+    // `genese::taille`. 0.6 ≈ une Terre standard.
+    pub taille: f32,
 }
 
 impl Apparence {
@@ -105,7 +113,10 @@ impl Apparence {
             anneau_out: 2.2,
             anneau_style: 0.0,
             axe: Vec3::Y,
-            band_scale: 13.0,
+            nb_bandes: 5.0,
+            jets_force: 0.6,
+            zonal_asym: 0.35,
+            zonal_flou: 0.15,
             warp_amt: 1.6,
             seed: 0.0,
             poly_cotes: 0.0,
@@ -120,6 +131,7 @@ impl Apparence {
             nuages: 0.0,
             nuages_couleur: vec3(1.0, 1.0, 1.0),
             nuages_type: 0.0,
+            cyclones_nb: 0.5,
             relief: 0.35,
             dunes: 0.0,
             mesa: 0.0,
@@ -145,9 +157,15 @@ impl Apparence {
             brume: 0.0,
             brume_couleur: vec3(0.6, 0.66, 0.74),
             g_pole: vec3(0.6, 0.6, 0.63),
-            jet_profil: 0.0,
             villes: 1.0,
+            taille: 0.6, // tellurique standard par défaut (≈ 1 R⊕)
         }
+    }
+
+    /// Fixe la taille physique (rayon visuel, unités de jeu). Voir `genese::taille`.
+    pub fn avec_taille(mut self, taille: f32) -> Self {
+        self.taille = taille;
+        self
     }
 
     pub fn avec_vegetation(mut self, couleur: Vec3, couverture: f32) -> Self {
@@ -169,6 +187,12 @@ impl Apparence {
         self.nuages = densite;
         self.nuages_couleur = couleur;
         self.nuages_type = type_t;
+        self
+    }
+    /// Météo cyclonique : `nb` = proportion (0..1) des emplacements de vortex actifs.
+    pub fn avec_cyclones(mut self, nb: f32) -> Self {
+        self.nuages_type = 2.0;
+        self.cyclones_nb = nb;
         self
     }
     pub fn avec_relief(mut self, amplitude: f32) -> Self {
@@ -255,6 +279,14 @@ impl Apparence {
         self.tache_type = 1.0;
         self
     }
+    /// Tête de « Grande Tache Blanche » (tempête planétaire type Saturne,
+    /// CONCEPTION_GAZEUSES_V2 § 6 bis) : gros ovale blanc convectif en slot 0.
+    pub fn avec_tache_blanche(mut self, dir: Vec3, taille: f32) -> Self {
+        self.tache_dir = dir.normalize_or_zero();
+        self.tache_taille = taille;
+        self.tache_type = 2.0;
+        self
+    }
     pub fn avec_cyclones_pol(mut self) -> Self {
         self.cyclones_pol = 1.0;
         self
@@ -282,8 +314,14 @@ impl Apparence {
         self.g_pole = couleur;
         self
     }
-    pub fn avec_jet_profil(mut self) -> Self {
-        self.jet_profil = 1.0;
+    /// Force des jets zonaux (0 = calme type Uranus, ~1 = Jupiter démonstratif).
+    pub fn avec_jets(mut self, force: f32) -> Self {
+        self.jets_force = force;
+        self
+    }
+    /// Adoucissement des frontières de bandes (classes voilées, sub-Neptunes).
+    pub fn avec_zonal_flou(mut self, flou: f32) -> Self {
+        self.zonal_flou = flou;
         self
     }
     pub fn avec_anneau(mut self, couleur: Vec3, normal: Vec3, r_in: f32, r_out: f32) -> Self {
