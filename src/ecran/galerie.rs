@@ -168,7 +168,12 @@ impl Galerie {
                 (screen_height() as u32 / PIX).max(2),
             );
             if self.rt_dims != dims || self.cible.is_none() {
-                let rt = render_target(dims.0, dims.1);
+                // depth: true — indispensable pour l'occlusion en mode pixel.
+                let rt = render_target_ex(
+                    dims.0,
+                    dims.1,
+                    RenderTargetParams { sample_count: 1, depth: true },
+                );
                 rt.texture.set_filter(FilterMode::Nearest);
                 self.cible = Some(rt);
                 self.rt_dims = dims;

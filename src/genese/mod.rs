@@ -13,7 +13,7 @@ pub use presets::{
 };
 
 use crate::astre::Foyer;
-use crate::ceinture::{Ceinture, CeintureConfig};
+use crate::disque::{Disque, DisqueConfig};
 use crate::etoile::{self, ProfilEtoile};
 use crate::planete::{Apparence, Planete, TypePlanete};
 use crate::soleil::Soleil;
@@ -139,12 +139,12 @@ fn construire_simple() -> (Systeme, String) {
     // cohérentes avec le système au lieu d'un rayon fixe.
     let bi: f32 = gen_range(2.0, 3.0) * ech;
     let bo: f32 = bi + gen_range(0.6, 1.4) * ech;
-    sys.ajouter(Box::new(Ceinture::new(CeintureConfig::asteroides(
+    sys.ajouter(Box::new(Disque::new(DisqueConfig::asteroides(
         900, bi * etoile::UA, bo * etoile::UA, MASSE_ETOILE,
     ))));
     let ki: f32 = bo + gen_range(20.0, 30.0) * ech;
     let ko: f32 = ki + gen_range(12.0, 20.0) * ech;
-    sys.ajouter(Box::new(Ceinture::new(CeintureConfig::kuiper(
+    sys.ajouter(Box::new(Disque::new(DisqueConfig::kuiper(
         1400, ki * etoile::UA, ko * etoile::UA, MASSE_ETOILE,
     ))));
 

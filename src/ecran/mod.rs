@@ -4,6 +4,7 @@
 
 mod accueil;
 mod galerie;
+mod galerie_disques;
 mod galerie_etoiles;
 mod objet;
 mod skymap;
@@ -12,6 +13,7 @@ mod vaisseaux;
 
 pub use accueil::{Accueil, Cible};
 pub use galerie::Galerie;
+pub use galerie_disques::GalerieDisques;
 pub use galerie_etoiles::GalerieEtoiles;
 pub use objet::Objet;
 pub use skymap::Skymap;

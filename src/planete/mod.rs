@@ -1,4 +1,3 @@
-mod anneau;
 mod apparence;
 mod materiau;
 mod palette;
@@ -21,10 +20,10 @@ pub fn set_viewport_h(h: f32) {
 }
 
 use crate::astre::{Astre, Categorie, CameraInfo, CorpsBase, Foyer};
-use anneau::construire_anneau;
+use crate::disque::{Disque, DisqueConfig};
 use macroquad::models::{draw_mesh, Mesh, Vertex};
 use macroquad::prelude::*;
-use materiau::{appliquer_uniforms, mat_anneau, mat_corps};
+use materiau::{appliquer_uniforms, mat_corps};
 
 pub struct Planete {
     pub base: CorpsBase,
@@ -33,11 +32,9 @@ pub struct Planete {
     mat: Material,
     verts: Vec<Vertex>,
     inds: Vec<u16>,
-    // Anneau : quads relatifs au centre + tampons + material dédié.
-    anneau_quads: Vec<[Vertex; 4]>,
-    anneau_sv: Vec<Vertex>,
-    anneau_si: Vec<u16>,
-    mat_anneau: Option<Material>,
+    // Anneau : champ de débris (couche voile) qui suit la planète. Rendu en
+    // deux moitiés autour du corps (voir draw). Voir CONCEPTION_CEINTURES.md.
+    anneau: Option<Disque>,
     // Terrain précalculé (telluriques) : atlas cube-sphere + niveau de mer.
     // Généré en ASYNCHRONE au premier draw (budget global de jobs -> pas de gel,
     // la galerie affiche un placeholder le temps que le terrain arrive).
@@ -75,11 +72,14 @@ impl Planete {
         // Material partagé (cloné) -> un seul pipeline GPU pour toutes les planètes/lunes.
         let mat = mat_corps();
 
-        // Construire l'anneau si nécessaire.
-        let (anneau_quads, mat_anneau) = if app.anneau {
-            (construire_anneau(rayon, &app), Some(mat_anneau()))
+        // Construire l'anneau si nécessaire : traduction des champs anneau_*
+        // d'Apparence vers le système unifié (style -> preset DisqueConfig).
+        let anneau = if app.anneau {
+            let mut d = Disque::new(config_anneau(rayon, &app));
+            d.set_ombre_rayon(rayon); // la planète projette son ombre sur l'anneau
+            Some(d)
         } else {
-            (Vec::new(), None)
+            None
         };
 
         // Profil zonal + slots de vortex (gazeuses) : synchrone, < 1 ms.
@@ -96,10 +96,7 @@ impl Planete {
             mat,
             verts: Vec::new(),
             inds: Vec::new(),
-            anneau_quads,
-            anneau_sv: Vec::new(),
-            anneau_si: Vec::new(),
-            mat_anneau,
+            anneau,
             terrain_tex: None,
             terrain_job: None,
             zonal_tex,
@@ -177,65 +174,24 @@ impl Planete {
         self
     }
 
-    /// Dessine la moitié avant (back=false) ou arrière (back=true) de l'anneau.
-    /// Le mesh est émis par lots pour ne pas dépasser la taille max d'un draw call.
-    fn dessiner_anneau(&mut self, c: Vec3, cam: &CameraInfo, back: bool) {
-        let mat_a = match self.mat_anneau.clone() {
-            Some(m) => m,
-            None => return,
-        };
-        const MAX_QUADS: usize = 640; // < limite batcher (640*4 verts, 640*6 indices)
-        let tocam = (cam.pos - c).normalize_or_zero();
-        let mut sv = std::mem::take(&mut self.anneau_sv);
-        let mut si = std::mem::take(&mut self.anneau_si);
-        sv.clear();
-        si.clear();
-        gl_use_material(&mat_a);
+}
 
-        let mut nq = 0usize;
-        for q in &self.anneau_quads {
-            let centre_rel =
-                (q[0].position + q[1].position + q[2].position + q[3].position) * 0.25;
-            let derriere = centre_rel.dot(tocam) < 0.0;
-            if derriere != back {
-                continue;
-            }
-            let i0 = sv.len() as u16;
-            for v in q {
-                let mut w = *v;
-                w.position += c;
-                sv.push(w);
-            }
-            si.extend_from_slice(&[i0, i0 + 1, i0 + 2, i0, i0 + 2, i0 + 3]);
-            nq += 1;
-            if nq >= MAX_QUADS {
-                let mesh = Mesh {
-                    vertices: std::mem::take(&mut sv),
-                    indices: std::mem::take(&mut si),
-                    texture: None,
-                };
-                draw_mesh(&mesh);
-                sv = mesh.vertices;
-                si = mesh.indices;
-                sv.clear();
-                si.clear();
-                nq = 0;
-            }
-        }
-        if !si.is_empty() {
-            let mesh = Mesh {
-                vertices: std::mem::take(&mut sv),
-                indices: std::mem::take(&mut si),
-                texture: None,
-            };
-            draw_mesh(&mesh);
-            sv = mesh.vertices;
-            si = mesh.indices;
-        }
-        gl_use_default_material();
-        self.anneau_sv = sv;
-        self.anneau_si = si;
-    }
+/// Traduit les champs `anneau_*` d'`Apparence` (API conservée : les presets et
+/// la persistance ne changent pas) en config du système unifié. Le style V1
+/// (0 Saturne, 1 granuleux, 2 arcs, 3 débris, 4 Uranus) choisit le preset.
+fn config_anneau(rayon: f32, app: &Apparence) -> DisqueConfig {
+    let r_in = rayon * app.anneau_in;
+    let r_out = rayon * app.anneau_out;
+    let c = app.anneau_couleur;
+    let g = app.seed;
+    let cfg = match app.anneau_style as i32 {
+        1 => DisqueConfig::anneau_granuleux(r_in, r_out, c, g),
+        2 => DisqueConfig::anneau_arcs(r_in, r_out, c, g),
+        3 => DisqueConfig::anneau_debris(r_in, r_out, c, g),
+        4 => DisqueConfig::anneau_uranus(r_in, r_out, c, g),
+        _ => DisqueConfig::anneau_saturne(r_in, r_out, c, g),
+    };
+    cfg.avec_normale(app.anneau_normal)
 }
 
 impl Astre for Planete {
@@ -275,7 +231,12 @@ impl Astre for Planete {
     fn corps_mut(&mut self) -> &mut CorpsBase {
         &mut self.base
     }
-    fn update(&mut self, _dt: f32) {}
+    fn update(&mut self, dt: f32) {
+        // L'anneau s'anime (rotation différentielle du voile) au rythme du jeu.
+        if let Some(a) = &mut self.anneau {
+            a.update(dt);
+        }
+    }
     fn orbite(&self) -> &[Vec3] {
         &self.orbite
     }
@@ -317,8 +278,9 @@ impl Astre for Planete {
         );
 
         // Anneau : moitié arrière AVANT le corps (la planète la masquera).
-        if self.mat_anneau.is_some() {
-            self.dessiner_anneau(c, cam, true);
+        if let Some(a) = &mut self.anneau {
+            a.corps_mut().position = c; // l'anneau suit la planète
+            a.draw_moitie(cam, -1.0);
         }
 
         gl_use_material(&self.mat);
@@ -333,8 +295,8 @@ impl Astre for Planete {
         gl_use_default_material();
 
         // Anneau : moitié avant APRÈS le corps (passe devant la planète).
-        if self.mat_anneau.is_some() {
-            self.dessiner_anneau(c, cam, false);
+        if let Some(a) = &mut self.anneau {
+            a.draw_moitie(cam, 1.0);
         }
     }
 }

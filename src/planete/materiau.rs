@@ -1,7 +1,6 @@
 use super::apparence::Apparence;
 use crate::astre::CameraInfo;
 use crate::impostor;
-use macroquad::miniquad::{BlendFactor, BlendState, BlendValue, Equation};
 use macroquad::prelude::*;
 use std::cell::RefCell;
 
@@ -78,7 +77,6 @@ fn set_val(mat: &Material, nom: &str, v: Val) {
 // pipeline GPU mais a ses propres uniforms -> évite « Pipelines amount exceeded ».
 thread_local! {
     static TPL_CORPS: RefCell<Option<Material>> = RefCell::new(None);
-    static TPL_ANNEAU: RefCell<Option<Material>> = RefCell::new(None);
     // Hauteur (px) du viewport de rendu courant : la galerie dessine dans des
     // cellules, pas plein écran -> nécessaire au LOD px_rayon. 0 = plein écran.
     static VIEWPORT_H: RefCell<f32> = RefCell::new(0.0);
@@ -99,20 +97,10 @@ pub(super) fn mat_corps() -> Material {
     })
 }
 
-pub(super) fn mat_anneau() -> Material {
-    TPL_ANNEAU.with(|c| {
-        if c.borrow().is_none() {
-            *c.borrow_mut() = Some(material_anneau());
-        }
-        c.borrow().as_ref().unwrap().clone()
-    })
-}
-
 /// Vide le cache de materials -> la prochaine création recompile depuis les .glsl
 /// (utilisé par le hot-reload).
 pub(super) fn vider_cache() {
     TPL_CORPS.with(|c| *c.borrow_mut() = None);
-    TPL_ANNEAU.with(|c| *c.borrow_mut() = None);
 }
 
 // Texture de secours (1×1) : corps sans terrain précalculé (gazeuses, glacées)
@@ -248,30 +236,4 @@ fn charger_corps() -> Material {
     .unwrap()
 }
 
-/// Material de l'anneau : couleur du sommet, alpha blend, sans écriture de profondeur.
-fn material_anneau() -> Material {
-    load_material(
-        ShaderSource::Glsl {
-            vertex: &impostor::source("planete_anneau.vert.glsl", VERT_ANNEAU),
-            fragment: &impostor::source("planete_anneau.frag.glsl", FRAG_ANNEAU),
-        },
-        MaterialParams {
-            pipeline_params: PipelineParams {
-                depth_test: Comparison::LessOrEqual,
-                depth_write: false,
-                color_blend: Some(BlendState::new(
-                    Equation::Add,
-                    BlendFactor::Value(BlendValue::SourceAlpha),
-                    BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
-                )),
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-    )
-    .unwrap()
-}
-
 const FRAG: &str = include_str!("../shaders/planete.frag.glsl");
-const VERT_ANNEAU: &str = include_str!("../shaders/planete_anneau.vert.glsl");
-const FRAG_ANNEAU: &str = include_str!("../shaders/planete_anneau.frag.glsl");

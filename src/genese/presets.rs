@@ -5,7 +5,7 @@ use super::{
 };
 use crate::astre::Foyer;
 use crate::stellaire::{Feuille, Noeud, Variante};
-use crate::ceinture::{Ceinture, CeintureConfig};
+use crate::disque::{Disque, DisqueConfig};
 use crate::etoile;
 use crate::planete::{Planete, TypePlanete};
 use crate::soleil::Soleil;
@@ -67,10 +67,10 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
     ajouter_planete(&mut sys, 39.5, 0.249, 17.1 * deg, 0.3, 0.1,
         preset_tellurique("Boule de neige")); // analogue de Pluton (nain glacé)
 
-    sys.ajouter(Box::new(Ceinture::new(CeintureConfig::asteroides(
+    sys.ajouter(Box::new(Disque::new(DisqueConfig::asteroides(
         900, 2.2 * etoile::UA, 3.3 * etoile::UA, MASSE_ETOILE,
     ))));
-    sys.ajouter(Box::new(Ceinture::new(CeintureConfig::kuiper(
+    sys.ajouter(Box::new(Disque::new(DisqueConfig::kuiper(
         2000, 30.0 * etoile::UA, 48.0 * etoile::UA, MASSE_ETOILE,
     ))));
 
@@ -102,7 +102,7 @@ pub fn construire_preset_tau_ceti() -> (Systeme, String) {
     ajouter_planete(&mut sys, 1.34, 0.16, 1.5 * deg, 0.6, 4.0,
         app_simple(Tellurique, vec3(0.6, 0.4, 0.3), vec3(0.4, 0.26, 0.2), vec3(0.7, 0.8, 0.9), 0.1));
 
-    sys.ajouter(Box::new(Ceinture::new(CeintureConfig::kuiper(
+    sys.ajouter(Box::new(Disque::new(DisqueConfig::kuiper(
         1600, 3.0 * etoile::UA, 16.0 * etoile::UA, MASSE_ETOILE,
     ))));
 
@@ -172,7 +172,7 @@ pub fn construire_preset_avatar() -> (Systeme, String) {
     ajouter_lune(&mut sys, externe, 1.2);
 
     // Ceinture d'astéroïdes entre Polyphemus et la géante externe.
-    sys.ajouter(Box::new(Ceinture::new(CeintureConfig::asteroides(
+    sys.ajouter(Box::new(Disque::new(DisqueConfig::asteroides(
         800, 2.3 * etoile::UA, 3.4 * etoile::UA, MASSE_ETOILE,
     ))));
 

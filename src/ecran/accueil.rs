@@ -8,6 +8,7 @@ pub enum Cible {
     Objet,
     Galerie,
     GalerieGaz,
+    GalerieDisques,
     GalerieEtoiles,
     Vaisseaux,
 }
@@ -42,16 +43,18 @@ impl Accueil {
         let b5 = Rect::new(cx - bw * 0.5, y0 + 4.0 * (bh + gap), bw, bh);
         let b6 = Rect::new(cx - bw * 0.5, y0 + 5.0 * (bh + gap), bw, bh);
         let b7 = Rect::new(cx - bw * 0.5, y0 + 6.0 * (bh + gap), bw, bh);
+        let b8 = Rect::new(cx - bw * 0.5, y0 + 7.0 * (bh + gap), bw, bh);
         minitel_ligne(b1, "SKYMAP - SYSTEME COMPLET", m);
         minitel_ligne(b2, "OBJET CELESTE - VUE ISOLEE", m);
         minitel_ligne(b3, "GALERIE - TYPES TELLURIQUES", m);
         minitel_ligne(b4, "GALERIE - GEANTES GAZEUSES", m);
-        minitel_ligne(b5, "GALERIE - ETOILES", m);
-        minitel_ligne(b6, "VAISSEAUX - SONDES / NAVETTES / STATIONS", m);
-        minitel_ligne(b7, "STARMAP - VOISINAGE STELLAIRE", m);
+        minitel_ligne(b5, "GALERIE - CEINTURES & DISQUES", m);
+        minitel_ligne(b6, "GALERIE - ETOILES", m);
+        minitel_ligne(b7, "VAISSEAUX - SONDES / NAVETTES / STATIONS", m);
+        minitel_ligne(b8, "STARMAP - VOISINAGE STELLAIRE", m);
 
         if clic {
-            if b7.contains(m) {
+            if b8.contains(m) {
                 return Some(Cible::Starmap);
             }
             if b1.contains(m) {
@@ -67,9 +70,12 @@ impl Accueil {
                 return Some(Cible::GalerieGaz);
             }
             if b5.contains(m) {
-                return Some(Cible::GalerieEtoiles);
+                return Some(Cible::GalerieDisques);
             }
             if b6.contains(m) {
+                return Some(Cible::GalerieEtoiles);
+            }
+            if b7.contains(m) {
                 return Some(Cible::Vaisseaux);
             }
         }

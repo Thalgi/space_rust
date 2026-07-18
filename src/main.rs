@@ -1,6 +1,6 @@
 mod astre;
 mod camera;
-mod ceinture;
+mod disque;
 mod ecran;
 mod etoile;
 mod fond;
@@ -20,7 +20,8 @@ mod ui;
 mod vaisseau;
 
 use ecran::{
-    Accueil, Cible, Galerie, GalerieEtoiles, Objet, Skymap, SortieStarmap, Starmap, Vaisseaux,
+    Accueil, Cible, Galerie, GalerieDisques, GalerieEtoiles, Objet, Skymap, SortieStarmap,
+    Starmap, Vaisseaux,
 };
 use macroquad::prelude::*;
 
@@ -40,6 +41,7 @@ enum Etat {
     Skymap(Box<Skymap>),
     Objet(Box<Objet>),
     Galerie(Box<Galerie>),
+    GalerieDisques(Box<GalerieDisques>),
     GalerieEtoiles(Box<GalerieEtoiles>),
     Vaisseaux(Box<Vaisseaux>),
 }
@@ -60,6 +62,9 @@ async fn main() {
                         Cible::Objet => Etat::Objet(Box::new(Objet::new())),
                         Cible::Galerie => Etat::Galerie(Box::new(Galerie::new(false))),
                         Cible::GalerieGaz => Etat::Galerie(Box::new(Galerie::new(true))),
+                        Cible::GalerieDisques => {
+                            Etat::GalerieDisques(Box::new(GalerieDisques::new()))
+                        }
                         Cible::GalerieEtoiles => {
                             Etat::GalerieEtoiles(Box::new(GalerieEtoiles::new()))
                         }
@@ -88,6 +93,11 @@ async fn main() {
                 }
             }
             Etat::Galerie(g) => {
+                if g.frame() {
+                    etat = Etat::Accueil(Accueil::new());
+                }
+            }
+            Etat::GalerieDisques(g) => {
                 if g.frame() {
                     etat = Etat::Accueil(Accueil::new());
                 }

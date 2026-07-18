@@ -493,6 +493,26 @@ suivante.
 
 ---
 
+### Phase 4 bis — Passe anti-autocollant sur la tache (retour visuel)
+
+Verdict de validation : la tache faisait encore autocollant. Causes trouvées et
+corrigées :
+
+- **Les bandes ne se courbaient pas autour d'elle** : la torsion des vortex
+  s'appliquait aux textures (via `dd`) mais la lecture du profil zonal `b(φ)`
+  se faisait à la latitude du PIXEL. Corrigé : `zp` est lu à `dot(dd, k)`
+  (latitude tordue) -> les bandes se déforment visiblement autour des vortex.
+- **Collier-halo** : l'anneau crème était uniforme (signature d'autocollant).
+  Corrigé : modulé par le champ de flot `ov` -> chapelet de nuages irrégulier.
+  Idem pour le sillage (traîne déchiquetée).
+- **Intérieur découplé** : la tache ignorait la luminance des bandes locales.
+  Corrigé : `spotc *= 0.86 + 0.28·bandc` + opacité dégressive vers le bord
+  -> elle appartient à sa ceinture.
+- Torsion renforcée (portée 2.4 -> 3.0 rayons, force 1.2 -> 1.6) et bord plus
+  rongé (0.34 -> 0.45).
+
+---
+
 ## 11 bis. État final
 
 Les 7 phases sont livrées (juillet 2026). Périmètre tenu : surface seule.
