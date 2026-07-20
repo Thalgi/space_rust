@@ -73,15 +73,29 @@ impl Rendu for RenduStandard {
             let w = (screen_width() as u32 / PIX_SCALE).max(2);
             let h = (screen_height() as u32 / PIX_SCALE).max(2);
             if (w, h) != self.rt {
-                self.cible = render_target(w, h);
+                // depth: true — sans attachement de profondeur, le depth test
+                // est muet dans la cible et l'ordre de dessin gagne (ceintures
+                // par-dessus planètes/soleil en mode pixel).
+                self.cible = render_target_ex(
+                    w,
+                    h,
+                    RenderTargetParams { sample_count: 1, depth: true },
+                );
                 self.cible.texture.set_filter(FilterMode::Nearest);
                 self.rt = (w, h);
             }
             cam3d.render_target = Some(self.cible.clone());
+            // Clamp sub-pixel des champs de débris : la cible est en demi-
+            // résolution, et le plus petit débris = 1 pixel de la grille.
+            crate::disque::set_viewport_h(h as f32);
+            crate::disque::set_px_min(1.0);
+
             set_camera(&cam3d);
             clear_background(Color::new(0.0, 0.0, 0.0, 0.0)); // transparent : ne masque pas le décor
             sys.draw_corps(cam);
             set_default_camera();
+            crate::disque::set_viewport_h(0.0);
+            crate::disque::set_px_min(0.0);
 
             // Upscale Nearest par-dessus la couche nette (alpha : corps opaques, vide transparent).
             draw_texture_ex(

@@ -2,24 +2,68 @@ use crate::ui::minitel_ligne;
 use macroquad::prelude::*;
 
 /// Destination choisie depuis l'accueil.
+#[derive(Clone, Copy)]
 pub enum Cible {
     Starmap,
     Skymap,
     Objet,
     Galerie,
     GalerieGaz,
+    GalerieDisques,
     GalerieEtoiles,
     Vaisseaux,
     Briques,
     Station,
 }
 
-/// Écran d'accueil : titre + boutons de mode.
+/// Écran d'accueil : titre + deux blocs de boutons (astres / vaisseaux).
 pub struct Accueil;
+
+/// Bloc de gauche : exploration et galeries d'astres.
+const BLOC_ASTRES: &[(&str, Cible)] = &[
+    ("SKYMAP - SYSTEME COMPLET", Cible::Skymap),
+    ("OBJET CELESTE - VUE ISOLEE", Cible::Objet),
+    ("STARMAP - VOISINAGE STELLAIRE", Cible::Starmap),
+    ("GALERIE - TYPES TELLURIQUES", Cible::Galerie),
+    ("GALERIE - GEANTES GAZEUSES", Cible::GalerieGaz),
+    ("GALERIE - CEINTURES & DISQUES", Cible::GalerieDisques),
+    ("GALERIE - ETOILES", Cible::GalerieEtoiles),
+];
+
+/// Bloc de droite : vaisseaux, briques et stations.
+const BLOC_VAISSEAUX: &[(&str, Cible)] = &[
+    ("VAISSEAUX - SONDES / NAVETTES / STATIONS", Cible::Vaisseaux),
+    ("BRIQUES - COMPOSANTS DE STATION", Cible::Briques),
+    ("STATION - ASSEMBLAGE (DEMO)", Cible::Station),
+];
 
 impl Accueil {
     pub fn new() -> Self {
         Self
+    }
+
+    /// Dessine un bloc (titre + boutons empilés) et renvoie la cible cliquée.
+    fn bloc(
+        titre: &str,
+        entrees: &'static [(&str, Cible)],
+        x: f32,
+        y0: f32,
+        m: Vec2,
+        clic: bool,
+    ) -> Option<&'static Cible> {
+        let bw = 380.0;
+        let bh = 40.0;
+        let gap = 12.0;
+        crate::police::texte(titre, x + 4.0, y0 - 10.0, 20.0, Color::new(0.5, 0.9, 0.7, 1.0));
+        let mut choix = None;
+        for (i, (label, cible)) in entrees.iter().enumerate() {
+            let r = Rect::new(x, y0 + i as f32 * (bh + gap), bw, bh);
+            minitel_ligne(r, label, m);
+            if clic && r.contains(m) {
+                choix = Some(cible);
+            }
+        }
+        choix
     }
 
     /// Dessine l'accueil et renvoie la destination si un bouton est cliqué.
@@ -31,60 +75,17 @@ impl Accueil {
         let cx = screen_width() * 0.5;
         let titre = "* GENERATEUR DE SYSTEMES *";
         let tw = crate::police::mesure(titre, 36);
-        crate::police::texte(titre, cx - tw * 0.5, screen_height() * 0.15, 36.0, Color::new(0.0, 0.9, 0.9, 1.0));
+        crate::police::texte(titre, cx - tw * 0.5, screen_height() * 0.12, 36.0, Color::new(0.0, 0.9, 0.9, 1.0));
 
-        let bw = 340.0;
-        let bh = 40.0;
-        let gap = 12.0;
-        let y0 = screen_height() * 0.22;
-        let b1 = Rect::new(cx - bw * 0.5, y0, bw, bh);
-        let b2 = Rect::new(cx - bw * 0.5, y0 + (bh + gap), bw, bh);
-        let b3 = Rect::new(cx - bw * 0.5, y0 + 2.0 * (bh + gap), bw, bh);
-        let b4 = Rect::new(cx - bw * 0.5, y0 + 3.0 * (bh + gap), bw, bh);
-        let b5 = Rect::new(cx - bw * 0.5, y0 + 4.0 * (bh + gap), bw, bh);
-        let b6 = Rect::new(cx - bw * 0.5, y0 + 5.0 * (bh + gap), bw, bh);
-        let b7 = Rect::new(cx - bw * 0.5, y0 + 6.0 * (bh + gap), bw, bh);
-        let b8 = Rect::new(cx - bw * 0.5, y0 + 7.0 * (bh + gap), bw, bh);
-        let b9 = Rect::new(cx - bw * 0.5, y0 + 8.0 * (bh + gap), bw, bh);
-        minitel_ligne(b1, "SKYMAP - SYSTEME COMPLET", m);
-        minitel_ligne(b2, "OBJET CELESTE - VUE ISOLEE", m);
-        minitel_ligne(b3, "GALERIE - TYPES TELLURIQUES", m);
-        minitel_ligne(b4, "GALERIE - GEANTES GAZEUSES", m);
-        minitel_ligne(b5, "GALERIE - ETOILES", m);
-        minitel_ligne(b6, "VAISSEAUX - SONDES / NAVETTES / STATIONS", m);
-        minitel_ligne(b7, "STARMAP - VOISINAGE STELLAIRE", m);
-        minitel_ligne(b8, "BRIQUES - COMPOSANTS DE STATION", m);
-        minitel_ligne(b9, "STATION - ASSEMBLAGE (DEMO)", m);
+        let bw = 380.0;
+        let ecart = 48.0;
+        let y0 = screen_height() * 0.24;
+        let xg = cx - bw - ecart * 0.5;
+        let xd = cx + ecart * 0.5;
 
-        if clic {
-            if b9.contains(m) {
-                return Some(Cible::Station);
-            }
-            if b8.contains(m) {
-                return Some(Cible::Briques);
-            }
-            if b7.contains(m) {
-                return Some(Cible::Starmap);
-            }
-            if b1.contains(m) {
-                return Some(Cible::Skymap);
-            }
-            if b2.contains(m) {
-                return Some(Cible::Objet);
-            }
-            if b3.contains(m) {
-                return Some(Cible::Galerie);
-            }
-            if b4.contains(m) {
-                return Some(Cible::GalerieGaz);
-            }
-            if b5.contains(m) {
-                return Some(Cible::GalerieEtoiles);
-            }
-            if b6.contains(m) {
-                return Some(Cible::Vaisseaux);
-            }
-        }
-        None
+        let choix = Self::bloc("[ ASTRES & GALERIES ]", BLOC_ASTRES, xg, y0, m, clic)
+            .or_else(|| Self::bloc("[ VAISSEAUX & STATIONS ]", BLOC_VAISSEAUX, xd, y0, m, clic));
+
+        choix.copied()
     }
 }

@@ -289,10 +289,12 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
                     vec3 e2 = normalize(cross(c, e1));                       // nord local
                     vec2 lp = vec2(dot(d, e1), dot(d, e2)) / max(cd, 0.3);
                     float front = smoothstep(0.25, 0.5, cd);
-                    // Torsion du fond : rotation différentielle BORNÉE.
+                    // Torsion du fond : rotation différentielle BORNÉE, portée
+                    // élargie et plus musclée -> les filaments voisins s'enroulent
+                    // visiblement autour du vortex (anti-autocollant).
                     float rt = length(lp) / vray;
-                    float pull = front * smoothstep(2.4, 0.5, rt);
-                    float awv = spin * pull * 1.2 / (rt + 0.5);
+                    float pull = front * smoothstep(3.0, 0.55, rt);
+                    float awv = spin * pull * 1.6 / (rt + 0.5);
                     float ca2 = cos(awv); float sa2 = sin(awv);
                     vec2 qr = vec2(lp.x * ca2 - lp.y * sa2, lp.x * sa2 + lp.y * ca2) - lp;
                     dd += (e1 * qr.x + e2 * qr.y) * vray * max(cd, 0.0) * 1.3;
@@ -311,7 +313,7 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
                     }
                     float r = length(lq) / re;
                     // Bord rongé par la turbulence -> le vortex se FOND dans les bandes.
-                    float rn = r + edgn * 0.34;
+                    float rn = r + edgn * 0.45;
                     float amt = (1.0 - smoothstep(0.5, 1.0, rn)) * front * inarc;
                     if (amt > spot_amt) {
                         spot_amt = amt;
@@ -372,7 +374,11 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
         // des sous-bandes fines. Remplace dec1 + jet_profil de la V1.
         float warp = ((turb - 0.5) * 0.7 + swirl * 0.4) * (0.6 + 0.3 * warp_amt)
                    + (turb - 0.5) * wake * 1.5; // ondulation des frontières + boost sillage
-        vec4 zp = texture2D(zonal, vec2(clamp(dk + warp * 0.16, -0.99, 0.99) * 0.5 + 0.5, 0.5));
+        // ANTI-AUTOCOLLANT : la latitude de lecture vient de la direction
+        // TORDUE par les vortex (dot(dd,k)), pas du pixel -> les bandes se
+        // COURBENT autour de la tache au lieu de passer derrière en ligne droite.
+        float dkv = dot(dd, k);
+        vec4 zp = texture2D(zonal, vec2(clamp(dkv + warp * 0.16, -0.99, 0.99) * 0.5 + 0.5, 0.5));
         float shear = zp.b;                    // cisaillement réel : festons aux flancs des jets
         float dec2 = fbm(vec3(dk * 7.5 - warp, sd.z + 4.0, sd.x)); // sous-bandes fines
         float band = zp.g;
@@ -463,10 +469,15 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
                 // Anneau de HAUTE VITESSE à 70-85 % du rayon : liseré vif.
                 float velring = smoothstep(0.58, 0.72, spot_r) * (1.0 - smoothstep(0.82, 0.95, spot_r));
                 spotc = mix(spotc, spotc * 1.4, velring * 0.6);
-                base = mix(base, spotc, spot_amt * 0.92);
-                // Collier clair isolant.
+                // ANTI-AUTOCOLLANT : la luminance des bandes locales transparaît
+                // dans la tache (elle appartient à SA ceinture, pas posée dessus).
+                spotc *= 0.86 + 0.28 * bandc;
+                base = mix(base, spotc, spot_amt * (0.8 + 0.12 * smoothstep(0.6, 0.2, spot_r)));
+                // Collier clair : chapelet de nuages IRRÉGULIER (modulé par le
+                // flot), pas un halo uniforme.
                 float collar = smoothstep(0.78, 1.0, spot_r) * (1.0 - smoothstep(1.0, 1.3, spot_r));
-                base = mix(base, gaz_pal[4], collar * 0.8);
+                collar *= 0.35 + 0.75 * smoothstep(0.35, 0.75, ov);
+                base = mix(base, gaz_pal[4], collar * 0.85);
             } else if (spot_type < 1.5) {
                 // Tache sombre (GDS) : ovale sombre fondu, sans collier (les
                 // compagnons blancs viennent du sillage/festons alentour).
@@ -501,9 +512,11 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
                 base = mix(base, spotc, spot_amt * 0.8);
             }
         }
-        // Sillage clair NET sur le flanc gauche (ouest) -> détache la tache du fond.
+        // Sillage clair sur le flanc ouest : traîne DÉCHIQUETÉE par le flot
+        // (modulée par le champ ov), pas une bande crème uniforme.
         if (wake > 0.0) {
-            base = mix(base, gaz_pal[4], wake * 0.5 * (1.0 - spot_amt));
+            float wmod = 0.3 + 0.55 * smoothstep(0.3, 0.8, ov);
+            base = mix(base, gaz_pal[4], wake * wmod * (1.0 - spot_amt));
         }
         // ---- PÔLES V2 (phase 5, § 6) : UN SEUL système polaire. ----
         // Emprise RÉDUITE : engage après la dernière paire de jets (pole_lat,
