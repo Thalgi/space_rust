@@ -1,6 +1,7 @@
+use super::pixel::FiltrePixel;
 use crate::camera::Camera;
 use crate::fond::Fond;
-use crate::vaisseau::Brique;
+use crate::vaisseau::{eclairage, Brique};
 use macroquad::prelude::*;
 
 /// Vue « atelier de briques » : chaque groupe de composant (structure, habitat,
@@ -11,6 +12,7 @@ pub struct Briques {
     courant: usize,
     cam: Camera,
     fond: Fond,
+    pixel: FiltrePixel,
 }
 
 impl Briques {
@@ -22,6 +24,7 @@ impl Briques {
             courant: 0,
             cam,
             fond: Fond::new(400),
+            pixel: FiltrePixel::new(),
         };
         vue.cadrer();
         vue
@@ -55,17 +58,27 @@ impl Briques {
         if is_key_pressed(KeyCode::Down) {
             self.changer(1);
         }
+        if is_key_pressed(KeyCode::P) {
+            self.pixel.basculer(); // filtre pixel ON/OFF
+        }
 
         self.cam.input_orbite(false);
 
         let aspect = screen_width() / screen_height();
-        let (cam_info, cam3d) = self.cam.construire(Vec3::ZERO, aspect);
+        let (cam_info, mut cam3d) = self.cam.construire(Vec3::ZERO, aspect);
 
+        // Couche nette : fond stellaire plein écran.
         set_camera(&cam3d);
         clear_background(BLACK);
         self.fond.draw(&cam_info);
-        self.brique().dessiner();
         set_default_camera();
+
+        // Couche brique : éclairée, éventuellement pixelisée par-dessus le fond.
+        self.pixel.preparer(&mut cam3d);
+        set_camera(&cam3d);
+        eclairage::avec(cam_info.pos, || self.brique().dessiner());
+        set_default_camera();
+        self.pixel.presenter();
 
         // Nom de la brique courante, en bas à gauche.
         let h = screen_height();
@@ -80,7 +93,10 @@ impl Briques {
         crate::police::texte(self.brique().nom(), 20.0, h - 24.0, 30.0, WHITE);
 
         crate::police::texte(
-            "Fleches haut/bas: brique   glisser: pivoter   molette: zoom   Echap: menu",
+            &format!(
+                "Fleches haut/bas: brique   glisser: pivoter   molette: zoom   P: pixel ({})   Echap: menu",
+                if self.pixel.actif { "ON" } else { "off" }
+            ),
             12.0,
             24.0,
             18.0,

@@ -10,6 +10,7 @@ mod atterrisseur;
 mod brique_demo;
 mod chantier;
 mod composant;
+pub mod eclairage;
 mod generateur;
 mod comsat;
 mod cubesat;

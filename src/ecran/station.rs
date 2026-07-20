@@ -1,5 +1,7 @@
+use super::pixel::FiltrePixel;
 use crate::camera::Camera;
 use crate::fond::Fond;
+use crate::vaisseau::eclairage;
 use crate::vaisseau::{
     demo_antennes, demo_chantier, demo_deux_modules, demo_habitats, demo_panneaux, demo_poutres,
     demo_radiateurs, demo_station, demo_treillis, generer, preset_iss, preset_mir, EtatStation,
@@ -21,6 +23,7 @@ pub struct VueStation {
     fond: Fond,
     ports: bool,
     numeros: bool,
+    pixel: FiltrePixel,
 }
 
 impl VueStation {
@@ -38,6 +41,7 @@ impl VueStation {
             fond: Fond::new(400),
             ports: false,
             numeros: false,
+            pixel: FiltrePixel::new(),
         };
         vue.charger();
         vue
@@ -94,6 +98,9 @@ impl VueStation {
         if is_key_pressed(KeyCode::N) {
             self.numeros = !self.numeros;
         }
+        if is_key_pressed(KeyCode::X) {
+            self.pixel.basculer(); // filtre pixel ON/OFF
+        }
         if is_key_pressed(KeyCode::D) {
             self.idx += 1;
             self.charger();
@@ -135,18 +142,25 @@ impl VueStation {
         self.cam.input_orbite(false);
 
         let aspect = screen_width() / screen_height();
-        let (cam_info, cam3d) = self.cam.construire(Vec3::ZERO, aspect);
+        let (cam_info, mut cam3d) = self.cam.construire(Vec3::ZERO, aspect);
 
+        // Couche nette : fond stellaire plein écran.
         set_camera(&cam3d);
         clear_background(BLACK);
         self.fond.draw(&cam_info);
+        set_default_camera();
+
+        // Couche station : éclairée, éventuellement pixelisée par-dessus le fond.
+        self.pixel.preparer(&mut cam3d);
+        set_camera(&cam3d);
         if let Some(station) = self.etat.doit_dessiner() {
-            station.dessiner();
+            eclairage::avec(cam_info.pos, || station.dessiner());
             if self.ports {
                 station.dessiner_ports();
             }
         }
         set_default_camera();
+        self.pixel.presenter();
 
         // Numéros de pièce (index d'assemblage) projetés à l'écran, pour pointer
         // les pièces à corriger. L'index = ordre de construction dans le code.
@@ -174,8 +188,9 @@ impl VueStation {
         crate::police::texte(&self.titre, 20.0, h - 24.0, 24.0, WHITE);
         let etat_ports = if self.ports { "ON" } else { "OFF" };
         let etat_num = if self.numeros { "ON" } else { "OFF" };
+        let etat_pix = if self.pixel.actif { "ON" } else { "OFF" };
         crate::police::texte(
-            &format!("1-4: complexite   O: ossature   G: graine   S: style   D: demo   P: ports ({etat_ports})   N: numeros ({etat_num})   Echap: menu"),
+            &format!("1-4: complexite   O: ossature   G: graine   S: style   D: demo   P: ports ({etat_ports})   N: numeros ({etat_num})   X: pixel ({etat_pix})   Echap: menu"),
             12.0,
             24.0,
             17.0,

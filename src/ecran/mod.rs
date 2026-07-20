@@ -8,6 +8,7 @@ mod galerie;
 mod galerie_disques;
 mod galerie_etoiles;
 mod objet;
+mod pixel;
 mod skymap;
 mod starmap;
 mod station;

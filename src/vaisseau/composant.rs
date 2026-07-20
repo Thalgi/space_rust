@@ -14,6 +14,8 @@ use std::f32::consts::{FRAC_PI_2, PI, TAU};
 // Palette provisoire (les styles arriveront à l'Étape 5).
 const COULEUR: Color = Color { r: 0.85, g: 0.85, b: 0.88, a: 1.0 };
 const SOMBRE: Color = Color { r: 0.25, g: 0.25, b: 0.28, a: 1.0 };
+/// Alu clair des bagues d'accostage (bout des collerettes).
+const BAGUE: Color = Color { r: 0.62, g: 0.64, b: 0.68, a: 1.0 };
 
 // Panneau solaire : mât entre le montage et le pied de la pale, et bras de base
 // côté hôte (−Z) qui matérialise la jonction module ↔ panneau.
@@ -486,6 +488,50 @@ impl VarianteModule {
         }
     }
 
+    /// Habillage de coque : sur le doré, bandes MLI alternées (feuilles
+    /// d'isolant) ; sinon coutures de panneaux — anneaux fins en très léger
+    /// débord radial (pas de face coplanaire → pas de z-fighting).
+    fn habillage(self, rayon: f32, demi: f32) {
+        let c = self.couleur();
+        match self {
+            VarianteModule::Dore => {
+                // Bandes d'isolant multicouche : tuiles de teintes dorées voisines.
+                let n = ((demi * 2.0) / 0.55).round().max(2.0) as usize;
+                for i in 0..n {
+                    let z0 = -demi + (i as f32) * (2.0 * demi / n as f32);
+                    let z1 = z0 + (2.0 * demi / n as f32) * 0.92; // jour entre feuilles
+                    let t = match i % 3 {
+                        0 => 1.06,
+                        1 => 0.93,
+                        _ => 1.0,
+                    };
+                    let teinte = Color::new(
+                        (c.r * t).min(1.0),
+                        (c.g * t).min(1.0),
+                        (c.b * t * 0.97).min(1.0),
+                        1.0,
+                    );
+                    super::cylindre(vec3(0.0, 0.0, z0), vec3(0.0, 0.0, z1), rayon * 1.004, teinte);
+                }
+            }
+            VarianteModule::Gonflable => {} // le bombement tissu se suffit
+            _ => {
+                // Coutures de panneaux : un anneau discret tous les ~0.8 u.
+                let seam = Color::new(c.r * 0.80, c.g * 0.80, c.b * 0.82, 1.0);
+                let n = ((demi * 2.0) / 0.8).round().max(1.0) as usize;
+                for i in 1..n {
+                    let z = -demi + (i as f32) * (2.0 * demi / n as f32);
+                    super::cylindre(
+                        vec3(0.0, 0.0, z - 0.015),
+                        vec3(0.0, 0.0, z + 0.015),
+                        rayon * 1.004,
+                        seam,
+                    );
+                }
+            }
+        }
+    }
+
     /// Détails de surface, dessinés par-dessus le corps (repère local, axe Z,
     /// corps de rayon `rayon` s'étendant de −`demi` à +`demi`).
     fn details(self, rayon: f32, demi: f32) {
@@ -662,16 +708,24 @@ impl Composant {
                 let lc = rayon * COL_LONG;
                 let rc = rayon * COL_RAYON;
                 // Corps : cylindre lisse, teinté par la variante.
-                super::cylindre(vec3(0.0, 0.0, -demi), vec3(0.0, 0.0, demi), rayon, variante.couleur());
+                let corps = variante.couleur();
+                super::cylindre(vec3(0.0, 0.0, -demi), vec3(0.0, 0.0, demi), rayon, corps);
+                // Habillage de coque : coutures de panneaux (ou bandes MLI pour
+                // le doré) — anneaux fins en léger débord radial, teinte voisine.
+                variante.habillage(rayon, demi);
                 // Embouts : un petit cylindre coiffe chaque disque de bout. Il
                 // chevauche le corps (part de `demi - EMBOUT_ENFONCE`) → aucune
                 // face coplanaire, donc plus de z-fighting ; léger débord = arête.
                 let re = rayon * EMBOUT_RAYON;
                 super::cylindre(vec3(0.0, 0.0, demi - EMBOUT_ENFONCE), vec3(0.0, 0.0, demi + EMBOUT_LONG), re, SOMBRE);
                 super::cylindre(vec3(0.0, 0.0, -demi + EMBOUT_ENFONCE), vec3(0.0, 0.0, -demi - EMBOUT_LONG), re, SOMBRE);
-                // Collerettes de docking : cols étroits qui dépassent à chaque bout.
+                // Collerettes de docking : cols étroits qui dépassent à chaque bout,
+                // terminés par une bague d'accostage alu clair (visuel APAS).
                 super::cylindre(vec3(0.0, 0.0, demi), vec3(0.0, 0.0, demi + lc), rc, SOMBRE);
                 super::cylindre(vec3(0.0, 0.0, -demi), vec3(0.0, 0.0, -demi - lc), rc, SOMBRE);
+                let lb = lc * 0.28; // épaisseur de la bague
+                super::cylindre(vec3(0.0, 0.0, demi + lc - lb), vec3(0.0, 0.0, demi + lc), rc * 1.10, BAGUE);
+                super::cylindre(vec3(0.0, 0.0, -demi - lc + lb), vec3(0.0, 0.0, -demi - lc), rc * 1.10, BAGUE);
                 // Détails de surface (hublots, fenêtre, coupole, bombement…).
                 variante.details(rayon, demi);
             }
@@ -687,9 +741,12 @@ impl Composant {
                 // Corps sphérique (pas de disque de bout → pas de z-fighting).
                 draw_sphere(Vec3::ZERO, rs, None, COULEUR);
                 for (dir, _, _) in faces_noeud(*sorties) {
-                    // Bras cylindrique ancré dans la sphère, puis collerette au bout.
+                    // Bras cylindrique ancré dans la sphère, collerette, puis
+                    // bague d'accostage alu clair au bout (comme les modules).
                     super::cylindre(dir * base, dir * (rs + lb), rb, COULEUR);
                     super::cylindre(dir * (rs + lb), dir * (rs + lb + lc), rc, SOMBRE);
+                    let lbg = lc * 0.28;
+                    super::cylindre(dir * (rs + lb + lc - lbg), dir * (rs + lb + lc), rc * 1.10, BAGUE);
                 }
             }
             Composant::PanneauSolaire { variante, longueur, largeur, .. } => {
@@ -744,10 +801,15 @@ impl Composant {
             }
             Composant::Adaptateur { grand, petit, longueur } => {
                 let demi = *longueur * 0.5;
-                // Tronc de cône grand (−Z) → petit (+Z) + collerettes de docking.
+                // Tronc de cône grand (−Z) → petit (+Z) + collerettes de docking
+                // terminées par une bague d'accostage alu clair.
                 super::cone(vec3(0.0, 0.0, -demi), Vec3::Z, grand.rayon(), petit.rayon(), *longueur, COULEUR);
-                super::cylindre(vec3(0.0, 0.0, -demi), vec3(0.0, 0.0, -demi - grand.rayon() * COL_LONG), grand.rayon() * COL_RAYON, SOMBRE);
-                super::cylindre(vec3(0.0, 0.0, demi), vec3(0.0, 0.0, demi + petit.rayon() * COL_LONG), petit.rayon() * COL_RAYON, SOMBRE);
+                for (s, p) in [(-1.0_f32, grand), (1.0_f32, petit)] {
+                    let (lc, rc) = (p.rayon() * COL_LONG, p.rayon() * COL_RAYON);
+                    let bout = s * (demi + lc);
+                    super::cylindre(vec3(0.0, 0.0, s * demi), vec3(0.0, 0.0, bout), rc, SOMBRE);
+                    super::cylindre(vec3(0.0, 0.0, bout - s * lc * 0.28), vec3(0.0, 0.0, bout), rc * 1.10, BAGUE);
+                }
             }
         }
     }
