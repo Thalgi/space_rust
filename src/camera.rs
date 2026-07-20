@@ -8,6 +8,7 @@ pub struct Camera {
     pub yaw: f32,
     pub pitch: f32,
     pub dist: f32,
+    dist_ref: f32,
     prec: (f32, f32),
     focus: Option<usize>,
 }
@@ -18,6 +19,7 @@ impl Camera {
             yaw: 0.8,
             pitch: 0.5,
             dist,
+            dist_ref: dist,
             prec: mouse_position(),
             focus: None,
         }
@@ -26,11 +28,20 @@ impl Camera {
     pub fn reset_focus(&mut self) {
         self.focus = None;
     }
+    /// Focalise la caméra sur l'astre `idx` (le suit).
+    pub fn set_focus(&mut self, idx: usize) {
+        self.focus = Some(idx);
+    }
     pub fn focus_actif(&self) -> bool {
         self.focus.is_some()
     }
     pub fn set_dist(&mut self, d: f32) {
         self.dist = d;
+        self.dist_ref = d;
+    }
+    /// Multiplicateur de zoom courant : x1.00 au cadrage de référence, >1 en approchant.
+    pub fn zoom(&self) -> f32 {
+        self.dist_ref / self.dist
     }
 
     /// Rotation (glisser) + zoom (molette), sauf si la souris est sur l'UI.
@@ -44,7 +55,7 @@ impl Camera {
         if !sur_ui {
             let mol = mouse_wheel().1;
             if mol != 0.0 {
-                self.dist = (self.dist * (1.0 - mol.signum() * 0.1)).clamp(4.0, 3600.0);
+                self.dist = (self.dist * (1.0 - mol.signum() * 0.1)).clamp(2.0, 30000.0);
             }
         }
     }
@@ -75,6 +86,8 @@ impl Camera {
             forward,
             light_pos: Vec3::ZERO,
             light_color: Vec3::ONE,
+            lights_pos: [Vec3::ZERO; 4],
+            lights_color: [Vec3::ZERO; 4],
         };
         let cam3d = Camera3D {
             position: pos,

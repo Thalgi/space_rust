@@ -72,6 +72,14 @@ impl ProfilEtoile {
     pub fn nom(&self) -> &'static str {
         self.nom
     }
+
+    /// Rémanent stellaire compact (pulsar, magnétar, étoile à neutrons). Ces objets
+    /// n'ont **pas de zone habitable** pertinente (leur éclat visible ne trace pas
+    /// une zone d'eau liquide) et leurs planètes rescapées orbitent serré
+    /// (cf. PSR B1257+12 : 0,19–0,46 UA). Sert à adapter distances et affichage.
+    pub fn est_remnant(&self) -> bool {
+        matches!(self.nom, "Pulsar" | "Etoile a neutrons" | "Magnetar")
+    }
 }
 
 /// Unités du monde par UA (unité astronomique). Les distances orbitales sont

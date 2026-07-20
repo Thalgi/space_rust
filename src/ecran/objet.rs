@@ -140,9 +140,9 @@ impl Objet {
         let aspect = screen_width() / screen_height();
         let (cam_info, cam3d) = self.cam.construire(Vec3::ZERO, aspect);
         self.rendu
-            .rendre(cam3d, &cam_info, &mut self.fond, &mut self.sys, false, false);
+            .rendre(cam3d, &cam_info, &mut self.fond, &mut self.sys, false, false, false);
 
-        draw_text(
+        crate::police::texte(
             &format!(
                 "{}   |   {} FPS   G: aleatoire   1: soleil   2: planete   P: pixel   R: shaders   Echap: menu",
                 self.spec.label(),

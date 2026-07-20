@@ -40,6 +40,38 @@ void main() {
     float rr = length(v_q);
     if (rr > couronne) discard;
 
+    if (couronne_type > 4.5) {
+        // ===== TROU NOIR (stylisé, sans lentille gravitationnelle) =====
+        // Disque d'accrétion incliné : ellipse (compression verticale) autour de l'horizon.
+        float incl = 0.40; // 0 -> vu par la tranche ; 1 -> vu de face
+        float rdisk = length(vec2(v_q.x, v_q.y / incl));
+        float r_in = 1.4;
+        float r_out = 3.0;
+        float band = smoothstep(r_in, r_in + 0.2, rdisk) * (1.0 - smoothstep(r_out - 0.7, r_out, rdisk));
+        // Spirale orbitale animée.
+        float ang = atan(v_q.y, v_q.x);
+        float swirl = fbm(vec3(cos(ang) * 4.0, sin(ang) * 4.0, rdisk * 2.5 - time * 1.6));
+        band *= 0.5 + 0.8 * swirl;
+        // Doppler beaming : le côté qui s'approche (x < 0) est nettement plus brillant.
+        float doppler = 0.35 + 1.1 * smoothstep(1.0, -1.0, v_q.x / max(rdisk, 0.001));
+        band *= doppler;
+        // Occlusion par l'horizon : la moitié ARRIÈRE (haut) est cachée derrière la sphère
+        // là où rr < 1 ; la moitié AVANT (bas) passe devant l'horizon.
+        float visible = max(step(v_q.y, 0.0), step(1.0, rr));
+        band *= clamp(visible, 0.0, 1.0);
+        // Couleur thermique : blanc-bleu (interne) -> orange (externe).
+        vec3 diskcol = mix(vec3(0.95, 0.98, 1.0), vec3(1.0, 0.55, 0.18), smoothstep(r_in, r_out, rdisk));
+        // Anneau de photons : fin liseré brillant au bord de l'horizon.
+        float photon = smoothstep(0.10, 0.0, abs(rr - 1.08));
+        float horizon = smoothstep(1.03, 0.97, rr); // 1 dans le trou
+        vec3 col = diskcol * band + vec3(1.0, 0.85, 0.6) * photon;
+        // Horizon noir : recouvre tout sauf le disque de devant qui passe par-dessus.
+        col = mix(col, vec3(0.0), horizon * (1.0 - clamp(band, 0.0, 1.0)));
+        float alpha = clamp(max(band, max(photon, horizon)), 0.0, 1.0);
+        gl_FragColor = vec4(col, alpha);
+        return;
+    }
+
     if (rr <= 1.0) {
         float z = sqrt(max(0.0, 1.0 - rr * rr));
         vec3 n = normalize(v_q.x * cam_right + v_q.y * cam_up + z * to_cam);

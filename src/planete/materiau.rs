@@ -23,12 +23,8 @@ const TABLE: &[(&str, UniformType, fn(&Apparence) -> Val)] = &[
     ("couleur3", UniformType::Float3, |a| Val::F3(a.couleur3)),
     ("type_p", UniformType::Float1, |a| Val::F1(a.type_p.code())),
     ("eau", UniformType::Float1, |a| Val::F1(a.eau)),
-    ("tache_dir", UniformType::Float3, |a| Val::F3(a.tache_dir)),
-    ("tache_w", UniformType::Float1, |a| Val::F1(a.tache_taille)),
     ("tache_col", UniformType::Float3, |a| Val::F3(a.tache_couleur)),
-    ("tache_type", UniformType::Float1, |a| Val::F1(a.tache_type)),
     ("axe", UniformType::Float3, |a| Val::F3(a.axe)),
-    ("band_scale", UniformType::Float1, |a| Val::F1(a.band_scale)),
     ("warp_amt", UniformType::Float1, |a| Val::F1(a.warp_amt)),
     ("seed", UniformType::Float1, |a| Val::F1(a.seed)),
     ("poly_cotes", UniformType::Float1, |a| Val::F1(a.poly_cotes)),
@@ -43,6 +39,7 @@ const TABLE: &[(&str, UniformType, fn(&Apparence) -> Val)] = &[
     ("nuages", UniformType::Float1, |a| Val::F1(a.nuages)),
     ("nuages_couleur", UniformType::Float3, |a| Val::F3(a.nuages_couleur)),
     ("nuages_type", UniformType::Float1, |a| Val::F1(a.nuages_type)),
+    ("cyclones_nb", UniformType::Float1, |a| Val::F1(a.cyclones_nb)),
     ("relief", UniformType::Float1, |a| Val::F1(a.relief)),
     ("dunes", UniformType::Float1, |a| Val::F1(a.dunes)),
     ("mesa", UniformType::Float1, |a| Val::F1(a.mesa)),
@@ -63,13 +60,11 @@ const TABLE: &[(&str, UniformType, fn(&Apparence) -> Val)] = &[
     ("cyclones_pol", UniformType::Float1, |a| Val::F1(a.cyclones_pol)),
     ("thermique", UniformType::Float1, |a| Val::F1(a.thermique)),
     ("thermique_couleur", UniformType::Float3, |a| Val::F3(a.thermique_couleur)),
-    ("tempetes", UniformType::Float1, |a| Val::F1(a.tempetes)),
     ("aurore", UniformType::Float1, |a| Val::F1(a.aurore)),
     ("aurore_couleur", UniformType::Float3, |a| Val::F3(a.aurore_couleur)),
     ("brume", UniformType::Float1, |a| Val::F1(a.brume)),
     ("brume_couleur", UniformType::Float3, |a| Val::F3(a.brume_couleur)),
     ("g_pole", UniformType::Float3, |a| Val::F3(a.g_pole)),
-    ("jet_profil", UniformType::Float1, |a| Val::F1(a.jet_profil)),
 ];
 
 fn set_val(mat: &Material, nom: &str, v: Val) {
@@ -84,6 +79,15 @@ fn set_val(mat: &Material, nom: &str, v: Val) {
 thread_local! {
     static TPL_CORPS: RefCell<Option<Material>> = RefCell::new(None);
     static TPL_ANNEAU: RefCell<Option<Material>> = RefCell::new(None);
+    // Hauteur (px) du viewport de rendu courant : la galerie dessine dans des
+    // cellules, pas plein écran -> nécessaire au LOD px_rayon. 0 = plein écran.
+    static VIEWPORT_H: RefCell<f32> = RefCell::new(0.0);
+}
+
+/// Indique la hauteur du viewport de rendu courant (galerie : hauteur de
+/// cellule, éventuellement divisée par le facteur pixel). 0 = plein écran.
+pub(super) fn set_viewport_h(h: f32) {
+    VIEWPORT_H.with(|v| *v.borrow_mut() = h);
 }
 
 pub(super) fn mat_corps() -> Material {
@@ -136,15 +140,30 @@ pub(super) fn appliquer_uniforms(
     c: Vec3,
     r: f32,
     terrain: Option<(&Texture2D, f32)>,
+    zonal: Option<(&Texture2D, f32)>,
+    vortex: Option<&([Vec4; super::vortex::N_VORTEX], [Vec4; super::vortex::N_VORTEX])>,
 ) {
     impostor::uniforms_standard(mat, cam, get_time() as f32, DISC);
     mat.set_uniform("centre", (c.x, c.y, c.z));
     mat.set_uniform("rayon", r);
+    // LOD (phase 6) : rayon apparent approximatif en pixels (fov ~45°,
+    // px ≈ r/dist · h/(2·tan(22.5°))) -> le shader estompe le micro-détail
+    // des gazeuses sur les petites sphères (galerie, vues système).
+    let vh = VIEWPORT_H.with(|v| *v.borrow());
+    let vh = if vh > 1.0 { vh } else { screen_height() };
+    let dist = (cam.pos - c).length().max(1e-3);
+    mat.set_uniform("px_rayon", r / dist * vh * 1.2);
     mat.set_uniform("lumiere", (cam.light_pos.x, cam.light_pos.y, cam.light_pos.z));
     mat.set_uniform(
         "light_color",
         (cam.light_color.x, cam.light_color.y, cam.light_color.z),
     );
+    // Éclairage multi-source (jusqu'à 4 étoiles ; indice 0 = primaire).
+    mat.set_uniform_array("lights_pos", &cam.lights_pos[..]);
+    mat.set_uniform_array("lights_color", &cam.lights_color[..]);
+    // Palette paramétrique des gazeuses : 8 teintes dérivées des couleurs du
+    // preset (voir palette.rs) -> plus de couleurs codées en dur dans le .glsl.
+    mat.set_uniform_array("gaz_pal", &super::palette::gaz_palette(a)[..]);
     match terrain {
         Some((tex, niveau)) => {
             mat.set_texture("terrain", tex.clone());
@@ -157,6 +176,26 @@ pub(super) fn appliquer_uniforms(
             mat.set_uniform("atlas_n", 1.0f32);
         }
     }
+    // Profil zonal 1D (gazeuses) : jets, type de bande, cisaillement, et borne
+    // polaire pole_lat (zonal.rs).
+    match zonal {
+        Some((tex, pl)) => {
+            mat.set_texture("zonal", tex.clone());
+            mat.set_uniform("pole_lat", pl);
+        }
+        None => {
+            mat.set_texture("zonal", tex_vide());
+            mat.set_uniform("pole_lat", 0.9f32);
+        }
+    }
+    // Slots de vortex (gazeuses, vortex.rs) ; zéros = tous inactifs.
+    const VORTEX_ZERO: [Vec4; super::vortex::N_VORTEX] = [Vec4::ZERO; super::vortex::N_VORTEX];
+    let (va, vb) = match vortex {
+        Some((a1, a2)) => (&a1[..], &a2[..]),
+        None => (&VORTEX_ZERO[..], &VORTEX_ZERO[..]),
+    };
+    mat.set_uniform_array("vortex", va);
+    mat.set_uniform_array("vortex2", vb);
     for (nom, _, get) in TABLE {
         set_val(mat, nom, get(a));
     }
@@ -170,8 +209,24 @@ fn charger_corps() -> Material {
         UniformDesc::new("rayon", UniformType::Float1),
         UniformDesc::new("lumiere", UniformType::Float3),
         UniformDesc::new("light_color", UniformType::Float3),
+        UniformDesc::array(UniformDesc::new("lights_pos", UniformType::Float3), 4),
+        UniformDesc::array(UniformDesc::new("lights_color", UniformType::Float3), 4),
+        UniformDesc::array(
+            UniformDesc::new("gaz_pal", UniformType::Float3),
+            super::palette::GAZ_PAL_N,
+        ),
+        UniformDesc::array(
+            UniformDesc::new("vortex", UniformType::Float4),
+            super::vortex::N_VORTEX,
+        ),
+        UniformDesc::array(
+            UniformDesc::new("vortex2", UniformType::Float4),
+            super::vortex::N_VORTEX,
+        ),
         UniformDesc::new("niveau_mer", UniformType::Float1),
         UniformDesc::new("atlas_n", UniformType::Float1),
+        UniformDesc::new("pole_lat", UniformType::Float1),
+        UniformDesc::new("px_rayon", UniformType::Float1),
     ]);
     uniforms.extend(TABLE.iter().map(|(nom, t, _)| UniformDesc::new(nom, *t)));
     load_material(
@@ -181,7 +236,7 @@ fn charger_corps() -> Material {
         },
         MaterialParams {
             uniforms,
-            textures: vec!["terrain".to_string()],
+            textures: vec!["terrain".to_string(), "zonal".to_string()],
             pipeline_params: PipelineParams {
                 depth_test: Comparison::LessOrEqual,
                 depth_write: true,

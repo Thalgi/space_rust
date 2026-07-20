@@ -1,7 +1,10 @@
 mod anneau;
 mod apparence;
 mod materiau;
+mod palette;
 pub mod terrain;
+mod vortex;
+mod zonal;
 
 pub use apparence::{Apparence, TypePlanete};
 
@@ -10,7 +13,14 @@ pub fn vider_cache_materials() {
     materiau::vider_cache();
 }
 
-use crate::astre::{Astre, Categorie, CameraInfo, CorpsBase};
+/// Hauteur (px) du viewport de rendu courant, pour le LOD des gazeuses.
+/// À appeler avant de dessiner dans un viewport partiel (galerie) ; remettre
+/// à 0 (= plein écran) ensuite.
+pub fn set_viewport_h(h: f32) {
+    materiau::set_viewport_h(h);
+}
+
+use crate::astre::{Astre, Categorie, CameraInfo, CorpsBase, Foyer};
 use anneau::construire_anneau;
 use macroquad::models::{draw_mesh, Mesh, Vertex};
 use macroquad::prelude::*;
@@ -33,6 +43,11 @@ pub struct Planete {
     // la galerie affiche un placeholder le temps que le terrain arrive).
     terrain_tex: Option<(Texture2D, f32)>,
     terrain_job: Option<std::thread::JoinHandle<terrain::DonneesTerrain>>,
+    // Profil zonal 1D (gazeuses) : texture jets/bandes/cisaillement + borne
+    // polaire pole_lat (zonal.rs).
+    zonal_tex: Option<(Texture2D, f32)>,
+    // Slots de vortex (gazeuses) : tache/ovales/barges/chapelets (vortex.rs).
+    vortex_unis: Option<([Vec4; vortex::N_VORTEX], [Vec4; vortex::N_VORTEX])>,
     // Lune : si parent défini, orbite analytique autour de l'astre `parent`.
     parent: Option<usize>,
     l_angle: f32,
@@ -40,6 +55,9 @@ pub struct Planete {
     l_r: f32,
     l_a1: Vec3,
     l_q: Vec3,
+    // Planète « sur rails » : orbite de Kepler analytique autour de son foyer.
+    orbite_kep: Option<crate::orbite::Orbite>,
+    foyer: Foyer,
 }
 
 impl Planete {
@@ -64,6 +82,13 @@ impl Planete {
             (Vec::new(), None)
         };
 
+        // Profil zonal + slots de vortex (gazeuses) : synchrone, < 1 ms.
+        let (zonal_tex, vortex_unis) = if app.type_p == TypePlanete::Gazeuse {
+            (Some(zonal::generer_zonal(&app)), Some(vortex::generer_vortex(&app)))
+        } else {
+            (None, None)
+        };
+
         Self {
             base,
             app,
@@ -77,13 +102,29 @@ impl Planete {
             mat_anneau,
             terrain_tex: None,
             terrain_job: None,
+            zonal_tex,
+            vortex_unis,
             parent: None,
             l_angle: 0.0,
             l_omega: 0.0,
             l_r: 0.0,
             l_a1: Vec3::X,
             l_q: Vec3::Z,
+            orbite_kep: None,
+            foyer: Foyer::Barycentre,
         }
+    }
+
+    /// Attache une orbite de Kepler (planète « sur rails »).
+    pub fn avec_orbite(mut self, o: crate::orbite::Orbite) -> Self {
+        self.orbite_kep = Some(o);
+        self
+    }
+
+    /// Définit le foyer d'orbite (étoile hôte S-type, ou barycentre P-type).
+    pub fn avec_foyer(mut self, f: Foyer) -> Self {
+        self.foyer = f;
+        self
     }
 
     /// Niveau d'extension des lumières de villes (0 = aucune … 4 = très étendu).
@@ -105,6 +146,11 @@ impl Planete {
     /// Copie de l'apparence (pour le bench de génération).
     pub fn apparence(&self) -> Apparence {
         self.app
+    }
+
+    /// Rayon (visuel, unités monde) du corps. Sert au cadrage caméra de la galerie.
+    pub fn rayon(&self) -> f32 {
+        self.base.rayon
     }
 
     /// Rayon externe de l'anneau (× rayon planète) ; 0 si aucun anneau.
@@ -208,6 +254,21 @@ impl Astre for Planete {
         self.base.position =
             centre + self.l_a1 * (self.l_r * self.l_angle.cos()) + self.l_q * (self.l_r * self.l_angle.sin());
     }
+    fn maj_rail(&mut self, foyer: Vec3, t: f64) {
+        if let Some(o) = &self.orbite_kep {
+            self.base.position = foyer + o.position(t);
+        }
+    }
+    fn amorcer_ncorps(&mut self, foyer_pos: Vec3, foyer_vel: Vec3, t: f64) {
+        if let Some(o) = &self.orbite_kep {
+            let (p, v) = o.etat(t);
+            self.base.position = foyer_pos + p;
+            self.base.vitesse = foyer_vel + v;
+        }
+    }
+    fn foyer(&self) -> Option<Foyer> {
+        Some(self.foyer)
+    }
     fn corps(&self) -> &CorpsBase {
         &self.base
     }
@@ -244,7 +305,16 @@ impl Astre for Planete {
         crate::impostor::push_quad(&mut self.verts, &mut self.inds, c, cam.right, cam.up, r * 1.05, WHITE);
 
         let terr = self.terrain_tex.as_ref().map(|(t, nm)| (t, *nm));
-        appliquer_uniforms(&self.mat, &self.app, cam, c, r, terr);
+        appliquer_uniforms(
+            &self.mat,
+            &self.app,
+            cam,
+            c,
+            r,
+            terr,
+            self.zonal_tex.as_ref().map(|(tex, pl)| (tex, *pl)),
+            self.vortex_unis.as_ref(),
+        );
 
         // Anneau : moitié arrière AVANT le corps (la planète la masquera).
         if self.mat_anneau.is_some() {

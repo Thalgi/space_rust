@@ -81,6 +81,11 @@ impl Soleil {
     pub(super) fn maj(&mut self, dt: f32) {
         self.temps += dt;
 
+        // Trou noir : pas de taches ni d'éruptions de surface (l'horizon est noir).
+        if self.couronne_type > 4.5 {
+            return;
+        }
+
         // --- Taches : apparition / fondu / disparition ---
         if self.temps >= self.prochaine_tache && self.taches.len() < MAX_TACHES {
             self.taches.push(Tache {

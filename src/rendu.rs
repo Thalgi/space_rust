@@ -14,7 +14,8 @@ pub trait Rendu {
         cam: &CameraInfo,
         fond: &mut Fond,
         sys: &mut Systeme,
-        orbites: bool,
+        orbites_planetes: bool,
+        orbites_etoiles: bool,
         zone: bool,
     );
     fn pixelise(&self) -> bool {
@@ -23,7 +24,9 @@ pub trait Rendu {
     fn toggle_pixel(&mut self) {}
 }
 
-/// Rendu standard : scène 3D, avec option « filtre pixel » (rendu basse-déf upscalé).
+/// Rendu standard. Le filtre « rétro » ne s'applique PAS à tout l'écran : seuls
+/// les corps célestes sont rendus en basse résolution puis upscalés (pixel art).
+/// Le fond stellaire et les trajectoires/zones restent nets, dessinés par-dessous.
 pub struct RenduStandard {
     pixelise: bool,
     cible: RenderTarget,
@@ -54,10 +57,19 @@ impl Rendu for RenduStandard {
         cam: &CameraInfo,
         fond: &mut Fond,
         sys: &mut Systeme,
-        orbites: bool,
+        orbites_planetes: bool,
+        orbites_etoiles: bool,
         zone: bool,
     ) {
+        // --- Couche NETTE (plein écran) : fond stellaire + trajectoires/zones ---
+        set_camera(&cam3d);
+        clear_background(BLACK);
+        fond.draw(cam); // étoiles lointaines (derrière tout)
+        sys.draw_orbites(orbites_planetes, orbites_etoiles, zone);
+        set_default_camera();
+
         if self.pixelise {
+            // --- Couche PIXEL : corps célestes seuls, en basse résolution ---
             let w = (screen_width() as u32 / PIX_SCALE).max(2);
             let h = (screen_height() as u32 / PIX_SCALE).max(2);
             if (w, h) != self.rt {
@@ -66,16 +78,12 @@ impl Rendu for RenduStandard {
                 self.rt = (w, h);
             }
             cam3d.render_target = Some(self.cible.clone());
-        }
+            set_camera(&cam3d);
+            clear_background(Color::new(0.0, 0.0, 0.0, 0.0)); // transparent : ne masque pas le décor
+            sys.draw_corps(cam);
+            set_default_camera();
 
-        set_camera(&cam3d);
-        clear_background(BLACK);
-        fond.draw(cam); // étoiles lointaines (derrière tout)
-        sys.draw(cam, orbites, zone);
-
-        set_default_camera();
-        if self.pixelise {
-            clear_background(BLACK);
+            // Upscale Nearest par-dessus la couche nette (alpha : corps opaques, vide transparent).
             draw_texture_ex(
                 &self.cible.texture,
                 0.0,
@@ -87,6 +95,11 @@ impl Rendu for RenduStandard {
                     ..Default::default()
                 },
             );
+        } else {
+            // Sans filtre : corps dessinés nets, dans la même passe que le décor.
+            set_camera(&cam3d);
+            sys.draw_corps(cam);
+            set_default_camera();
         }
     }
 }

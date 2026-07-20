@@ -12,27 +12,42 @@ uniform vec3 couleur;
 uniform vec3 couleur2;
 uniform vec3 couleur3;
 uniform vec3 light_color;
+// Éclairage multi-source (systèmes à plusieurs étoiles). L'indice 0 = étoile
+// primaire (= lumiere/light_color) ; les entrées inutilisées ont une couleur nulle.
+uniform vec3 lights_pos[4];
+uniform vec3 lights_color[4];
 uniform float type_p;
 uniform float eau;
-uniform vec3 tache_dir;
-uniform float tache_w;
 uniform vec3 tache_col;
+// Vortex unifiés (phase 4, vortex.rs) : 8 slots. vortex[i].xyz = direction du
+// centre, .w = type + rayon angulaire (type = floor : 0 GRS, 1 sombre,
+// 2 ovale blanc, 3 barge, 4 chapelet ; inactif si fract ≈ 0).
+// vortex2[i] : x = dérive (u du jet local), y = spin, z = index du slot.
+uniform vec4 vortex[8];
+uniform vec4 vortex2[8];
 uniform vec3 axe;
-uniform float band_scale;
 uniform float warp_amt;
 uniform float seed;
 uniform float poly_cotes; // 0 = pas de vortex polaire, sinon nb de côtés
 uniform float cyclones_pol;   // géantes : amas de cyclones aux pôles (0 = aucun)
 uniform float thermique;      // géantes chaudes : émission thermique nocturne (0 = aucune)
 uniform vec3 thermique_couleur; // teinte de l'émission thermique
-uniform float tempetes;       // géantes : densité de petites tempêtes (ovales) (0 = aucune)
 uniform float aurore;         // géantes : aurores polaires émissives (0 = aucune)
 uniform vec3 aurore_couleur;  // teinte des aurores
 uniform float brume;          // géantes : voile de brume qui adoucit les bandes (sub-Neptune)
 uniform vec3 brume_couleur;   // teinte de la brume
 uniform vec3 g_pole;          // géantes : teinte des régions polaires (dégradé latitudinal)
-uniform float jet_profil;     // géantes : profil latitudinal type Jupiter (EZ + NEB/SEB) (0 = aucun)
-uniform float tache_type;     // 0 = tache rouge (GRS), 1 = tache sombre (Neptune)
+// Palette paramétrique des gazeuses (dérivée CPU des couleurs du preset, cf.
+// planete/palette.rs) : 0 fond de zone, 1 clair (flocons/ovales/équateur),
+// 2 filaments sombres, 3 filaments chauds, 4 collier/sillage, 5 ceinture hôte
+// de la tache, 6 bord de tache, 7 cellules polaires claires.
+uniform vec3 gaz_pal[8];
+// Profil zonal 1D précalculé (gazeuses, zonal.rs) : indexé par sin(latitude)
+// (uv.x = dot(d, axe)*0.5+0.5). R = u(φ) vitesse de jet signée (0.5 = 0),
+// G = b(φ) type de bande (0 belt .. 1 zone), B = s(φ) cisaillement 0..1.
+uniform sampler2D zonal;
+uniform float pole_lat;   // sin(latitude) où commence le régime polaire (zonal.rs)
+uniform float px_rayon;   // rayon apparent en pixels -> LOD du micro-détail (phase 6)
 uniform vec3 atmo;        // halo atmosphérique (0 = aucun)
 uniform float lave;       // monde de lave : fissures incandescentes (0 = aucun)
 uniform float eau_motif;  // topologie de l'eau : 0 océan global,1 continents,2 mers,3 marais
@@ -44,6 +59,7 @@ uniform float rivieres;   // densité de rivières sur les terres (0 = aucune)
 uniform float nuages;     // densité de la couche nuageuse (0 = ciel clair)
 uniform vec3 nuages_couleur; // teinte des nuages (blanc, gris orage, sable...)
 uniform float nuages_type; // 0 = classique, 1 = tempête sombre, 2 = cyclone spiralé
+uniform float cyclones_nb; // proportion (0..1) des emplacements de cyclones actifs
 uniform float relief;     // amplitude des montagnes (0 = plat, 1 = chaînes marquées)
 uniform float dunes;      // ondulations de dunes (ergs) sur les terres sèches (0 = aucune)
 uniform float mesa;       // plateaux étagés + falaises + strates (0 = aucun)
@@ -142,6 +158,78 @@ float altitude_atlas(vec4 t) {
     return (t.r * 255.0 * 256.0 + t.g * 255.0) / 65535.0;
 }
 
+// Champ de cyclones tropicaux (telluriques) : plusieurs vortex COMPACTS répartis
+// sur le globe, chacun avec œil dégagé + mur de l'œil dense + bras en SPIRALE
+// LOGARITHMIQUE (θ ∝ ln r -> enroulement plus serré au centre), sens de rotation
+// donné par l'hémisphère (Coriolis : antihoraire au nord, horaire au sud).
+// ANTI-AUTOCOLLANT : en plus de la densité 0..1 retournée, la fonction
+// - tord `dn` (direction d'échantillonnage des nuages de fond) en rotation
+//   différentielle autour de chaque vortex -> la couverture existante est
+//   ASPIRÉE en spirale (bandes d'alimentation), même mécanique que la grande
+//   tache des géantes ;
+// - accumule `clair` (0..1) : dégagement de l'œil, pour trouer le fond.
+// Les centres DÉRIVENT lentement vers l'ouest (rotation autour de l'axe k,
+// sens opposé par hémisphère). GLSL ES 100 (pas de continue/break).
+float champ_cyclones(vec3 d, vec3 k, float t, inout vec3 dn, inout float clair) {
+    float acc = 0.0;
+    for (int i = 0; i < 6; i++) {
+        float fi = float(i);
+        // Centre pseudo-aléatoire, distribution ~uniforme sur la sphère.
+        float h0 = hash(vec3(seed + fi * 11.3, 3.1, 7.7));
+        float h1 = hash(vec3(seed + fi * 4.7, 9.2, 1.3));
+        float h2 = hash(vec3(seed + fi * 2.9, 5.5, 8.1));
+        float present = step(1.0 - cyclones_nb, h2);    // quantité pilotée par preset
+        float z = 2.0 * h0 - 1.0;
+        float ph = 6.2831853 * h1;
+        float rho = sqrt(max(0.0, 1.0 - z * z));
+        vec3 c = vec3(rho * cos(ph), z, rho * sin(ph));
+        float spin = (dot(c, k) > 0.0) ? 1.0 : -1.0;    // Coriolis
+        // Dérive lente autour de l'axe (Rodrigues) : conserve la latitude.
+        float aw0 = spin * (0.015 + 0.02 * h1) * t;
+        float cw = cos(aw0); float sw = sin(aw0);
+        c = c * cw + cross(k, c) * sw + k * dot(k, c) * (1.0 - cw);
+        // Cyclones surtout aux moyennes latitudes/tropiques (pas pile sur l'axe).
+        float lat = abs(dot(c, k));
+        present *= 1.0 - smoothstep(0.72, 0.95, lat);
+        // Rayon angulaire : gros et lisible, mais RÉTRÉCIT quand ils sont
+        // nombreux (sinon un monde-tempête sature en une bouillie de spirales).
+        float R = (0.24 + 0.18 * h2) * (1.15 - 0.45 * cyclones_nb);
+        float cd = dot(d, c);
+        float front = smoothstep(0.15, 0.45, cd);       // face visible du centre (doux)
+        // Coordonnées tangentes locales (projection gnomonique autour de c).
+        vec3 up = abs(c.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+        vec3 e1 = normalize(cross(c, up));
+        vec3 e2 = cross(c, e1);
+        vec2 lp = vec2(dot(d, e1), dot(d, e2)) / max(cd, 1e-3);
+        float r = length(lp) / R;                       // 0 = centre, 1 = bord nominal
+        float ang = atan(lp.y, lp.x);
+        float rot = t * (0.25 + 0.25 * h0);
+        // ADVECTION du fond : rotation différentielle BORNÉE. Surtout PAS de
+        // terme croissant avec le temps ici : le fond s'enroulerait à l'infini
+        // -> anneaux concentriques (sillons de vinyle) à la périphérie. Le
+        // mouvement vient de la dérive propre du fbm de fond (t1/t2) qui
+        // TRAVERSE ce champ de torsion fixe.
+        float pull = present * front * smoothstep(2.4, 0.5, r);
+        float aw = spin * pull * 1.3 / (r + 0.5);
+        float ca2 = cos(aw); float sa2 = sin(aw);
+        vec2 q = vec2(lp.x * ca2 - lp.y * sa2, lp.x * sa2 + lp.y * ca2) - lp;
+        dn += (e1 * q.x + e2 * q.y) * R * max(cd, 0.0);
+        // Bras spiraux logarithmiques + rotation différentielle animée.
+        float sp = 0.5 + 0.5 * sin(2.0 * ang + spin * 7.0 * log(r + 0.12) - spin * rot * 4.0);
+        sp = pow(sp, 0.55);                             // bras ÉPAIS (sinon effet fil/emoji)
+        sp *= 0.75 + 0.25 * fbm(d * 14.0 + fi + seed);  // grain fin le long des bras
+        float eye = smoothstep(0.05, 0.12, r);          // œil central dégagé
+        float env = smoothstep(1.0, 0.25, r);           // enveloppe : dense au cœur, fond au bord
+        float wall = smoothstep(0.08, 0.13, r) * smoothstep(0.26, 0.15, r); // mur de l'œil
+        float dens = max(sp * env * eye, wall * env * 0.95);
+        acc = max(acc, dens * present * front);
+        // Œil dégagé : troue aussi la couverture de fond.
+        clair = max(clair, present * front * smoothstep(0.14, 0.05, r));
+    }
+    dn = normalize(dn);
+    return clamp(acc, 0.0, 1.0);
+}
+
 vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
     wet = 0.0; // surface d'eau (pour le reflet spéculaire) ; mise à 1 sur l'océan
     if (type_p > 1.5) {
@@ -155,35 +243,96 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
         // multi-octave qui dérive dans le temps -> festons, volutes et tourbillons vivants.
         float dk = dot(d, k);
         vec3 sd = vec3(seed, seed * 1.7, seed * 0.3);
-        float t = time * 0.025;
+        float t = time * 0.025;  // animation des vortex (tache, polygone...)
+        float tn = time * 0.010; // dérive RÉSIDUELLE du bruit (le transport vient de l'advection)
 
-        // Grande tache (vortex) : calculée d'abord pour spiraler le flot autour d'elle.
+        // ADVECTION DIFFÉRENTIELLE (phase 3, § 3.2) : chaque latitude tourne à
+        // la vitesse de son jet u(φ) (canal R du profil zonal) -> les bandes
+        // glissent réellement les unes contre les autres. Rotation exacte
+        // autour de k : aucun enroulement cumulatif du bruit. La grande tache
+        // reste ancrée au repère rigide : le flot cisaille AUTOUR d'elle,
+        // comme la vraie GRS entre ses deux jets.
+        float uz = (texture2D(zonal, vec2(dk * 0.5 + 0.5, 0.5)).r - 0.5) * 2.0;
+        float az = uz * time * 0.025; // stylisé : cisaillement visible en quelques secondes
+        float caz = cos(az); float saz = sin(az);
+        vec3 dzn = d * caz + cross(k, d) * saz + k * dk * (1.0 - caz);
+
+        // ---- CHAMP DE VORTEX UNIFIÉ (phase 4, § 5) : 8 slots CPU. ----
+        // Chaque vortex TORD le fond advecté (aspiration bornée, anti-vinyle :
+        // aucun terme croissant, c'est le fond qui traverse le champ) et le
+        // slot DOMINANT au pixel garde ses coordonnées polaires pour le rendu.
+        // Le slot 0 est la tache du preset ; tous dérivent le long de leur jet
+        // (même horloge que l'advection -> ils RIDENT le flot).
         float spot_amt = 0.0;
-        float spot_r = 2.0;   // rayon normalisé dans la tache (0 = cœur)
-        float spot_ang = 0.0; // angle autour du centre de la tache
-        float wake = 0.0;     // sillage turbulent sur le flanc ouest de la tache
-        vec3 dd = d; // direction d'échantillonnage, spiralée près de la tache
-        if (tache_w > 0.0 && dot(d, tache_dir) > 0.0) {
-            vec3 se1 = normalize(cross(tache_dir, k));
-            vec3 se2 = cross(tache_dir, se1);
-            vec2 sq = vec2(dot(d, se1), dot(d, se2));
-            sq.x *= 0.6; // ovale
-            float rr = length(sq) / tache_w;
-            spot_r = rr;
-            spot_ang = atan(sq.y, sq.x);
-            // Bord légèrement irrégulier (intégré aux turbulences) mais corps bien opaque.
-            float rn = rr + (fbm(d * 6.0 + sd + 5.0) - 0.5) * 0.18;
-            spot_amt = 1.0 - smoothstep(0.55, 1.0, rn); // plein jusqu'à 55 % du rayon -> contours opaques
-            // Sillage : flanc ouest (sq.x<0), traîne latitudinale, juste hors de la tache.
-            float wlon = sq.x / tache_w;
-            float wlat = sq.y / tache_w;
-            wake = smoothstep(0.0, -0.5, wlon) * (1.0 - smoothstep(0.0, 1.3, abs(wlat)))
-                 * smoothstep(0.9, 1.15, rr) * (1.0 - smoothstep(2.4, 2.9, rr));
-            float ang = 1.2 / (rr + 0.3) + t * 4.0; // rotation DIFFÉRENTIELLE (whirlpool) -> enroulement
-            float ca2 = cos(ang), sa2 = sin(ang);
-            vec2 qr = vec2(sq.x * ca2 - sq.y * sa2, sq.x * sa2 + sq.y * ca2);
-            dd = normalize(d + (se1 * (qr.x - sq.x) + se2 * (qr.y - sq.y)) * tache_w * 1.3);
+        float spot_r = 2.0;    // rayon normalisé dans le vortex dominant
+        float spot_ang = 0.0;  // angle polaire local
+        float spot_type = -1.0;
+        float spot_spin = 1.0;
+        float spot_id = 0.0;
+        float wake = 0.0;      // sillage turbulent (GRS seulement)
+        vec3 dd = dzn;         // direction d'échantillonnage advectée + torsions
+        float edgn = fbm(d * 6.0 + sd + 5.0) - 0.5; // bruit de bord PARTAGÉ par les slots
+        for (int i = 0; i < 8; i++) {
+            float vw = vortex[i].w;
+            float vray = fract(vw);
+            if (vray > 0.005) {
+                float vtype = floor(vw + 0.001);
+                // Dérive le long du jet local (u lu par le CPU dans le profil).
+                vec3 c0 = vortex[i].xyz;
+                float ad = vortex2[i].x * time * 0.025;
+                float cad = cos(ad); float sad = sin(ad);
+                vec3 c = c0 * cad + cross(k, c0) * sad + k * dot(k, c0) * (1.0 - cad);
+                float cd = dot(d, c);
+                if (cd > 0.25) {
+                    float spin = vortex2[i].y;
+                    vec3 e1 = normalize(cross(k, c) + vec3(1e-5, 0.0, 0.0)); // est local
+                    vec3 e2 = normalize(cross(c, e1));                       // nord local
+                    vec2 lp = vec2(dot(d, e1), dot(d, e2)) / max(cd, 0.3);
+                    float front = smoothstep(0.25, 0.5, cd);
+                    // Torsion du fond : rotation différentielle BORNÉE.
+                    float rt = length(lp) / vray;
+                    float pull = front * smoothstep(2.4, 0.5, rt);
+                    float awv = spin * pull * 1.2 / (rt + 0.5);
+                    float ca2 = cos(awv); float sa2 = sin(awv);
+                    vec2 qr = vec2(lp.x * ca2 - lp.y * sa2, lp.x * sa2 + lp.y * ca2) - lp;
+                    dd += (e1 * qr.x + e2 * qr.y) * vray * max(cd, 0.0) * 1.3;
+                    // Géométrie par type : ovale est-ouest, barge très allongée.
+                    float ax = (vtype > 2.5 && vtype < 3.5) ? 0.38 : 0.6;
+                    vec2 lq = vec2(lp.x * ax, lp.y);
+                    float re = vray;
+                    float inarc = 1.0;
+                    if (vtype > 3.5) {
+                        // Chapelet (« string of pearls ») : perles régulières le long du jet.
+                        float arc = vray * 5.0;   // demi-étendue de l'arc
+                        float pas = vray * 1.35;  // espacement des perles
+                        inarc = 1.0 - smoothstep(arc * 0.7, arc, abs(lp.x));
+                        lq = vec2((fract(lp.x / pas + 0.5) - 0.5) * pas, lp.y);
+                        re = vray * 0.3;          // rayon d'une perle
+                    }
+                    float r = length(lq) / re;
+                    // Bord rongé par la turbulence -> le vortex se FOND dans les bandes.
+                    float rn = r + edgn * 0.34;
+                    float amt = (1.0 - smoothstep(0.5, 1.0, rn)) * front * inarc;
+                    if (amt > spot_amt) {
+                        spot_amt = amt;
+                        spot_r = r;
+                        spot_ang = atan(lq.y, lq.x);
+                        spot_type = vtype;
+                        spot_spin = spin;
+                        spot_id = vortex2[i].z;
+                    }
+                    // Sillage : GRS uniquement, flanc ouest, hors du corps.
+                    if (vtype < 0.5) {
+                        float wlon = lq.x / vray;
+                        float wlat = lp.y / vray;
+                        wake = max(wake, smoothstep(0.0, -0.5, wlon)
+                             * (1.0 - smoothstep(0.0, 1.3, abs(wlat)))
+                             * smoothstep(0.9, 1.15, r) * (1.0 - smoothstep(2.4, 2.9, r)));
+                    }
+                }
+            }
         }
+        dd = normalize(dd);
 
         // Échantillonnage ÉTIRÉ HORIZONTALEMENT : on compresse la composante zonale (est-ouest)
         // -> les tourbillons s'allongent le long des jets, plus de « pointes » verticales abruptes.
@@ -197,199 +346,247 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
             float e = 0.06;
             vec3 ta = normalize(cross(k, dh) + vec3(1e-4, 0.0, 0.0)); // tangente est-ouest
             vec3 tb = cross(dh, ta);                                  // tangente nord-sud
-            float cx = fbm(dh * 3.0 + ta * e + sd + t) - fbm(dh * 3.0 - ta * e + sd + t);
-            float cy = fbm(dh * 3.0 + tb * e + sd + t) - fbm(dh * 3.0 - tb * e + sd + t);
+            float cx = fbm(dh * 3.0 + ta * e + sd + tn) - fbm(dh * 3.0 - ta * e + sd + tn);
+            float cy = fbm(dh * 3.0 + tb * e + sd + tn) - fbm(dh * 3.0 - tb * e + sd + tn);
             dh += (ta * cy - tb * cx) * (0.5 + 0.35 * warp_amt); // rotation 90° = curl
         }
 
         // Domain warping multi-octave (2 niveaux) -> tourbillons ; le temps = advection.
         vec3 q1 = vec3(fbm(dh * 2.4 + sd), fbm(dh * 2.4 + sd + 5.2), fbm(dh * 2.4 + sd + 9.1)) - 0.5;
-        vec3 q2 = vec3(fbm(dh * 2.4 + 2.6 * q1 + sd + t),
-                       fbm(dh * 2.4 + 2.6 * q1 + sd + 7.3 - t),
+        vec3 q2 = vec3(fbm(dh * 2.4 + 2.6 * q1 + sd + tn),
+                       fbm(dh * 2.4 + 2.6 * q1 + sd + 7.3 - tn),
                        fbm(dh * 2.4 + 2.6 * q1 + sd + 2.8)) - 0.5;
         float turb = fbm(dh * 4.0 + 2.4 * q2 + sd);
-        float fine = fbm(dh * 13.0 + 3.0 * q2 + sd + 80.0); // détail haute fréquence (anti basse-déf)
+        // LOD (phase 6) : sous ~120 px de rayon apparent, le micro-détail
+        // s'estompe -> anti-scintillement (galerie) et économies de fbm.
+        float lod = smoothstep(30.0, 120.0, px_rayon);
+        float fine = 0.5; // valeur neutre quand le détail est éteint
+        if (lod > 0.02) {
+            fine = mix(0.5, fbm(dh * 13.0 + 3.0 * q2 + sd + 80.0), lod);
+        }
         float swirl = fbm(dh * 6.0 + 3.0 * q2 + sd + 12.0) - 0.5; // octave de micro-tourbillons/filaments
 
-        // BANDES ORGANIQUES (double-offset, façon Cosmos Journeyer) : au lieu de sin(latitude)
-        // (périodique, régulier), deux fbm échantillonnés le long de la latitude et décalés par
-        // le warping -> bandes aux largeurs variables, non périodiques, frontières ondulées.
-        float bscale = band_scale * 0.3;
+        // PROFIL ZONAL (texture 1D précalculée, CONCEPTION_GAZEUSES_V2 § 3) :
+        // la STRUCTURE (latitudes/largeurs des bandes, cisaillement) vient du
+        // CPU ; le bruit n'a plus qu'à ONDULER les frontières (warp) et poser
+        // des sous-bandes fines. Remplace dec1 + jet_profil de la V1.
         float warp = ((turb - 0.5) * 0.7 + swirl * 0.4) * (0.6 + 0.3 * warp_amt)
                    + (turb - 0.5) * wake * 1.5; // ondulation des frontières + boost sillage
-        float dec1 = fbm(vec3(dk * bscale + warp, sd.x, sd.y));            // décision principale
-        float dec2 = fbm(vec3(dk * bscale * 1.9 - warp, sd.z + 4.0, sd.x)); // sous-bandes (offset opposé)
-        // Cisaillement = proximité d'une frontière de bande (dec1 ~ 0.5) -> festons/turbulence là.
-        float shear = 1.0 - smoothstep(0.0, 0.22, abs(dec1 - 0.5));
-        float band = smoothstep(0.36, 0.64, dec1);
-        band = clamp(band + (smoothstep(0.42, 0.58, dec2) - 0.5) * 0.5
-                          + (fine - 0.5) * 0.16, 0.0, 1.0); // sous-bandes fines + grain
-
-        // PROFIL TYPE JUPITER (jet_profil > 0) : large Zone Équatoriale claire bordée des
-        // ceintures sombres NEB/SEB, par-dessus les bandes procédurales -> structure reconnaissable.
-        if (jet_profil > 0.5) {
-            float al = abs(dk);
-            band = mix(band, 0.82, (1.0 - smoothstep(0.05, 0.18, al)) * 0.55);        // EZ claire (plafonnée, pas surexposée)
-            float neb = smoothstep(0.18, 0.23, al) * (1.0 - smoothstep(0.34, 0.42, al));
-            band = mix(band, 0.0, neb * 0.6);                                          // NEB/SEB sombres, larges
-        }
+        vec4 zp = texture2D(zonal, vec2(clamp(dk + warp * 0.16, -0.99, 0.99) * 0.5 + 0.5, 0.5));
+        float shear = zp.b;                    // cisaillement réel : festons aux flancs des jets
+        float dec2 = fbm(vec3(dk * 7.5 - warp, sd.z + 4.0, sd.x)); // sous-bandes fines
+        float band = zp.g;
+        band = clamp(band + (smoothstep(0.42, 0.58, dec2) - 0.5) * 0.35
+                          + (fine - 0.5) * 0.10, 0.0, 1.0); // sous-bandes + grain (réduit : anti-moucheté)
 
         // Couleurs : ceinture sombre (belt) <-> zone claire ; courbe en S -> contraste marqué.
-        vec3 zone = mix(couleur3, vec3(1.0, 0.98, 0.93), 0.3); // zones crème/ivoire éclatantes
-        vec3 belt = couleur2;                                  // brique / ocre (ceintures sombres)
+        // Toutes les teintes de détail viennent de gaz_pal (palette paramétrique).
+        vec3 zone = gaz_pal[0]; // fond des zones claires
+        vec3 belt = couleur2;   // ceintures sombres
         float bandc = smoothstep(0.12, 0.88, band);
         bandc = smoothstep(0.0, 1.0, bandc);                   // courbe en S -> zones plus claires, belts plus sombres
         vec3 base = mix(belt, zone, bandc);
         float beltmask = 1.0 - smoothstep(0.30, 0.58, band); // dans les ceintures
         float zonemask = smoothstep(0.55, 0.85, band);       // dans les zones
-        // Ceinture hôte de la Grande Tache (SEB) : grosse ceinture brun-rouge brique continue.
-        if (jet_profil > 0.5 && tache_w > 0.0) {
-            float slat = dot(tache_dir, k);                  // latitude de la tache
+        // Ceinture hôte de la Grande Tache (SEB) : ceinture continue teintée de
+        // la tache (slot 0 de type GRS seulement ; les sombres n'en ont pas).
+        if (fract(vortex[0].w) > 0.005 && floor(vortex[0].w + 0.001) < 0.5) {
+            float slat = dot(vortex[0].xyz, k);              // latitude de la tache
             float seb = 1.0 - smoothstep(0.04, 0.18, abs(dk - slat));
             seb *= 0.6 + 0.4 * beltmask;                     // surtout dans la ceinture, mais continue
-            base = mix(base, vec3(0.66, 0.29, 0.16), seb * 0.7); // brun-rouge brique intense
-            // Zone Tempérée Sud : fine bande ivoire qui ondule juste sous la Tache.
+            base = mix(base, gaz_pal[5], seb * 0.7);         // ceinture hôte (teinte de la tache)
+            // Zone Tempérée Sud : fine bande claire qui ondule juste sous la Tache.
             float ond = (fbm(dd * 5.0 + sd + 22.0) - 0.5) * 0.05;
             float zts = 1.0 - smoothstep(0.0, 0.045, abs(dk - (slat - 0.135) + ond));
-            base = mix(base, vec3(0.98, 0.96, 0.9), zts * 0.55 * (1.0 - spot_amt));
+            base = mix(base, gaz_pal[1], zts * 0.55 * (1.0 - spot_amt));
         }
 
-        // Bandes sombres MARBRÉES : filaments chocolat + saumon (bruit étiré longitudinal).
+        // Bandes sombres MARBRÉES : filaments sombres + chauds (bruit étiré longitudinal).
         float marb = fbm(dd * 8.0 + vec3(turb * 3.0, 0.0, 0.0) + sd + 50.0);
-        vec3 choco  = belt * vec3(0.62, 0.5, 0.46);                 // filaments chocolat
-        vec3 saumon = mix(belt, vec3(0.92, 0.62, 0.5), 0.55);       // filaments saumon
-        base = mix(base, choco,  beltmask * smoothstep(0.30, 0.05, marb) * 0.45);
-        base = mix(base, saumon, beltmask * smoothstep(0.62, 0.85, marb) * 0.4);
-        // Filaments internes plus clairs (ocre/brique) -> casse l'effet « bloc » uni.
-        vec3 ocre = mix(belt, vec3(0.88, 0.62, 0.36), 0.55);
-        float fil = fbm(dd * 11.0 + vec3(turb * 4.0, 0.0, 0.0) + sd + 55.0);
-        base = mix(base, ocre, beltmask * smoothstep(0.55, 0.82, fil) * 0.45);
+        base = mix(base, gaz_pal[2], beltmask * smoothstep(0.30, 0.05, marb) * 0.45);
+        base = mix(base, gaz_pal[3], beltmask * smoothstep(0.62, 0.85, marb) * 0.4);
+        // Filaments internes plus clairs -> casse l'effet « bloc » uni.
+        float fil = 0.5;
+        if (lod > 0.02) {
+            fil = mix(0.5, fbm(dd * 11.0 + vec3(turb * 4.0, 0.0, 0.0) + sd + 55.0), lod);
+        }
+        base = mix(base, gaz_pal[3], beltmask * smoothstep(0.55, 0.82, fil) * 0.45);
         base = mix(base, couleur, smoothstep(0.40, 0.62, turb) * 0.4 * (0.4 + 0.6 * shear));
 
         // Bandes claires LAITEUSES / floconneuses (cristaux d'ammoniac).
-        float flake = fbm(dd * 14.0 + 2.0 * q2 + sd + 33.0);
-        base = mix(base, mix(zone, vec3(1.0), 0.35), zonemask * smoothstep(0.5, 0.82, flake) * 0.4);
+        float flake = 0.5;
+        if (lod > 0.02) {
+            flake = mix(0.5, fbm(dd * 14.0 + 2.0 * q2 + sd + 33.0), lod);
+        }
+        base = mix(base, mix(zone, gaz_pal[1], 0.6), zonemask * smoothstep(0.5, 0.82, flake) * 0.4);
 
         // Festons / volutes / micro-tourbillons aux frontières (cisaillement élevé).
         float wisp = smoothstep(0.6, 0.86, fbm(dd * 7.0 + 4.0 * q2 + sd + 15.0));
         wisp = max(wisp, wake * smoothstep(0.45, 0.7, fine)); // chaos du sillage à gauche de la tache
-        base = mix(base, mix(zone, vec3(1.0), 0.4), wisp * 0.35 * (shear + wake));
+        base = mix(base, mix(zone, gaz_pal[1], 0.65), wisp * 0.35 * (shear + wake));
         // Festons bleu-gris (crochets sombres caractéristiques aux bords des ceintures).
         base = mix(base, base * vec3(0.68, 0.76, 0.85), wisp * (shear + wake) * 0.28);
 
-        // Petites tempêtes (ovales blancs) advectées.
+        // Champ doux pour les traînées équatoriales (les ovales et tempêtes
+        // sont désormais de VRAIS vortex en slots, plus des seuils de bruit).
         float ov = fbm(dd * 5.0 + 2.0 * q2 + sd + 30.0);
-        base = mix(base, mix(zone, vec3(1.0), 0.6), smoothstep(0.80, 0.90, ov) * 0.5);
-        // Champ de tempêtes multiples : ovales clairs + cyclones sombres épars dans les bandes.
-        if (tempetes > 0.0) {
-            float st = fbm(dd * 6.5 + 3.0 * q2 + sd + 70.0);
-            float clair = smoothstep(0.74, 0.80, st) * (1.0 - smoothstep(0.86, 0.92, st));
-            base = mix(base, mix(zone, vec3(1.0), 0.7), clair * tempetes * 0.7);
-            float st2 = fbm(dd * 5.5 + 2.0 * q1 + sd + 90.0);
-            float sombre = smoothstep(0.78, 0.84, st2) * (1.0 - smoothstep(0.9, 0.95, st2));
-            base = mix(base, belt * 0.65, sombre * tempetes * 0.5);
-        }
-        // Micro-détail global continu (élimine l'aspect basse résolution).
-        base *= 0.96 + 0.12 * fine;
+        // Micro-détail global continu, DISCRET (trop fort = aspect moucheté).
+        base *= 0.98 + 0.05 * fine;
         // Ombrage subtil entre bandes (relief des nuages).
         base *= 1.0 + clamp((turb - 0.5) * 0.7, -0.2, 0.2);
 
-        // PÔLES : dégradé brumeux bleu-gris / olive sombre, structuré en cyclones (Worley), pas en bandes.
+        // (Pôles V2 : le régime polaire complet est rendu APRÈS les vortex,
+        //  voir le bloc « PÔLES V2 » plus bas — plus de calotte envahissante.)
         float la = abs(dk);
-        float polef = smoothstep(0.32, 0.72, la); // engage à latitude moyenne-haute -> région polaire visible bleutée
+        // Équateur : zone claire PROPRE + fines traînées chaudes (pas de beige sale).
+        float eqf = (1.0 - smoothstep(0.0, 0.5, la));
+        base = mix(base, gaz_pal[1], eqf * zonemask * 0.45);                     // clair propre
+        float streak = smoothstep(0.55, 0.72, ov) * eqf * zonemask;
+        base = mix(base, mix(gaz_pal[1], gaz_pal[3], 0.5), streak * 0.32);       // traînées chaudes claires
+
+        // ---- RENDU DU VORTEX DOMINANT (phase 4) : intégré aux bandes. ----
+        if (spot_amt > 0.0) {
+            float finsp = 0.5; // grain haute résolution (sous LOD)
+            if (lod > 0.02) {
+                finsp = mix(0.5, fbm(dd * 20.0 + sd + 40.0), lod);
+            }
+            if (spot_type < 0.5) {
+                // GRS : bras en spirale log par FBM PUR (fini le sinus « vinyle »).
+                float swl = spot_spin * 1.9 * log(spot_r + 0.15);
+                float pang = spot_ang + swl - t * 2.2 * spot_spin;
+                float arms = fbm(vec3(pang * 1.1, spot_r * 4.5, sd.y + 50.0 + spot_id));
+                vec3 coeur = tache_col * 1.35;                       // cœur vif (teinte du preset)
+                vec3 spotc = mix(coeur, gaz_pal[6], smoothstep(0.0, 0.8, spot_r));
+                spotc *= (0.72 + 0.5 * arms) * (0.92 + 0.16 * finsp);
+                // Cœur calme et profond (faible vorticité au centre).
+                spotc = mix(spotc, tache_col * 0.8, smoothstep(0.3, 0.0, spot_r) * 0.5);
+                // Anneau de HAUTE VITESSE à 70-85 % du rayon : liseré vif.
+                float velring = smoothstep(0.58, 0.72, spot_r) * (1.0 - smoothstep(0.82, 0.95, spot_r));
+                spotc = mix(spotc, spotc * 1.4, velring * 0.6);
+                base = mix(base, spotc, spot_amt * 0.92);
+                // Collier clair isolant.
+                float collar = smoothstep(0.78, 1.0, spot_r) * (1.0 - smoothstep(1.0, 1.3, spot_r));
+                base = mix(base, gaz_pal[4], collar * 0.8);
+            } else if (spot_type < 1.5) {
+                // Tache sombre (GDS) : ovale sombre fondu, sans collier (les
+                // compagnons blancs viennent du sillage/festons alentour).
+                vec3 tcol = spot_id < 0.5 ? tache_col : couleur2 * 0.45;
+                vec3 coeur = tcol * 0.55;
+                vec3 bordd = mix(tcol, base * 0.7, 0.5);
+                vec3 spotc = mix(coeur, bordd, smoothstep(0.0, 0.92, spot_r));
+                spotc *= 0.85 + 0.2 * finsp;
+                base = mix(base, spotc, spot_amt * 0.85);
+            } else if (spot_type < 2.5) {
+                // Ovale blanc : anticyclone compact brillant à cœur calme,
+                // assis dans sa bande par un fin liseré d'ombre.
+                float swl2 = spot_spin * 1.5 * log(spot_r + 0.2);
+                float arms2 = fbm(vec3((spot_ang + swl2 - t * 2.5 * spot_spin) * 1.3,
+                                       spot_r * 5.0, sd.x + 70.0 + spot_id));
+                vec3 spotc = mix(gaz_pal[1], vec3(1.0), 0.25) * (0.9 + 0.18 * arms2);
+                spotc = mix(spotc, base * 0.72, smoothstep(0.75, 1.0, spot_r) * 0.5);
+                base = mix(base, spotc, spot_amt * 0.85);
+            } else if (spot_type < 3.5) {
+                // Barge brune : cyclone allongé sombre, filaments internes.
+                float fil2 = fbm(vec3(spot_ang * 0.8 + spot_r * 2.0,
+                                      spot_r * 6.0 - t * 1.5, sd.z + 90.0 + spot_id));
+                vec3 spotc = gaz_pal[2] * 0.85;
+                spotc = mix(spotc, gaz_pal[3] * 0.8, smoothstep(0.55, 0.85, fil2) * 0.5);
+                spotc *= 0.9 + 0.14 * finsp;
+                spotc = mix(spotc, gaz_pal[1] * 0.9, smoothstep(0.7, 1.0, spot_r) * 0.25);
+                base = mix(base, spotc, spot_amt * 0.8);
+            } else {
+                // Perle de chapelet : petit ovale blanc simple.
+                vec3 spotc = gaz_pal[1] * (0.92 + 0.14 * finsp);
+                spotc = mix(spotc, base * 0.75, smoothstep(0.7, 1.0, spot_r) * 0.4);
+                base = mix(base, spotc, spot_amt * 0.8);
+            }
+        }
+        // Sillage clair NET sur le flanc gauche (ouest) -> détache la tache du fond.
+        if (wake > 0.0) {
+            base = mix(base, gaz_pal[4], wake * 0.5 * (1.0 - spot_amt));
+        }
+        // ---- PÔLES V2 (phase 5, § 6) : UN SEUL système polaire. ----
+        // Emprise RÉDUITE : engage après la dernière paire de jets (pole_lat,
+        // borne calculée par le CPU depuis le profil zonal), pleine vers ~80°.
+        // La montée de turbulence en amont vient de s(φ) (phase 2) : la
+        // transition est structurelle, pas un fondu envahissant.
+        float polef = smoothstep(pole_lat, min(pole_lat + 0.10, 0.995), la);
         if (polef > 0.0) {
+            float hemi = dk >= 0.0 ? 1.0 : -1.0;
             vec3 pref = abs(k.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
             vec3 pe1 = normalize(cross(k, pref));
             vec3 pe2 = cross(k, pe1);
-            vec2 pp = vec2(dot(d, pe1), dot(d, pe2)) * 5.0;
-            float wpole = worley(vec3(pp, dk * 3.0) + sd + 60.0);
-            vec3 olive = g_pole * vec3(0.9, 0.94, 0.74);                  // olive plus clair
-            vec3 polcol = mix(g_pole, olive, smoothstep(0.2, 0.6, wpole));
-            polcol = mix(polcol, polcol * 0.86, smoothstep(0.34, 0.1, wpole) * 0.4); // cœurs de cyclones discrets
-            float lum = dot(polcol, vec3(0.33));
-            polcol = mix(polcol, vec3(lum), 0.16);                        // légère désaturation feutrée
-            base = mix(base, polcol, polef * 0.95);                       // calotte brumeuse dominante
-        }
-        // Équateur : zone ivoire PROPRE + fines traînées ocre/saumon claires (pas de beige sale).
-        float eqf = (1.0 - smoothstep(0.0, 0.5, la));
-        base = mix(base, vec3(1.0, 0.98, 0.92), eqf * zonemask * 0.45);          // ivoire propre
-        float streak = smoothstep(0.55, 0.72, ov) * eqf * zonemask;
-        base = mix(base, vec3(0.97, 0.85, 0.71), streak * 0.32);                 // traînées ocre/saumon claires
+            // PROJECTION AZIMUTALE correcte : ρ = angle au pôle (fini la
+            // distorsion Worley de la projection plane), θ = longitude.
+            // dzn -> la calotte suit l'advection résiduelle (u→0 au pôle).
+            float rho = acos(clamp(la, 0.0, 1.0));
+            float theta = atan(dot(dzn, pe2) * hemi, dot(dzn, pe1));
+            vec2 pq = vec2(rho * cos(theta), rho * sin(theta));
 
-        // GRANDE TACHE : cyclone fluide INTÉGRÉ -> cœur orange-brique vif, bords beige rosé, collier crème.
-        if (spot_amt > 0.0) {
-            float spiral = 0.5 + 0.5 * sin(spot_ang * 2.0 + spot_r * 11.0 - t * 6.0);
-            float finsp = fbm(dd * 20.0 + sd + 40.0);            // grain haute résolution
-            if (tache_type < 0.5) {
-                // Tache rouge (GRS) : VORTEX en coordonnées polaires distordues (technique whirlpool).
-                // On enroule l'angle par 1/(r+s) -> bras en SPIRALE LOGARITHMIQUE (rotation différentielle,
-                // plus serrée près du cœur). Du bruit échantillonné le long de la spirale = filaments.
-                float swirl = 1.7 / (spot_r + 0.22);
-                float pang = spot_ang + swirl - t * 2.5;
-                float arms = fbm(vec3(pang * 1.3, spot_r * 5.0, sd.y + 50.0));
-                arms = mix(0.5 + 0.5 * sin(pang * 3.0), arms, 0.6); // bandes spiralées + irrégularité
-                vec3 coeur = tache_col * 1.28 + vec3(0.07, 0.01, 0.0);   // orange-brique vif
-                vec3 bordr = mix(tache_col, vec3(0.96, 0.78, 0.7), 0.8); // beige rosé
-                vec3 spotc = mix(coeur, bordr, smoothstep(0.0, 0.8, spot_r));
-                spotc *= (0.74 + 0.42 * arms) * (0.92 + 0.16 * finsp); // bras spiralés + grain fin
-                // Cœur calme et rouge profond (faible vorticité au centre).
-                spotc = mix(spotc, tache_col * 0.8, smoothstep(0.3, 0.0, spot_r) * 0.5);
-                // Anneau de HAUTE VITESSE à 70-85 % du rayon (pic de vorticité) : liseré vif.
-                float velring = smoothstep(0.58, 0.72, spot_r) * (1.0 - smoothstep(0.82, 0.95, spot_r));
-                spotc = mix(spotc, spotc * 1.32 + vec3(0.07, 0.02, 0.0), velring * 0.6);
-                base = mix(base, spotc, spot_amt * 0.92);
-                // Collier blanc/crème isolant.
-                float collar = smoothstep(0.78, 1.0, spot_r) * (1.0 - smoothstep(1.0, 1.3, spot_r));
-                base = mix(base, vec3(0.98, 0.94, 0.86), collar * 0.8);
-            } else {
-                // Tache sombre (Grande Tache Sombre de Neptune) : ovale très sombre, bords fondus,
-                // sans collier crème (les nuages blancs compagnons viennent du sillage).
-                vec3 coeur = tache_col * 0.55;
-                vec3 bordd = mix(tache_col, base * 0.7, 0.5);
-                vec3 spotc = mix(coeur, bordd, smoothstep(0.0, 0.92, spot_r));
-                spotc *= 0.85 + 0.18 * finsp + 0.12 * spiral;
-                base = mix(base, spotc, spot_amt * 0.85);
+            // 1) Fond feutré : cellules Worley azimutales, désaturé.
+            float wpole = worley(vec3(pq * 5.5, hemi * 3.0) + sd + 60.0);
+            vec3 polcol = mix(g_pole, gaz_pal[7], smoothstep(0.2, 0.6, wpole));
+            polcol = mix(polcol, polcol * 0.86, smoothstep(0.34, 0.1, wpole) * 0.4);
+            float lum = dot(polcol, vec3(0.33));
+            polcol = mix(polcol, vec3(lum), 0.16);
+            polcol *= 0.97 + 0.06 * fine; // même grain que le reste -> pas d'aplat
+
+            // 2) Anneau de cyclones (config Juno) : N cyclones autour du vortex
+            //    central, N DIFFÉRENT par hémisphère, rotation lente opposée.
+            if (cyclones_pol > 0.5) {
+                float ncyc = 5.0 + mod(floor(seed * 13.7) + max(hemi, 0.0) * 3.0, 4.0);
+                float rr0 = 0.30;                   // rayon (rad) de l'anneau
+                float seg = 6.2831853 / ncyc;
+                float thr = theta - hemi * t * 0.5; // l'anneau dérive lentement
+                float aj = (floor(thr / seg) + 0.5) * seg + hemi * t * 0.5;
+                vec2 cc = vec2(rr0 * cos(aj), rr0 * sin(aj));
+                vec2 lpc = (pq - cc) / 0.15;        // rayon d'un cyclone ~0.15 rad
+                float rc2 = length(lpc);
+                // Bras spiralés fbm + œil sombre, bord rongé par le bruit partagé.
+                float acy = atan(lpc.y, lpc.x);
+                float armc = fbm(vec3((acy + hemi * 2.2 * log(rc2 + 0.2) - hemi * t * 3.0) * 1.2,
+                                      rc2 * 3.5, sd.x + 44.0 + aj));
+                float cycm = 1.0 - smoothstep(0.55, 1.0, rc2 + edgn * 0.3);
+                polcol = mix(polcol, mix(g_pole * 0.8, gaz_pal[7] * 1.12, armc), cycm * 0.8);
+                polcol = mix(polcol, g_pole * 0.7, smoothstep(0.18, 0.0, rc2) * 0.6);
             }
+
+            // 3) Vortex central : tourbillon sombre à bras fbm (pas de sinus).
+            float rcen = rho / 0.15;
+            if (rcen < 1.6) {
+                float acen = atan(pq.y, pq.x);
+                float armz = fbm(vec3((acen + hemi * 2.4 * log(rcen + 0.18) - hemi * t * 2.0) * 1.2,
+                                      rcen * 3.0, sd.y + 61.0));
+                float cenm = 1.0 - smoothstep(0.5, 1.3, rcen + edgn * 0.25);
+                polcol = mix(polcol, g_pole * (0.62 + 0.3 * armz), cenm * 0.75);
+            }
+
+            // 4) Polygone (hexagone de Saturne) : le CONTOUR du jet polaire,
+            //    pôle nord seulement (comme le vrai). Bord ondulé par le bruit,
+            //    pincé d'eddies Worley, rotation lente -> il ÉMERGE du régime
+            //    polaire au lieu d'être tamponné dessus.
+            if (poly_cotes > 2.5 && hemi > 0.0) {
+                float rot = t * 0.25;
+                vec2 ph = vec2(pq.x * cos(rot) - pq.y * sin(rot),
+                               pq.x * sin(rot) + pq.y * cos(rot)) * 1.55;
+                float hd = poly_dist(ph, 0.33, poly_cotes);
+                hd += (fbm(vec3(ph * 5.0, sd.z + 21.0)) - 0.5) * 0.045; // bord VIVANT
+                float dedans = smoothstep(0.0, -0.06, hd);
+                float bordp = smoothstep(0.05, 0.0, abs(hd));
+                polcol = mix(polcol, polcol * 0.68, dedans * 0.55);
+                float edd = worley(vec3(ph * 4.0, hemi * 5.0) + sd + 33.0);
+                float lisere = bordp * (0.6 + 0.6 * smoothstep(0.45, 0.18, edd));
+                polcol = mix(polcol, polcol * 1.45 + vec3(0.05), lisere);
+            }
+
+            base = mix(base, polcol, polef);
         }
-        // Sillage crème NET sur le flanc gauche (ouest) -> détache la tache du fond.
-        if (wake > 0.0) {
-            base = mix(base, vec3(0.97, 0.94, 0.87), wake * 0.5 * (1.0 - spot_amt));
-        }
-        // Vortex polaire polygonal (hexagone de Saturne, ou pentagone/octogone), au pôle nord.
-        if (poly_cotes > 2.5 && dk > 0.55) {
-            float cap = smoothstep(0.55, 0.72, dk);
-            vec3 ref = abs(k.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-            vec3 e1 = normalize(cross(k, ref));
-            vec3 e2 = cross(k, e1);
-            vec2 pp = vec2(dot(d, e1), dot(d, e2)) * 1.6;
-            float hd = poly_dist(pp, 0.33, poly_cotes);
-            float bord = smoothstep(0.05, 0.0, abs(hd));
-            float dedans = smoothstep(0.0, -0.06, hd);
-            base = mix(base, base * 0.65, dedans * 0.6 * cap);
-            // Eddies le long du jet-stream qui pincent le polygone (cellules Worley sur le bord).
-            float edd = worley(vec3(pp * 4.0, dk * 5.0) + sd + 33.0);
-            float lisere = bord * cap * (0.6 + 0.6 * smoothstep(0.45, 0.18, edd));
-            base = mix(base, base * 1.45 + vec3(0.05), lisere);
-            // Vortex polaire central (œil) qui stabilise l'hexagone : petit tourbillon sombre spiralé.
-            float rc = length(pp);
-            float eye = smoothstep(0.14, 0.0, rc);
-            float swirl = 0.5 + 0.5 * sin(atan(pp.y, pp.x) * 2.0 + rc * 26.0 - t * 5.0);
-            base = mix(base, base * (0.55 + 0.25 * swirl) + vec3(0.03, 0.02, 0.04), eye * cap * 0.7);
-        }
-        // Cyclones polaires : amas de tourbillons aux deux pôles (cellules Worley).
-        if (cyclones_pol > 0.5) {
-            float cap2 = smoothstep(0.58, 0.82, abs(dk));
-            vec3 ref2 = abs(k.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-            vec3 ce1 = normalize(cross(k, ref2));
-            vec3 ce2 = cross(k, ce1);
-            vec2 cp = vec2(dot(d, ce1), dot(d, ce2)) * 5.5;
-            float w = worley(vec3(cp, dk * 4.0) + sd + 60.0);
-            base = mix(base, base * 0.8, smoothstep(0.42, 0.12, w) * cap2 * 0.35);   // cœurs sombres
-            base = mix(base, base * 1.22 + vec3(0.03), smoothstep(0.34, 0.46, w) * cap2 * 0.4); // bords clairs
-        }
-        // Voile de brume : adoucit/efface les bandes (sub-Neptunes, hot Jupiters voilés).
+        // Voile de brume INÉGAL (phase 6) : variation très basse fréquence et
+        // ceintures qui percent légèrement -> monde voilé, pas délavé.
         if (brume > 0.0) {
-            base = mix(base, brume_couleur, brume);
+            float bv = brume * (0.8 + 0.2 * fbm(dzn * 1.6 + sd + 120.0));
+            bv *= 0.75 + 0.25 * zp.g; // les belts (sombres, profondes) percent un peu
+            base = mix(base, brume_couleur, clamp(bv, 0.0, 1.0));
         }
         return base;
     } else {
@@ -582,9 +779,21 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
             // Deux couches qui dérivent à des vitesses/échelles différentes -> ciel vivant.
             float t1 = time * 0.015;
             float t2 = time * 0.032;
-            float c1 = fbm(d * 2.2 + sd + vec3(t1, 0.0, t1 * 0.7));
-            float c2 = fbm(d * 4.8 + sd + vec3(t2, 0.0, -t2 * 0.6));
+            // Cyclones (nuages_type 2) : calculés AVANT le fond, car ils tordent
+            // la direction d'échantillonnage -> la couverture est aspirée dedans.
+            vec3 dnu = d;
+            float cyc = 0.0;
+            float oeil = 0.0;
+            if (nuages_type > 1.5) { cyc = champ_cyclones(d, k, time, dnu, oeil); }
+            float c1 = fbm(dnu * 2.2 + sd + vec3(t1, 0.0, t1 * 0.7));
+            float c2 = fbm(dnu * 4.8 + sd + vec3(t2, 0.0, -t2 * 0.6));
             float cov = c1 * 0.65 + c2 * 0.35;
+            // EYEBALL : capuchon de tempête permanent au-dessus du point
+            // subsolaire (la zone chaude évapore en continu), bord effiloché.
+            if (eyeball > 0.0) {
+                float sub = smoothstep(0.5, 0.92, dot(d, ld));
+                cov = max(cov, sub * (0.55 + 0.30 * fbm(d * 6.0 + sd + vec3(time * 0.02, 0.0, 0.0))));
+            }
             float seuil_bas = 0.50;
             float seuil_haut = 0.78;
             vec3 ccol = nuages_couleur;
@@ -595,19 +804,13 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
                 seuil_haut = 0.60;
                 ccol = mix(nuages_couleur, nuages_couleur * 0.35, smoothstep(0.62, 0.88, cov));
             } else if (nuages_type > 1.5) {
-                // Cyclone : bras spiraux autour d'un centre, œil dégagé.
-                vec3 cc = normalize(vec3(sin(seed * 1.7), 0.35, cos(seed)));
-                vec3 e1 = normalize(cross(cc, vec3(0.0, 1.0, 0.0)) + vec3(1e-4));
-                vec3 e2 = cross(cc, e1);
-                vec2 qd = vec2(dot(d, e1), dot(d, e2));
-                float rr2 = length(qd);
-                float ang = atan(qd.y, qd.x);
-                float dome = max(dot(d, cc), 0.0);
-                float spiral = 0.5 + 0.5 * sin(ang * 2.0 + rr2 * 16.0 - time * 0.6);
-                float eye = smoothstep(0.05, 0.14, rr2); // œil central dégagé
-                cov = mix(cov, spiral * eye, smoothstep(0.25, 0.85, dome));
-                seuil_bas = 0.40;
-                seuil_haut = 0.70;
+                // Cyclones : le fond garde sa PLEINE densité (c'est LUI qui
+                // spirale, via l'advection) ; le vortex s'y fond en RENFORÇANT
+                // la couverture locale, l'œil troue tout.
+                cov = max(cov, mix(cov, 1.0, cyc * 0.85)) * (1.0 - oeil);
+                ccol = mix(nuages_couleur, vec3(1.0), 0.35 * cyc); // murs plus blancs
+                seuil_bas = 0.42;
+                seuil_haut = 0.72;
             }
             // OMBRES PORTÉES des nuages au sol : même champ échantillonné
             // décalé vers le soleil -> le sol s'assombrit sous les nuages.
@@ -660,14 +863,29 @@ void main() {
         float f = dot(n, L); // 1 = subsolaire, -1 = antisolaire
         float fr = f + (fbm(d * 1.6 + 90.0) - 0.5) * 0.5; // bord de glace irrégulier
         float ice = smoothstep(eye_glace + 0.06, eye_glace - 0.10, fr);
-        albedo = mix(albedo, vec3(0.9, 0.94, 0.99), ice * eyeball);
+        // GLACE TEXTURÉE (pas un aplat blanc) : mince et translucide près du
+        // bord (la surface transparaît -> anneau de "slush"), épaisse et
+        // bleutée vers la nuit profonde, parcourue de fractures.
+        float fx = fbm(d * 5.0 + 31.0);
+        float veine = 1.0 - abs(2.0 * fx - 1.0);
+        vec3 gcol = mix(vec3(0.87, 0.91, 0.97), vec3(0.58, 0.72, 0.9), smoothstep(0.0, -0.75, f));
+        gcol = mix(gcol, vec3(0.5, 0.67, 0.88), smoothstep(0.7, 0.95, veine) * 0.55); // fractures bleutées
+        vec3 mince = mix(albedo, gcol, 0.55);              // glace mince : la surface dessous
+        gcol = mix(mince, gcol, smoothstep(0.10, -0.30, fr)); // épaississement vers la nuit
+        albedo = mix(albedo, gcol, ice * eyeball);
+        wet *= 1.0 - ice * eyeball; // l'eau gelée ne fait plus de reflet spéculaire
         if (eye_ring > 0.5) {
-            float ring = smoothstep(0.30, 0.12, abs(f - 0.05)) * (1.0 - ice);
-            albedo = mix(albedo, vec3(0.14, 0.4, 0.17), ring * 0.75 * eyeball);
+            // Anneau de vie au terminateur : bord rongé par le bruit, teinte du preset.
+            float rb = (fbm(d * 4.0 + 17.0) - 0.5) * 0.22;
+            float ring = smoothstep(0.30, 0.12, abs(f - 0.05) + rb) * (1.0 - ice);
+            albedo = mix(albedo, veg_couleur * 0.85, ring * 0.8 * eyeball);
         }
         if (eye_lave > 0.5) {
-            eye_hot = smoothstep(0.45, 0.82, f) * eyeball;
-            albedo = mix(albedo, vec3(0.05, 0.045, 0.06), eye_hot * 0.85); // obsidienne
+            // Zone subsolaire : obsidienne variée de plaques de croûte, bord bruité.
+            float ncr = fbm(d * 7.0 + 55.0);
+            eye_hot = smoothstep(0.45, 0.82, f + (ncr - 0.5) * 0.2) * eyeball;
+            vec3 obs = mix(vec3(0.05, 0.045, 0.06), vec3(0.16, 0.10, 0.08), smoothstep(0.4, 0.8, ncr));
+            albedo = mix(albedo, obs, eye_hot * 0.85);
         }
     }
     // NORMALE PERTURBÉE (telluriques) : le gradient d'altitude bosselle la
@@ -687,7 +905,15 @@ void main() {
         vec3 nb = db * ca - cross(k, db) * sa + k * dot(k, db) * (1.0 - ca);
         diffb = max(dot(nb, L), 0.0);
     }
+    // Éclairage diffus MULTI-SOURCE : l'étoile primaire garde le diffus bosselé par
+    // le relief (diffb, via light_color) ; les compagnons (indices 1..3) ajoutent un
+    // diffus géométrique. En système à une seule étoile, lights_color[1..3] = 0 ->
+    // strictement identique à avant.
     vec3 lit = vec3(0.35) + light_color * (0.65 * diffb);
+    for (int i = 1; i < 4; i++) {
+        vec3 Li = normalize(lights_pos[i] - surf);
+        lit += lights_color[i] * (0.65 * max(dot(n, Li), 0.0));
+    }
     vec3 col = albedo * lit;
     // Assombrissement du limbe (géantes gazeuses) : trajet atmosphérique vers les bords.
     if (type_p > 0.5 && type_p < 1.5) {
@@ -768,10 +994,11 @@ void main() {
         col += teinte * city * (1.2 + ext * 0.15) * force;
     }
     // Émission thermique (géantes chaudes : classes IV/V, naine brune) : lueur côté nuit,
-    // structurée par les bandes (zones plus chaudes).
+    // structurée par le PROFIL ZONAL réel (les belts, moins nuageuses, rayonnent
+    // plus) -> la nuit est le négatif du jour, mêmes latitudes de bandes.
     if (thermique > 0.0) {
         float nuit = 1.0 - smoothstep(-0.1, 0.35, diff);
-        float gb = 0.65 + 0.35 * sin(dot(d, k) * band_scale);
+        float gb = 0.55 + 0.55 * (1.0 - texture2D(zonal, vec2(dot(d, k) * 0.5 + 0.5, 0.5)).g);
         col += thermique_couleur * (nuit * thermique * gb);
     }
     // Aurores polaires (géantes) : anneaux émissifs scintillants autour des pôles,
