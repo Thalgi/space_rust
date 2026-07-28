@@ -1,5 +1,5 @@
 //! Standard d'unités du générateur de stations (voir
-//! `docs/stations_fondations.md`, §2).
+//! `docs/conception/stations.md`, Partie B §2).
 //!
 //! Principe : **une seule unité de base `U`**, et toute dimension s'exprime en
 //! `n * U`. Les diamètres ne sont pas libres mais tirés d'une famille discrète

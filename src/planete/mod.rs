@@ -33,7 +33,7 @@ pub struct Planete {
     verts: Vec<Vertex>,
     inds: Vec<u16>,
     // Anneau : champ de débris (couche voile) qui suit la planète. Rendu en
-    // deux moitiés autour du corps (voir draw). Voir CONCEPTION_CEINTURES.md.
+    // deux moitiés autour du corps (voir draw). Voir docs/conception/ceintures.md.
     anneau: Option<Disque>,
     // Terrain précalculé (telluriques) : atlas cube-sphere + niveau de mer.
     // Généré en ASYNCHRONE au premier draw (budget global de jobs -> pas de gel,

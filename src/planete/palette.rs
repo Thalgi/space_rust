@@ -1,5 +1,5 @@
 //! Palette paramétrique des géantes gazeuses (V2, phase 1 — voir
-//! CONCEPTION_GAZEUSES_V2.md § 4).
+//! docs/conception/geantes_gazeuses.md Partie A § 4).
 //!
 //! Contrat des trois couleurs d'`Apparence` pour les gazeuses :
 //! - `couleur2` = **belt** (ceintures sombres)

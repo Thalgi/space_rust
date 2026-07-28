@@ -1,4 +1,14 @@
-# Conception — Géantes gazeuses V2 (surface)
+# Conception — Géantes gazeuses
+
+> Fusion de deux anciens documents : la conception V2 de la surface
+> (`CONCEPTION_GAZEUSES_V2.md`) et la synthèse de recherche sur les
+> noises/patterns (`NOISES_GAZEUSES.md`). Suivi/catalogue :
+> [`docs/suivi/geantes_gazeuses.md`](../suivi/geantes_gazeuses.md).
+
+---
+
+## Partie A — Surface V2 (conception)
+
 
 > Document de conception, phase avant code. Périmètre : la **surface nuageuse**
 > (bandes, vortex, pôles, palette, animation). Les anneaux, l'éclairage/atmosphère
@@ -7,7 +17,7 @@
 
 ---
 
-## 1. Diagnostic critique de l'existant
+### 1. Diagnostic critique de l'existant
 
 La V1 (branche `type_p ∈ ]0.5, 1.5[` de `planete.frag.glsl`, ~250 lignes) a coché
 presque toute la bucketlist : double-offset, curl warp cheap, grande tache à
@@ -16,7 +26,7 @@ darkening, thermique, aurores, brume. Le résultat est honorable **sur les prese
 jupitériens** — et c'est précisément le problème : le shader a une signature
 Jupiter câblée en dur, et tout le reste du catalogue la subit.
 
-### 1.1 Rotation en bloc : pas de cisaillement zonal
+##### 1.1 Rotation en bloc : pas de cisaillement zonal
 
 LE mouvement caractéristique d'une géante — les bandes qui glissent les unes
 contre les autres — n'existe pas. `main()` applique une rotation **rigide**
@@ -24,7 +34,7 @@ contre les autres — n'existe pas. `main()` applique une rotation **rigide**
 bruit (`+ t` dans les fbm). Aucune bande n'a de vitesse propre. La planète
 tourne comme une boule de billard peinte.
 
-### 1.2 Mille-feuille de `mix()` aux couleurs codées en dur
+##### 1.2 Mille-feuille de `mix()` aux couleurs codées en dur
 
 La branche gazeuse enchaîne ~25 `mix()` successifs dont la moitié injecte des
 teintes absolues :
@@ -43,7 +53,7 @@ Sudarsky se distinguent par la couleur de base mais pas par la matière. Le
 contrat des trois couleurs (`couleur`/`couleur2`/`couleur3`) est noyé — `couleur`
 (censée être le « ton moyen ») ne sert plus que d'accent de turbulence à 40 %.
 
-### 1.3 Structure zonale pauvre et binaire
+##### 1.3 Structure zonale pauvre et binaire
 
 `jet_profil` est un booléen qui plaque UN profil symétrique (EZ claire + NEB/SEB) :
 
@@ -57,7 +67,7 @@ contrôle du **nombre** de bandes (`band_scale` est une fréquence de fbm, pas u
 compte lisible). Le double-offset (dec1/dec2) casse bien la périodicité mais
 produit une répartition de bandes subie, jamais composée.
 
-### 1.4 Vortex : deux poids, deux mesures
+##### 1.4 Vortex : deux poids, deux mesures
 
 La grande tache a un vrai traitement (projection tangente, whirlpool, sillage)
 mais sa spirale interne est un `sin()` pur — effet « sillon de vinyle » :
@@ -72,7 +82,7 @@ telluriques ont un `champ_cyclones()` complet (spirale log, Coriolis, advection
 du fond, dérive) — les géantes, qui sont LE monde des vortex, n'en profitent pas.
 Et il n'y a qu'UNE tache paramétrable par planète.
 
-### 1.5 Pôles envahissants
+##### 1.5 Pôles envahissants
 
 ```glsl
 float polef = smoothstep(0.32, 0.72, la);
@@ -85,20 +95,20 @@ fondu de couleur, pas un changement de régime (dans la réalité, les bandes se
 compriment et se turbulisent avant de céder aux cyclones). En prime, la
 projection polaire est plane (`dot(d, pe1/pe2)`) → Worley distordu loin du pôle.
 
-### 1.6 Incohérences jour/nuit
+##### 1.6 Incohérences jour/nuit
 
 L'émission thermique nocturne module par `sin(lat * band_scale)` alors que les
 bandes visibles sont en double-offset fbm : la structure de nuit **ne correspond
 pas** à celle de jour. L'aurore est un anneau néon fixe (`smoothstep` sur la
 latitude), sans lien avec un axe magnétique.
 
-### 1.7 Brume = lavage global
+##### 1.7 Brume = lavage global
 
 `base = mix(base, brume_couleur, brume)` : uniforme, sans dépendance à la
 latitude ni au limbe. Les sub-Neptunes sont des géantes délavées, pas des mondes
 voilés.
 
-### 1.8 Coût par pixel et absence de LOD
+##### 1.8 Coût par pixel et absence de LOD
 
 Comptage sur le chemin gazeux complet : q1(3) + q2(3) + turb + fine + swirl +
 curl(4) + dec1 + dec2 + marb + fil + flake + wisp + ov + st + st2 + ond + arms +
@@ -106,7 +116,7 @@ finsp ≈ **26-30 fbm** × 5 octaves ≈ **130-150 vnoise/pixel/frame**, en
 `highp`, GLSL ES 100. La galerie paie plein tarif sur des sphères de 100 px, où
 `fine` (fréq. ×13) ne fait qu'aliaser/scintiller.
 
-### 1.9 Variété perçue < variété paramétrée
+##### 1.9 Variété perçue < variété paramétrée
 
 13 presets + palette HSV aléatoire corrects sur le papier, mais le hardcode
 (§ 1.2) et la structure unique (§ 1.3) compriment tout vers le même rendu. Une
@@ -115,7 +125,7 @@ ressemble à une Jupiter pâle.
 
 ---
 
-## 2. Principes V2
+### 2. Principes V2
 
 - **P1 — Squelette CPU, chair shader.** La *structure* (jets, latitudes et
   largeurs de bandes, turbulence de cisaillement) vient d'un **profil zonal 1D
@@ -133,7 +143,7 @@ ressemble à une Jupiter pâle.
 
 ---
 
-## 3. Le profil zonal (texture 1D, CPU)
+### 3. Le profil zonal (texture 1D, CPU)
 
 Une texture **256×1 RGBA** générée par seed côté Rust (module `planete/zonal.rs`,
 même philosophie que `terrain.rs` mais trivial : < 1 ms, 1 Ko). Axe = latitude
@@ -146,7 +156,7 @@ même philosophie que `terrain.rs` mais trivial : < 1 ms, 1 Ko). Axe = latitude
 | B | `s(φ)` : cisaillement local (∝ \|du/dφ\|, renormalisé) | `shear` (proxy actuel sur dec1) |
 | A | réservé (altitude de brume / nuages, plus tard) | — |
 
-### 3.1 Génération (Rust)
+##### 3.1 Génération (Rust)
 
 Somme de gaussiennes posées par le seed : un jet équatorial large (amplitude et
 signe paramétrés), puis N paires de jets alternés vers les pôles, amplitudes
@@ -167,7 +177,7 @@ Paramètres `Apparence` (remplacent/complètent l'existant) :
 
 Hot-reload : la texture se régénère quand un param change (comme l'atlas).
 
-### 3.2 Consommation (shader)
+##### 3.2 Consommation (shader)
 
 ```glsl
 float phi = asin(clamp(dot(d, k), -1.0, 1.0));      // latitude vraie
@@ -186,7 +196,7 @@ avec un rôle réduit : onduler les frontières de `b(φ)`, amplitude ~⅓ de la
 
 ---
 
-## 4. Palette paramétrique
+### 4. Palette paramétrique
 
 Rôles contractuels des trois couleurs (à documenter dans `apparence.rs`) :
 
@@ -215,7 +225,7 @@ sont reproduits en choisissant les mêmes teintes via les dérivations.
 
 ---
 
-## 5. Vortex unifiés
+### 5. Vortex unifiés
 
 Un `champ_vortex_gazeux()` sur le modèle de `champ_cyclones()` tellurique,
 adapté aux anticyclones de géantes. **8 slots**, chacun : direction (hash du
@@ -249,7 +259,7 @@ Décisions structurantes :
 
 ---
 
-## 6. Pôles V2
+### 6. Pôles V2
 
 - **Emprise réduite** : engage à \|φ\| ≈ 62° (après la dernière paire de jets du
   profil zonal — la borne est calculée CPU et passée en uniform), pleine à 85°.
@@ -266,14 +276,14 @@ Décisions structurantes :
 
 ---
 
-## 6 bis. Cas particuliers réels : couverture et omissions (revue)
+### 6 bis. Cas particuliers réels : couverture et omissions (revue)
 
 Inventaire des phénomènes documentés (Voyager/Cassini/Juno/Hubble), avec la
 décision V2. Règle de tri : on garde ce qui est **spatial et statique** (un état
 visuel qu'un preset peut porter), on omet ce qui est **temporel** (événements,
 cycles pluriannuels — nos planètes n'ont pas d'évolution longue) ou invisible.
 
-### Couvert par la V2
+##### Couvert par la V2
 
 | Phénomène réel | Couvert par |
 |---|---|
@@ -289,7 +299,7 @@ cycles pluriannuels — nos planètes n'ont pas d'évolution longue) ou invisibl
 | Festons / hot spots 5 µm (plumes sombres au bord de l'EZ) | turbulence liée à `s(φ)` |
 | SEB « affaiblie » (état pâle) | statiquement via `zonal_flou` / amplitude de `b(φ)` |
 
-### Ajouts retenus (peu coûteux, forte identité)
+##### Ajouts retenus (peu coûteux, forte identité)
 
 - **Chapelet d'ovales (« string of pearls »)** : N petits ovales blancs
   régulièrement espacés **sur la même latitude de jet** (la STB de Jupiter).
@@ -300,7 +310,7 @@ cycles pluriannuels — nos planètes n'ont pas d'évolution longue) ou invisibl
   tempête brillante + traîne turbulente sur toute la longitude d'un jet.
   Variante rare de `apparence_gazeuse()` + un preset. → Phase 7, priorité basse.
 
-### Omis (assumé)
+##### Omis (assumé)
 
 | Phénomène | Raison |
 |---|---|
@@ -313,7 +323,7 @@ cycles pluriannuels — nos planètes n'ont pas d'évolution longue) ou invisibl
 
 ---
 
-## 7. Cohérences incluses (petites, mais visibles)
+### 7. Cohérences incluses (petites, mais visibles)
 
 - **Thermique nocturne structurée** : `surface()` exporte `band` (via `out`) et
   l'émission module par la vraie structure — la nuit devient le négatif du jour.
@@ -327,7 +337,7 @@ cycles pluriannuels — nos planètes n'ont pas d'évolution longue) ou invisibl
 
 ---
 
-## 8. Budget fbm (avant/après)
+### 8. Budget fbm (avant/après)
 
 | Poste | V1 | V2 |
 |---|---|---|
@@ -341,7 +351,7 @@ cycles pluriannuels — nos planètes n'ont pas d'évolution longue) ou invisibl
 
 ---
 
-## 9. Hors périmètre V2 (acté, pour mémoire)
+### 9. Hors périmètre V2 (acté, pour mémoire)
 
 - **Anneaux V2** : ombres croisées planète↔anneau (le manque visuel n°1 du
   rendu global), éclairage de la face nuit, anti-crénelage radial — chantier
@@ -354,7 +364,7 @@ cycles pluriannuels — nos planètes n'ont pas d'évolution longue) ou invisibl
 
 ---
 
-## 9 bis. Décisions actées
+### 9 bis. Décisions actées
 
 - **Cisaillement stylisé, visible** : le glissement entre bandes se perçoit en
   quelques secondes en mode objet. `vit_zonale` reste un uniform global (pas
@@ -368,12 +378,12 @@ cycles pluriannuels — nos planètes n'ont pas d'évolution longue) ou invisibl
 
 ---
 
-## 10. Étapes de travaux
+### 10. Étapes de travaux
 
 Chaque phase compile, se hot-reload, et se valide sur la galerie avant la
 suivante.
 
-### Phase 0 — Filet de non-régression
+##### Phase 0 — Filet de non-régression
 - [x] Outillage : la touche **C** de la galerie lance désormais une session
       multi-frames qui fait défiler la grille et exporte **toutes** les
       cellules dans un seul dossier `captures/<ts>_seed<N>_<gaz|tell>_<jour|nuit>/`
@@ -383,7 +393,7 @@ suivante.
 - [ ] Prendre les captures de référence : galerie gazeuse, **C** en éclairage
       jour puis **C** en nuit (graine par défaut, seed 1).
 
-### Phase 1 — Palette paramétrique
+##### Phase 1 — Palette paramétrique
 - [x] Dérivations côté Rust (`planete/palette.rs`), uniform `gaz_pal[8]`
       (poussé dans `materiau.rs`, déclaré dans le .glsl).
 - [x] Remplacer les constantes couleur de la branche gazeuse : zone/ivoire,
@@ -397,7 +407,7 @@ suivante.
   perdent leurs teintes saumon/ivoire parasites. À vérifier en galerie (C,
   comparer au dossier phase 0).
 
-### Phase 2 — Profil zonal
+##### Phase 2 — Profil zonal
 - [x] `planete/zonal.rs` : génération 256×1 RGBA par seed (gaussiennes, vorticité
       -> type de bande, flou paramétré). Texture liée en 2e unité (`zonal`),
       indexée par sin(latitude) — pas d'asin shader.
@@ -414,7 +424,7 @@ suivante.
 - Validation : nombre de bandes pilotable et lisible, asymétrie N/S visible,
   festons concentrés aux frontières de jets, moucheté résorbé.
 
-### Phase 3 — Rotation différentielle
+##### Phase 3 — Rotation différentielle
 - [x] Advection `dzn` par `u(φ)` (§ 3.2) : rotation Rodrigues par pixel, angle
       `u(φ)·time·0.025` (stylisé, § 9 bis) ; tout l'échantillonnage de bandes
       passe par `dzn`. Rotation exacte : aucun enroulement cumulatif.
@@ -425,7 +435,7 @@ suivante.
 - Validation : en mode objet, les bandes glissent visiblement les unes contre
   les autres ; pas d'artefact d'enroulement après 10 min.
 
-### Phase 4 — Vortex unifiés
+##### Phase 4 — Vortex unifiés
 - [x] Génération CPU des slots (`planete/vortex.rs` -> uniforms `vortex[8]` +
       `vortex2[8]`), slot 0 = tache preset ; latitude choisie selon la bande
       (zones pour ovales/chapelets, belts pour sombres/barges, via le profil
@@ -443,7 +453,7 @@ suivante.
 - Validation : GRS avec bras irréguliers ; ovales blancs avec vraie rotation ;
   une géante à `tempetes` élevé montre des vortex distincts, pas une bouillie.
 
-### Phase 5 — Pôles V2
+##### Phase 5 — Pôles V2
 - [x] Emprise recalculée : uniform `pole_lat` = sin(latitude) après la dernière
       paire de jets (calculé dans `generer_zonal`) — la calotte engage vers
       62-67° au lieu de 19° (!), les bandes montent enfin haut.
@@ -460,7 +470,7 @@ suivante.
   (vivant) ; vue pole-on (Uranus) intéressante au lieu d'une calotte plate ;
   Jupiter : anneau de cyclones visible en vue polaire, différent N/S.
 
-### Phase 6 — Cohérences + budget
+##### Phase 6 — Cohérences + budget
 - [x] Thermique structurée par `b(φ)` (fait dès la phase 2).
 - [x] Brume inégale : fbm très basse fréquence + les belts percent le voile
       (`0.75 + 0.25·b(φ)`) — les sub-Neptunes sont voilées, plus délavées.
@@ -476,7 +486,7 @@ suivante.
 - Validation : côté nuit d'une classe V = bandes en négatif ; galerie fluide
   et moins scintillante ; Neptune bleue ; diff des captures phase 0 assumé.
 
-### Phase 7 — Recalibrage du catalogue
+##### Phase 7 — Recalibrage du catalogue
 - [x] Presets : les ~27 ont tous leur structure (`avec_jets`/`avec_zonal_flou`
       par archétype — Jupiter 1.0, Uranus 0.15 + flou, classes I/II douces et
       voilées, IV/V et naines brunes contrastées, Neptune recalibrée bleue…).
@@ -488,12 +498,13 @@ suivante.
       `avec_tache_blanche` (tache_type 2 → slot 0 ovale blanc massif) +
       tempêtes max ; preset rare « Tempete planetaire (GTB) » + ~6 % des
       géantes classiques aléatoires.
-- [x] Mise à jour `GAZEUSES_BUCKETLIST.md` (bilan V2, items cochés) et
-      `NOISES_GAZEUSES.md` (post-scriptum V2 : ce qui a servi, ce qui a changé).
+- [x] Mise à jour de [`docs/suivi/geantes_gazeuses.md`](../suivi/geantes_gazeuses.md)
+      (bilan V2, items cochés) et de la Partie B ci-dessous (post-scriptum V2 :
+      ce qui a servi, ce qui a changé).
 
 ---
 
-### Phase 4 bis — Passe anti-autocollant sur la tache (retour visuel)
+##### Phase 4 bis — Passe anti-autocollant sur la tache (retour visuel)
 
 Verdict de validation : la tache faisait encore autocollant. Causes trouvées et
 corrigées :
@@ -513,7 +524,7 @@ corrigées :
 
 ---
 
-## 11 bis. État final
+### 11 bis. État final
 
 Les 7 phases sont livrées (juillet 2026). Périmètre tenu : surface seule.
 Chantiers suivants notés : **anneaux V2** (ombres croisées — § 9), éclairage/
@@ -521,7 +532,7 @@ terminateur, ombres de lunes, éclairs nocturnes (§ 6 bis).
 
 ---
 
-## 11. Références
+### 11. Références
 
 - Profils de vents zonaux de Jupiter/Saturne (Voyager/Cassini) — alternance de
   jets, asymétries N/S : la base du § 3.
@@ -529,5 +540,87 @@ terminateur, ombres de lunes, éclairs nocturnes (§ 6 bis).
 - Gaseous Giganticus (S. M. Birrell) — l'advection par champ sans divergence,
   approchée ici par transport zonal réel + curl cheap.
 - Juno (JunoCam) : configuration des cyclones polaires en anneau (§ 6).
-- `conception_planete_v2.md` — le précédent « squelette CPU / chair shader »
-  qui a fait ses preuves sur les telluriques.
+- [`conception/planetes.md`](planetes.md) — le précédent « squelette CPU / chair
+  shader » qui a fait ses preuves sur les telluriques.
+
+---
+
+## Partie B — Recherche : noises & patterns
+
+
+Synthèse des techniques utilisées par les générateurs de géantes gazeuses, avec ce
+qu'on fait déjà (`planete.frag.glsl`, branche `type_p > 0.5`) et les pistes à tester.
+
+### 1. Domain warping (Inigo Quilez) — ✅ en place
+Échantillonner le bruit *à une position elle-même déplissée par du bruit* :
+`fbm(p + k·fbm(p + k·fbm(p)))`. Donne les volutes/tourbillons. On l'a en 2 niveaux
+(`q1`, `q2`) avec advection temporelle (`+ t`). Réf : iquilezles.org/articles/warp.
+
+### 2. Étirement latitudinal des coordonnées — ✅ en place
+Pour transformer le bruit isotrope en **bandes**, on compresse l'axe zonal avant de
+sampler (`seededSamplePoint.y *= 2.5` chez Barth ; chez nous `dh = dlat + (dd-dlat)*0.5`).
+Les nuages s'allongent le long des jets → bandes. C'est la clé du look « rayé ».
+
+### 3. Modèle de bandes à DOUBLE OFFSET — ✅ en place
+Au lieu de bandes en `sin(latitude)` (périodiques, régulières), Barthélemy utilise
+**deux décisions de couleur** décalées par le warping :
+```
+colorDecision1 = fbm(latitude + warping, seed)
+colorDecision2 = fbm(latitude - warping, seed)
+color = mix(c1, dark, smoothstep(0.4,0.6, colorDecision1))
+color = mix(color, c2, smoothstep(0.2,0.8, colorDecision2))
+```
+→ bandes **organiques, non périodiques**, largeurs variables. Pourrait remplacer/épauler
+notre `sin(bc)` pour casser la régularité résiduelle. Le `smoothstep` resserre les
+transitions (bandes nettes).
+
+### 4. Curl noise / advection de champ (Gaseous Giganticus) — ✅ version cheap en place
+La référence pour Jupiter : on advecte des particules le long d'un **champ de vecteurs
+sans divergence** (le *curl* d'un bruit : `curl = (∂n/∂y, -∂n/∂x)`). Les particules
+tracent des filaments et vortex ultra-réalistes. Coûteux (simulation / render-to-texture).
+Notre turbulence advectée (`q2 + t`) en est une approximation cheap. Piste cheap :
+calculer un curl 2D à partir des gradients de `fbm` et l'ajouter au warp pour des
+tourbillons plus « fluides » (moins de blobs étirés). Réfs : Parallel Cascades (curl
+flow Unity), smbc/Gaseous Giganticus (github).
+
+### 5. Worley / cellular noise — ✅ en place (pôles)
+Cellules de Voronoï → amas de cyclones. On l'utilise aux pôles (`wpole`) et pour
+`cyclones_pol`. Peut aussi servir à des poches de tempêtes éparses dans les bandes.
+
+### 6. Ridged noise — 🔜 à tester (filaments)
+`ridged = 1 - |2·fbm - 1|` (replie le bruit) → crêtes fines et nettes. Idéal pour les
+**filaments brillants** dans les zones et les festons. Plus marqué que le `fbm` simple.
+
+### 7. Palette HSV à teintes complémentaires — ✅ en place (génération aléatoire)
+Pour `apparence_gazeuse()` (géantes random), tirer la teinte en **HSV** plutôt qu'en RGB :
+- teinte1 = normal(µ, σ) ; teinte2 = teinte1 + 180° (complémentaire) ; sombre = teinte libre, V bas.
+Donne des combinaisons harmonieuses au lieu de couleurs random parfois laides.
+Box-Muller pour une distribution normale (contrôle de la variété).
+
+### 8. Détails déjà couverts chez nous
+Festons bleu-gris (cisaillement), marbrures chocolat/saumon/ocre (belts), zones
+laiteuses (flocons ammoniac), tache rouge intégrée + sillage, brume polaire (g_pole),
+limb darkening + désaturation, profil de jets type Jupiter (`jet_profil` : EZ + NEB/SEB).
+
+### Priorités proposées
+1. **Double-offset (§3)** — casse la régularité des bandes, peu de code.
+2. **Ridged filaments (§6)** — relief fin dans zones/festons.
+3. **Curl warp cheap (§4)** — tourbillons plus fluides.
+4. **HSV palette (§7)** — variété des géantes générées aléatoirement.
+
+---
+
+### Post-scriptum V2 (juillet 2026)
+
+La V2 (Partie A ci-dessus) a rebattu ces cartes :
+- Le **double-offset (§3)** est remplacé pour la structure par le **profil zonal
+  1D précalculé** (`zonal.rs`) — les bandes viennent d'une somme de gaussiennes
+  de jets + vorticité, le fbm ne fait plus qu'onduler les frontières (dec2).
+- Le **curl warp (§4)** est conservé, et l'advection « cheap » est devenue une
+  **vraie rotation différentielle** par u(φ) — la référence Gaseous Giganticus
+  est approchée par transport zonal réel plutôt que par simulation.
+- La **palette HSV (§7)** est en place, poussée plus loin : 8 teintes dérivées
+  CPU (`palette.rs`) + archétypes structurels dans `apparence_gazeuse()`.
+- Le **ridged (§6)** n'a finalement pas été utilisé (les filaments passent par
+  des seuils multiples sur 2 fbm partagés) — reste une piste si besoin.
+- Le Worley (§5) est passé en **projection azimutale** aux pôles.

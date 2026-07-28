@@ -1,7 +1,7 @@
 use crate::systeme::G;
 use macroquad::prelude::*;
 
-/// Réglages d'un champ de débris (voir CONCEPTION_CEINTURES.md).
+/// Réglages d'un champ de débris (voir docs/conception/ceintures.md).
 /// Deux couches superposables :
 /// - **particules** (`nb > 0`) : corps discrets, orbites animées par le GPU ;
 /// - **voile** (`voile_alpha > 0`) : annulus continu à profil procédural

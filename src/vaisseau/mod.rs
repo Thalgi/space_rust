@@ -6,147 +6,43 @@
 //! BUCKETLIST) : ce module est volontairement découplé de la gravité N-corps.
 
 mod assemblage;
-mod atterrisseur;
-mod brique_demo;
 mod chantier;
 mod composant;
 pub mod eclairage;
 mod generateur;
-mod comsat;
-mod cubesat;
-mod futur;
-mod gps;
-mod iss;
+mod maillage;
 mod montage;
-mod navette;
+mod peintre;
 mod pieces;
 mod port;
-mod sonde;
-mod station; // module Mir (fichier historique réutilisé)
 mod symetrie;
-mod telescope;
-mod tiangong;
 mod unites;
-mod voyager;
 
 pub use assemblage::{Assembleur, Budget, EtatStation, Piece, Station};
 pub use composant::{
-    Composant, Sorties, StyleTreillis, VarianteAntenne, VarianteModule, VariantePanneau,
+    Composant, FamillePropulsion, Sorties, StyleTreillis, VarianteAntenne, VarianteCaisson,
+    VarianteCharge, VarianteCoiffe, VarianteModule, VariantePanneau, VariantePropulseur,
     VarianteRadiateur,
 };
-pub use generateur::{generer, preset_iss, preset_mir, Ossature, ParamsStation, Style};
+pub use generateur::{
+    demo_anneaux, demo_charpente, demo_moteur_antimatiere, demo_moteur_antimatiere_principal,
+    demo_radiateur_mega, demo_reservoir,
+    generer, preset_anneau,
+    preset_comsat, preset_iss, preset_isv, preset_isv_moteur, preset_mir, preset_sonde,
+    preset_tiangong, Ossature,
+    ParamsStation, Style,
+};
+pub use maillage::MaillageStation;
 pub use montage::{
-    cuire, demo_antennes, demo_chantier, demo_deux_modules, demo_habitats, demo_panneaux,
-    demo_poutres, demo_radiateurs, demo_station, demo_treillis,
+    cuire, demo_antennes, demo_caissons, demo_chantier, demo_coiffes,
+    demo_habitats, demo_panneaux, demo_poutres, demo_propulsion, demo_radiateurs, demo_station,
+    demo_treillis,
 };
 pub use port::{accoupler, GenrePort, Port, Repere};
 pub use symetrie::Symetrie;
 pub use unites::Profil;
 
 use macroquad::prelude::*;
-
-pub use atterrisseur::dessiner_atterrisseur;
-pub use brique_demo::Brique;
-pub use comsat::dessiner_comsat;
-pub use cubesat::dessiner_cubesat;
-pub use futur::dessiner_futur;
-pub use gps::dessiner_gps;
-pub use iss::dessiner_iss;
-pub use navette::dessiner_navette;
-pub use sonde::dessiner_sonde;
-pub use station::dessiner_mir;
-pub use telescope::dessiner_telescope;
-pub use tiangong::dessiner_tiangong;
-pub use voyager::dessiner_voyager;
-
-/// Les engins présentés dans la galerie.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum TypeEngin {
-    Sonde,
-    CubeSat,
-    Gps,
-    ComSat,
-    Telescope,
-    Voyager,
-    Atterrisseur,
-    Navette,
-    Mir,
-    Iss,
-    Tiangong,
-    Futur,
-}
-
-impl TypeEngin {
-    /// Tous les engins, dans l'ordre d'affichage de la grille (3 par ligne).
-    pub const TOUS: [TypeEngin; 12] = [
-        TypeEngin::Sonde,
-        TypeEngin::CubeSat,
-        TypeEngin::Gps,
-        TypeEngin::ComSat,
-        TypeEngin::Telescope,
-        TypeEngin::Voyager,
-        TypeEngin::Atterrisseur,
-        TypeEngin::Navette,
-        TypeEngin::Mir,
-        TypeEngin::Iss,
-        TypeEngin::Tiangong,
-        TypeEngin::Futur,
-    ];
-
-    pub fn nom(&self) -> &'static str {
-        match self {
-            TypeEngin::Sonde => "SONDE",
-            TypeEngin::CubeSat => "CUBESAT 3U",
-            TypeEngin::Gps => "SAT. NAVIGATION",
-            TypeEngin::ComSat => "SAT. COMM",
-            TypeEngin::Telescope => "TELESCOPE",
-            TypeEngin::Voyager => "SONDE VOYAGER",
-            TypeEngin::Atterrisseur => "ATTERRISSEUR",
-            TypeEngin::Navette => "NAVETTE",
-            TypeEngin::Mir => "STATION MIR",
-            TypeEngin::Iss => "STATION ISS",
-            TypeEngin::Tiangong => "STATION TIANGONG",
-            TypeEngin::Futur => "STATION ORBITALE",
-        }
-    }
-
-    /// Demi-dimensions (x = demi-largeur, y = demi-hauteur) approximatives de la
-    /// maquette à l'écran, utilisées pour espacer la grille sans chevauchement.
-    pub fn demi_dim(&self) -> Vec2 {
-        match self {
-            TypeEngin::Sonde => vec2(1.30, 0.85),
-            TypeEngin::CubeSat => vec2(0.35, 0.75),
-            TypeEngin::Gps => vec2(1.60, 0.60),
-            TypeEngin::ComSat => vec2(2.05, 0.55),
-            TypeEngin::Telescope => vec2(1.50, 0.95),
-            TypeEngin::Voyager => vec2(1.65, 1.15),
-            TypeEngin::Atterrisseur => vec2(0.50, 1.00),
-            TypeEngin::Navette => vec2(1.20, 0.85),
-            TypeEngin::Mir => vec2(1.50, 1.30),
-            TypeEngin::Iss => vec2(2.85, 1.70),
-            TypeEngin::Tiangong => vec2(1.95, 1.30),
-            TypeEngin::Futur => vec2(1.90, 1.75),
-        }
-    }
-
-    /// Dessine l'engin centré à l'origine (repère caméra 3D déjà actif).
-    pub fn dessiner(&self) {
-        match self {
-            TypeEngin::Sonde => dessiner_sonde(),
-            TypeEngin::CubeSat => dessiner_cubesat(),
-            TypeEngin::Gps => dessiner_gps(),
-            TypeEngin::ComSat => dessiner_comsat(),
-            TypeEngin::Telescope => dessiner_telescope(),
-            TypeEngin::Voyager => dessiner_voyager(),
-            TypeEngin::Atterrisseur => dessiner_atterrisseur(),
-            TypeEngin::Navette => dessiner_navette(),
-            TypeEngin::Mir => dessiner_mir(),
-            TypeEngin::Iss => dessiner_iss(),
-            TypeEngin::Tiangong => dessiner_tiangong(),
-            TypeEngin::Futur => dessiner_futur(),
-        }
-    }
-}
 
 /// Panneau plat visible des deux côtés : macroquad ne double-face pas les
 /// parallélogrammes, donc on le redessine avec les arêtes inversées.

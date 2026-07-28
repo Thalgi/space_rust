@@ -2,20 +2,29 @@
 //!
 //! Chaque fonction dessine un élément paramétré (position, orientation, taille,
 //! couleurs) sans supposer de palette : les couleurs sont fournies par
-//! l'appelant. Ces briques sont la base de la future génération procédurale de
-//! stations — voir `docs/stations_procedurales.md`. Les blocs qui se
-//! ressemblaient dans les maquettes (poutres, modules, ailes, radiateurs) sont
-//! désormais centralisés ici.
+//! l'appelant. Ces briques sont la base de la génération procédurale de
+//! stations — voir `docs/conception/stations.md`, Partie A.
+//!
+//! **Sortie abstraite** : les briques partagées avec `composant.rs` sont
+//! génériques sur [`Peintre`], donc utilisables aussi bien en dessin immédiat
+//! (galeries `brique_demo`/`iss`) qu'en cuisson de maillage. Un seul code de
+//! géométrie alimente les deux, ce qui interdit toute dérive visuelle entre eux.
+//! `module` et `paire_ailes` ne servent qu'aux galeries : elles restent en
+//! immédiat (`paire_ailes` utilise des fils, qu'un maillage ne porte pas).
 
-use super::{cylindre, panneau};
-use macroquad::models::{draw_mesh, Mesh, Vertex};
+use super::peintre::Peintre;
 use macroquad::prelude::*;
 use std::f32::consts::FRAC_PI_3;
+
+/// Épaisseur des traits (nervures, coutures) quand ils sont cuits en géométrie.
+/// Ignorée par la sortie immédiate, qui trace un vrai segment d'un pixel.
+const TRAIT: f32 = 0.02;
 
 /// Pale à **tuiles hexagonales** légèrement espacées : un maillage de petits
 /// hexagones (flat-top) réduits pour laisser un jour entre eux. Déployée depuis
 /// `pied` le long de `deploy`, large de `largeur` selon `largeur_axe`.
-pub(crate) fn pale_hexagonale(
+pub(crate) fn pale_hexagonale<P: Peintre>(
+    p: &mut P,
     pied: Vec3,
     deploy: Vec3,
     largeur_axe: Vec3,
@@ -29,7 +38,7 @@ pub(crate) fn pale_hexagonale(
     let hr = r * 0.86; // tuile réduite → espace visible entre tuiles
     let dcol = 1.5 * r; // pas entre colonnes (hexagones flat-top)
     let drow = 3.0_f32.sqrt() * r; // pas entre rangées
-    let mut verts: Vec<Vertex> = Vec::new();
+    let mut sommets: Vec<Vec3> = Vec::new();
     let mut inds: Vec<u16> = Vec::new();
     let ncol = (largeur / dcol) as i32;
     let nrow = (longueur / drow) as i32;
@@ -43,12 +52,11 @@ pub(crate) fn pale_hexagonale(
                 continue;
             }
             let centre = pied + w * cx + d * cz;
-            let i0 = verts.len() as u16;
-            verts.push(Vertex::new2(centre, vec2(0.5, 0.5), couleur));
+            let i0 = sommets.len() as u16;
+            sommets.push(centre);
             for k in 0..6 {
                 let a = FRAC_PI_3 * k as f32;
-                let p = centre + w * (hr * a.cos()) + d * (hr * a.sin());
-                verts.push(Vertex::new2(p, vec2(0.0, 0.0), couleur));
+                sommets.push(centre + w * (hr * a.cos()) + d * (hr * a.sin()));
             }
             for k in 0..6u16 {
                 let a = i0 + 1 + k;
@@ -57,9 +65,67 @@ pub(crate) fn pale_hexagonale(
             }
         }
     }
-    if !inds.is_empty() {
-        draw_mesh(&Mesh { vertices: verts, indices: inds, texture: None });
+    p.triangles(&sommets, &inds, couleur);
+}
+
+/// **Sphère à tuiles triangulaires** : icosphère (icosaèdre dont chaque face est
+/// subdivisée `freq` fois puis projetée sur la sphère). Chaque facette est
+/// **rétrécie vers son centre** de `jour` pour laisser un joint visible entre
+/// tuiles. Un seul lot de triangles, double face.
+pub(crate) fn sphere_triangulee<P: Peintre>(
+    p: &mut P,
+    centre: Vec3,
+    rayon: f32,
+    freq: usize,
+    jour: f32,
+    couleur: Color,
+) {
+    // Émet une tuile (triangle rétréci vers son centre) dans les tampons.
+    fn tuile(a: Vec3, b: Vec3, c: Vec3, s: &mut Vec<Vec3>, ix: &mut Vec<u16>, jour: f32) {
+        let ctr = (a + b + c) / 3.0;
+        let k = 1.0 - jour;
+        let i0 = s.len() as u16;
+        s.push(ctr + (a - ctr) * k);
+        s.push(ctr + (b - ctr) * k);
+        s.push(ctr + (c - ctr) * k);
+        ix.extend_from_slice(&[i0, i0 + 1, i0 + 2, i0, i0 + 2, i0 + 1]); // double face
     }
+
+    let gold = (1.0 + 5.0_f32.sqrt()) * 0.5; // nombre d'or
+    let base: [Vec3; 12] = [
+        vec3(-1.0, gold, 0.0), vec3(1.0, gold, 0.0), vec3(-1.0, -gold, 0.0), vec3(1.0, -gold, 0.0),
+        vec3(0.0, -1.0, gold), vec3(0.0, 1.0, gold), vec3(0.0, -1.0, -gold), vec3(0.0, 1.0, -gold),
+        vec3(gold, 0.0, -1.0), vec3(gold, 0.0, 1.0), vec3(-gold, 0.0, -1.0), vec3(-gold, 0.0, 1.0),
+    ];
+    let faces: [[usize; 3]; 20] = [
+        [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
+        [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
+        [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
+        [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
+    ];
+    let f = freq.max(1);
+    let mut sommets: Vec<Vec3> = Vec::new();
+    let mut inds: Vec<u16> = Vec::new();
+    for face in faces {
+        let va = base[face[0]].normalize();
+        let vb = base[face[1]].normalize();
+        let vc = base[face[2]].normalize();
+        // Point (i, j) de la grille barycentrique, projeté sur la sphère.
+        let pt = |i: usize, j: usize| -> Vec3 {
+            let (fi, fj, ff) = (i as f32, j as f32, f as f32);
+            let w = va * (ff - fi - fj) + vb * fi + vc * fj;
+            centre + w.normalize() * rayon
+        };
+        for i in 0..f {
+            for j in 0..(f - i) {
+                tuile(pt(i, j), pt(i + 1, j), pt(i, j + 1), &mut sommets, &mut inds, jour);
+                if j < f - i - 1 {
+                    tuile(pt(i + 1, j), pt(i + 1, j + 1), pt(i, j + 1), &mut sommets, &mut inds, jour);
+                }
+            }
+        }
+    }
+    p.triangles(&sommets, &inds, couleur);
 }
 
 /// Repère local orthonormé (avant, droite, haut) déduit d'un axe principal.
@@ -75,9 +141,64 @@ fn repere(axe: Vec3) -> (Vec3, Vec3, Vec3) {
     (f, droite, haut)
 }
 
+/// **Prisme hexagonal en treillis**, hexagone dans le plan X‑Z local, centré en
+/// `centre`, à **arêtes haute et basse horizontales** (parallèles à X). Chaque
+/// arête est une poutre à section **rectangulaire** : demi‑épaisseur `sec` dans
+/// le plan de l'hexagone, demi‑profondeur `prof` **hors‑plan** (≈ Y) — ce sont
+/// ces faces hors‑plan qui donnent au volume son épaisseur. `cote` est la
+/// longueur d'arête (largeur du côté haut, celui « en contact »). Renvoie le
+/// milieu de l'arête haute (raccord éventuel).
+pub(crate) fn treillis_hexagone<P: Peintre>(
+    p: &mut P,
+    centre: Vec3,
+    cote: f32,
+    sec: f32,
+    prof: f32,
+    metal: Color,
+    sombre: Color,
+) -> Vec3 {
+    let r = cote; // hexagone régulier : circonradius = côté
+    let ap = cote * 3.0_f32.sqrt() * 0.5; // apothème (centre → milieu d'arête)
+    let demi = cote * 0.5;
+    let v = [
+        centre + vec3(-demi, 0.0, ap),  // haut‑gauche
+        centre + vec3(demi, 0.0, ap),   // haut‑droit
+        centre + vec3(r, 0.0, 0.0),     // droit
+        centre + vec3(demi, 0.0, -ap),  // bas‑droit
+        centre + vec3(-demi, 0.0, -ap), // bas‑gauche
+        centre + vec3(-r, 0.0, 0.0),    // gauche
+    ];
+    let t = sec.min(prof);
+    // Coins de section **à chaque sommet**, partagés par les deux arêtes qui s'y
+    // rejoignent → aucun écart aux angles. Offset **radial** (centre → sommet)
+    // pour l'épaisseur dans le plan, et ±Y pour la profondeur.
+    let coins = |k: usize| -> [Vec3; 4] {
+        let ur = (v[k] - centre).normalize_or_zero(); // radial dans le plan X‑Z
+        [
+            v[k] - ur * sec - Vec3::Y * prof,
+            v[k] + ur * sec - Vec3::Y * prof,
+            v[k] + ur * sec + Vec3::Y * prof,
+            v[k] - ur * sec + Vec3::Y * prof,
+        ]
+    };
+    let mut prev = coins(5);
+    for k in 0..6 {
+        let cur = coins(k);
+        for i in 0..4 {
+            p.cylindre(prev[i], cur[i], t * 0.30, metal); // longeron (rail continu)
+        }
+        for w in 0..4 {
+            p.cylindre(cur[w], cur[(w + 1) % 4], t * 0.22, sombre); // cadre au sommet
+        }
+        p.cylindre(prev[0], cur[2], t * 0.18, sombre); // diagonale de baie
+        prev = cur;
+    }
+    centre + vec3(0.0, 0.0, ap) // milieu de l'arête haute
+}
+
 /// Poutre en treillis à section carrée reliant `a` à `b` : quatre longerons et
 /// des cadres/diagonales de baie répartis sur la longueur.
-pub(crate) fn treillis(a: Vec3, b: Vec3, demi: f32, metal: Color, sombre: Color) {
+pub(crate) fn treillis<P: Peintre>(p: &mut P, a: Vec3, b: Vec3, demi: f32, metal: Color, sombre: Color) {
     let axe = b - a;
     let long = axe.length();
     if long < 1e-4 {
@@ -91,25 +212,32 @@ pub(crate) fn treillis(a: Vec3, b: Vec3, demi: f32, metal: Color, sombre: Color)
         d * -demi + h * demi,
     ];
     for c in coins {
-        cylindre(a + c, b + c, demi * 0.18, metal); // longerons
+        p.cylindre(a + c, b + c, demi * 0.18, metal); // longerons
     }
     let baies = (long / (demi * 3.0)).round().max(1.0) as usize;
     for k in 0..=baies {
         let c = a + axe * (k as f32 / baies as f32);
         for w in 0..4 {
-            cylindre(c + coins[w], c + coins[(w + 1) % 4], demi * 0.10, sombre); // cadre
+            p.cylindre(c + coins[w], c + coins[(w + 1) % 4], demi * 0.10, sombre); // cadre
         }
         if k < baies {
             let c2 = a + axe * ((k + 1) as f32 / baies as f32);
-            cylindre(c + coins[0], c2 + coins[2], demi * 0.09, sombre); // diagonales
-            cylindre(c + coins[1], c2 + coins[3], demi * 0.09, sombre);
+            p.cylindre(c + coins[0], c2 + coins[2], demi * 0.09, sombre); // diagonales
+            p.cylindre(c + coins[1], c2 + coins[3], demi * 0.09, sombre);
         }
     }
 }
 
 /// Poutre en treillis à section **triangulaire** (3 longerons) — plus légère,
 /// look « sonde ». Mêmes cadres/diagonales que la version carrée, en 3 côtés.
-pub(crate) fn treillis_triangulaire(a: Vec3, b: Vec3, demi: f32, metal: Color, sombre: Color) {
+pub(crate) fn treillis_triangulaire<P: Peintre>(
+    p: &mut P,
+    a: Vec3,
+    b: Vec3,
+    demi: f32,
+    metal: Color,
+    sombre: Color,
+) {
     let axe = b - a;
     let long = axe.length();
     if long < 1e-4 {
@@ -122,45 +250,88 @@ pub(crate) fn treillis_triangulaire(a: Vec3, b: Vec3, demi: f32, metal: Color, s
     };
     let coins = [coin(90.0), coin(210.0), coin(330.0)]; // 1 en haut, 2 en bas
     for c in coins {
-        cylindre(a + c, b + c, demi * 0.16, metal); // longerons
+        p.cylindre(a + c, b + c, demi * 0.16, metal); // longerons
     }
     let baies = (long / (demi * 3.0)).round().max(1.0) as usize;
     for k in 0..=baies {
         let c = a + axe * (k as f32 / baies as f32);
         for w in 0..3 {
-            cylindre(c + coins[w], c + coins[(w + 1) % 3], demi * 0.10, sombre); // cadre
+            p.cylindre(c + coins[w], c + coins[(w + 1) % 3], demi * 0.10, sombre); // cadre
         }
         if k < baies {
             let c2 = a + axe * ((k + 1) as f32 / baies as f32);
             for w in 0..3 {
-                cylindre(c + coins[w], c2 + coins[(w + 1) % 3], demi * 0.08, sombre); // diagonales
+                p.cylindre(c + coins[w], c2 + coins[(w + 1) % 3], demi * 0.08, sombre); // diagonales
             }
         }
     }
 }
 
-/// Module pressurisé cylindrique centré sur `centre`, aligné sur `axe`, avec
-/// deux anneaux de jonction sombres aux extrémités.
-pub(crate) fn module(
-    centre: Vec3,
-    axe: Vec3,
-    longueur: f32,
-    rayon: f32,
-    couleur: Color,
+/// Poutre en treillis à section **variable et courbe** : carrée de demi-section
+/// `demi_a` à `a`, `demi_b` à `b`, l'interpolation suivant `(1 − t)^courbure`.
+/// `courbure = 1` → cône droit (pyramide) ; `courbure > 1` → base qui s'évase
+/// puis longue flèche affinée (silhouette d'ISV). Les longerons sont tracés en
+/// **polyligne** de baie en baie pour **suivre la courbe** au lieu de la couper
+/// en droite.
+pub(crate) fn treillis_conique<P: Peintre>(
+    p: &mut P,
+    a: Vec3,
+    b: Vec3,
+    demi_a: f32,
+    demi_b: f32,
+    courbure: f32,
+    metal: Color,
     sombre: Color,
 ) {
-    let d = axe.normalize();
-    let a = centre - d * (longueur * 0.5);
-    let b = centre + d * (longueur * 0.5);
-    cylindre(a, b, rayon, couleur);
-    cylindre(a, a + d * 0.03, rayon * 1.06, sombre);
-    cylindre(b - d * 0.03, b, rayon * 1.06, sombre);
+    let axe = b - a;
+    let long = axe.length();
+    if long < 1e-4 {
+        return;
+    }
+    let (_, d, h) = repere(axe);
+    let carre = |c: Vec3, s: f32| [c + d * -s + h * -s, c + d * s + h * -s, c + d * s + h * s, c + d * -s + h * s];
+    let epais = demi_a.max(demi_b);
+    // Assez de baies pour que la courbe soit lisse (bornée pour le batcher).
+    let baies = ((long / (epais.max(0.4) * 1.3)) as usize).clamp(10, 48);
+    // L'évasement se joue sur une **distance absolue** (proportionnelle à la
+    // base), pas sur la fraction de longueur : ainsi rallonger la charpente
+    // n'agrandit **que la flèche**, la base garde sa courbe. Au-delà, section
+    // constante = `demi_b` (la tige fine).
+    let flare = (demi_a * 9.0).min(long);
+    let section = |t: f32| {
+        let f = (t * long / flare).min(1.0);
+        demi_b + (demi_a - demi_b) * (1.0 - f).powf(courbure)
+    };
+    let anneau = |k: usize| {
+        let t = k as f32 / baies as f32;
+        let s = section(t);
+        (carre(a + axe * t, s), s)
+    };
+    let (mut prev, mut ps) = anneau(0);
+    for w in 0..4 {
+        p.cylindre(prev[w], prev[(w + 1) % 4], ps * 0.10, sombre); // cadre de base
+    }
+    for k in 1..=baies {
+        let (cur, cs) = anneau(k);
+        for i in 0..4 {
+            p.cylindre(prev[i], cur[i], demi_a * 0.15, metal); // longeron : **Ø constant** = tiges blanches de l'hexagone (pas d'amincissement)
+        }
+        for w in 0..4 {
+            p.cylindre(cur[w], cur[(w + 1) % 4], cs * 0.10, sombre); // cadre
+        }
+        p.cylindre(prev[0], cur[2], ps * 0.08, sombre); // diagonales
+        p.cylindre(prev[1], cur[3], ps * 0.08, sombre);
+        prev = cur;
+        ps = cs;
+    }
 }
 
 /// Une pale solaire : deux lés séparés par une couture centrale, un cadre et
 /// des nervures de cellules. Déployée depuis `racine` le long de `deploy`,
 /// large de `largeur` selon `largeur_axe`.
-pub(crate) fn pale_solaire(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn pale_solaire<P: Peintre>(
+    p: &mut P,
     racine: Vec3,
     deploy: Vec3,
     largeur_axe: Vec3,
@@ -175,47 +346,22 @@ pub(crate) fn pale_solaire(
     let coin = racine - w * (largeur * 0.5);
     let e1 = w * largeur;
     let e2 = d * longueur;
-    panneau(coin, e1, e2, couleur);
-    draw_line_3d(coin, coin + e1, bord);
-    draw_line_3d(coin + e2, coin + e1 + e2, bord);
-    draw_line_3d(coin, coin + e2, bord);
-    draw_line_3d(coin + e1, coin + e1 + e2, bord);
-    draw_line_3d(racine, racine + e2, bord); // couture entre les deux lés
+    p.panneau(coin, e1, e2, couleur);
+    p.ligne(coin, coin + e1, TRAIT, bord);
+    p.ligne(coin + e2, coin + e1 + e2, TRAIT, bord);
+    p.ligne(coin, coin + e2, TRAIT, bord);
+    p.ligne(coin + e1, coin + e1 + e2, TRAIT, bord);
+    p.ligne(racine, racine + e2, TRAIT, bord); // couture entre les deux lés
     for n in 1..cellules {
         let m = coin + e2 * (n as f32 / cellules as f32);
-        draw_line_3d(m, m + e1, bord); // nervures de cellules
-    }
-}
-
-/// Paire d'ailes solaires : boîtier du joint rotatif au centre et deux pales
-/// opposées le long de `deploy`, séparées par `ecart` (l'espace visible entre
-/// les deux pales). Reproduit un « Photovoltaic Module » de l'ISS.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn paire_ailes(
-    base: Vec3,
-    deploy: Vec3,
-    largeur_axe: Vec3,
-    ecart: f32,
-    longueur: f32,
-    largeur: f32,
-    cellules: usize,
-    couleur: Color,
-    boitier: Color,
-    sombre: Color,
-) {
-    draw_cube(base, Vec3::splat(0.26), None, boitier); // joint / gimbal
-    draw_cube_wires(base, Vec3::splat(0.26), sombre);
-    let d = deploy.normalize();
-    for s in [-1.0_f32, 1.0] {
-        let racine = base + d * (s * ecart);
-        cylindre(base, racine, 0.04, sombre); // bras jusqu'au pied de pale
-        pale_solaire(racine, d * s, largeur_axe, longueur, largeur, cellules, couleur);
+        p.ligne(m, m + e1, TRAIT, bord); // nervures de cellules
     }
 }
 
 /// Radiateur thermique : panneau clair rainuré, orienté `deploy`/`largeur_axe`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn radiateur(
+pub(crate) fn radiateur<P: Peintre>(
+    p: &mut P,
     base: Vec3,
     deploy: Vec3,
     largeur_axe: Vec3,
@@ -230,9 +376,9 @@ pub(crate) fn radiateur(
     let coin = base - w * (largeur * 0.5);
     let e1 = w * largeur;
     let e2 = d * longueur;
-    panneau(coin, e1, e2, couleur);
+    p.panneau(coin, e1, e2, couleur);
     for n in 1..lignes {
         let m = coin + e2 * (n as f32 / lignes as f32);
-        draw_line_3d(m, m + e1, sombre);
+        p.ligne(m, m + e1, TRAIT, sombre);
     }
 }

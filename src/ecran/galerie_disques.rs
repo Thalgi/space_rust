@@ -10,7 +10,7 @@ use macroquad::rand::srand;
 /// Galerie des champs de débris : UN cas par écran, défilement molette case
 /// par case. Les cas stellaires sont à l'ÉCHELLE RÉELLE du jeu (rayons en UA,
 /// masse de genese, étoile de référence au centre) : ce qu'on voit ici est
-/// l'aspect final en skymap. Banc de validation de CONCEPTION_CEINTURES.md.
+/// l'aspect final en skymap. Banc de validation de docs/conception/ceintures.md.
 pub struct GalerieDisques {
     seed: u64,
     cellules: Vec<Cellule>,

@@ -1,10 +1,20 @@
-# Bilan des travaux — génération de planètes v2
+# Suivi — Planètes telluriques
+
+> Fusion de deux anciens documents : le bilan de la refonte v2 du rendu
+> (`bilan_travaux.md`) et le catalogue de presets (`PLANET_BUCKETLIST.md`).
+> Conception : [`docs/conception/planetes.md`](../conception/planetes.md).
+
+---
+
+## Partie A — Bilan des travaux (rendu v2)
+
 
 > Reprise du chantier ailleurs : ce document dit CE QUI A ÉTÉ FAIT, OÙ, et
 > COMMENT s'en servir. Le POURQUOI (conception, algorithmes, décisions) est
-> dans `conception_planete_v2.md` — les renvois « § n » pointent dedans.
+> dans [`conception/planetes.md`](../conception/planetes.md) Partie A —
+> les renvois « § n » pointent dedans.
 
-## 1. Résumé exécutif
+### 1. Résumé exécutif
 
 Le rendu des planètes telluriques est passé d'un shader 100 % procédural par
 pixel (champs de bruit indépendants, rivières incohérentes) à un pipeline
@@ -15,7 +25,7 @@ sont **toutes implémentées et testées** (11 tests unitaires verts). La
 génération est asynchrone (pas de gel d'UI), déterministe par graine, et
 outillée : bench intégré, captures de non-régression, filtre pixel.
 
-## 2. Fichiers touchés et nature des changements
+### 2. Fichiers touchés et nature des changements
 
 | Fichier | État | Contenu |
 |---|---|---|
@@ -25,11 +35,11 @@ outillée : bench intégré, captures de non-régression, filtre pixel.
 | `src/planete/mod.rs` | modifié | `Planete` porte `terrain_tex`/`terrain_job` : génération **asynchrone au premier draw** (thread + budget global 2 jobs), upload GPU à la fin du job. Accesseurs `terrain_pret()`, `apparence()`. |
 | `src/ecran/galerie.rs` | modifié | Scroll doux (cible + lissage exponentiel + accrochage pixel), **P** filtre pixel (render target demi-résolution, plus proche voisin, textes nets), **C** captures PNG de non-régression, **B** bench, overlay FPS/génération/état du bench. |
 | `Cargo.toml` | modifié | `[profile.dev] opt-level = 1` (le bruit CPU est inutilisable en debug pur). |
-| `conception_planete_v2.md` | vivant | Conception + état d'avancement par étape (§ 8) + revue du catalogue (§ 12) + non-régression (§ 13). |
+| [`conception/planetes.md`](../conception/planetes.md) Partie A | vivant | Conception + état d'avancement par étape (§ 8) + revue du catalogue (§ 12) + non-régression (§ 13). |
 
 Zéro dépendance ajoutée (threads std, pas de rayon ; RNG maison).
 
-## 3. Mode d'emploi (galerie des telluriques)
+### 3. Mode d'emploi (galerie des telluriques)
 
 - Molette : défilement (doux). `G` : nouvelle graine. `R` : hot-reload shaders.
 - `P` : filtre **pixel** ON/OFF (préfigure le style final).
@@ -44,7 +54,7 @@ Zéro dépendance ajoutée (threads std, pas de rayon ; RNG maison).
 - Une tellurique s'affiche d'abord en **placeholder uni** (~0,5-1 s) le temps
   que son terrain se génère en fond — comportement normal, pas un bug.
 
-## 4. Leviers de réglage (tous dans `terrain.rs` sauf mention)
+### 4. Leviers de réglage (tous dans `terrain.rs` sauf mention)
 
 | Levier | Valeur | Effet |
 |---|---|---|
@@ -56,7 +66,7 @@ Zéro dépendance ajoutée (threads std, pas de rayon ; RNG maison).
 | `PIX` (`galerie.rs`) | 2 | Échelle du filtre pixel (aussi dans `rendu.rs` pour les autres vues). |
 | Seuil rivières (shader) | `mix(0.78, 0.50, rivieres)` | Densité du réseau visible, piloté par le preset. |
 
-## 5. Performances
+### 5. Performances
 
 - **Bench utilisateur 2026-07-02** (8 cœurs, release, avant optimisation) :
   médiane 1061 ms, max 2040 ms, érosion ~62 % du coût, bruit ~430 ms non scalé.
@@ -68,7 +78,7 @@ Zéro dépendance ajoutée (threads std, pas de rayon ; RNG maison).
   octaves de fbm remplacées par ~4 lectures de texture par pixel).
 - Mémoire GPU : ~1,5 Mo/planète tellurique (atlas 774×516 RGBA8).
 
-## 6. Tests et validation
+### 6. Tests et validation
 
 - `cargo test` : 11 tests dans `terrain.rs` — aller-retour texel↔sphère
   exhaustif, coutures réciproques, quantile de mer, gouttière d'atlas,
@@ -81,7 +91,7 @@ Zéro dépendance ajoutée (threads std, pas de rayon ; RNG maison).
   nocturnes), Bioluminescent (réseaux de lumière la nuit), Boule de neige
   (banquise ≠ glace terrestre).
 
-## 7. Pièges connus / vigilance
+### 7. Pièges connus / vigilance
 
 - **Un incident de troncature de fichier** s'est produit pendant les travaux
   (`src/planete/mod.rs` coupé en fin de fichier, réparé depuis git). Avant de
@@ -98,7 +108,7 @@ Zéro dépendance ajoutée (threads std, pas de rayon ; RNG maison).
   identique ont la même géographie (voulu pour la galerie, touche G pour
   varier).
 
-## 8. Reste à faire / prochains chantiers
+### 8. Reste à faire / prochains chantiers
 
 1. **Re-bench post-optimisation** (B) et calibrage visuel de `QUALITE`
    (captures avant/après).
@@ -115,3 +125,103 @@ Zéro dépendance ajoutée (threads std, pas de rayon ; RNG maison).
 5. Optionnel selon besoin : érosion parallèle (si le re-bench déçoit),
    512²/face pour la vue rapprochée, lunes riches, génération aléatoire
    branchée sur le catalogue (§ 8 point 5 de la première analyse).
+
+---
+
+## Partie B — Catalogue (bucket list)
+
+
+Catalogue des planètes telluriques. Voir [`conception/planetes.md`](../conception/planetes.md)
+Partie B pour le modèle paramétrique.
+`[x]` = un preset existe dans la **Galerie** (ou est généré aléatoirement).
+
+Légende : `[ ]` à faire · `[x]` fait · `(R)` rare · `(F)` flavor (rendu comme la famille parente)
+
+---
+
+### Bilan — CATALOGUE COMPLET ✅
+
+**~126 presets tellurique** en galerie (3 passes). Toutes les familles de Planetary
+Diversity sont couvertes, plus les non-habitables et les cas spéciaux.
+
+**Axes / features implémentés** (uniforms, hot-reload R) : altitude par domain warping +
+**étagement de biome** (prairie → forêt → roche → neige), `eau`+`eau_motif`, `veg`,
+`rivieres` (+`riv_lave`), `grad_lat`, `calotte` (glace fracturée, bord déchiqueté), `nuages`
+**2 couches** + `nuages_type` (classique/tempête/cyclone), `relief` (montagnes), `dunes`,
+`mesa`, `pics`, `recifs`, `basalt`, `crateres`, `voile` (Vénus/Titan), `eyeball` (marée),
+`cryo`, `biolum`, `lave`, **reflet spéculaire océan**, `seed` (géographie unique).
+
+**Reste (optionnel, non bloquant)** :
+
+- [ ] Rotation à **vitesse variable** par planète (la rotation existe déjà, vitesse uniforme).
+- [ ] Faire **piocher le générateur** (skymap/objet) dans le catalogue de presets nommés.
+- [ ] Sélecteur de variante en mode Objet.
+- [ ] Passe **planètes gazeuses** (Hot/Cold/Cloudless Gas Giant) — type séparé.
+- [ ] Perf : mutualiser les fbm si le plein écran rame.
+
+---
+
+# Partie A — Archétypes (tous faits)
+
+- [x] Humide : Continentale, Monde-océan, Tropicale, Marécage, Récif
+- [x] Sec : Désert/dunes, Aride/mesa/badlands, Oasis, Savane/steppe, Sable ferreux
+- [x] Froid : Toundra, Arctique, Boule de neige, Cryovolcanique, Alpin
+- [x] Extrêmes : Lave, Étuve/Vénus, Eyeball (humide/sec/gelé)
+- [x] Exotiques : Fer/Mercure, Carbone/Diamant, Soufre/Io, Hydrocarbures/Titan
+- [x] Transverses : nuages (2 couches + types), relief + étagement, calottes texturées,
+      lumières de villes, **reflet spéculaire océan**
+
+---
+
+# Partie B — Catalogue (toutes les variantes ont un preset)
+
+### Humide › Continental
+- [x] Megaflora (R) · Retinal · Forest · Petrified (R) · Lake · Tepid · Mushroom · Sakura ·
+  Carotene · Moss · Marsh
+
+### Humide › Océan
+- [x] Reef (R) · Cascadian · Swamp · Archipelago (R) · Crag · Fog · Kelp · Columnar ·
+  Barnacle · Pink Algae · Tidepool
+- [x] **Ocean pur** (aucune terre émergée, eau = 1.0) · **Hycean** (océan global sous
+  atmosphère de vapeur épaisse) · **Ocean de magma** (mer de roche fondue, émissif la nuit)
+
+### Humide › Tropical
+- [x] Geothermal (R) · Atoll · Mangrove · Bioluminescent (R) · Tepui · Cenote · Fungal ·
+  Lilypad · Thunderstorm · Aerial · Obsidian
+
+### Sec › Désert
+- [x] Salt (R) · Oasis · Outback · Aquifer (R) · Dune · Coastal · Fungi · Cactus ·
+  Dust Storm · Ironsand · Sodalite
+
+### Sec › Aride
+- [x] Coral (R) · Mesa · Mediterranean · Primal (R) · Fog Desert · Badlands · Succulent ·
+  Amethyst · Superbloom · Striped · Opal
+
+### Sec › Savane
+- [x] Baobab (R) · Scrubland · Steppe · Geoglyph (R,F) · Pampa · Veldt · Acacia · Heath ·
+  Bushveld · Termite (F) · Amber
+
+### Froid › Arctique
+- [x] Storm (R) · Cold Desert · Antarctic · Iceberg (R) · Glacial · Aeolian · Ice Spike ·
+  Ice Dunes · Supraglacial · Crevasse · Ferrosprings
+
+### Froid › Toundra
+- [x] Cryflora (R) · Bog · Mud · Lichen (R) · Mycelium* · Basalt · Tuya · Treeline ·
+  Travertine · Cryovolcano · Peatland   (*Mycelium ≈ Fungal/Bog)
+
+### Froid › Alpin
+- [x] Glaciovolcanic (R) · Boreal · Highland · Lanthanide (R) · Snow · Dune Forest · Fjord ·
+  Taiga · Ravine · Blossom · Craton
+
+### Volcanique
+- [x] Ash
+
+### Gaia & Superhabitables
+- [x] Dry Gaia · Cold Gaia · Wet/Dry/Cold Superhabitable
+
+### Verrouillées par marée & Mondes-grottes
+- [x] Wet/Dry/Cold Tidally Locked (Eyeball) · Wet/Dry/Cold Cave (F)
+
+### Non-habitables
+- [x] Lune · Diamant · Chthonien · Subglaciaire · Vénus · Titan · Fer/Mercure · Carbone ·
+  Ash · Io (soufre)

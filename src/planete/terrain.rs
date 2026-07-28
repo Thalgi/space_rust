@@ -1,4 +1,4 @@
-//! Grille cube-sphere du terrain tellurique (conception : `conception_planete_v2.md` § 4).
+//! Grille cube-sphere du terrain tellurique (conception : `docs/conception/planetes.md` Partie A § 4).
 //!
 //! 6 faces de N×N texels projetées sur la sphère avec un warp équi-angulaire
 //! (`tan`) : l'écart de surface entre texels tombe de ~5× à ~1,3×, pas de

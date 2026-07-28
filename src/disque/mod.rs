@@ -1,5 +1,5 @@
 //! Champ de débris unifié (ceintures, anneaux planétaires, disques proto*) —
-//! voir CONCEPTION_CEINTURES.md. Principe : la géométrie est construite UNE
+//! voir docs/conception/ceintures.md. Principe : la géométrie est construite UNE
 //! fois à la création (éléments orbitaux encodés dans les canaux de sommet),
 //! puis les shaders animent via `time`. Zéro travail CPU par frame en dehors
 //! des uniforms.

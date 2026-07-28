@@ -11,9 +11,14 @@ pub enum Cible {
     GalerieGaz,
     GalerieDisques,
     GalerieEtoiles,
-    Vaisseaux,
+    /// Catalogue des composants (vue station, catégorie Briques).
     Briques,
-    Station,
+    /// Reproductions de petites stations réelles.
+    PetitesStations,
+    /// Générateur procédural.
+    Generateur,
+    /// Grandes stations & mégastructures.
+    Megastructures,
 }
 
 /// Écran d'accueil : titre + deux blocs de boutons (astres / vaisseaux).
@@ -30,11 +35,12 @@ const BLOC_ASTRES: &[(&str, Cible)] = &[
     ("GALERIE - ETOILES", Cible::GalerieEtoiles),
 ];
 
-/// Bloc de droite : vaisseaux, briques et stations.
-const BLOC_VAISSEAUX: &[(&str, Cible)] = &[
-    ("VAISSEAUX - SONDES / NAVETTES / STATIONS", Cible::Vaisseaux),
-    ("BRIQUES - COMPOSANTS DE STATION", Cible::Briques),
-    ("STATION - ASSEMBLAGE (DEMO)", Cible::Station),
+/// Bloc de droite : briques, stations et mégastructures.
+const BLOC_STATIONS: &[(&str, Cible)] = &[
+    ("BRIQUES - COMPOSANTS", Cible::Briques),
+    ("PETITES STATIONS - ISS / MIR / TIANGONG", Cible::PetitesStations),
+    ("GENERATEUR PROCEDURAL", Cible::Generateur),
+    ("MEGASTRUCTURES - ISV / ANNEAUX", Cible::Megastructures),
 ];
 
 impl Accueil {
@@ -84,7 +90,7 @@ impl Accueil {
         let xd = cx + ecart * 0.5;
 
         let choix = Self::bloc("[ ASTRES & GALERIES ]", BLOC_ASTRES, xg, y0, m, clic)
-            .or_else(|| Self::bloc("[ VAISSEAUX & STATIONS ]", BLOC_VAISSEAUX, xd, y0, m, clic));
+            .or_else(|| Self::bloc("[ STATIONS & MEGASTRUCTURES ]", BLOC_STATIONS, xd, y0, m, clic));
 
         choix.copied()
     }

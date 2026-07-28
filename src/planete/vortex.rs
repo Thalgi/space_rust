@@ -1,4 +1,4 @@
-//! Slots de vortex des géantes gazeuses (V2 phase 4, CONCEPTION_GAZEUSES_V2.md § 5).
+//! Slots de vortex des géantes gazeuses (V2 phase 4, docs/conception/geantes_gazeuses.md Partie A § 5).
 //!
 //! Un seul système pour la grande tache, les taches sombres, les ovales
 //! blancs, les barges brunes et les chapelets de perles : 8 slots générés ici

@@ -14,7 +14,7 @@ pub enum SortieStarmap {
 ///
 /// Sol en diagonale (nuage de points) + billes d'étoiles à hauteur variable (z réel exagéré),
 /// reliées au sol par une tige pointillée. Survol -> surbrillance + panneau info ; clic ->
-/// zoom vers la Skymap de l'étoile (cf. `CONCEPTION_STARMAP.md`).
+/// zoom vers la Skymap de l'étoile (cf. `docs/conception/starmap.md`).
 pub struct Starmap {
     etoiles: Vec<Etoile>,
     noms: bool,

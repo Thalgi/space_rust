@@ -4,6 +4,7 @@
 //! fonctions factorisées de [`super::pieces`] et des primitives orientées du
 //! module parent.
 
+use super::peintre::Immediat;
 use super::pieces::{module, paire_ailes, radiateur, treillis};
 use super::{cone, cylindre, parabole};
 use macroquad::prelude::*;
@@ -70,7 +71,7 @@ impl Brique {
 
         match self {
             Brique::Structure => {
-                treillis(vec3(-1.4, 0.0, 0.0), vec3(1.4, 0.0, 0.0), 0.16, metal, sombre);
+                treillis(&mut Immediat, vec3(-1.4, 0.0, 0.0), vec3(1.4, 0.0, 0.0), 0.16, metal, sombre);
             }
             Brique::Habitat => {
                 module(Vec3::ZERO, Vec3::Z, 1.5, 0.42, blanc, sombre);
@@ -103,7 +104,7 @@ impl Brique {
             }
             Brique::Radiateur => {
                 cylindre(vec3(0.0, 0.0, -0.7), vec3(0.0, 0.0, -0.55), 0.1, metal); // pivot
-                radiateur(vec3(0.0, 0.0, -0.55), Vec3::Z, Vec3::X, 1.2, 0.85, 7, radia, sombre);
+                radiateur(&mut Immediat, vec3(0.0, 0.0, -0.55), Vec3::Z, Vec3::X, 1.2, 0.85, 7, radia, sombre);
             }
             Brique::Parabole => {
                 cylindre(vec3(0.0, 0.0, -0.35), vec3(0.0, 0.0, -0.12), 0.05, sombre); // pied

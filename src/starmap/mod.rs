@@ -1,5 +1,5 @@
 //! Modèle de la Starmap (vue galactique) : voisinage stellaire + projection oblique.
-//! Voir `CONCEPTION_STARMAP.md`. Le rendu (grille, tiges, glyphes) vit dans `rendu.rs`.
+//! Voir `docs/conception/starmap.md`. Le rendu (grille, tiges, glyphes) vit dans `rendu.rs`.
 
 mod rendu;
 pub use rendu::dessiner;
@@ -56,7 +56,7 @@ impl Etoile {
     }
 }
 
-/// Le voisinage stellaire (§4 de CONCEPTION_STARMAP.md). (l, b) approximatifs.
+/// Le voisinage stellaire (§4 de `docs/conception/starmap.md`). (l, b) approximatifs.
 /// Proxima et Alpha Cen se superposent presque (4.25 vs 4.37 al) -> `decalage` d'affichage
 /// opposé pour les rendre lisibles. Alpha Cen et Sirius sont binaires (`double`).
 pub fn voisinage() -> Vec<Etoile> {

@@ -1,5 +1,5 @@
 //! Glu entre le modèle de ports (`port.rs`) et l'assemblage (`assemblage.rs`) —
-//! sous-étape 2c de `docs/stations_raccordement.md`.
+//! sous-étape 2c de `docs/conception/stations.md`, Partie C.
 //!
 //! Trois fonctions composables, sans état :
 //! - [`port_monde`] : repère **monde** d'un port d'un composant déjà placé ;
@@ -13,7 +13,8 @@
 use super::chantier::Chantier;
 use super::{
     accoupler, Assembleur, Composant, EtatStation, GenrePort, Piece, Profil, Repere, Sorties,
-    Station, StyleTreillis, Symetrie, VarianteAntenne, VarianteModule, VariantePanneau,
+    FamillePropulsion, Station, StyleTreillis, Symetrie, VarianteAntenne, VarianteCaisson,
+    VarianteCharge, VarianteCoiffe, VarianteModule, VariantePanneau, VariantePropulseur,
     VarianteRadiateur,
 };
 use macroquad::prelude::*;
@@ -67,25 +68,6 @@ pub fn cuire_symetrie(
         .into_iter()
         .map(|t| Piece::new(t * base, comp))
         .collect()
-}
-
-/// Démo 2e : deux modules axiaux mis bout-à-bout par leurs écoutilles, assemblés
-/// en une [`Station`] prête à dessiner. C'est le cas de validation visuelle du
-/// raccordement complet (ports → accouplement → cuisson → assemblage → rendu).
-pub fn demo_deux_modules() -> Station {
-    let a = Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 3.0 };
-    let b = Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 2.0 };
-
-    let a_monde = Repere::IDENTITE;
-    let hote = port_monde(a_monde, a, 0); // écoutille +Z libre de A
-    let b_monde = poser(hote, b, 1); // B clipsé par son écoutille −Z
-
-    let mut asm = Assembleur::new();
-    asm.ajouter(cuire(a_monde, a)).ajouter(cuire(b_monde, b));
-    match asm.terminer() {
-        EtatStation::Prete(s) => s,
-        EtatStation::Vide => unreachable!("deux pièces posées"),
-    }
 }
 
 /// Démo « les quatre nœuds côte à côte » : de gauche à droite 4 sorties (croix
@@ -225,6 +207,33 @@ pub fn demo_chantier() -> Station {
     }
 }
 
+/// Démo coiffes : un module **habitat Cœur** coiffé de chacune des 3 coiffes
+/// (bombée, hexagonale, couronne), alignés côte à côte, **axe vertical** (nez
+/// vers le haut, +Y) pour bien voir les capuchons.
+pub fn demo_coiffes() -> Station {
+    let mut asm = Assembleur::new();
+    let tous = VarianteCoiffe::TOUS;
+    let n = tous.len();
+    let profil = Profil::P2;
+    let longueur = 4.0;
+    let demi = longueur * 0.5;
+    let mrot = Quat::from_rotation_arc(Vec3::Z, Vec3::Y); // axe module → +Y
+    for (i, v) in tous.iter().enumerate() {
+        let dx = (i as f32 - (n as f32 - 1.0) / 2.0) * 4.0;
+        let module = Composant::ModuleAxial { profil, variante: VarianteModule::Coeur, longueur };
+        let mm = Repere::new(vec3(dx, 0.0, 0.0), mrot);
+        asm.ajouter(cuire(mm, module));
+        // Coiffe posée sur le bout +Z local du module (= son sommet +Y monde).
+        let coiffe = Composant::Coiffe { profil, variante: *v };
+        let cm = mm.compose(Repere::new(vec3(0.0, 0.0, demi), Quat::IDENTITY));
+        asm.ajouter(cuire(cm, coiffe));
+    }
+    match asm.terminer() {
+        EtatStation::Prete(s) => s,
+        EtatStation::Vide => unreachable!("coiffes"),
+    }
+}
+
 /// Démo habitats : les 6 variantes de module (standard, doré, hublots, labo,
 /// gonflable, coupole) alignées côte à côte, chaînées bout à bout par paires.
 pub fn demo_habitats() -> Station {
@@ -264,6 +273,122 @@ pub fn demo_antennes() -> Station {
 
 /// Démo radiateurs : les **7 variantes** alignées côte à côte, déployées vers le
 /// haut (+Y). Six technologies réelles + le LDR (gouttelettes) exotique.
+/// Vitrine des caissons techniques **non pressurisés** et de leurs charges :
+/// les 4 variantes montrées **accrochées à leur structure** (trois sur une barre
+/// de treillis, une sur le flanc d'un module), puis un porteur chargé de ses
+/// trois charges utiles **posées à plat**. Le moyen d'attache est démontré
+/// autant que les boîtes elles-mêmes — d'où une seule vue plutôt que deux.
+pub fn demo_caissons() -> Station {
+    let mut asm = Assembleur::new();
+    let boite = |v| Composant::Caisson { profil: Profil::P0, variante: v, longueur: 2.2, largeur: 1.2 };
+
+    // Barre de structure horizontale + caissons sur ses ports hôtes.
+    let poutre = Composant::Treillis { profil: Profil::P1, longueur: 11.0, style: StyleTreillis::Carre };
+    let pm = Repere::new(vec3(0.0, 2.2, 0.0), Quat::from_rotation_arc(Vec3::Z, Vec3::X));
+    asm.ajouter(cuire(pm, poutre));
+    let mut pris = 0usize;
+    for port in poutre.ports() {
+        if port.genre != GenrePort::Surface || port.repere.avant().x < 0.0 || pris >= 3 {
+            continue;
+        }
+        let c = boite(VarianteCaisson::TOUS[pris]);
+        asm.ajouter(cuire(poser(pm.compose(port.repere), c, 0), c));
+        pris += 1;
+    }
+
+    // Le quatrième sur le flanc d'un module : même port `Surface`, autre hôte.
+    let m = Composant::ModuleAxial {
+        profil: Profil::P1,
+        variante: VarianteModule::Standard,
+        longueur: 4.0,
+    };
+    let mm = Repere::new(vec3(0.0, -2.6, 0.0), Quat::from_rotation_arc(Vec3::Z, Vec3::X));
+    asm.ajouter(cuire(mm, m));
+    if let Some(port) = m.ports().iter().find(|p| {
+        p.genre == GenrePort::Surface && p.repere.avant().y > 0.9
+    }) {
+        let c = boite(VarianteCaisson::Berceau);
+        asm.ajouter(cuire(poser(mm.compose(port.repere), c, 0), c));
+    }
+
+    // Un porteur plus grand, chargé sur ses faces : c'est là qu'on voit que les
+    // charges utiles se posent **à plat** sur un caisson, sans entretoise.
+    let porteur = Composant::Caisson {
+        profil: Profil::P1,
+        variante: VarianteCaisson::Ossature,
+        longueur: 4.0,
+        largeur: 2.2,
+    };
+    let qm = Repere::new(vec3(0.0, -6.6, 0.0), Quat::from_rotation_arc(Vec3::Z, Vec3::X));
+    asm.ajouter(cuire(qm, porteur));
+    let hotes: Vec<_> = porteur.ports()[1..].to_vec();
+    for (i, v) in VarianteCharge::TOUS.iter().enumerate() {
+        if i >= hotes.len() {
+            break;
+        }
+        let ch = Composant::ChargeUtile {
+            profil: Profil::P0,
+            variante: *v,
+            longueur: 2.4,
+            largeur: 1.3,
+        };
+        asm.ajouter(cuire(poser(qm.compose(hotes[i].repere), ch, 0), ch));
+    }
+
+    match asm.terminer() {
+        EtatStation::Prete(s) => s,
+        EtatStation::Vide => unreachable!("variantes de caissons"),
+    }
+}
+
+/// Vitrine d'une famille de propulsion. Chaque variante est montrée **sur son
+/// hôte** : les moteurs principaux boulonnés en bout d'un tronçon de corps
+/// (écoutille axiale, tuyère vers l'arrière), les grappes de contrôle posées sur
+/// le flanc d'un module. Une vue par famille, leurs échelles étant trop
+/// différentes pour cohabiter lisiblement.
+pub fn demo_propulsion(famille: FamillePropulsion) -> Station {
+    let mut asm = Assembleur::new();
+    let variantes: Vec<_> = VariantePropulseur::TOUS
+        .iter()
+        .filter(|v| v.famille() == famille)
+        .collect();
+    let n = variantes.len().max(1);
+    for (i, v) in variantes.iter().enumerate() {
+        let dx = (i as f32 - (n as f32 - 1.0) / 2.0) * 4.2;
+        let corps = Composant::ModuleAxial {
+            profil: Profil::P1,
+            variante: VarianteModule::Standard,
+            longueur: 2.4,
+        };
+        let cm = Repere::new(vec3(dx, 1.6, 0.0), Quat::IDENTITY);
+        asm.ajouter(cuire(cm, corps));
+        let prop = Composant::Propulseur { profil: Profil::P1, variante: **v, taille: 1.7 };
+        if v.axial() {
+            // En bout de corps, par l'écoutille arrière.
+            let arriere = corps
+                .ports()
+                .into_iter()
+                .find(|p| p.genre == GenrePort::ModuleAxial && p.repere.avant().z < 0.0);
+            if let Some(port) = arriere {
+                asm.ajouter(cuire(poser(cm.compose(port.repere), prop, 0), prop));
+            }
+        } else {
+            // Sur un flanc, comme un appendice.
+            let flanc = corps
+                .ports()
+                .into_iter()
+                .find(|p| p.genre == GenrePort::Surface && p.repere.avant().y > 0.9);
+            if let Some(port) = flanc {
+                asm.ajouter(cuire(poser(cm.compose(port.repere), prop, 0), prop));
+            }
+        }
+    }
+    match asm.terminer() {
+        EtatStation::Prete(s) => s,
+        EtatStation::Vide => unreachable!("variantes de propulsion"),
+    }
+}
+
 pub fn demo_radiateurs() -> Station {
     let mut asm = Assembleur::new();
     let tous = VarianteRadiateur::TOUS;

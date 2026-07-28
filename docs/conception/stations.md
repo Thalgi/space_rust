@@ -1,0 +1,1086 @@
+# Conception — Stations spatiales
+
+> Fusion de quatre anciens documents de conception, dans l'ordre de lecture
+> conseillé : le plan directeur (`stations_procedurales.md`), les fondations
+> transverses (`stations_fondations.md`), le raccordement ports↔assemblage
+> (`stations_raccordement.md`), et la feuille de route des classes de station
+> (`classes_stations.md`). Suivi/passation :
+> [`docs/suivi/stations.md`](../suivi/stations.md).
+
+---
+
+## Partie A — Plan directeur : briques à variantes pour stations procédurales
+
+
+Document de travail. **But immédiat** : constituer un *bon lot de variantes* pour
+chaque type de brique (structure, habitat, nœud, panneau solaire, radiateur,
+antenne/parabole, appendices), afin que des stations type ISS générées
+procéduralement aient de la **variété visuelle** tout en restant low-poly,
+réalistes et esthétiques.
+
+**But final** : un générateur `Station::generer(seed, params)` qui assemble ces
+variantes selon une grammaire (voir §5).
+
+---
+
+### 0. État (2026-07-28)
+
+Le **modèle de ports** (Étape 1) est en place et testé — voir la Partie C
+ci-dessous. Composants déjà implémentés dans `src/vaisseau/composant.rs`
+(enum `Composant`) :
+
+- `ModuleAxial` — cylindre pressurisé (collerettes de docking + **bague
+  d'accostage** alu au bout) en 7 variantes d'habitat : `Standard`, `Dore`,
+  `Hublots`, `Labo`, `Gonflable`, `Coupole`, `Sas` (écoutille EVA, type Quest) ;
+- `Noeud` — hub sphérique multi-ports, 4 dispositions : `Quatre` (croix plane),
+  `Six` (croix 3D), `T` (plan XZ), `Tetra` (tétraèdre) ;
+- `PanneauSolaire` — 5 variantes : `RigideUS`, `RusseBleu`, `RollOut`,
+  `Futuriste`, `Hexagonal` (tuiles hexagonales espacées, en maillage) ;
+- `Treillis` — poutre-ossature, 2 styles (`Carre`, `Triangulaire`) × gabarits
+  (profil), **avec ports hôtes `Surface`** répartis sur la longueur ;
+- `Radiateur` — 8 variantes : `PanneauSimple`, `AccordeonATCS`, `PivotantTRRJ`,
+  `Caloducs`, `Deroulable`, `Corps` (6 technos réelles) + `Gouttelettes` (LDR,
+  exotique) + `Voile` (grande voile radiante à l'échelle vaisseau, type ISV) ;
+- `Antenne` — 6 variantes : `ParaboleGG`, `ParaboleOffset`, `Cornets`, `Fouet`,
+  `ReseauPhase`, `Helice` ;
+- `Adaptateur` — tronc de cône à **deux écoutilles axiales de profils
+  différents** : sert à la fois de **nez de docking** (PMA/IDA) et
+  d'**adaptateur de profil** (P1↔P2).
+
+**Ajouts 2026-07-23 (briques classe C — ISV).** Depuis, `ModuleAxial` compte
+**10 variantes** (ajout de `GrandGonflable`, `Serre`, `Coeur` étagé). Nouvelles
+briques dans `composant.rs` :
+
+- `Charpente` — treillis **courbe à section variable** (P3 base → P1 flèche),
+  option `aiguille` (anneau hexagonal en treillis au pied) ; épine de l'ISV.
+- `RadiateurMega` — grande aile **en arête de poisson** (boom + ailettes), échelle
+  mégastructure ; les voiles radiateurs de l'ISV.
+- `Motrice`, `BlocMoteur` — nacelle/bloc moteur (caisse collecteur + rangée
+  d'habitats), base de la partie propulsion.
+- `Reservoir` — cuve **sphérique** à tuiles, tenue par une **cage tétraédrique**
+  de 4 barres ; réservoirs de carburant.
+- `Coiffe` — capuchon de nez de module, 3 formes (`Bombee` demi-dôme fermé,
+  `Hexagonale` à face plate, `Amarrage` adaptateur d'accostage) ; posée sur
+  l'écoutille axiale d'un module (à ras du corps).
+- **Bloc propulsion antimatière**, deux briques chaînées : `ReacteurAntimatiere`
+  (cuve sombre + 4 bobines EM en cryostat + tuyauterie + injecteur & pièges à
+  antiprotons) puis `MoteurAntimatiere` (tuyère : **buse** cylindrique + **cage
+  de 2 cercles ouverts sur 4 tiges** ancrées à la buse, cœur d'annihilation).
+
+Nouvelles **vues Briques** (touche **D**) : réservoir carburant, moteur
+antimatière (tuyère + réacteur assemblés), coiffes de modules (3 formes).
+Assemblages complets : `preset_isv` et `preset_isv_moteur` portent le bloc
+propulsion ISV via `poser_bloc_moteur(.., propulseur)`. **Prochain chantier :
+stockages de carburant.**
+
+**Montage factorisé** : tous les appendices (panneau, radiateur, antenne) se
+montent par le **même genre générique `Surface`** ; un port hôte `Surface` en
+accepte donc n'importe lequel, le `profil` gérant la taille. Les genres
+`MontageAile`/`MontageRadiateur` ont été supprimés. **Ports hôtes `Surface`
+partout** : sur le treillis (paires ±X), sur le **module** (±X, ±Y radiaux) et
+sur le **nœud** (faces principales libres) — stations type Mir possibles.
+
+**Constructeur `Chantier`** (`src/vaisseau/chantier.rs`) — le fondement du
+générateur : il suit les **ports hôtes libres**. `racine(comp)`, puis
+`poser(hote_idx, comp, montage_idx)` qui vérifie compatibilité + budget +
+**anti-collision** (sphères englobantes géométriques, hôte direct exempté), le
+port consommé et les ports de l'enfant libérés. `compatibles()` liste où poser.
+
+**Générateur** `generer(&ParamsStation)` (`src/vaisseau/generateur.rs`) : RNG
+déterministe (splitmix64), `Style` (Historique/Russe/Futuriste), `Ossature`
+(Iss/Mir, ou tirée à la graine), grammaire par-dessus le `Chantier` (ossature →
+armatures en treillis → habillage par axe : panneaux ±X, radiateurs ±Y, antennes
+±Z). `generateur.rs` porte aussi tous les **presets** (`preset_iss`,
+`preset_mir`, `preset_tiangong`, `preset_comsat`, `preset_sonde`,
+`preset_anneau`, `preset_isv`, `preset_isv_moteur`) et les **vitrines de
+briques** (`demo_*`) : les anciens fichiers un-vaisseau-par-fichier
+(`iss.rs`, `tiangong.rs`, `comsat.rs`, `sonde.rs`, `voyager.rs`, `telescope.rs`,
+`gps.rs`, `cubesat.rs`, `navette.rs`, `atterrisseur.rs`, `futur.rs`,
+`station.rs`) ont été **supprimés** : plus aucune géométrie codée en dur en
+dehors du vocabulaire composants/ports — chaque preset n'est plus qu'un
+assemblage écrit avec les mêmes helpers que le générateur.
+
+**Menu** (`ecran/accueil.rs`) : deux blocs de boutons, « Astres & galeries » et
+« Stations & mégastructures ». Ce second bloc route vers quatre entrées qui
+partagent la même vue (`ecran/station.rs`, enum `Categorie`) mais cyclent
+chacune leurs **propres** items à la touche **D** : `Briques` (19 vitrines de
+composants), `PetitesStations` (ISS / Mir / Tiangong / comsat / sonde),
+`Generateur` (1 item, réglable par G/S/1-4/O), `Megastructures` (anneau / ISV
+charpente+radiateurs / ISV radiateur+bloc moteur). Touches debug/rendu
+communes : **P** gizmos de ports, **N** numéros de pièce (index d'assemblage
+projeté à l'écran — sert à désigner une pièce à corriger), **X** filtre pixel,
+**M** bascule maillage cuit / rendu immédiat.
+
+**Sortie de géométrie abstraite** (`src/vaisseau/peintre.rs` +
+`src/vaisseau/maillage.rs`, nouveau) : toutes les briques de dessin
+(`pieces.rs`, `composant.rs`) sont **génériques sur un trait `Peintre`**
+(`fn treillis<P: Peintre>(p: &mut P, ..)`,
+`Composant::dessiner<P: Peintre>(&self, p: &mut P)`) plutôt que d'appeler
+macroquad en dur — un seul jeu de fonctions de forme, deux sorties :
+`peintre::Immediat` (appels macroquad directs, comportement historique) et
+`maillage::Batisseur` (accumulation sommets/indices). La vue station **cuit**
+la station courante une fois (`MaillageStation::cuire`, touche **M** pour
+comparer aux deux rendus) : un treillis ISS complet, dessiné en immédiat,
+pousse près d'un millier de `push_model_matrix` (un draw call par primitive) ;
+cuit, il tient en quelques `draw_mesh` (découpés en lots de
+≤ 1600 sommets / 2400 indices, la limite du batcher macroquad).
+`Station::cout_total()` (somme de `Composant::cout()`) donne la mesure de
+complexité affichée à l'écran à côté du nombre de lots/sommets/triangles.
+
+**Couche rendu** (`src/vaisseau/eclairage.rs` + `src/shaders/station.*.glsl`) :
+un material unique ombre **toutes** les primitives macroquad via des normales de
+facette calculées en **dérivées écran** (lumière clé + contre-jour + spéculaire
+alu) — aucune normale requise dans les sommets, aucune géométrie modifiée ;
+usage `eclairage::avec(cam_pos, || …)`. Le **filtre pixel** (`src/ecran/pixel.rs`,
+`FiltrePixel`) rend la station dans une cible basse résolution en Nearest, avec
+le fond stellaire net dessous. Habillage de coque (`composant.rs`) : coutures de
+panneaux, bandes **MLI** sur le module doré, **bagues d'accostage** alu au bout
+des collerettes (modules, nœuds, adaptateurs).
+
+`preset_iss()` est une **reproduction ISS assemblée à la main** — inventaire
+réel, fusions, chevauchements et audit dans le document dédié
+[`suivi/stations.md`](../suivi/stations.md) Partie B. Topologie : poutre déportée au **zénith
+par un boom Z1** (elle ne traverse plus le cœur), segment **US** aft
+(Destiny→Harmony + Columbus/Kibō + nez PMA/IDA) avec grappe Tranquility (Cupola
+nadir, BEAM, PMM), segment **russe** fore (Zarya→Zvezda + arrays + nœud MRM),
+Sas Quest et radiateurs nadir.
+
+`preset_mir()` reproduit **Mir en configuration finale**, d'après le schéma
+d'assemblage et les cotes publiées (fonction `cote(m)` : les longueurs du code
+sont les cotes réelles à l'échelle). Cœur DOS-7 (13,13 m) ; **nœud sphérique à
+5 ports** à l'avant (1 axial + **4 radiaux** → la « croix ») ; **Kvant-1 à
+l'arrière du cœur** (et non au nœud), tonneau court de 5,80 m ; module
+d'amarrage navette (Ø 2,20 m) au bout de Kristall ; Soyouz-TM et Progress-M
+amarrés aux deux ports axiaux.
+
+Trois détails d'ailes solaires, qui portent beaucoup de la silhouette :
+**Kristall et Priroda n'en ont aucune** en configuration finale (celles de
+Kristall ont été transférées sur Kvant-1, Priroda tournait sur batteries), et
+**Spektr en porte quatre** (deux paires croisées). Les ailes font ~10,6 × 3,9 m,
+soit presque la longueur d'un module.
+
+`preset_tiangong()` reproduit la **configuration en T** : cœur Tianhe, nœud avant
+dont deux ports **radiaux opposés** portent Wentian et Mengtian, plus un port
+axial et un port **nadir** (Shenzhou) ; cargo Tianzhou à l'arrière. Les ailes des
+laboratoires sont volontairement bien plus grandes que celles du cœur (27 m
+contre 12,6 m en vrai) — c'est une part importante de la silhouette.
+
+**Docking par direction monde** : les nœuds **basculent** (demi-tour) à
+l'accouplement — viser « le port −Z » ne pointe donc *pas* vers −Z monde, ce qui
+repliait les chaînes sur elles-mêmes (Destiny et le module avant au même point,
+Harmony sur le FGB). Le preset docke via `porter_vers(hote, dir_monde, …)`, qui
+choisit le port dont l'**avant monde** vise la direction voulue. À réutiliser
+dans le générateur.
+
+**Manques du générateur pour atteindre la fidélité ISS** (constatés en comparant
+au preset) :
+- **topologie décalée** : poutre transverse portée par un **boom** (type Z1) au
+  lieu d'une épine — fait dans le preset, pas encore dans le générateur ;
+- **attache mi-poutre** : le treillis n'a de ports qu'aux bouts ; impossible d'y
+  accrocher un module en son *milieu* ;
+- **ports `Surface` ±Y de poutre** : ils n'existent que sur ±X_local, d'où des
+  radiateurs de poutre fore/aft au lieu de nadir ;
+- **zonage des appendices** : arrays aux extrémités, radiateurs inboard — règle à
+  porter dans le générateur ;
+- **docking par direction monde** (`porter_vers`) et **symétrie bâbord/tribord
+  structurée** (le générateur reste stochastique).
+
+Reste (détaillé aux §4–5) : combler ces manques ; composants optionnels
+(appendices dockés Soyouz/cargo, styles de nœud/treillis) ; atelier à deux axes ;
+styles/palettes.
+
+---
+
+### 1. Rappel : ce qui existe déjà
+
+- Briques factorisées dans `src/vaisseau/pieces.rs` : `treillis`, `module`,
+  `pale_solaire`, `paire_ailes`, `radiateur` (paramétrées, orientables).
+- Primitives orientées dans `mod.rs` : `cylindre`, `cone`, `parabole`, `voile`,
+  `panneau`.
+- Atelier de visualisation : catégorie `Briques` de `ecran/station.rs` (menu
+  accueil « BRIQUES - COMPOSANTS »), touche **D** pour changer de brique.
+  (Les anciens `ecran/briques.rs`/`ecran/vaisseaux.rs` ne sont plus référencés
+  par `ecran/mod.rs` — supplantés par cette vue unifiée.)
+- ISS de référence reconstruite à partir de ces briques (calibrage).
+
+Il manque : **plusieurs variantes par type**, et un moyen de les parcourir.
+
+---
+
+### 2. Modèle de variante (à implémenter en premier)
+
+Chaque type de brique devient un **enum de variantes** + des **paramètres
+continus**. Une brique concrète = `(Type, Variante, Params, Palette)`.
+
+```rust
+// Exemple pour les panneaux solaires.
+enum VariantePanneau {
+    RigideUS,     // ambre, 2 lés rigides (P4/P6…)
+    RusseBleu,    // bleu, plus court
+    RollOut,      // iROSA, étroit et foncé, posé sur un rigide
+    Futuriste,    // cyan
+}
+
+struct ParamsPanneau { longueur: f32, largeur: f32, cellules: usize, ecart: f32 }
+```
+
+Règle : **une seule fonction de dessin par type**, qui `match` sur la variante.
+Les variantes partagent le maximum de code (les lés, le cadre, les nervures
+restent factorisés).
+
+---
+
+### 3. Points d'accroche (le cœur de l'accouplement)
+
+> **État : implémenté** dans `src/vaisseau/port.rs` (`Repere`, `Port`,
+> `GenrePort`, `accoupler`), couvert par 13 tests (`cargo test port`). Les 5 cas
+> limites — coïncidence des positions, opposition des avants, verrouillage du
+> roulis, robustesse en chaîne, garde-fou de compatibilité — sont validés.
+> Reste à poser le **trait `Composant`** (`ports()` + `dessiner()`, Étape 2).
+> Écart avec le brouillon ci-dessous : le champ `diametre` a été remplacé par un
+> **`profil: Profil`** (enum discret P0..P3, cf. `unites.rs`), plus sûr qu'un
+> flottant pour le « snap » et la compatibilité.
+
+Idée retenue : **chaque composant expose des points d'accroche** (ports)
+orientés. Un composant s'assemble en « clipsant » un de ses ports sur un port
+libre d'un composant déjà posé. C'est le modèle d'attache par nœuds (façon
+Kerbal Space Program) — il rend triviales les stations qui se ramifient (nœuds,
+modules radiaux, panneaux le long d'une poutre) et garantit des jonctions
+propres, sans positions codées en dur.
+
+##### 3.1 Ce qu'est un port
+
+Un port n'est **pas un simple point** : c'est un **repère orienté** local au
+composant.
+
+- `pos` : où est le port sur le composant.
+- `direction` : le sens d'accouplement **sortant** (vers l'extérieur). Deux
+  ports s'apparient quand leurs directions sont **opposées** (face à face).
+- `haut` : référence de roulis, pour un accouplement totalement contraint (sinon
+  ambiguïté de rotation autour de l'axe). On peut aussi laisser un roulis
+  aléatoire/paramétré pour varier.
+- `genre` : type de connexion (compatibilité, voir §3.3).
+- `profil` : taille nominale discrète (`P0..P3`, cf. `unites.rs`) — évite
+  d'accoupler un module de 4 m sur un port de 0,5 m, et sert au « snap ». (Choisi
+  plutôt qu'un `diametre: f32` : la compatibilité devient une égalité d'enum,
+  sans cas limite numérique.)
+
+```rust
+// Tel qu'implémenté dans src/vaisseau/port.rs :
+struct Repere { pos: Vec3, rot: Quat } // avant = rot*Z, haut = rot*Y
+
+enum GenrePort {
+    ModuleAxial,   // hatch/CBM en bout de module
+    ModuleRadial,  // face d'un nœud
+    PoutreBout,    // extrémité de treillis
+    Surface,       // montage d'appendice GÉNÉRIQUE : panneau, radiateur,
+                   // antenne, capteur (factorisé — un port hôte les accepte tous)
+}
+
+struct Port { repere: Repere, genre: GenrePort, profil: Profil } // profil P0..P3
+
+// À poser en Étape 2 :
+trait Composant {
+    fn ports(&self) -> Vec<Port>; // dans le repère local
+    fn dessiner(&self);           // dans le repère local
+}
+```
+
+##### 3.2 Port de montage vs ports hôtes
+
+Un composant a **un port de « montage »** (celui par lequel il se rattache à son
+parent) et **0..n ports « hôtes »** libres (où viennent ses enfants). En
+pratique c'est la même liste : on marque simplement le port consommé comme
+occupé. Un composant peut donc être relié à **1 ou n structures** — exactement
+ce qu'on veut.
+
+##### 3.3 Compatibilité
+
+On n'accouple que des ports de **genres compatibles** (table de compatibilité) :
+un appendice (panneau/radiateur/antenne) se monte sur `Surface`, un module sur
+`ModuleAxial`/`Radial`, etc.
+Le générateur ne pioche que dans les ports libres compatibles.
+
+##### 3.4 Calcul d'accouplement
+
+Attacher un enfant (port de montage `pm`, local) sur un port hôte `ph` déjà en
+coordonnées monde :
+
+```rust
+// On veut : enfant.avant == -hote.avant, et les positions des ports coïncident.
+fn accoupler(ph: Repere, pm: Repere) -> Repere {
+    let face_a_face = ph.rot * Quat::from_rotation_y(PI); // demi-tour autour du "haut"
+    let rot = face_a_face * pm.rot.inverse();
+    let pos = ph.pos - rot * pm.pos;
+    Repere { pos, rot } // transformée monde de l'enfant
+}
+```
+
+Le rendu applique ensuite ce `Repere` via `push_model_matrix` avant d'appeler
+`dessiner()`. (Détail : le demi-tour se fait autour de l'axe *haut* pour que les
+« avant » s'opposent tout en gardant les *haut* alignés ; le roulis fin se règle
+avec la référence `haut` du port.)
+
+##### 3.5 Deux familles d'hôtes
+
+- **Ports discrets** : hatch de module, faces d'un nœud → liste finie. *(à faire
+  en premier)*
+- **Rails continus** : bord d'une poutre où l'on peut monter panneaux et
+  radiateurs à **n'importe quel décalage** → un « rail » qui génère des ports à
+  la demande. *(étape ultérieure)*
+
+##### 3.6 Symétrie
+
+Marquer les ports en **paires miroir** (ex. +Y / −Y d'un nœud, gauche/droite
+d'une poutre) : le générateur y place des enfants **appariés**, indispensable au
+look ISS. Un `groupe_symetrie: Option<u8>` sur le port suffit.
+
+##### 3.7 Coût / garde-fous
+
+- Plus de machinerie en amont qu'un placement codé en dur — mais c'est justement
+  ce qui débloque ramification + variété (le but).
+- V1 volontairement minimale : `Repere` + `genre` + `occupe`. Le reste
+  (diamètre, symétrie, rails) s'ajoute ensuite.
+- Les ports ne suffisent pas contre les **chevauchements à distance** (deux
+  enfants voisins qui se croisent) : garder une vérification de boîtes
+  englobantes en filet de sécurité (§7).
+
+---
+
+### 4. Le lot de variantes visé (cible : 3–5 par type)
+
+##### 3.1 Structure (treillis / poutre)
+
+- [x] `Carre` — 4 longerons + cadres/diagonales (barres en cylindres, du volume).
+- [x] `Triangulaire` — 3 longerons (plus léger, look « sonde »).
+- [ ] `Caisson` — tube/box plein, faces pleines.
+- [ ] `AvecRails` — poutre + rail du transporteur mobile (détail ISS).
+- Axes : longueur, gabarit (via `profil`) ; ports hôtes `Surface` répartis.
+
+##### 3.2 Habitat (module)
+
+- [x] `Standard` — blanc simple.
+- [x] `Dore` — teinte or (segment russe).
+- [x] `Hublots` — rangée de hublots + mains courantes EVA.
+- [x] `Labo` — grande fenêtre + rack externe (type Destiny).
+- [x] `Gonflable` — profil bombé (type BEAM).
+- [x] `Coupole` — coupole vitrée à un bout (type Cupola).
+- Implémenté comme champ `variante` de `ModuleAxial` (couleur + `details()`).
+  Axes : `profil`, `longueur`.
+
+##### 3.3 Nœud d'amarrage
+
+- [x] `Spherique` — multi-ports (type Mir) : dispositions `Quatre`, `Six`, `T`,
+  `Tetra` ; sphère gonflée, bras cylindriques ancrés + collerette par sortie.
+- [ ] `Cubique` — nœud US (Unity/Harmony).
+- [ ] `AvecCupola` — coupole facettée orientable.
+- Axes : disposition/nombre de ports, profil.
+
+##### 3.4 Panneau solaire
+
+- [x] `RigideUS` — ambre, 2 lés rigides.
+- [x] `RusseBleu` — bleu, plus court.
+- [x] `RollOut` — iROSA, bande étroite plus foncée.
+- [x] `Futuriste` — cyan, plus large.
+- [x] `Hexagonal` — tuiles hexagonales espacées (maillage).
+- Axes : longueur, largeur ; couleur/proportions portées par la variante (`style()`).
+- Reste : la **paire d'ailes** en données (symétrie miroir sur un port hôte
+  `Surface` — le treillis en expose déjà).
+
+##### 3.5 Radiateur
+
+- [x] `PanneauSimple` — panneau plat rainuré (body-mounted).
+- [x] `AccordeonATCS` — corrugation en zigzag (bank ISS).
+- [x] `PivotantTRRJ` — gros joint rotatif visible.
+- [x] `Caloducs` — tubes cuivre apparents (loop heat pipe).
+- [x] `Deroulable` — gros tambour + bande étroite dorée (roll-out).
+- [x] `Corps` — large et court, sombre (body-mounted).
+- [x] `Gouttelettes` — **exotique** : rideau de gouttelettes (LDR).
+- [x] `Voile` — grande voile radiante à l'échelle vaisseau (quille + nervures,
+  teinte chaude), distincte de `RadiateurMega` (celle-ci reste montée en port
+  `Surface` standard, pas un composant autonome).
+- Chaque variante porte sa couleur/proportions/silhouette. Reste : ports hôtes
+  `Surface` (le treillis en expose déjà — panneau/radiateur/antenne s'y clipsent).
+
+##### 3.6 Antenne / Parabole
+
+- [x] `ParaboleGG` — grand gain, orientée +Z.
+- [x] `ParaboleOffset` — parabole à alimentation décalée, inclinée.
+- [x] `Fouet` — fouets omni croisés.
+- [x] `ReseauPhase` — plaque plate quadrillée (réseau phasé).
+- [x] `Cornets` — grappe de cornets (horns).
+- [x] `Helice` — antenne hélicoïdale.
+- Monté par un port `Surface` ; axe : `taille`.
+
+##### 3.7 Appendices (vaisseaux amarrés)
+
+- [ ] `Soyouz` — vert, petits panneaux.
+- [ ] `CargoUS` — Dragon/Cygnus.
+- Axes : taille, couleur.
+
+---
+
+### 5. Étapes claires
+
+**Étape 1 — Modèle de points d'accroche** ✅ *fait*
+`Repere`, `Port`, `GenrePort` et `accoupler` posés dans `src/vaisseau/port.rs`,
+validés par 13 tests (5 cas limites). Reste, avant l'Étape 2, à ajouter le trait
+`Composant` (`ports()` + `dessiner()`) et à valider sur deux modules bout à bout
+puis un nœud + modules radiaux.
+
+**Étape 2 — Modèle de variante**
+Transformer chaque brique de `pieces.rs` en `match` sur un enum de variante +
+struct de params, et faire exposer ses `ports()`. Commencer par un seul type
+(panneau solaire) de bout en bout.
+
+**Étape 3 — Atelier à deux axes**
+Étendre `ecran/briques.rs` : **haut/bas = type de brique**, **gauche/droite =
+variante**. Afficher « TYPE — Variante (i/n) » en bas à gauche, et
+(option) visualiser les ports (petites flèches). Outil de réglage au cas par cas.
+*Réalisé autrement* : pas d'atelier à deux axes séparé — `ecran/briques.rs` n'est
+plus référencé (voir §0). La catégorie `Briques` de `ecran/station.rs` couvre le
+même besoin en une seule liste de 19 vitrines cyclée par **D**, une par type/
+variante notable, avec les gizmos de ports (**P**) déjà en commun avec le reste
+de la vue station.
+
+**Étape 4 — Remplir le lot**
+Implémenter les variantes listées au §4, une par une, en les vérifiant dans
+l'atelier. Objectif : 3–5 variantes par type.
+
+**Étape 5 — Palettes / styles**
+Regrouper les couleurs en `Style` (Historique argent+ambre, Russe or+bleu,
+Futuriste métal+cyan). Une variante peut être compatible avec un sous-ensemble
+de styles.
+
+**Étape 6 — Station en données**
+Introduire `Piece { composant, variante, params, style }` reliées par ports, et
+l'assemblage en `Vec<Piece>` (transformées calculées par `accoupler`). Réécrire
+Mir / ISS / Tiangong comme **données** pour valider que le lot couvre les cas
+réels.
+
+**Étape 7 — Générateur**
+`Station::generer(seed, params)` : grammaire (§6) qui tire des variantes au
+hasard (RNG graine) dans le style choisi, en clipsant sur les ports libres
+compatibles, avec les contraintes d'espacement.
+
+**Étape 8 — Cohérence & collisions**
+Rails continus (§3.5), boîtes englobantes par pièce, espacement mini entre
+groupes de panneaux, symétrie miroir/radiale.
+
+---
+
+### 6. Grammaire d'assemblage (pour l'étape 7)
+
+1. **Épine dorsale** : poutre (type ISS) ou enfilade de modules (type Mir), posée
+   en clipsant module sur module par leurs ports axiaux.
+2. **Nœuds** tous les N modules ; 0–4 modules radiaux tirés sur les ports
+   radiaux libres (symétrie via les paires miroir).
+3. **Énergie** : paires d'ailes sur les ports hôtes `Surface` symétriques, `ecart`
+   inter-paire garanti (> largeur de pale) pour ne jamais coller.
+4. **Thermique** : un radiateur par surface X de panneaux.
+5. **Appendices** : antennes/paraboles sur les ports `Surface` libres ; vaisseaux
+   sur les ports axiaux terminaux.
+6. **Style** : toutes les variantes tirées dans la palette du style choisi.
+
+Paramètres exposés : `seed`, `taille`, `nb_paires_ailes`, `symetrie`, `style`,
+`densite_details`.
+
+---
+
+### 7. Garde-fous esthétiques (low-poly réaliste)
+
+- Cellules solaires : couture centrale + nervures ; ambre US / bleu russe.
+- Treillis réellement ajouré (longerons + diagonales).
+- Modules : anneaux de jonction sombres pour lire les raccords.
+- Radiateurs franchement blancs, distincts des panneaux.
+- Jamais de sphère pour un élément orienté (paraboles = cônes orientés).
+- Variété *dans le style* : deux stations d'un même style doivent différer par
+  le choix et le placement des variantes, pas par des couleurs incohérentes.
+
+---
+
+### Sources
+
+- [Integrated Truss Structure — NASA](https://www.nasa.gov/international-space-station/integrated-truss-structure/)
+- [Integrated Truss Structure — Wikipedia](https://en.wikipedia.org/wiki/Integrated_Truss_Structure)
+- [Electrical system of the International Space Station — Wikipedia](https://en.wikipedia.org/wiki/Electrical_system_of_the_International_Space_Station)
+
+---
+
+## Partie B — Fondations transverses (état, budget, unités, symétrie)
+
+
+Compagnon de la Partie A ci-dessus. Ce document
+ne réécrit pas le modèle de ports (déjà validé) : il pose les **3 garde-fous
+transverses** demandés — modèle d'état (1), plafond de coût flottant (7),
+standard d'unités (8) — plus la synthèse de la phase de recherche. Fil rouge :
+**KISS et coût de rendu maîtrisé**.
+
+---
+
+### 0. Ce que dit la recherche
+
+**Kerbal Space Program**
+- Chaque pièce déclare des *attach nodes* nommés (`node_stack_top`,
+  `node_stack_bottom`, `node_attach`) = **position + orientation**. C'est
+  exactement notre `Port` (§3 du doc existant). La recherche **valide** notre
+  choix, rien à changer.
+- Symétrie = **miroir** + **radiale à multiplicateur N** ; elle se propage dans
+  l'arbre. Assemblage en **arbre, sans boucle**.
+- Diamètres **normalisés** en famille discrète (0,625 / 1,25 / 2,5 / 3,75 / 5 m).
+  Les pièces ne s'emboîtent proprement que par **profils compatibles**. → fonde
+  le point 8.
+- Le **coût = nombre de pièces** (physique par pièce, chaque frame, mono-thread →
+  ça rame au-delà de ~200 pièces). Chez nous le coût n'est pas la physique mais
+  les **draw calls / primitives par frame** (macroquad en mode immédiat). **Même
+  leçon** : plafonner le poids de pièces. → fonde le point 7.
+
+**Générateurs procéduraux (grammaires de formes)**
+- Axiome + règles de réécriture + opérations de symétrie/répétition. C'est déjà
+  notre grammaire (§6 du doc existant).
+
+**Conclusion** : l'architecture est la bonne. Ce qui manque, ce sont les trois
+fondations ci-dessous.
+
+---
+
+### 1. Modèle d'état (point 1) — le plus léger possible
+
+Problème : ne **jamais** dessiner une station à moitié construite (rendu tronqué
+ou incohérent).
+
+Principe KISS : **séparer génération et rendu**. On ne dessine QUE des stations
+immuables et terminées. On n'atteint jamais un état partiel *observable*, car :
+- la génération écrit dans un `Vec<Piece>` **local** ;
+- on ne publie la station (move dans le slot de rendu) **qu'une fois complète**.
+
+L'état se réduit à :
+
+```rust
+enum EtatStation {
+    Vide,            // rien à dessiner
+    Prete(Station),  // immuable — la seule qu'on dessine
+}
+```
+
+Le rendu fait un `match` ; seul `Prete` dessine. **Coût par frame : zéro** (un
+enum, aucune machinerie, aucune vérification runtime).
+
+Invariant tenu *par construction* (pas par surveillance) :
+`Station::generer(seed, params) -> Station` renvoie l'objet **fini**,
+transformées déjà cuites, et `Station` **n'est jamais muté** après publication.
+Immuabilité = cohérence garantie.
+
+**Croissance future uniquement si besoin** : si un jour la génération passe en
+tâche de fond (thread), ajouter une 3e variante `Generation { seed }` qui **ne se
+dessine pas**. Tant que la génération reste synchrone et sous la milliseconde,
+elle est atomique → `Vide | Prete` suffisent. Ne pas sur-concevoir maintenant.
+
+---
+
+### 2. Standard d'unités (point 8)
+
+But : chaque composant dimensionné dans une **unité commune**, proportions
+cohérentes, emboîtement garanti — sans réglage au cas par cas.
+
+##### 2.1 Unité de base
+Une seule constante :
+
+```rust
+const U: f32 = 1.0; // rayon du module « standard » = 1 U
+```
+
+**Toute** dimension s'écrit `n * U`. Changer `U` rescale toute station d'un coup.
+
+##### 2.2 Profils (diamètres discrets, façon KSP)
+
+```rust
+enum Profil { P0, P1, P2, P3 } // rayons : 0.5U, 1U, 2U, 3U
+```
+
+- **P0** (0,5 U) : sondes, cubesats, appendices.
+- **P1** (1 U) : module habitat standard.
+- **P2** (2 U) : gros module / nœud.
+- **P3** (3 U) : cœur / épine dorsale.
+
+Deux ports ne s'accouplent que s'ils ont le **même profil** (`port.profil`
+précise le `diametre` du §3.1 existant). Compatibilité = **égalité d'enum** →
+test trivial, jonctions toujours propres, jamais de module de 4 m clipsé sur un
+port de 0,5 m.
+
+##### 2.3 Proportions dérivées
+Pour rester réaliste automatiquement, dériver les longueurs du diamètre plutôt
+que de les fixer en absolu :
+- longueur d'un module = **1,5 à 4 × diamètre** ;
+- panneau solaire : largeur ≈ diamètre du module porteur, longueur = k × largeur ;
+- treillis : demi-section = 0,5 à 1 × diamètre.
+
+**Règle** : un composant ne fixe jamais une taille absolue arbitraire ; il
+l'exprime en `U` ou relativement au **profil de son port**. Les proportions
+restent homogènes sans effort.
+
+---
+
+### 3. Plafond de coût flottant (point 7)
+
+But : borner la complexité d'une station pour protéger le budget de rendu, et
+servir au cadrage caméra / anti-collision.
+
+##### 3.1 Budget de coût (le principal)
+Chaque variante déclare un **coût de rendu approximatif** (poids ≈ nombre de
+primitives / lignes dessinées) :
+
+```rust
+fn cout(&self) -> f32
+```
+
+La génération part d'un budget et le dépense :
+
+```rust
+struct Budget { restant: f32 }
+// à chaque pièce ajoutée : restant -= piece.cout();
+// on arrête d'ajouter dès que restant <= 0.
+```
+
+**Pourquoi un float et pas un compteur de pièces** : les pièces n'ont pas le même
+coût (un segment de treillis nu ≪ une aile solaire nervurée). Le float pondère
+correctement → le plafond limite le **coût réel de rendu**, pas un nombre
+trompeur. C'est notre équivalent, pondéré, de la limite ~200 pièces de KSP.
+
+Le budget par défaut se calibre pour tenir le framerate sur la station la plus
+lourde ; il est exposé dans la grammaire (le paramètre `taille` du §6 existant se
+mappe sur un budget).
+
+##### 3.2 Rayon maximal (le secondaire)
+
+```rust
+struct Station { pieces: Vec<Piece>, rayon: f32 } // sphère englobante
+```
+
+Calculé **une fois** à la génération (distance max pièce ↔ centre). Sert à :
+cadrer la caméra (comme `demi_dim` pour les maquettes actuelles), rejeter un
+enfant qui dépasserait `rayon_max`, alimenter le filet anti-collision (§7 du doc
+existant).
+
+---
+
+### 4. Symétrie (point 4, validé)
+
+Reprendre KSP : **deux opérations seulement**.
+
+```rust
+enum Symetrie { Miroir, Radiale(u8) } // Radiale(n) = n copies autour de l'axe
+```
+
+Portée par les groupes de ports (`groupe_symetrie`, §3.6 existant). Le générateur
+place les enfants d'un groupe symétrique **en une passe**. Indispensable au look
+ISS (miroir gauche/droite des ailes) et aux nœuds type Mir (radiale).
+
+---
+
+### 5. Ordre d'implémentation
+
+Ces fondations s'insèrent **avant** les étapes 6–7 du doc existant :
+
+1. `U` + `Profil` + proportions (§2) — trivial, débloque tout le reste.
+2. `EtatStation = Vide | Prete` + `Station` immuable (§1).
+3. `cout()` par variante + `Budget` + `rayon` (§3).
+4. `Symetrie` (§4), au moment du générateur (étape 7 du doc existant).
+
+Reconstruire ISS / Mir **« en données »** (étape 6, point 5) : **plus tard**, une
+fois le lot de variantes rempli.
+
+---
+
+### Sources
+- [KSP — attachment nodes & symétrie (General Discussions)](https://steamcommunity.com/app/220200/discussions/0/1743358239843828618/)
+- [KSP — tailles de pièces / form factors (Steam)](https://steamcommunity.com/app/220200/discussions/0/364042703862870924/)
+- [KSP 2 — Size categories (modding wiki)](https://modding.kerbal.wiki/Size_Category)
+- [KSP — coût CPU par nombre de pièces (forum)](https://forum.kerbalspaceprogram.com/topic/163317-how-to-improve-fps-with-high-part-count-crafts/)
+- [SpaceshipGenerator — grammaire d'extrusion + symétrie (GitHub)](https://github.com/a1studmuffin/SpaceshipGenerator)
+
+---
+
+## Partie C — Raccordement ports ↔ assemblage (Étape 2)
+
+
+Troisième partie de ce document, à lire après la Partie A
+(plan directeur, modèle de ports) et la Partie B
+(état, budget, unités, symétrie). Il ne réexplique pas ces briques : il pose **le
+chaînon qui les relie** — le trait/enum `Composant`, l'évolution de `Piece`, et la
+« cuisson » des transformées. C'est l'**Étape 2** du plan directeur.
+
+Fil rouge inchangé : **KISS**, coût de rendu maîtrisé, invariants tenus *par
+construction* plutôt que surveillés.
+
+---
+
+### 0. État de départ (ce qui existe déjà)
+
+| Brique | Fichier | État |
+|---|---|---|
+| Ports : `Repere`, `Port`, `GenrePort`, `accoupler` | `src/vaisseau/port.rs` | ✅ 13 tests (5 cas limites) |
+| Unités : `U`, `Profil` P0–P3, `proportion` | `src/vaisseau/unites.rs` | ✅ |
+| État & immuabilité : `EtatStation`, `Assembleur`, `Station` | `src/vaisseau/assemblage.rs` | ✅ |
+| Budget & rayon englobant | `src/vaisseau/assemblage.rs` | ✅ |
+| Symétrie : `Miroir`, `Radiale(n)` → `Vec<Mat4>` | `src/vaisseau/symetrie.rs` | ✅ |
+| Briques de dessin (treillis, module, ailes, radiateur…) | `src/vaisseau/pieces.rs` | ✅ (fonctions libres, **pas** de ports) |
+
+**Manque, dans l'ordre du raccordement :** le `Composant`, une `Piece` qui porte une
+transformée cuite, la liaison `accoupler`/`Symetrie` → `Piece`, et un `cout()` par
+composant. Tout le reste (variantes riches, styles, générateur, atelier 2 axes) est
+**hors scope** de ce doc → Étapes 3+.
+
+---
+
+### 1. Décisions actées
+
+Quatre forks tranchés avant d'écrire une ligne :
+
+1. **Dispatch = enum `Composant` + `match`.** Pas de `Box<dyn>`. KISS, zéro
+   allocation, monomorphisé, cohérent avec `TypeEngin` déjà en place. Une seule
+   fonction de dessin et une seule d'exposition de ports par composant, qui
+   `match` sur la variante.
+
+2. **`Piece.transforme` est une `Mat4` cuite** (pas un `Repere`). Voir §2 pour
+   l'architecture à deux couches et l'argument.
+
+3. **Le miroir est natif** grâce à la couche `Mat4` : une réflexion (déterminant
+   −1) ne rentre pas dans un `Quat`, donc on n'essaie pas. `symetrie` continue de
+   renvoyer des `Mat4`, appliquées à la transformée cuite.
+
+4. **Premier composant validé de bout en bout = le module axial.** Deux modules
+   bout-à-bout par leurs ports axiaux : le cas minimal qui exerce
+   `accoupler` + `Composant` + `Piece` **sans** symétrie ni variantes riches.
+   (C'est le critère de validation de l'Étape 1 du plan directeur.) Le panneau
+   solaire (avec sa paire miroir) vient juste après, pour exercer la symétrie.
+
+##### 1 bis. Piège d'assemblage : ne pas chaîner par index de port
+
+`accoupler` met les ports **face à face**, ce qui impose un **demi-tour** à
+l'enfant. Conséquence : après montage, « le port −Z » d'un nœud ne pointe plus
+vers −Z **monde**. Chaîner en réutilisant des index fixes (`port 1`, `port 0`…)
+fait donc **replier la chaîne sur elle-même** — bug réellement rencontré sur
+`preset_iss` (deux modules au même point, un segment retombant sur l'autre).
+
+**Règle** : pour chaîner, viser une **direction monde**, pas un index. Cf.
+`porter_vers(hote, dir_monde, enfant, montage)` dans `generateur.rs` : il
+sélectionne le port dont l'**avant monde** maximise le produit scalaire avec la
+direction voulue (aft/fore/nadir/zénith/bâbord/tribord). Même principe pour les
+appendices avec `appendice_sur_module` (choix de la face par direction monde).
+
+---
+
+### 2. Architecture à deux couches (le cœur)
+
+L'assemblage et le rendu ne parlent pas le même langage géométrique, et c'est
+**voulu** :
+
+**Couche construction — `Repere` / `Quat`.**
+C'est là que vivent les ports. `accoupler(hote, montage)` et `Repere::compose`
+travaillent en rotation pure : composition exacte, aucune dérive au-delà de
+l'arrondi f32, déjà testé. Le chaînage d'un arbre de composants se fait
+entièrement ici. **Le miroir n'y est jamais appliqué.**
+
+**Couche cuite — `Mat4`.**
+Une fois la place d'un composant résolue en `Repere` monde, on la **cuit** en
+`Mat4` (`repere.to_mat4()`) et on la range dans une `Piece`. Le rendu fait
+`push_model_matrix(piece.transforme)` puis `composant.dessiner()`.
+
+##### Pourquoi `Mat4` cuite et pas `Repere` dans `Piece`
+
+Le seul argument qui trancherait vers `Repere` serait « un seul type partout ».
+Mais le **miroir le casse** : une symétrie Miroir est une réflexion de
+déterminant −1, impossible à encoder dans un `Quat`. Avec `Repere` dans `Piece`,
+une pièce miroir devient irreprésentable — il faudrait un `miroir: bool` qui, en
+plus, ne suffit pas (un miroir à travers un plan quelconque exige le plan), et ce
+cas spécial fuit dans le rendu, le rayon englobant et l'anti-collision.
+
+Une `Mat4` encode réflexion + rotation + translation dans un type uniforme. En
+prime : `symetrie::transformations` renvoie **déjà** des `Mat4`, et le renderer
+veut une `Mat4`. Une copie symétrique n'est alors qu'un produit :
+
+```
+transforme_copie_k = symetrie_k * repere_monde.to_mat4()
+```
+
+Coût : 64 o/pièce contre 28 — négligeable pour quelques centaines de pièces. On
+perd le re-chaînage depuis une pièce cuite, mais on n'en a pas besoin : **le
+chaînage est terminé avant la cuisson**. (KSP fait pareil : les pièces miroir
+sont de vraies copies chirales.)
+
+---
+
+### 3. Cible de types
+
+Esquisse (les noms/champs se figent en codant ; `params`/`style` restent **hors
+scope**, ajoutés aux Étapes 4–5) :
+
+```rust
+// src/vaisseau/composant.rs (nouveau)
+
+/// Un composant concret : ce qui sait exposer ses ports et se dessiner.
+/// Enum fermé, match — pas de trait objet.
+pub enum Composant {
+    ModuleAxial { profil: Profil, longueur: f32 },
+    // PanneauSolaire { .. }, Treillis { .. }, Noeud { .. } … à venir
+}
+
+impl Composant {
+    /// Ports dans le repère LOCAL du composant (montage + hôtes libres).
+    pub fn ports(&self) -> Vec<Port>;
+    /// Dessine dans le repère local (transformée déjà poussée par l'appelant).
+    pub fn dessiner(&self);
+    /// Coût de rendu ≈ nb de primitives/lignes (pondère le Budget, §3.1 fondations).
+    pub fn cout(&self) -> f32;
+    /// Rayon englobant local (pour la sphère de Station, remplace Piece.profil).
+    pub fn rayon_local(&self) -> f32;
+}
+```
+
+> **Mise à jour (implémentée depuis) :** `dessiner` a fini **générique sur un
+> trait `Peintre`** plutôt que sur une signature figée —
+> `pub fn dessiner<P: Peintre>(&self, p: &mut P)` — pour pouvoir, sans dupliquer
+> la géométrie, soit dessiner immédiatement (`peintre::Immediat`, comportement
+> historique) soit accumuler dans un maillage cuit (`maillage::Batisseur`). Le
+> raisonnement et les deux implémentations sont dans `src/vaisseau/peintre.rs`
+> et `src/vaisseau/maillage.rs` (voir la Partie A §0). Ça ne
+> change rien à l'esquisse ci-dessus côté ports/coût/rayon, seulement à la
+> forme de `dessiner`.
+
+`Piece` évolue de `{ position, profil, cout }` vers :
+
+```rust
+pub struct Piece {
+    pub transforme: Mat4,      // cuite (couche Mat4)
+    pub composant: Composant,  // porte cout() et rayon_local()
+}
+```
+
+- `Station::depuis_pieces` calcule le rayon via
+  `translation(transforme).length() + composant.rayon_local()` (au lieu de
+  `position.length() + profil.rayon()`).
+- `Budget` consomme `composant.cout()` au lieu d'un `f32` fourni à la main
+  (le champ `cout` brut de `Piece` disparaît).
+
+> **Note de compat :** cette évolution touche les tests existants de
+> `assemblage.rs` (ils construisent des `Piece::new(pos, profil, cout)`). Ils
+> seront réécrits en même temps — c'est attendu, pas une régression.
+
+---
+
+### 4. Sous-étapes ordonnées (chacune se valide seule)
+
+> **État (2026-07-16) : Étape 2 close (2a→2f faits).** Raccordement complet
+> validé : les composants s'assemblent par ports, se cuisent en `Mat4`, se
+> dessinent (écran « STATION », bouton du menu). `cargo test` couvre `composant`,
+> `assemblage` et `montage`. Premiers composants réels construits par-dessus :
+> `ModuleAxial`, `Noeud` (4 dispositions) et `PanneauSolaire` (5 variantes) — voir
+> la Partie A §0 pour la suite.
+>
+> **Affinage rendu (issu de la validation visuelle) :** `ModuleAxial` dessine son
+> corps en **cylindre lisse** (pas via `pieces::module`, dont les anneaux évasés
+> 1.06× créaient une large bande sombre au joint), gagne une **collerette de
+> docking** (col étroit dépassant à chaque bout ; le port se pose à son extrémité
+> → offset visible au joint), et des **embouts** qui coiffent chaque disque de
+> bout en **chevauchant** le corps — donc aucune face coplanaire, ce qui supprime
+> le z-fighting (cause du « halo » observé). Constantes de forme dans
+> `composant.rs` (`COL_*`, `EMBOUT_*`).
+
+**2a — Enum `Composant` minimal.** ✅ *fait*
+`composant.rs` avec la seule variante `ModuleAxial` : `ports()` (deux ports
+axiaux, avant opposés, sur ±Z aux deux bouts), `dessiner()` (réutilise
+`pieces::module`), `cout()`, `rayon_local()`.
+*Validation :* test que `ports()` renvoie 2 ports axiaux de profils cohérents et
+de `haut` bien orienté.
+
+**2b — `Piece` en `Mat4` + `Composant`.** ✅ *fait*
+Faire évoluer `Piece`, adapter `Station::depuis_pieces` (rayon via
+`rayon_local`), `Assembleur`, et réécrire les tests d'`assemblage.rs`.
+*Validation :* les 19 tests d'assemblage repassent au vert, adaptés au nouveau
+`Piece`.
+
+**2c — Cuisson d'un accouplement.** ✅ *fait*
+Fonction de glu : à partir du `Repere` monde d'un port hôte et du composant
+enfant + l'indice de son port de montage, produire la `Piece` enfant
+(`accoupler(...).to_mat4()`).
+*Validation :* **deux modules bout-à-bout** (le cas de la décision 4) — poser A à
+l'identité, cuire B sur le port axial libre de A, et vérifier en re-décodant les
+ports monde que les hatches **coïncident** et sont **face-à-face**.
+
+**2d — Symétrie cuite.** ✅ *fait*
+Appliquer `symetrie::transformations` à la transformée cuite d'un composant pour
+produire un groupe de `Piece`.
+*Validation :* un groupe `Miroir` produit 2 pièces, transformées de déterminants
+opposés (la réflexion est bien là) ; un `Radiale(4)` produit 4 pièces à 90°.
+
+**2e — Branchement rendu.** ✅ *fait*
+La vue (`ecran/…`) qui affiche une `Station`/`EtatStation` : `match doit_dessiner`,
+puis pour chaque `Piece` `push_model_matrix(transforme)` → `composant.dessiner()`.
+*Validation :* visuelle — deux modules bout-à-bout à l'écran, jonction propre.
+
+**2f (option, utile au debug) — Visualisation des ports.** ✅ *fait*
+`Station::dessiner_ports()` trace pour chaque port une bille + l'axe **avant**
+(orange) et **haut** (vert) ; touche **P** dans la vue STATION, dans toutes ses
+catégories (`ecran/station.rs`, enum `Categorie` — voir la Partie A
+§0). Chaque catégorie cycle ses propres items à la touche **D**.
+
+---
+
+### 5. Hors scope (rappel — Étapes 3+)
+
+- Modèle de **variante** riche (`params`, plusieurs formes par type) — Étape 2 du
+  plan directeur au sens « lot de variantes », déclenchée après ce raccordement.
+- **Palettes / styles** — Étape 5.
+- **Atelier 2 axes** (type/variante) — Étape 3.
+- **Générateur** `Station::generer(seed, params)` + grammaire — Étape 7.
+- **Rails continus**, anti-collision par boîtes englobantes — Étape 8.
+
+Ce doc s'arrête quand deux modules (puis une paire d'ailes miroir) s'assemblent
+par ports, se cuisent en `Mat4`, et se dessinent — la chaîne complète validée sur
+le cas minimal.
+
+---
+
+### 6. Limites & extensions futures (mégastructures)
+
+Ce modèle vise les stations **type ISS/Mir** : un assemblage de petits modules
+clipsés par ports, en **arbre sans boucle**. Les habitats rotatifs — **tore de
+Stanford**, **cylindre d'O'Neill** — sont un **chantier séparé**, pas produit
+automatiquement par ce générateur. Deux raisons de fond :
+
+1. **Grande coque courbe ≠ assemblage de briques.** Un tore ou un long cylindre
+   est fondamentalement **une seule primitive courbe**, pas une accrétion de
+   modules. Nos briques (`pieces.rs`) ne savent pas dessiner une section de tore.
+
+2. **Un anneau est une boucle ; l'assemblage est un arbre.** Un anneau se referme
+   sur lui-même — le modèle acyclique ne garantit pas la fermeture. Le plus KISS
+   est de dessiner l'anneau **en une primitive paramétrique**, pas de l'assembler
+   par segments.
+
+**Ce qui resterait réutilisable** le jour où on s'y attaque : toutes les
+fondations (transformée `Mat4` — qui encode aussi la rotation d'habitat —,
+budget, `EtatStation`, immuabilité), et surtout le **squelette moyeu + rayons**
+(un nœud central + poutres en `Radiale(n)`) qui, lui, colle parfaitement au
+modèle de ports. Seul l'anneau/cylindre est l'intrus.
+
+**Ce qu'il faudrait ajouter** (hors de ce doc) : des variantes de `Composant`
+**primitives paramétriques** — `Tore { rayon_majeur, rayon_mineur, … }`,
+`CylindreOneill { longueur, rayon, … }` — dessinant leur coque courbe (maillage
+généré) et exposant des ports pour le moyeu et les rayons ; et, si l'on veut un
+anneau *assemblé*, un mécanisme de **fermeture de boucle**. Rien n'interdit ces
+mégastructures ; elles demandent simplement ces primitives dédiées en plus.
+
+---
+
+## Partie D — Classes de stations : de l'ISS à l'O'Neill
+
+
+Feuille de route d'architecture. But : garantir que **chaque brique compose vers
+le haut**, de la station modulaire à la mégastructure, sans jamais repartir de
+zéro. La règle est qu'une classe supérieure **réutilise** les briques des classes
+inférieures et n'ajoute que ce qui lui est propre.
+
+---
+
+### Les couches (rien au-dessus ne réinvente ce qui est en dessous)
+
+- **L0 — primitives** (`peintre`/`maillage`) : cylindre, cône, sphère, cube,
+  panneau, treillis. Sortie abstraite → dessin immédiat *ou* maillage cuit.
+- **L1 — composants** (vocabulaire à ports) : `ModuleAxial` (10 variantes,
+  jusqu'au `GrandGonflable` et `Serre`), `Noeud`, `Treillis`, `Adaptateur`,
+  `PanneauSolaire`, `Radiateur`, `Antenne`, `Caisson`, `ChargeUtile`,
+  `Propulseur` (3 familles). **Briques classe C (ISV) :** `Charpente` (treillis
+  courbe à section variable), `RadiateurMega` (aile en arête de poisson),
+  `Motrice`, `BlocMoteur`, `Reservoir` (cuve sphérique en cage tétraédrique),
+  `Coiffe` (capuchon de nez, 3 formes : bombée / hexagonale à face plate /
+  adaptateur d'amarrage) et le **bloc propulsion antimatière** en deux briques
+  chaînées — `ReacteurAntimatiere` (cuve sombre + bobines EM + tuyauterie +
+  pièges à antiprotons) puis `MoteurAntimatiere` (tuyère : buse + cage de deux
+  cercles ouverts sur 4 tiges).
+- **L2 — assemblages typés** (helpers qui posent des groupes) : `poser_anneau`,
+  `greffer_structure_puissance` (boom + poutre + arrays), `paire_ailes`,
+  `vaisseau_amarre`, `sur_face`. *À venir* : `poser_epine`, `poser_rayons`,
+  `voiles_radiateurs`, `coque_cylindre`.
+- **L3 — classes de station** : les cibles ci-dessous, chacune un preset (fait
+  main) puis, à terme, une famille du générateur.
+
+---
+
+### Les classes
+
+| Classe | Échelle | Exemples | Construction dominante |
+|---|---|---|---|
+| **A — engins** | m | comsat, sonde | un bus + appendices |
+| **B — stations modulaires** | 10–100 m | ISS, Mir, Tiangong, générateur | cœur + poutre + grappe |
+| **C — grands vaisseaux & anneaux** | 100 m–2 km | **ISV**, station à anneau, **Elysium** | épine ou anneau + moyeu |
+| **D — mégastructures** | 10–30 km | **cylindre de O'Neill** | coque monolithique en rotation |
+
+La classe D est « au-dessus » : sa coque n'est **pas** faite de modules, mais
+elle réutilise l'anneau (ceinture agricole), l'épine (axe) et les radiateurs.
+
+---
+
+### Ce dont chaque cible a besoin (réutilisé vs neuf)
+
+##### ISV Venture Star — classe C (*inspiré*, pas copié)
+Grand vaisseau à **épine**. Réutilise : nœuds, modules (grappe habitée),
+`Propulseur` (nucléaire-électrique / VASIMR, en gros gabarit), `Adaptateur`,
+`poser_anneau` (petit anneau d'habitation optionnel). **Neuf** : épine dorsale
+longue (`Charpente`/`Treillis` P3), **voiles radiateurs** (`RadiateurMega`) et le
+**bloc propulsion à antimatière** (`ReacteurAntimatiere` + `MoteurAntimatiere`).
+
+**État (2026-07-23) — bloc propulsion ISV fait.** La `Charpente` courbe, les
+`RadiateurMega`, le `BlocMoteur` avec sa rangée de trois Cœurs et le propulseur
+à antimatière sont assemblés. `preset_isv_moteur` (« RADIATEUR + BLOC MOTEUR »)
+et `preset_isv` (« CHARPENTE + RADIATEURS ») portent la **version complète** :
+Cœur 1 & 2 coiffés d'une chape bombée, propulseur accroché au bout libre de
+Cœur 3 (réacteur monté par sa tête, tuyère sous sa base, poussée vers
+l'extérieur ; taille calée pour que le corps du réacteur ait le **même diamètre**
+que Cœur 3 au raccord). Réservoirs sphériques de part et d'autre de l'hexagone.
+Le tout via le helper `poser_bloc_moteur(.., propulseur: bool)`.
+Prochain chantier : **stockages de carburant**.
+
+##### Elysium — classe C (tore de Stanford, anneau **ouvert** ~1,8 km)
+Réutilise **directement** `poser_anneau` mis à l'échelle + `poser_rayons`
+(rayons moyeu→jante, en `Treillis`) + moyeu (`Noeud`). **Neuf** : habitat sur la
+**jante intérieure** (variante d'orientation de `poser_anneau` : modules
+tournés vers l'axe), et une bande de jante continue.
+
+##### Cylindre de O'Neill — classe D (paire contra-rotative)
+Réutilise : `poser_anneau` (ceinture agricole), épine (axe central),
+radiateurs, capots. **Neuf** : **coque cylindrique rayée** — un grand cylindre à
+**6 bandes longitudinales** (3 terres, 3 fenêtres), **capots d'extrémité**
+coniques, et **miroirs externes** (grands `panneau` inclinés). C'est la seule
+brique vraiment nouvelle de cette classe.
+
+---
+
+### Ordre des briques (ce qu'il reste à faire)
+
+1. ✅ **Anneau** (`poser_anneau`) — topologie fermée, posée par cuisson
+   géométrique. Sert au preset roue, à Elysium, et à la ceinture O'Neill.
+2. ✅ **Épine dorsale** — `Charpente` (treillis courbe P3→P1, anneau hexagonal en
+   pied) porte moteurs, radiateurs et réservoirs.
+3. ✅ **Voiles radiateurs** — `RadiateurMega` (aile en arête de poisson) en
+   enfilade. Signature de l'ISV.
+4. 🔩 **assembler l'ISV** (preset, classe C) — **bloc propulsion fait**
+   (`poser_bloc_moteur` + propulseur antimatière sur Cœur 3, chapes bombées sur
+   Cœur 1/2). **Reste : stockages de carburant** (prochain chantier), puis
+   grappe habitée et finitions.
+5. **Elysium** — anneau XL + rayons + moyeu + habitat de jante (surtout de la
+   réutilisation).
+6. **Coque cylindrique rayée** + capots + miroirs (nouveau composant).
+7. → **assembler l'O'Neill** (preset, classe D).
+
+À terme, le **générateur** choisit une classe selon un paramètre d'échelle et
+enchaîne les mêmes helpers — c'est pour ça qu'on les écrit réutilisables plutôt
+que de coder chaque cible en dur.
+
+---
+
+### Sources
+- [Stanford torus — Wikipedia](https://en.wikipedia.org/wiki/Stanford_torus)
+- [Stanford torus — Elysium Wiki](https://elysiumfilm.fandom.com/wiki/Stanford_torus)
+- [O'Neill cylinder — Wikipedia](https://en.wikipedia.org/wiki/O%27Neill_cylinder)
+- [O'Neill Cylinder Space Settlement — NSS](https://nss.org/o-neill-cylinder-space-settlement/)

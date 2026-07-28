@@ -3,7 +3,6 @@
 //! travailler le rendu d'un seul corps). `main` se contente d'alterner entre eux.
 
 mod accueil;
-mod briques;
 mod galerie;
 mod galerie_disques;
 mod galerie_etoiles;
@@ -12,15 +11,12 @@ mod pixel;
 mod skymap;
 mod starmap;
 mod station;
-mod vaisseaux;
 
 pub use accueil::{Accueil, Cible};
-pub use briques::Briques;
 pub use galerie::Galerie;
 pub use galerie_disques::GalerieDisques;
 pub use galerie_etoiles::GalerieEtoiles;
 pub use objet::Objet;
 pub use skymap::Skymap;
 pub use starmap::{SortieStarmap, Starmap};
-pub use station::VueStation;
-pub use vaisseaux::Vaisseaux;
+pub use station::{Categorie, VueStation};

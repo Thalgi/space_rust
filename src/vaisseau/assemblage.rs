@@ -1,6 +1,6 @@
 //! Modèle de station **assemblée**, son état de rendu et les garde-fous de
-//! taille (voir `docs/stations_fondations.md`, §1 et §3, et
-//! `docs/stations_raccordement.md`, §3 — sous-étape 2b).
+//! taille (voir `docs/conception/stations.md`, Partie B §1 et §3, et
+//! Partie C §3 — sous-étape 2b).
 //!
 //! - Étape 2 : on ne dessine jamais une station à moitié construite. On
 //!   assemble dans un tampon local (`Assembleur`), `terminer` **consomme**
@@ -11,11 +11,12 @@
 //!   totale, et chaque `Station` connaît son **rayon englobant** (calculé une
 //!   fois) pour le cadrage / l'anti-collision.
 
+use super::peintre::Immediat;
 use super::Composant;
 use macroquad::prelude::*;
 
 /// Une pièce placée : sa transformée monde est déjà **cuite** en `Mat4` à la
-/// génération (couche cuite, cf. `stations_raccordement.md` §2 — la `Mat4`
+/// génération (couche cuite, cf. `docs/conception/stations.md` Partie C §2 — la `Mat4`
 /// encode aussi les réflexions du miroir, qu'un `Quat` ne pourrait pas porter).
 ///
 /// Elle référence son `composant`, qui fournit `cout()` (pondération du budget)
@@ -76,6 +77,14 @@ impl Station {
         self.rayon
     }
 
+    /// Somme des coûts de rendu des pièces — la **mesure de complexité** d'une
+    /// station, dans l'unité que consomme le `Budget` du générateur. Sert
+    /// d'étalon : on calibre les niveaux de complexité sur des stations réelles
+    /// plutôt que sur des nombres arbitraires.
+    pub fn cout_total(&self) -> f32 {
+        self.pieces.iter().map(|p| p.composant.cout()).sum()
+    }
+
     /// Dessine toutes les pièces (le repère caméra 3D doit déjà être actif).
     /// Chaque pièce pousse sa transformée **cuite** (`Mat4`) puis délègue le
     /// tracé à son composant — c'est le branchement rendu de la couche cuite.
@@ -84,7 +93,7 @@ impl Station {
             unsafe {
                 get_internal_gl().quad_gl.push_model_matrix(p.transforme);
             }
-            p.composant.dessiner();
+            p.composant.dessiner(&mut Immediat);
             unsafe {
                 get_internal_gl().quad_gl.pop_model_matrix();
             }

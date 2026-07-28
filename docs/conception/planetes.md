@@ -1,4 +1,14 @@
-# Conception — Génération de planètes telluriques v2
+# Conception — Planètes telluriques
+
+> Fusion de deux anciens documents : la conception v2 du pipeline de rendu
+> (`conception_planete_v2.md`) et la conception des variantes/catalogue
+> (`CONCEPTION_PLANETES.md`). Suivi/catalogue :
+> [`docs/suivi/planetes.md`](../suivi/planetes.md).
+
+---
+
+## Partie A — Pipeline de rendu v2 (conception)
+
 
 > Document de conception, phase avant code. Objectif : des rendus de planètes
 > aboutis, couvrant tout le spectre du catalogue (tempéré, désert, glacé, lave,
@@ -6,7 +16,7 @@
 
 ---
 
-## 1. Diagnostic de l'existant
+### 1. Diagnostic de l'existant
 
 Le shader actuel (`src/shaders/planete.frag.glsl`, branche tellurique) est 100 %
 procédural par pixel sur un impostor. Chaque feature est un champ de bruit
@@ -30,7 +40,7 @@ Un terrain crédible est une **chaîne causale** : altitude → vallées → éc
 voisins : l'eau "coule de proche en proche", c'est un phénomène global,
 impossible à calculer par pixel. D'où la décision ci-dessous.
 
-## 2. Architecture retenue (option B, hybride)
+### 2. Architecture retenue (option B, hybride)
 
 Deux options étaient sur la table :
 
@@ -54,7 +64,7 @@ l'habillage. Répartition des rôles :
 Les features existantes du shader (dunes, mesa, pics, cratères, voile, eyeball,
 villes…) **continuent de fonctionner** par-dessus la nouvelle géographie.
 
-## 3. Pipeline de génération (5 étapes)
+### 3. Pipeline de génération (5 étapes)
 
 ```
 Apparence + seed
@@ -78,7 +88,7 @@ Apparence + seed
    Shader (habillage)
 ```
 
-### 3.1 Universalité : un seul pipeline pour tout le catalogue
+##### 3.1 Universalité : un seul pipeline pour tout le catalogue
 
 La géographie se calcule pareil pour tous les climats ; c'est son
 **interprétation** qui change. Deux boutons pilotent le pipeline (fixés par
@@ -97,15 +107,15 @@ L'érosion **thermique** (éboulis) reste active partout : c'est elle qui évite
 l'aspect "bruit plastique" sur les mondes sans eau. Optimisation possible :
 sauter l'érosion si `voile > 0.9` (Vénus/Titan, sol invisible).
 
-## 4. La grille cube-sphere
+### 4. La grille cube-sphere
 
-### 4.1 Pourquoi pas une équirectangulaire ?
+##### 4.1 Pourquoi pas une équirectangulaire ?
 
 L'équirect pince les pôles (texels dégénérés, érosion faussée). Le cube-sphere
 projette 6 faces carrées sur la sphère : distorsion quasi uniforme, pas de
 singularité polaire.
 
-### 4.2 Mapping texel ↔ sphère (warp équi-angulaire)
+##### 4.2 Mapping texel ↔ sphère (warp équi-angulaire)
 
 Sans correction, un texel au centre d'une face couvre ~5× la surface d'un texel
 de coin. Le warp `tan` ramène l'écart à ~1,3×.
@@ -146,7 +156,7 @@ fn sphere_vers_texel(d: Vec3, n: usize) -> (usize, usize, usize) {
 }
 ```
 
-### 4.3 Stockage et voisinage
+##### 4.3 Stockage et voisinage
 
 ```rust
 struct Terrain {
@@ -187,9 +197,9 @@ tolèrent sans cas particulier.
 de bord, `voisin()` puis `voisin()` en sens inverse doit revenir au point de
 départ ; et `texel_vers_sphere ∘ sphere_vers_texel = identité`.
 
-## 5. Étapes de génération
+### 5. Étapes de génération
 
-### 5.1 Altitude de base
+##### 5.1 Altitude de base
 
 Même recette que le shader actuel (cohérence visuelle), évaluée sur CPU :
 
@@ -207,7 +217,7 @@ fn altitude_base(d: Vec3, ap: &Apparence, rng_seed: f32) -> f32 {
 }
 ```
 
-### 5.2 Érosion hydraulique par gouttes (méthode "droplet", cf. Sebastian Lague)
+##### 5.2 Érosion hydraulique par gouttes (méthode "droplet", cf. Sebastian Lague)
 
 ~50 000 gouttes. Chacune : naît en un point aléatoire, descend le gradient,
 arrache du sédiment quand elle accélère, le dépose quand elle ralentit,
@@ -250,13 +260,13 @@ fn eroder(t: &mut Terrain, p: &ParamsErosion, rng: &mut Rng) {
 `arrache`/`depose` répartissent sur les 4 texels voisins (bilinéaire inverse)
 pour éviter les trous en pointe.
 
-### 5.3 Érosion thermique (éboulis) — toujours active
+##### 5.3 Érosion thermique (éboulis) — toujours active
 
 Quelques passes : si la pente entre deux voisins dépasse un angle critique
 (le *talus*), on transfère de la matière du haut vers le bas. ~5 lignes,
 crucial pour les mondes secs/stériles.
 
-### 5.4 Hydrologie
+##### 5.4 Hydrologie
 
 1. **Priority-flood** : remplit chaque dépression jusqu'à son point de
    déversement → un niveau d'eau cohérent par cuvette (futurs lacs/salines/mers
@@ -282,7 +292,7 @@ fn flux_d8(t: &mut Terrain) {
 3. **Humidité** : distance à l'eau (mer, lacs, rivières) + bruit grande
    échelle → alimente les biomes côté shader.
 
-### 5.5 Bake : atlas 2D avec gouttière
+##### 5.5 Bake : atlas 2D avec gouttière
 
 macroquad ne expose que `Texture2D` → les 6 faces sont packées dans **un**
 atlas 3×2. Autour de chaque face, une **gouttière de 1 texel** recopiée des
@@ -301,7 +311,7 @@ Atlas ((N+2)*3) × ((N+2)*2)          1 texel RGBA8 :
 Décodage : `h = (R*256 + G) / 257 / 255` → pas de marches d'escalier
 (contrainte GLSL 100 / WebGL1 : pas de texture flottante garantie).
 
-## 6. Côté shader (ce qui change)
+### 6. Côté shader (ce qui change)
 
 La branche tellurique de `planete.frag.glsl` remplace le calcul de `h`,
 `moist`, `rv` par une lecture d'atlas :
@@ -342,7 +352,7 @@ Le shader **garde** et améliore :
 
 Les branches gazeuse et glacée du shader ne bougent pas.
 
-## 7. Budgets et contraintes
+### 7. Budgets et contraintes
 
 | Poste | Valeur visée |
 |---|---|
@@ -353,7 +363,7 @@ Les branches gazeuse et glacée du shader ne bougent pas.
 | Déterminisme | RNG dédié par planète, seedé (pas le RNG global macroquad — sinon tout tirage ajouté décale tous les systèmes) |
 | GLSL 100 / WebGL1 | pas de float texture → altitude 16 bits sur R+G |
 
-## 8. Décisions actées / restantes
+### 8. Décisions actées / restantes
 
 Actées :
 
@@ -457,9 +467,9 @@ upscalée en plus proche voisin, textes nets — préfigure le style pixel final
      effet « lave sous glace fracturée » (Glaciovolcanic, Crevasse). Les
      fissures diffuses (`lave`) restent une couche géologique séparée.
 
-## 9. Paramétrage climatique de l'érosion (conçu)
+### 9. Paramétrage climatique de l'érosion (conçu)
 
-### 9.1 Niveau de la mer par quantile
+##### 9.1 Niveau de la mer par quantile
 
 Le shader actuel utilise un seuil fixe (`sea = mix(0.36, 0.60, eau)`) sur un
 bruit dont la distribution varie → couverture d'eau imprévisible. Sur CPU on a
@@ -476,7 +486,7 @@ fn niveau_mer(t: &Terrain, eau: f32) -> f32 {
 
 Même mécanisme réutilisable pour la latitude de calotte ou la limite forêt/roche.
 
-### 9.2 Encodage des lacs
+##### 9.2 Encodage des lacs
 
 Après priority-flood, pour chaque texel de cuvette sous le niveau de
 déversement : `h = niveau_de_remplissage` (plan d'eau plat) et `flux = 1.0`
@@ -487,7 +497,7 @@ déversement : `h = niveau_de_remplissage` (plan d'eau plat) et `flux = 1.0`
 - `seuil < flux < ~0.9` → cours d'eau, largeur ∝ `log(flux)` ;
 - `flux < seuil` → rien (le canal sert quand même à l'humidité).
 
-### 9.3 Deux boutons, paramètres dérivés
+##### 9.3 Deux boutons, paramètres dérivés
 
 La logique climatique de `apparence_tellurique()` (bandes de température) fixe
 seulement :
@@ -523,9 +533,9 @@ fn params_erosion(intensite: f32, regime: Regime, dunes: f32, n_texels: usize) -
   benchmark une fois le pipeline codé.
 - Optimisation : sauter l'érosion hydraulique si `voile > 0.9` (sol invisible).
 
-## 10. Interprétation du flux côté shader (conçu)
+### 10. Interprétation du flux côté shader (conçu)
 
-### 10.1 Encodage du canal B (au bake)
+##### 10.1 Encodage du canal B (au bake)
 
 Le flux D8 brut varie de 1 (crête) à ~n_texels (embouchure d'un grand fleuve) :
 une échelle log est indispensable.
@@ -536,7 +546,7 @@ let b = if lac { 1.0 } else { (1.0 + flux).ln() / (1.0 + flux_max).ln() * 0.9 };
 // -> cours d'eau dans [0, 0.9], eau stagnante = 1.0 : jamais d'ambiguïté.
 ```
 
-### 10.2 Lecture (une seule règle, quatre rendus)
+##### 10.2 Lecture (une seule règle, quatre rendus)
 
 ```glsl
 float fx  = t.b;                          // flux normalisé lu dans l'atlas
@@ -560,7 +570,7 @@ Rendu selon `regime` (uniform, remplace l'actuel `riv_lave`) :
 | Gelé | glacier blanc-bleu + crevasses (fbm fin) | lac gelé (glace texturée § existant) | léger |
 | Lave | reprend le rendu émissif `riv_lave` actuel | mer de lave émissive | non |
 
-### 10.3 Ce qu'on ne code PAS
+##### 10.3 Ce qu'on ne code PAS
 
 - **Berges végétales** : aucun cas particulier — le canal A (humidité) est déjà
   plus élevé près de l'eau (§ 5.4), la végétation suit toute seule via les
@@ -570,9 +580,9 @@ Rendu selon `regime` (uniform, remplace l'actuel `riv_lave`) :
   d'échantillonnage (`d += fbm_fin * 0.002`) pour casser l'alignement des
   texels en très gros plan. Une ligne.
 
-## 11. Biomes par température × humidité (conçu)
+### 11. Biomes par température × humidité (conçu)
 
-### 11.1 Les deux axes
+##### 11.1 Les deux axes
 
 ```glsl
 // Température locale : base climatique - latitude - altitude.
@@ -584,7 +594,7 @@ float hum  = t.a;                                            // canal humidité
 `calotte` devient un seuil sur `tloc` (et plus sur la latitude seule) → la
 neige descend naturellement en altitude, les calottes suivent le climat.
 
-### 11.2 La table ne fixe pas des couleurs, mais des POIDS de palette
+##### 11.2 La table ne fixe pas des couleurs, mais des POIDS de palette
 
 Crucial pour le catalogue : une planète peut être violette. Le lookup
 (tloc × hum) renvoie des poids de mélange entre les couleurs de `Apparence`,
@@ -613,7 +623,7 @@ Les features de style (`dunes`, `mesa`, `basalt`, `pics`…) restent des couches
 par-dessus, inchangées — elles se contentent maintenant d'un masque plus juste
 (ex. dunes seulement si `hum < 0.3`).
 
-### 11.2 bis Couverture végétale garantie (normalisation par quantile)
+##### 11.2 bis Couverture végétale garantie (normalisation par quantile)
 
 Piège identifié : sur un monde sec à végétation (Steppe, Scrubland, "Dune
 Forest"… `eau ≈ 0.05`, `veg_couv ≈ 0.5`), une humidité purement physique est
@@ -638,14 +648,14 @@ placent dans les creux et lits d'oueds, pas au sommet des dunes. Le régime
 sémantique (l'eau est-elle liquide, gelée, de la lave ?) reste piloté par
 `regime`, la répartition par le rang d'humidité.
 
-### 11.3 Ce que ça remplace dans le shader actuel
+##### 11.3 Ce que ça remplace dans le shader actuel
 
 - `moist = fbm(...)` (bruit indépendant) → canal A précalculé.
 - Végétation par `lat` brute → par `tloc` (latitude + altitude + climat).
 - Calotte par latitude bruitée → par température (le bruit de côte déchiquetée
   est conservé, appliqué à `tloc`).
 
-## 11 bis. Volcanisme (conçu, à implémenter après l'étape 4)
+### 11 bis. Volcanisme (conçu, à implémenter après l'étape 4)
 
 Constat : lave et cryo sont aujourd'hui des couches émissives du shader — aucun
 édifice volcanique dans `h`, pas de coulées, pas de fonte locale.
@@ -667,7 +677,7 @@ Design (le volcanisme est une feature de GÉOMÉTRIE -> opérateur de bake, § 1
 4. **Shader** : quasi rien — biomes inchangés, `cryo` émissif conservé pour
    les fractures.
 
-## 12. Couverture du catalogue — revue de cas
+### 12. Couverture du catalogue — revue de cas
 
 Stress test de la conception contre les presets existants.
 
@@ -689,7 +699,7 @@ features de *surface/émissives* (récifs, cryo, biolum, eyeball, villes)
 restent des couches shader et profitent automatiquement des nouveaux canaux
 (profondeur réelle, humidité, flux).
 
-## 13. Non-régression visuelle (implémenté)
+### 13. Non-régression visuelle (implémenté)
 
 Leçon de l'étape 4 : la montée de version a fait apparaître de l'eau sur des
 mondes qui n'en ont pas (lacs du priority-flood rendus en eau sur la Lune…).
@@ -710,10 +720,151 @@ Deux garde-fous :
    (même graine = mêmes planètes, génération déterministe). Les captures sont
    la « mémoire de l'état de l'art » des types de planètes.
 
-## 14. Références
+### 14. Références
 
 - Inigo Quilez — *Domain warping* (déjà utilisé dans le shader actuel)
 - Sebastian Lague — *Coding Adventure: Hydraulic Erosion* (modèle de gouttes)
 - Amit Patel (Red Blob Games) — *Polygonal Map Generation* (rivières par graphe)
 - Barnes, Lehman, Mulla — *Priority-flood* (remplissage de dépressions)
 - Diagramme de Whittaker (biomes par température × précipitations)
+
+---
+
+## Partie B — Variations et catalogue (conception)
+
+
+Base de réflexion pour générer le grand nombre de planètes listées dans
+[`suivi/planetes.md`](../suivi/planetes.md) (≈130 variantes nommées), à coût quasi nul, en s'appuyant sur
+le socle de rendu déjà en place (impostor + table déclarative d'uniforms + hot-reload).
+
+### 0. Principe directeur
+
+**On ne fait pas 130 shaders ni 130 textures.** Une planète tellurique = **un point
+dans un espace de paramètres**. Chaque variante nommée du catalogue (Sakura, Dune,
+Cryovolcano, Mesa…) n'est qu'un **preset** : un jeu de valeurs sur ces axes. Le shader
+`planete.frag.glsl` lit ces paramètres (uniforms) et compose la surface.
+
+Conséquence : ajouter une variante = ajouter un preset (données), pas du code. Ajouter
+une *capacité visuelle nouvelle* (ex. orgues basaltiques) = 1 uniform dans la table
+déclarative + 1 branche dans le shader, réglable en hot-reload.
+
+### 1. Référence
+
+Planetary Diversity (Stellaris) — `https://steamcommunity.com/sharedfiles/filedetails/?id=819148835`.
+Ossature reprise : 3 groupes climatiques **Humide / Sec / Froid**, chacun en 3
+sous-familles, plus **Extrêmes**, **Exotiques/composition**, **Gaia/Superhabitables**,
+**Verrouillées par marée** et **Grottes**. Le catalogue complet vit dans
+[`suivi/planetes.md`](../suivi/planetes.md) ; ce document décrit comment le produire.
+
+### Bilan d'avancement (à date)
+
+Le modèle paramétrique est en place et **30 presets** sont visibles en galerie.
+
+**Axes implémentés** (uniforms dans la table déclarative de `planete/materiau.rs`,
+réglables en hot-reload) : `eau` + `eau_motif` (océan/continents/mers/marais),
+`couleur/2/3`, `veg_couleur`+`veg_couv`, `rivieres`, `grad_lat` (dégradé latitudinal),
+`calotte` (banquise texturée à bord irrégulier), `nuages`+`nuages_couleur`, `relief`
+(montagnes ridged + ombrage de pente + neige de sommet), `dunes`, `mesa` (plateaux/
+strates), `pics` (glace), `recifs`, `basalt` (Worley), `lave`, `seed` (géographie unique).
+Surface bâtie sur un champ d'altitude par **domain warping** + étagement.
+
+**Restant** : voile atmosphérique opaque (Vénus/Titan), verrouillage de marée (eyeball),
+cryovolcan/bioluminescence émissifs, reflet spéculaire océan, rotation visible, mondes
+soufre/Titan, combinaison de deux features, et bascule du générateur sur le catalogue.
+
+### 2. Les axes du modèle (ce qu'une planète doit pouvoir exprimer)
+
+Revu pour couvrir les besoins du catalogue. `*` = déjà présent dans `Apparence`.
+
+1. **Groupe climatique** — dérivé de la température d'équilibre (déjà calculée) +
+   couverture d'eau. Pilote les plages par défaut de tous les autres axes.
+2. **Eau** `eau`* — 0 (aride) → 1 (monde-océan). + sous-type : océan profond, lacs
+   épars, mers intérieures, hauts-fonds turquoise (récifs/atolls).
+3. **Palette** `couleur/couleur2/couleur3`* — roche, végétation/sable, eau/glace.
+4. **Teinte de végétation** — hue dédiée pour les biomes : vert (Forest), violet
+   (Retinal), rose (Sakura/Pink Algae), ambre (Carotene/Amber), fluo (Cryflora/Biolumen),
+   blanc (Lichen/Salt/Travertine). → 1 paramètre hue + 1 densité de couverture.
+5. **Motif / relief de surface** — un *type de feature* procédural (enum) + amplitude :
+   dunes, mesas/canyons, orgues basaltiques, pics de glace, dunes de glace, récifs,
+   terrasses, strates colorées (Striped/Sodalite), plaines lisses.
+6. **Couche nuageuse** — densité + vitesse + couleur (Thunderstorm/Storm/Fog/Dust Storm).
+7. **Atmosphère / voile** `atmo`* — couleur + densité du halo ; voile opaque qui cache
+   le sol (Vénus jaune, Titan orange, Fog blanc).
+8. **Calottes polaires** — latitude de la banquise, fonction de la température.
+9. **Émissif** — `lave`* (fissures), + cryovolcans (points), bioluminescence + lumières
+   de villes côté nuit (déjà pour océans).
+10. **Verrouillage de marée** — direction du soleil **fixe** : face chaude / face gelée /
+    anneau habitable au terminateur (eyeball).
+11. **Rotation propre** `axe`* + vitesse (visible).
+12. **Modificateur rare** — variante (R) : pousse un axe à l'extrême ou active une feature.
+
+### 3. Comment chaque famille se règle
+
+| Famille            | Eau     | Palette / teinte            | Feature dominante         | Nuages / voile        |
+|--------------------|---------|-----------------------------|---------------------------|-----------------------|
+| Humide/Continental | 0.4–0.8 | végétation (vert→violet…)   | plaines + relief doux     | modérés               |
+| Humide/Océan       | 0.8–1.0 | bleu + îles                 | récifs / orgues / îles    | modérés à brumeux     |
+| Humide/Tropical    | 0.5–0.9 | vert vif, parfois fluo      | jungle, lagons            | denses (orages)       |
+| Sec/Désert         | 0–0.1   | sable (ocre/rouille/bleu)   | dunes                     | clairs / tempête pous.|
+| Sec/Aride          | 0–0.2   | roche, strates colorées     | mesas / canyons / strates | brouillard sec        |
+| Sec/Savane         | 0.1–0.3 | jaune-vert, ambre           | plaines herbeuses         | clairs                |
+| Froid/Arctique     | 0–0.3   | blanc-bleu                  | banquise, pics de glace   | variables             |
+| Froid/Toundra      | 0–0.3   | roche + lichen + glace      | basalte, cryovolcans      | variables             |
+| Froid/Alpin        | 0.1–0.4 | vert sombre + neige         | montagnes, fjords         | brume                 |
+| Extrême/Lave       | 0       | croûte sombre               | fissures (émissif) ✔      | —                     |
+| Extrême/Étuve      | 0       | sol caché                   | —                         | voile CO2 jaune opaque|
+| Exotique/Fer       | 0       | gris métallique             | cratères                  | aucune                |
+| Exotique/Soufre    | 0       | jaune-orange (Io)           | panaches volcaniques      | fines                 |
+| Exotique/Titan     | lacs    | brun-orange                 | lacs d'hydrocarbures      | voile orange opaque   |
+| Eyeball (marée)    | var.    | gradient chaud→gelé         | anneau au terminateur     | bande nuageuse        |
+
+### 4. Paliers de faisabilité (pour prioriser)
+
+- **T1 — palette + eau + nuages + calottes** : couvre la **majorité** du catalogue
+  (Forest, Sakura, Moss, Steppe, Mediterranean, Snow, Boreal, Pink Algae, Carotene…).
+  Quasi gratuit : juste des paramètres de couleur/couverture/nuages.
+- **T2 — features de surface procédurales** : dunes, mesas/canyons, orgues basaltiques,
+  pics/dunes de glace, récifs/atolls, terrasses, strates. Un générateur de feature dans
+  le shader (sélection par enum) + relief par perturbation de normale.
+- **T3 — spéciaux** : eyeball (verrouillage marée), voile opaque (Vénus/Titan), émissif
+  (lave ✔, cryovolcan, bioluminescence), reflet spéculaire océan.
+- **Flavor / label seulement** : Cave Worlds (souterrain), Geoglyph, Megaflora, Aerial
+  (cosses flottantes), Termite — invisibles ou presque depuis l'orbite. On les rend comme
+  leur **famille parente** + une teinte/marqueur ; pas de shader dédié.
+
+### 5. Impact sur le code
+
+- [x] `genese/apparences.rs::apparence_tellurique(temp)` refondu en **groupe climatique**
+  (Lave/Étuve/Sec/Humide/Froid/Gelé) qui tire les paramètres dans des plages propres.
+- [x] `Apparence` + **table déclarative** de `planete/materiau.rs` étendues ; chaque ajout
+  d'uniform = 1 ligne table + 1 builder `avec_*` + 1 branche `planete.frag.glsl` (hot-reload).
+  Restent à câbler : `voile` (atmo opaque), `eyeball`+`sun_dir`, `cryo`.
+- [ ] **Table de presets nommés** : aujourd'hui les presets vivent dans
+  `genese::catalogue_telluriques()` (galerie). À terme, le **générateur** (skymap/objet)
+  devrait y piocher, et un **sélecteur** en mode Objet permettrait de viser une variante.
+
+### 6. Plan d'implémentation (étapes cheap, hot-reloadables)
+
+1. [x] **Groupes climatiques propres** : Humide/Sec/Froid/Gelé/Étuve, palettes, eau,
+   calottes + dégradé latitudinal.
+2. [x] **Teinte de végétation + couverture** → Sakura, Retinal, Carotene, Mousse…
+3. [x] **Couche nuageuse animée** → Brumeux, Orageux, Tempête de poussière.
+4. [x] **Calottes texturées** (bord irrégulier + crevasses) + **rivières** + relief de surface.
+5. [x] **Features de surface** : montagnes, dunes, mesas/strates, pics de glace, récifs,
+   orgues basaltiques (un type à la fois pour l'instant).
+6. [ ] **Spéciaux** (T3) : eyeball (verrouillage marée), voile opaque (Vénus/Titan),
+   cryovolcan, reflet océan.
+7. [ ] **Exotiques** : soufre/Io, hydrocarbures/Titan (fer & carbone déjà en presets).
+8. [ ] **Sélecteur de preset** en mode Objet + **bascule du générateur** sur le catalogue.
+9. [ ] **Combinaison de deux features** (Dune Forest, Geothermal…) + **perf** du shader
+   (mutualiser les fbm si besoin).
+
+### 7. Questions ouvertes
+
+- **Sélecteur de variante nommée** en mode Objet (au-delà de G/1/2) : à faire ou pas ? (étape 8)
+- **Features combinées** : aujourd'hui **une seule** feature à la fois ; passer à deux
+  (Dune Forest, Geothermal) est prévu (étape 9) — à confirmer.
+- **Mondes flavor** (Cave/Geoglyph/Megaflora) : gardés dans le catalogue pour la complétude
+  mais rendus comme leur famille parente (pas de shader dédié).
+- **Perf** : la surface tellurique fait ~15 échantillons de bruit/pixel (+ Worley si basalt).
+  OK en galerie/skymap (petites planètes) ; à surveiller en plein écran mode Objet.

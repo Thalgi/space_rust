@@ -280,7 +280,7 @@ impl Apparence {
         self
     }
     /// Tête de « Grande Tache Blanche » (tempête planétaire type Saturne,
-    /// CONCEPTION_GAZEUSES_V2 § 6 bis) : gros ovale blanc convectif en slot 0.
+    /// docs/conception/geantes_gazeuses.md Partie A § 6 bis) : gros ovale blanc convectif en slot 0.
     pub fn avec_tache_blanche(mut self, dir: Vec3, taille: f32) -> Self {
         self.tache_dir = dir.normalize_or_zero();
         self.tache_taille = taille;

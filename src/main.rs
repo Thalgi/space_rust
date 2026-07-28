@@ -20,8 +20,8 @@ mod ui;
 mod vaisseau;
 
 use ecran::{
-    Accueil, Briques, Cible, Galerie, GalerieDisques, GalerieEtoiles, Objet, Skymap,
-    SortieStarmap, Starmap, Vaisseaux, VueStation,
+    Accueil, Categorie, Cible, Galerie, GalerieDisques, GalerieEtoiles, Objet, Skymap,
+    SortieStarmap, Starmap, VueStation,
 };
 use macroquad::prelude::*;
 
@@ -43,8 +43,6 @@ enum Etat {
     Galerie(Box<Galerie>),
     GalerieDisques(Box<GalerieDisques>),
     GalerieEtoiles(Box<GalerieEtoiles>),
-    Vaisseaux(Box<Vaisseaux>),
-    Briques(Box<Briques>),
     Station(Box<VueStation>),
 }
 
@@ -70,9 +68,18 @@ async fn main() {
                         Cible::GalerieEtoiles => {
                             Etat::GalerieEtoiles(Box::new(GalerieEtoiles::new()))
                         }
-                        Cible::Vaisseaux => Etat::Vaisseaux(Box::new(Vaisseaux::new())),
-                        Cible::Briques => Etat::Briques(Box::new(Briques::new())),
-                        Cible::Station => Etat::Station(Box::new(VueStation::new())),
+                        Cible::Briques => {
+                            Etat::Station(Box::new(VueStation::new(Categorie::Briques)))
+                        }
+                        Cible::PetitesStations => {
+                            Etat::Station(Box::new(VueStation::new(Categorie::PetitesStations)))
+                        }
+                        Cible::Generateur => {
+                            Etat::Station(Box::new(VueStation::new(Categorie::Generateur)))
+                        }
+                        Cible::Megastructures => {
+                            Etat::Station(Box::new(VueStation::new(Categorie::Megastructures)))
+                        }
                     };
                 }
             }
@@ -108,16 +115,6 @@ async fn main() {
             }
             Etat::GalerieEtoiles(g) => {
                 if g.frame() {
-                    etat = Etat::Accueil(Accueil::new());
-                }
-            }
-            Etat::Vaisseaux(v) => {
-                if v.frame() {
-                    etat = Etat::Accueil(Accueil::new());
-                }
-            }
-            Etat::Briques(b) => {
-                if b.frame() {
                     etat = Etat::Accueil(Accueil::new());
                 }
             }

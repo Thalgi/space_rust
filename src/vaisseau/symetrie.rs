@@ -1,5 +1,5 @@
 //! Opérations de symétrie pour l'assemblage de stations (voir
-//! `docs/stations_fondations.md`, §4). Deux opérations seulement, façon Kerbal
+//! `docs/conception/stations.md`, Partie B §4). Deux opérations seulement, façon Kerbal
 //! Space Program : **miroir** (réflexion à travers un plan) et **radiale** (n
 //! copies réparties autour d'un axe).
 //!

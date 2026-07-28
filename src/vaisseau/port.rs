@@ -1,5 +1,5 @@
 //! Modèle de points d'accroche (« ports »), cœur de l'assemblage par nœuds
-//! façon Kerbal Space Program (voir `docs/stations_procedurales.md`, §3).
+//! façon Kerbal Space Program (voir `docs/conception/stations.md`, Partie A §3).
 //!
 //! Un composant expose des **ports** : des repères orientés par lesquels il se
 //! clipse sur un port libre d'un composant déjà posé. [`accoupler`] calcule la

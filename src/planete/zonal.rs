@@ -1,4 +1,4 @@
-//! Profil zonal 1D des géantes gazeuses (V2 phase 2, CONCEPTION_GAZEUSES_V2.md § 3).
+//! Profil zonal 1D des géantes gazeuses (V2 phase 2, docs/conception/geantes_gazeuses.md Partie A § 3).
 //!
 //! Le SQUELETTE des bandes est précalculé ici (CPU, 1× par planète, < 1 ms) ;
 //! le shader n'habille plus que la matière (volutes, grain, frontières

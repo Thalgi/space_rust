@@ -1,5 +1,5 @@
 //! Constructeur incrémental de station qui suit les **ports hôtes libres** —
-//! le fondement du générateur (`docs/stations_procedurales.md`, §7).
+//! le fondement du générateur (`docs/conception/stations.md`, Partie A §7).
 //!
 //! Idée : au lieu d'assembler à la main, on tient à jour la liste des ports
 //! hôtes libres (en monde). La grammaire du générateur pilote :
@@ -48,6 +48,25 @@ impl Chantier {
 
     /// Ports hôtes libres actuels (lecture). **Les indices ne sont valides que
     /// jusqu'à la prochaine `poser`/`racine`** (retrait par `swap_remove`).
+    /// Pièce qui expose un port (via `PortLibre::origine`). Permet à la
+    /// grammaire de savoir **sur quoi** elle est en train de poser — par exemple
+    /// pour zoner les appendices d'une poutre autrement que ceux d'un module.
+    pub fn piece(&self, origine: usize) -> Option<&Piece> {
+        self.pieces.get(origine)
+    }
+
+    /// Budget encore disponible. Permet à la grammaire de **réserver** de quoi
+    /// finir : sans cela, la croissance des modules consomme tout et il ne reste
+    /// rien pour les panneaux, qui sont pourtant l'organe vital.
+    pub fn budget_restant(&self) -> f32 {
+        // Sans budget (chantier libre), rien ne limite : « infini » laisse
+        // toutes les comparaisons `<= plancher` répondre non.
+        match &self.budget {
+            Some(b) => b.restant(),
+            None => f32::INFINITY,
+        }
+    }
+
     pub fn libres(&self) -> &[PortLibre] {
         &self.libres
     }
