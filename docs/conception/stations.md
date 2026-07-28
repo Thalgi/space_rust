@@ -4,8 +4,12 @@
 > conseillé : le plan directeur (`stations_procedurales.md`), les fondations
 > transverses (`stations_fondations.md`), le raccordement ports↔assemblage
 > (`stations_raccordement.md`), et la feuille de route des classes de station
-> (`classes_stations.md`). Suivi/passation :
-> [`docs/suivi/stations.md`](../suivi/stations.md).
+> (`classes_stations.md`). Plus une **Partie E** (2026-07-29) : refonte du
+> système de composants (découpage de `composant.rs` + composite
+> `SousEnsemble`), en préparation d'un futur éditeur d'assemblage façon VAB
+> (Kerbal Space Program). Suivi/passation :
+> [`docs/suivi/stations.md`](../suivi/stations.md) — priorités immédiates en
+> tête de ce document.
 
 ---
 
@@ -1084,3 +1088,216 @@ que de coder chaque cible en dur.
 - [Stanford torus — Elysium Wiki](https://elysiumfilm.fandom.com/wiki/Stanford_torus)
 - [O'Neill cylinder — Wikipedia](https://en.wikipedia.org/wiki/O%27Neill_cylinder)
 - [O'Neill Cylinder Space Settlement — NSS](https://nss.org/o-neill-cylinder-space-settlement/)
+
+---
+
+## Partie E — Refonte du système de composants (vers un éditeur façon VAB)
+
+> Document de conception, phase avant code (2026-07-29) — **rien de cette
+> partie n'est encore implémenté**. Deux chantiers ordonnés : d'abord ramener
+> `composant.rs` à une taille gérable (§E.1–E.2), puis introduire un composant
+> **composite** capable d'agréger plusieurs pièces en une seule brique
+> réutilisable (§E.3). L'éditeur d'assemblage interactif façon VAB (Vehicle
+> Assembly Building de Kerbal Space Program) est **hors scope** de cette
+> partie : §E.4 liste ce dont il aura besoin, pour que la refonte ne lui ferme
+> aucune porte, mais sa construction est un chantier **ultérieur**, distinct.
+
+### E.1 Constat : pourquoi `composant.rs` doit être découpé
+
+`src/vaisseau/composant.rs` fait aujourd'hui **2800 lignes** pour un seul
+fichier — ~19× l'objectif que le projet s'est fixé lui-même
+(`suivi/bucketlist_globale.md` §7, « fichiers ≤ ~100-150 lignes »). Le
+problème n'est pas la taille en soi, mais sa cause : **une seule fonction par
+capacité, qui `match` sur les 19 variantes de `Composant`** (décision actée en
+Partie C §1 — enum fermé, pas de `Box<dyn>`) :
+
+| Fonction | Lignes | Ce qu'elle contient |
+|---|---|---|
+| `dessiner<P: Peintre>(&self, p: &mut P)` | **624** | la géométrie complète des 19 variantes, un `match` géant |
+| `ports(&self) -> Vec<Port>` | **241** | idem pour la liste de ports |
+| `cout(&self)` / `rayon_local(&self)` | (le reste) | idem, en plus petit |
+
+Conséquence directe : **ajouter ou corriger une seule variante touche un
+fichier de 2800 lignes**, oblige à naviguer 4 `match` différents pour trouver
+tous les endroits qui la concernent, et rend les diffs de revue illisibles
+(une modification d'un radiateur produit un diff au milieu d'un fichier qui
+parle aussi de réacteurs à antimatière). Le nombre de variantes n'a fait que
+grandir (2 en Partie C §4 « État 2026-07-16 », 19 aujourd'hui) — la fonction
+géante était un choix raisonnable à 2 variantes, plus du tout à 19.
+
+**Ce qui ne change pas** : la décision Partie C §1 reste valide.
+`Composant` reste un **enum fermé, `Copy`, dispatché par `match`** — pas de
+trait objet, zéro allocation, monomorphisé. Le problème est la **granularité
+des fichiers**, pas le modèle de dispatch.
+
+### E.2 Découpage proposé : un module par famille de brique
+
+Principe : **une variante (ou une petite famille de variantes proches) = un
+fichier**, qui regroupe pour cette famille son enum de style/variante *et* ses
+quatre comportements (`ports`, `dessiner`, `cout`, `rayon_local`) — au lieu
+d'un enum de variante isolé quelque part et son comportement dispersé dans
+4 `match` à 1000 lignes d'écart. `composant/mod.rs` ne garde que la définition
+de l'enum `Composant` et 4 `match` **d'une ligne par bras**, qui délèguent :
+
+```rust
+// composant/mod.rs (esquisse)
+impl Composant {
+    pub fn ports(&self) -> Vec<Port> {
+        match self {
+            Composant::ModuleAxial { profil, variante, longueur } =>
+                module_axial::ports(*profil, *variante, *longueur),
+            Composant::Noeud { profil, sorties } => noeud::ports(*profil, *sorties),
+            // … une ligne par variante
+        }
+    }
+    // dessiner / cout / rayon_local : même forme
+}
+```
+
+Regroupement en **familles** (pas 19 fichiers isolés — les briques déjà
+apparentées dans la Partie D restent ensemble) :
+
+| Fichier | Variantes regroupées | Pourquoi ensemble |
+|---|---|---|
+| `commun.rs` | — (constantes + helpers) | `COULEUR`/`SOMBRE`/`BAGUE`/`TRAIT_FIN`, `COL_*`/`EMBOUT_*` (collerette de docking, partagée par module/nœud/adaptateur/coiffe), `faces_principales`, `dessiner_moteur_seul` |
+| `module_axial.rs` | `ModuleAxial` + `VarianteModule` (10) | déjà un tout cohérent |
+| `noeud.rs` | `Noeud` + `Sorties` + `faces_noeud` | déjà un tout cohérent |
+| `panneau_solaire.rs` | `PanneauSolaire` + `VariantePanneau` (5) | déjà un tout cohérent |
+| `treillis.rs` | `Treillis` + `TreillisHexagone` + `Charpente` + `StyleTreillis` | même famille « ossature » (Partie D L1/L1-C) |
+| `radiateur.rs` | `Radiateur` + `RadiateurMega` + `VarianteRadiateur` (8) | grand radiateur = même brique à l'échelle vaisseau |
+| `antenne.rs` | `Antenne` + `VarianteAntenne` (6) | déjà un tout cohérent |
+| `adaptateur.rs` | `Adaptateur` + `Coiffe` + `VarianteCoiffe` | même rôle : pièce de raccord/embout en bout de module |
+| `caisson.rs` | `Caisson` + `ChargeUtile` + `VarianteCaisson` + `VarianteCharge` | même famille « boîte » |
+| `propulsion.rs` | `Propulseur` + `Motrice` + `BlocMoteur` + `FamillePropulsion` + `VariantePropulseur` (9) | même famille propulsion classique |
+| `antimatiere.rs` | `ReacteurAntimatiere` + `MoteurAntimatiere` | déjà documentées comme « deux briques chaînées » (Partie D) |
+| `reservoir.rs` | `Reservoir` | isolé mais simple |
+
+Douze fichiers de ~100 à ~300 lignes chacun (le plus gros, `module_axial.rs`,
+reste sous la barre grâce à ses 10 variantes qui partagent déjà beaucoup de
+code) au lieu d'un fichier de 2800 lignes. **Aucun changement de
+comportement** : c'est un déplacement de code, pas une réécriture — la
+migration se valide avec les 121 tests existants inchangés (ils testent le
+comportement de `Composant::ports/dessiner/cout/rayon_local`, pas l'endroit où
+vit le code).
+
+**Ordre de migration conseillé** (chaque étape compile et passe les tests) :
+1. Créer `composant/commun.rs`, y déplacer les constantes et helpers partagés.
+2. Extraire les familles une par une, **de la plus isolée à la plus
+   couplée** : `reservoir.rs` → `antimatiere.rs` → `antenne.rs` →
+   `panneau_solaire.rs` → `caisson.rs` → `adaptateur.rs` → `radiateur.rs` →
+   `propulsion.rs` → `treillis.rs` → `noeud.rs` → `module_axial.rs` en dernier
+   (le plus gros, le plus sûr une fois la mécanique rodée sur les petits).
+3. À chaque extraction : couper-coller le bras de `match` concerné des 4
+   fonctions vers le nouveau module, vérifier `cargo test`, commit.
+
+### E.3 Le composant composite : `SousEnsemble`
+
+Le découpage en fichiers (§E.2) ne change rien au **modèle** : assembler
+plusieurs composants reste aujourd'hui le travail de `Chantier`/`Assembleur`
+(Partie C), qui produit une `Station` = `Vec<Piece>`. Il n'existe **aucun
+moyen de traiter un groupe de pièces déjà assemblées comme une seule brique
+réutilisable** — impossible de construire « une paire d'ailes + adaptateur »
+une fois et de la clipser telle quelle à trois endroits différents, ou de
+docker une station entière comme module d'une mégastructure (pourtant annoncé
+en Partie D : « chaque classe supérieure réutilise les briques des classes
+inférieures »).
+
+**Proposition : une 20ᵉ variante de `Composant`, composite.**
+
+```rust
+/// Sous-ensemble figé : un groupe de pièces déjà assemblées (ports cuits en
+/// Mat4, comme dans une Station), traité comme UNE SEULE brique. Pattern
+/// Composite : `SousEnsemble` a des ports/cout/rayon_local comme n'importe
+/// quel composant, mais son `dessiner` délègue à ses enfants.
+Composant::SousEnsemble {
+    profil: Profil,                  // profil du port de montage présenté au parent
+    donnees: Rc<DonneesSousEnsemble>,
+}
+
+pub struct DonneesSousEnsemble {
+    pub pieces: Vec<Piece>,          // sous-arbre figé, repère LOCAL au sous-ensemble
+    pub ports_exposes: Vec<Port>,    // ports hôtes restés libres, en repère local
+    pub cout: f32,                   // précalculé = somme des cout() enfants
+    pub rayon: f32,                  // précalculé = rayon englobant du sous-arbre
+}
+```
+
+Les quatre comportements deviennent triviaux (c'est tout l'intérêt du
+Composite) :
+- `ports()` → clone de `donnees.ports_exposes` (déjà en repère local, comme
+  n'importe quel autre composant) ;
+- `dessiner(p)` → boucle sur `donnees.pieces`, pousse la transformée de
+  chacune, délègue à `piece.composant.dessiner(p)` — **exactement** ce que
+  fait déjà `Station::dessiner` (Partie C §2), donc pas de nouveau code de
+  rendu, juste un appel à la même mécanique ;
+- `cout()` / `rayon_local()` → lecture `O(1)` des champs précalculés (pas de
+  parcours à chaque appel — important, `Chantier::poser` les appelle à chaque
+  pose pour le budget et l'anti-collision).
+
+**Comment on en fabrique un** : `Assembleur`/`Chantier` construisent un
+sous-arbre normalement, puis une fonction `figer(assembleur, port_montage)
+-> Composant::SousEnsemble` le gèle — même idée que `Station::terminer()`
+(Partie B §1, « on ne publie qu'une fois complet »), appliquée à un
+sous-arbre au lieu de la station entière. Ça rend une **station entière**
+trivialement réutilisable comme brique d'une mégastructure : geler un
+`EtatStation::Prete(Station)` produit un `Composant::SousEnsemble` qu'on peut
+docker ailleurs — exactement le « réutilise les briques des classes
+inférieures » que demande la Partie D, mais que rien aujourd'hui ne permet
+mécaniquement.
+
+**Coût architectural honnête, à trancher avant d'implémenter** : `Composant`
+est aujourd'hui `#[derive(Clone, Copy, PartialEq, Debug)]`. Un champ
+`Rc<DonneesSousEnsemble>` **casse `Copy`** (`Rc` ne l'est pas). Deux options :
+
+1. **Accepter la perte de `Copy`** (`Clone` seulement) : le coût réel est que
+   les quelques call-sites qui font `let m = composant; … m.ports()[i] …
+   m.ports()[j] …` (copie implicite aujourd'hui) doivent ajouter un
+   `.clone()` explicite — mécanique, repérable à la compilation, pas un
+   risque caché. `Rc::clone` est un simple `refcount++`, pas une copie
+   profonde du sous-arbre.
+2. **Garder `Copy` via un handle** : `Composant::SousEnsemble { profil: Profil,
+   id: SousEnsembleId(u32) }`, `SousEnsembleId` étant un index `Copy` dans un
+   registre (`Vec<DonneesSousEnsemble>`) tenu par l'`Assembleur`/`Chantier` en
+   cours. Préserve `Copy` partout, mais ajoute un registre à faire vivre et
+   passer en argument (ou en `thread_local`, moins KISS).
+
+**Recommandation** : option 1 (`Rc`, perte de `Copy`). Plus simple, aucune
+gestion de cycle de vie de registre, coût mesurable et local (quelques
+`.clone()` à ajouter, visibles à la compilation). L'option 2 se justifierait
+seulement si le profilage montrait un jour un coût réel — YAGNI sinon, même
+logique que le rejet du `Box<dyn>` en Partie C §1.
+
+### E.4 Ce qu'il faudra à un futur éditeur façon VAB (non fait ici)
+
+Rappel : **ce qui suit n'est pas construit maintenant**. Ça sert seulement à
+vérifier que §E.2/E.3 ne ferment aucune porte. Un éditeur d'assemblage
+interactif (façon Kerbal Space Program : palette de pièces, clic pour poser,
+undo, sauvegarde) aurait besoin, en plus de ce qui existe déjà :
+
+- **Retrait d'une pièce (et de son sous-arbre)** : `Chantier`/`Assembleur`
+  savent poser (`poser`) mais pas retirer — l'éditeur doit pouvoir supprimer
+  une branche et **libérer** les ports qu'elle occupait. Aujourd'hui
+  irréversible par construction (Partie B §1 : « on ne publie qu'une fois
+  complet », l'immuabilité de `Station` n'anticipait pas l'édition
+  incrémentale interactive).
+- **Historique (undo/redo)** : conséquence directe du point précédent — une
+  pile d'opérations `poser`/`retirer` réversibles, pas dans le modèle actuel.
+- **Métadonnées de palette** : chaque variante a déjà un `nom()` (cf. Partie D
+  et les `impl Variante* { pub fn nom(...) }` du §E.2), mais il manque une
+  façon d'**énumérer** « tous les composants posables sur CE port libre,
+  avec leur nom, pour construire un menu » — aujourd'hui seul le générateur
+  sait quoi poser où, rien n'expose la liste aux mêmes fins pour un humain.
+- **Sérialisation** : sauvegarder/charger un assemblage utilisateur (format
+  simple : liste de `(Composant, port hôte visé)` dans l'ordre de pose —
+  suffit à rejouer la construction, pas besoin de sérialiser les `Mat4`
+  cuites).
+- **`SousEnsemble` (§E.3) est le mécanisme naturel** pour la fonctionnalité
+  « sauvegarder cette sélection comme sous-assemblage réutilisable » de KSP —
+  c'est une des raisons de l'introduire maintenant plutôt que d'attendre
+  l'éditeur : il sert déjà (mégastructures, Partie D) indépendamment de
+  l'éditeur, et l'éditeur n'aura qu'à l'exploiter.
+
+Rien de cette liste ne se code avant que §E.2 (découpage) et §E.3 (composite)
+soient faits et stables — un éditeur interactif construit sur un
+`composant.rs` de 2800 lignes hériterait du même problème en pire (chaque
+pièce de la palette référençant un `match` géant).

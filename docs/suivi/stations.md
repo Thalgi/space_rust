@@ -7,6 +7,43 @@
 
 ---
 
+## Priorités immédiates (2026-07-29) — à corriger avant tout le reste
+
+Constat d'une revue de code sans complaisance sur l'état actuel du dépôt
+(travail en cours non commité). Ordre = urgence, pas ordre de fichier.
+
+1. **Committer l'état actuel avant de toucher à autre chose.** Le dernier
+   commit (`ae74b03`) date du 2026-07-20 ; depuis, 64 fichiers touchés,
+   +3896/-5224 lignes, 12 anciens fichiers `vaisseau/*.rs` supprimés, une
+   nouvelle couche de rendu ajoutée (`peintre.rs`/`maillage.rs`) — zéro point
+   de reprise (`git bisect`) sur tout ça. `cargo test` passe (121 tests) :
+   rien n'empêche un commit de sauvegarde avant d'entamer la refonte §E de
+   [`conception/stations.md`](../conception/stations.md).
+2. **`cargo clippy` ne compile pas.** `src/planete/terrain.rs:154` déclenche
+   `clippy::approx_constant` (deny-by-default) sur `0.318_309_9` au lieu de
+   `std::f32::consts::FRAC_1_PI`. Signe que clippy n'a pas tourné depuis un
+   moment — 63 autres avertissements attendent derrière une fois l'erreur
+   levée. Correction triviale, aucune raison de la reporter.
+3. **`composant.rs` (2800 lignes, `dessiner()` = 624 lignes, `ports()` =
+   241 lignes)** : le chantier de refonte est maintenant conçu —
+   [`conception/stations.md`](../conception/stations.md) Partie E.2. Pas
+   encore commencé.
+4. **Fichiers morts** : `src/ecran/briques.rs` (107 lignes) et
+   `src/ecran/vaisseaux.rs` (93 lignes) ne sont plus déclarés dans
+   `ecran/mod.rs` depuis la réorganisation du menu — ne compilent plus dans
+   le binaire, jamais supprimés. Suppression triviale.
+5. **`astre::Astre` a une variante trop grosse** (`clippy::large_enum_variant`,
+   `Planete { app: Apparence, .. }` → 376 octets pour tout l'enum). Hors
+   sujet stations, mais gratuit à corriger (`Box<Apparence>`) une fois
+   clippy remis en état de marche (point 2).
+
+Une fois les points 1–2 traités et §E.2/E.3 de la conception implémentés,
+reprendre le fil du générateur (Partie A ci-dessous) et le chantier
+« stockages de carburant » de l'ISV
+([`conception/stations.md`](../conception/stations.md) Partie D).
+
+---
+
 ## Partie A — Générateur : état des lieux et reprise
 
 

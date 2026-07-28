@@ -19,7 +19,7 @@ la trace de ce qui existe).
 
 | Fichier | Sujet |
 |---|---|
-| [`stations.md`](conception/stations.md) | Stations spatiales procédurales : modèle de ports, composants, budget/unités/symétrie, raccordement ports↔assemblage, classes de stations (ISS → O'Neill). Fusion de 4 anciens docs. |
+| [`stations.md`](conception/stations.md) | Stations spatiales procédurales : modèle de ports, composants, budget/unités/symétrie, raccordement ports↔assemblage, classes de stations (ISS → O'Neill), **+ Partie E : refonte de `composant.rs` et composite `SousEnsemble`** (vers un futur éditeur façon VAB). Fusion de 4 anciens docs. |
 | [`planetes.md`](conception/planetes.md) | Planètes telluriques : pipeline de rendu (grille cube-sphere, érosion, hydrologie, biomes) + modèle de variantes/catalogue. Fusion de 2 anciens docs. |
 | [`geantes_gazeuses.md`](conception/geantes_gazeuses.md) | Géantes gazeuses : surface V2 (profil zonal, palette, vortex, pôles) + recherche noises/patterns. Fusion de 2 anciens docs. |
 | [`ceintures.md`](conception/ceintures.md) | Champs de débris unifiés : ceintures d'astéroïdes, anneaux planétaires, disques proto*, nuage de Oort — un seul modèle `Disque` paramétrique. |
@@ -30,7 +30,7 @@ la trace de ce qui existe).
 
 | Fichier | Sujet |
 |---|---|
-| [`stations.md`](suivi/stations.md) | Passation du chantier générateur de stations (état des lieux, bugs résolus) + audit de référence du preset ISS. Fusion de 2 anciens docs. |
+| [`stations.md`](suivi/stations.md) | **Priorités immédiates en tête** (à corriger avant tout), puis passation du chantier générateur de stations (état des lieux, bugs résolus) + audit de référence du preset ISS. Fusion de 2 anciens docs. |
 | [`planetes.md`](suivi/planetes.md) | Bilan de la refonte v2 du rendu tellurique (fichiers touchés, perfs, tests) + catalogue des ~126 presets. Fusion de 2 anciens docs. |
 | [`geantes_gazeuses.md`](suivi/geantes_gazeuses.md) | Catalogue des géantes gazeuses (archétypes, features, presets) et bilan de la V2. |
 | [`etoiles.md`](suivi/etoiles.md) | Catalogue de la galerie des étoiles (types, rendu, chantiers restants). |
