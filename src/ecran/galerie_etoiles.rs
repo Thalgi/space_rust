@@ -1,7 +1,6 @@
 use crate::astre::{Astre, CameraInfo};
 use crate::etoile::couleur_corps_noir;
 use crate::soleil::Soleil;
-use crate::ui::minitel_ligne;
 use macroquad::prelude::*;
 
 /// Catalogue des étoiles : (nom, rayon, température K, luminosité, couronne 0=halo 1=jets 2=vent).
@@ -85,7 +84,7 @@ impl GalerieEtoiles {
         let cw = screen_width() / cols as f32;
         let ch = 180.0;
         let render_h = ch - label_h;
-        let rows = (n + cols - 1) / cols;
+        let rows = n.div_ceil(cols);
         let h_vue = screen_height() - top;
         let max_scroll = (rows as f32 * ch - h_vue).max(0.0);
         self.scroll = (self.scroll - mouse_wheel().1 * 48.0).clamp(0.0, max_scroll);

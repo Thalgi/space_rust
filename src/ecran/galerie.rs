@@ -137,7 +137,7 @@ impl Galerie {
         let cw = screen_width() / cols as f32;
         let ch = 212.0; // render_h inchangé (146) : mêmes planètes, plus d'air
         let render_h = ch - label_h;
-        let rows = (n + cols - 1) / cols;
+        let rows = n.div_ceil(cols);
         let h_vue = screen_height() - top;
         let max_scroll = (rows as f32 * ch - h_vue).max(0.0);
         // Défilement doux : la molette déplace une CIBLE, le scroll réel y

@@ -30,8 +30,8 @@ use std::cell::RefCell;
 // l'assombrissant — Kuiper/Oort restent visibles aux échelles réelles).
 // 0 = plein écran. Même convention que planete::set_viewport_h.
 thread_local! {
-    static VIEWPORT_H: RefCell<f32> = RefCell::new(0.0);
-    static PX_MIN: RefCell<f32> = RefCell::new(0.0);
+    static VIEWPORT_H: RefCell<f32> = const { RefCell::new(0.0) };
+    static PX_MIN: RefCell<f32> = const { RefCell::new(0.0) };
 }
 
 /// Hauteur du viewport courant (galerie : hauteur de cellule / facteur pixel).

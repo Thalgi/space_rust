@@ -157,7 +157,7 @@ impl Systeme {
             let rr = rayon * rayon;
             if d2 <= rr {
                 let t = tca - (rr - d2).sqrt();
-                if best.map_or(true, |(bt, _)| t < bt) {
+                if best.is_none_or(|(bt, _)| t < bt) {
                     best = Some((t, i));
                 }
             }

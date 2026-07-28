@@ -22,7 +22,7 @@ pub const N_VORTEX: usize = 8;
 
 /// Hash déterministe 0..1 (stable, indépendant du RNG global).
 fn h01(seed: f32, i: f32) -> f32 {
-    let v = ((seed * 12.9898 + i * 78.233).sin()) * 43758.5453_f32;
+    let v = ((seed * 12.9898 + i * 78.233).sin()) * 43_758.547_f32;
     v - v.floor()
 }
 

@@ -84,7 +84,7 @@ impl Starmap {
         for (i, e) in self.etoiles.iter().enumerate() {
             let p = proj.project(e.position()) + e.decalage;
             let d = p.distance(m);
-            if d <= e.rayon + 8.0 && meilleur.map_or(true, |(_, best)| d < best) {
+            if d <= e.rayon + 8.0 && meilleur.is_none_or(|(_, best)| d < best) {
                 meilleur = Some((i, d));
             }
         }

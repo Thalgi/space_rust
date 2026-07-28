@@ -3,7 +3,7 @@ mod persistance;
 mod presets;
 mod taille;
 
-pub use taille::{ClasseTaille, rayon_visuel};
+pub use taille::ClasseTaille;
 
 pub use persistance::{charger_presets, sauver_presets, PresetSauve};
 pub use presets::{

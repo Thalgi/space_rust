@@ -5,8 +5,8 @@ use std::cell::RefCell;
 
 // Materials partagés : un seul pipeline chacun, clonés à chaque soleil.
 thread_local! {
-    static TPL_SOLEIL: RefCell<Option<Material>> = RefCell::new(None);
-    static TPL_PLASMA: RefCell<Option<Material>> = RefCell::new(None);
+    static TPL_SOLEIL: RefCell<Option<Material>> = const { RefCell::new(None) };
+    static TPL_PLASMA: RefCell<Option<Material>> = const { RefCell::new(None) };
 }
 
 pub(super) fn mat_soleil() -> Material {

@@ -745,7 +745,7 @@ pub fn generer_chrono(app: &Apparence, n: usize) -> (DonneesTerrain, EtapesMs) {
     let relief = app.relief;
     let nb_th = std::thread::available_parallelism().map(|c| c.get()).unwrap_or(4).clamp(2, 16);
     let lignes_tot = NB_FACES * n; // ligne globale l -> (face l/n, y l%n)
-    let par_bande = (lignes_tot + nb_th - 1) / nb_th;
+    let par_bande = lignes_tot.div_ceil(nb_th);
     std::thread::scope(|s| {
         let mut restes_h: &mut [f32] = &mut t.h;
         let mut restes_hum: &mut [f32] = &mut t.hum;

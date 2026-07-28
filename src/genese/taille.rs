@@ -6,7 +6,7 @@
 //! ainsi que ~3× une tellurique à l'écran au lieu de 11×. On garde l'ordre correct
 //!   géante gazeuse > géante de glace > sous-Neptune > super-Terre > tellurique
 //!   > monde de glace > naine > lune
-//! sans que les géantes n'écrasent visuellement les petits corps voisins (lunes).
+//! > sans que les géantes n'écrasent visuellement les petits corps voisins (lunes).
 //!
 //! Calibrage : `rayon_visuel(1.0) = 0.6` (une Terre ≈ 0.6 unité de jeu), ce qui
 //! reproduit les valeurs peintes à la main des presets canon (Polyphemus ≈ 1.7

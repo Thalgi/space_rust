@@ -76,10 +76,10 @@ fn set_val(mat: &Material, nom: &str, v: Val) {
 // Materials partagés (créés une seule fois, clonés ensuite) : un clone partage le
 // pipeline GPU mais a ses propres uniforms -> évite « Pipelines amount exceeded ».
 thread_local! {
-    static TPL_CORPS: RefCell<Option<Material>> = RefCell::new(None);
+    static TPL_CORPS: RefCell<Option<Material>> = const { RefCell::new(None) };
     // Hauteur (px) du viewport de rendu courant : la galerie dessine dans des
     // cellules, pas plein écran -> nécessaire au LOD px_rayon. 0 = plein écran.
-    static VIEWPORT_H: RefCell<f32> = RefCell::new(0.0);
+    static VIEWPORT_H: RefCell<f32> = const { RefCell::new(0.0) };
 }
 
 /// Indique la hauteur du viewport de rendu courant (galerie : hauteur de
@@ -107,7 +107,7 @@ pub(super) fn vider_cache() {
 // et telluriques dont la génération asynchrone n'a pas fini (placeholder :
 // h ≈ 0.55 -> sol plat uni, ni océan global ni noir).
 thread_local! {
-    static TEX_VIDE: RefCell<Option<Texture2D>> = RefCell::new(None);
+    static TEX_VIDE: RefCell<Option<Texture2D>> = const { RefCell::new(None) };
 }
 
 fn tex_vide() -> Texture2D {
