@@ -323,25 +323,34 @@ fn caisson_haut(largeur: f32) -> f32 {
 ///
 /// Deux régimes, parce que trois nacelles ne se rangent pas comme six :
 /// - **3 → triforce** : trois conteneurs de **même orientation** posés aux
-///   sommets d'un triangle, qui se touchent **par la pointe** et laissent un
-///   creux triangulaire au milieu. La distance au centre vaut alors exactement
-///   le rayon hors-tout d'une nacelle (propriété du triangle : le centroïde
-///   d'un sous-triangle d'une subdivision est à une distance égale à son propre
-///   circonrayon) ;
+///   sommets d'un triangle, pointe contre pointe, laissant un creux
+///   triangulaire au milieu ;
 /// - **≥ 4 → couronne** : réparties en angle, **coin vers l'axe**, les côtés
 ///   plats se faisant face. Le rayon vient du demi-pas angulaire, donc elles ne
 ///   se croisent jamais quel que soit leur nombre.
+///
+/// **Écartement de la triforce** (l'erreur à ne pas refaire) : des triangles à
+/// coins **vifs** se touchent pointe contre pointe quand la distance au centre
+/// vaut leur circonrayon. Nos sections ont des coins **congés** — ce sont donc
+/// des triangles nus *gonflés* du rayon de congé ρ, et à cette distance elles
+/// s'interpénètrent. Il faut écarter les triangles nus de 2ρ. Leurs pointes
+/// s'écartent de `√3·(D − r_nu)` quand on écarte les centres de `D`, d'où
+/// `D = r_nu + 2ρ/√3`, soit `D = r·(1 − f + 2f/√3)` avec `f` la fraction de
+/// congé. Le facteur `JEU` ajoute par-dessus un vrai jour visible.
 fn grappe_cargo(rayon: f32, nacelles: usize) -> (f32, Vec<(Vec3, f32)>) {
     let n = nacelles.max(3);
     let dir = |a: f32| vec3(a.cos(), a.sin(), 0.0);
     if n == 3 {
+        const JEU: f32 = 1.05;
+        let f = super::pieces::ONIGIRI_FILET;
+        let ecart = (1.0 - f + 2.0 * f / 3.0_f32.sqrt()) * JEU;
         let places = (0..3)
             .map(|k| {
                 let a = FRAC_PI_2 + TAU * k as f32 / 3.0;
                 (dir(a) * rayon, FRAC_PI_2)
             })
             .collect();
-        (rayon, places)
+        (rayon / ecart, places)
     } else {
         let rnac = rayon * (PI / n as f32).sin() * 0.9;
         let places = (0..n)
@@ -3117,33 +3126,48 @@ mod tests {
     }
 
     // La triforce n'est pas « 3 nacelles en rond » : c'est trois conteneurs de
-    // MÊME orientation qui se touchent par la pointe. Les deux propriétés se
-    // vérifient, sinon on retombe sur une couronne à trois branches.
+    // MÊME orientation posés pointe contre pointe.
     #[test]
     fn ratelier_trois_nacelles_forme_une_triforce() {
-        let rayon = 2.6_f32;
-        let (rnac, places) = grappe_cargo(rayon, 3);
+        let (_, places) = grappe_cargo(2.6, 3);
         assert_eq!(places.len(), 3);
-        // Rayon de nacelle = rayon de grappe : la condition de tangence.
-        assert!((rnac - rayon).abs() < 1e-5);
-        // Orientation commune (le motif triforce vient de là).
         let spin0 = places[0].1;
         assert!(places.iter().all(|(_, s)| (s - spin0).abs() < 1e-5), "orientation commune");
-        // Deux nacelles voisines partagent une pointe.
-        let coins = |(poste, spin): &(Vec3, f32)| -> Vec<Vec3> {
-            (0..3)
-                .map(|j| {
-                    let a = spin + TAU * j as f32 / 3.0;
-                    *poste + vec3(a.cos(), a.sin(), 0.0) * rnac
-                })
-                .collect()
-        };
-        let (a, b) = (coins(&places[0]), coins(&places[1]));
-        let plus_proche = a
-            .iter()
-            .flat_map(|p| b.iter().map(move |q| p.distance(*q)))
-            .fold(f32::INFINITY, f32::min);
-        assert!(plus_proche < 1e-4, "pointes non jointives : {plus_proche}");
+        // Postes aux trois sommets d'un triangle équilatéral (même distance au
+        // centre, 120° d'écart) — pas une file ni un tas.
+        let d0 = places[0].0.length();
+        assert!(places.iter().all(|(q, _)| (q.length() - d0).abs() < 1e-4));
+    }
+
+    // **Non-recouvrement** de la triforce — le bug trouvé à l'écran : des
+    // triangles à coins congés sont des triangles nus gonflés du rayon de
+    // congé, donc les poser à la tangence des coins VIFS les fait se traverser.
+    // On vérifie ici la condition exacte : les triangles nus de deux nacelles
+    // voisines doivent être écartés d'au moins 2ρ.
+    #[test]
+    fn ratelier_triforce_ne_se_traverse_pas() {
+        for rayon in [1.5_f32, 2.6, 6.0] {
+            let (rnac, places) = grappe_cargo(rayon, 3);
+            let f = super::super::pieces::ONIGIRI_FILET;
+            let (rho, r_nu) = (rnac * f, rnac * (1.0 - f));
+            // Pointe (du triangle NU) de chaque nacelle dirigée vers sa voisine.
+            let pointe = |k: usize, vers: f32| {
+                let (poste, spin) = places[k];
+                let _ = spin;
+                poste + vec3(vers.cos(), vers.sin(), 0.0) * r_nu
+            };
+            let a120 = TAU / 3.0;
+            let v0 = pointe(0, FRAC_PI_2 + a120); // nacelle 0 → voisine 1
+            let v1 = pointe(1, FRAC_PI_2); // nacelle 1 → voisine 0
+            let ecart = v0.distance(v1);
+            assert!(
+                ecart >= 2.0 * rho,
+                "rayon {rayon} : nacelles qui se traversent ({ecart:.4} < {:.4})",
+                2.0 * rho
+            );
+            // ...mais pas au point de perdre le motif : la triforce reste serrée.
+            assert!(ecart < 3.0 * rho, "rayon {rayon} : triforce trop lâche ({ecart:.4})");
+        }
     }
 
     // En couronne, les nacelles doivent se frôler sans jamais se croiser, quel

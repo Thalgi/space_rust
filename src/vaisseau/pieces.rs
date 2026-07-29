@@ -391,7 +391,12 @@ const ONIGIRI_ARC: usize = 8;
 /// plus le triangle est franc. À 0.22 les **côtés restent bien droits** et les
 /// coins sont juste adoucis : c'est la lecture « structure triangulaire », pas
 /// « tube mou ».
-const ONIGIRI_FILET: f32 = 0.22;
+///
+/// Exposé au module : l'empilement en triforce a besoin du rayon de congé pour
+/// calculer l'écartement sans recouvrement (un triangle **congé** est un
+/// triangle nu *gonflé* de ce rayon, il ne peut donc pas se toucher pointe
+/// contre pointe comme un triangle à coins vifs).
+pub(crate) const ONIGIRI_FILET: f32 = 0.22;
 
 /// Contour d'une section onigiri de rayon hors-tout `rayon`, tourné de `spin`,
 /// dans le plan Z = `z`. **Vrai triangle à coins congés** : trois arcs de
@@ -479,9 +484,23 @@ pub(crate) fn nacelle_cargo<P: Peintre>(
 
     // Collerettes de bout : mêmes section et orientation, à peine plus larges →
     // une arête nette au lieu d'un tube qui s'arrête dans le vide.
+    //
+    // Elles **débordent** hors du corps (`deb`) tout en s'y **enfonçant**
+    // (`ec`) : aucune de leurs faces n'est alors coplanaire avec un bout du
+    // corps. Posées à ras, les deux faces se disputaient le même plan et la
+    // collerette clignotait à travers le conteneur (z-fighting) — même piège,
+    // et même remède, que les embouts de module (`EMBOUT_*` dans `composant`).
     let ec = (longueur * 0.05).min(rayon * 0.6);
-    prisme_onigiri(p, pied, ec, rayon * 1.06, spin, bague);
-    prisme_onigiri(p, pied + Vec3::Z * (longueur - ec), ec, rayon * 1.06, spin, bague);
+    let deb = ec * 0.35;
+    prisme_onigiri(p, pied - Vec3::Z * deb, ec + deb, rayon * 1.06, spin, bague);
+    prisme_onigiri(
+        p,
+        pied + Vec3::Z * (longueur - ec),
+        ec + deb,
+        rayon * 1.06,
+        spin,
+        bague,
+    );
 
     // Rails d'arête : dans l'axe des trois coins, au rayon hors-tout.
     for k in 0..3 {
