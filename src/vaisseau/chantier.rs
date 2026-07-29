@@ -11,7 +11,11 @@
 //! Les transformées sont cuites en `Mat4` dans les `Piece` (couche cuite), mais
 //! le chaînage garde le repère monde en `Repere` (couche construction).
 
-use super::{accoupler, cuire, Budget, Composant, EtatStation, GenrePort, Piece, Profil, Repere, Station};
+use super::{
+    accoupler, cuire, Budget, Composant, DonneesSousEnsemble, EtatStation, GenrePort, Piece, Port,
+    Profil, Repere, Station,
+};
+use std::rc::Rc;
 
 /// Tolérance de recouvrement : deux sphères englobantes ne déclenchent une
 /// collision que si la distance des centres passe sous `FACTEUR × (r1 + r2)`.
@@ -78,13 +82,13 @@ impl Chantier {
     /// Pose le composant **racine** à l'origine ; tous ses ports deviennent
     /// libres. Renvoie `false` si le budget ne le couvre pas.
     pub fn racine(&mut self, comp: Composant) -> bool {
-        if !self.payer(comp) {
+        if !self.payer(&comp) {
             return false;
         }
         let corps = Repere::IDENTITE;
-        self.pieces.push(cuire(corps, comp));
-        let idx = self.pieces.len() - 1;
-        self.ajouter_libres(corps, comp, None, idx);
+        let idx = self.pieces.len();
+        self.ajouter_libres(corps, &comp, None, idx);
+        self.pieces.push(cuire(corps, &comp)); // dernier usage : consomme `comp`
         true
     }
 
@@ -108,22 +112,22 @@ impl Chantier {
         let corps = accoupler(hote.repere, montage.repere);
         // Anti-collision : rejette si l'enfant recouvre trop une pièce **autre**
         // que son hôte direct (qu'il est censé toucher au joint).
-        if self.collision(corps, comp, hote.origine) {
+        if self.collision(corps, &comp, hote.origine) {
             return false;
         }
-        if !self.payer(comp) {
+        if !self.payer(&comp) {
             return false;
         }
-        self.pieces.push(cuire(corps, comp));
         self.libres.swap_remove(hote_idx); // port consommé
-        let idx = self.pieces.len() - 1;
-        self.ajouter_libres(corps, comp, Some(montage_idx), idx);
+        let idx = self.pieces.len();
+        self.ajouter_libres(corps, &comp, Some(montage_idx), idx);
+        self.pieces.push(cuire(corps, &comp)); // dernier usage : consomme `comp`
         true
     }
 
     /// Indices des ports libres compatibles avec le port `montage_idx` de `comp`
     /// (genre + profil). Sert à la grammaire pour choisir où poser.
-    pub fn compatibles(&self, comp: Composant, montage_idx: usize) -> Vec<usize> {
+    pub fn compatibles(&self, comp: &Composant, montage_idx: usize) -> Vec<usize> {
         let ports = comp.ports();
         let m = match ports.get(montage_idx) {
             Some(p) => *p,
@@ -137,6 +141,35 @@ impl Chantier {
             .collect()
     }
 
+    /// Gèle le chantier en un **sous-ensemble réutilisable**
+    /// ([`Composant::SousEnsemble`], Partie E.3) : les pièces posées jusqu'ici
+    /// deviennent un sous-arbre figé (déjà en repère local, puisque `racine`
+    /// place toujours à `Repere::IDENTITE`) et les ports hôtes encore libres
+    /// deviennent les ports exposés du composite. `profil` est le profil du
+    /// port de **montage** que ce sous-ensemble présentera à qui l'utilisera
+    /// — choisi par l'appelant (pas dérivé), rien n'oblige à s'ancrer par un
+    /// port précis du sous-arbre. `None` si rien n'a été posé (même invariant
+    /// que [`Station::depuis_pieces`] : un sous-ensemble vide n'existe pas).
+    pub fn figer(self, profil: Profil) -> Option<Composant> {
+        if self.pieces.is_empty() {
+            return None;
+        }
+        let cout = self.pieces.iter().map(|p| p.composant.cout()).sum();
+        let rayon = self
+            .pieces
+            .iter()
+            .fold(0.0_f32, |m, p| m.max(p.centre().length() + p.composant.rayon_local()));
+        let ports_exposes = self
+            .libres
+            .iter()
+            .map(|pl| Port::new(pl.repere, pl.genre, pl.profil))
+            .collect();
+        Some(Composant::SousEnsemble {
+            profil,
+            donnees: Rc::new(DonneesSousEnsemble { pieces: self.pieces, ports_exposes, cout, rayon }),
+        })
+    }
+
     /// Publie la station (immuable). `Vide` si rien n'a été posé.
     pub fn terminer(self) -> EtatStation {
         match Station::depuis_pieces(self.pieces) {
@@ -147,7 +180,7 @@ impl Chantier {
 
     // ---- interne ----
 
-    fn payer(&mut self, comp: Composant) -> bool {
+    fn payer(&mut self, comp: &Composant) -> bool {
         match &mut self.budget {
             Some(b) => b.depenser(comp.cout()),
             None => true,
@@ -156,7 +189,7 @@ impl Chantier {
 
     /// L'enfant (`comp` placé en `corps`) recouvre-t-il trop une pièce **autre**
     /// que son hôte `hote_piece` ? Sphères englobantes géométriques + tolérance.
-    fn collision(&self, corps: Repere, comp: Composant, hote_piece: usize) -> bool {
+    fn collision(&self, corps: Repere, comp: &Composant, hote_piece: usize) -> bool {
         let (c_local, r) = comp.englobant_local();
         let centre = corps.transforme_point(c_local);
         self.pieces.iter().enumerate().any(|(i, p)| {
@@ -171,7 +204,7 @@ impl Chantier {
 
     /// Ajoute les ports de `comp` (placé en `corps`, pièce d'indice `origine`)
     /// comme libres, sauf celui consommé (`sauf`).
-    fn ajouter_libres(&mut self, corps: Repere, comp: Composant, sauf: Option<usize>, origine: usize) {
+    fn ajouter_libres(&mut self, corps: Repere, comp: &Composant, sauf: Option<usize>, origine: usize) {
         for (i, p) in comp.ports().into_iter().enumerate() {
             if Some(i) == sauf {
                 continue;
@@ -247,8 +280,8 @@ mod tests {
     fn compatibles_liste_les_ports() {
         let mut ch = Chantier::new();
         ch.racine(module());
-        assert_eq!(ch.compatibles(module(), 1).len(), 2); // 2 ports axiaux compatibles
-        assert_eq!(ch.compatibles(panneau(), 0).len(), 4); // 4 montages Surface radiaux
+        assert_eq!(ch.compatibles(&module(), 1).len(), 2); // 2 ports axiaux compatibles
+        assert_eq!(ch.compatibles(&panneau(), 0).len(), 4); // 4 montages Surface radiaux
     }
 
     #[test]
@@ -263,7 +296,7 @@ mod tests {
         };
         // Grand panneau sur +X : OK (hôte = module, exempté de la collision).
         let ix = ch.libres().iter().position(|p| p.repere.pos.x > 0.9).unwrap();
-        assert!(ch.poser(ix, grand, 0));
+        assert!(ch.poser(ix, grand.clone(), 0));
         // Grand panneau sur +Y : recouvre le précédent (non-hôte) → rejeté.
         let iy = ch.libres().iter().position(|p| p.repere.pos.y > 0.9).unwrap();
         assert!(!ch.poser(iy, grand, 0), "recouvrement d'un voisin → rejeté");

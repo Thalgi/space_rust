@@ -285,9 +285,9 @@ fn hub6() -> Composant {
 fn poser_sur(
     asm: &mut Assembleur,
     hote_monde: Repere,
-    hote: Composant,
+    hote: &Composant,
     idx: usize,
-    enfant: Composant,
+    enfant: &Composant,
     montage: usize,
 ) -> Repere {
     let m = poser(port_monde(hote_monde, hote, idx), enfant, montage);
@@ -296,7 +296,7 @@ fn poser_sur(
 }
 
 /// Petits arrays russes (bleus) sur les flancs ±X d'un module.
-fn arrays_russes(asm: &mut Assembleur, corps: Repere, comp: Composant) {
+fn arrays_russes(asm: &mut Assembleur, corps: Repere, comp: &Composant) {
     for p in comp.ports() {
         if p.genre != GenrePort::Surface || p.repere.avant().x.abs() < 0.9 {
             continue;
@@ -307,14 +307,14 @@ fn arrays_russes(asm: &mut Assembleur, corps: Repere, comp: Composant) {
             longueur: 3.0,
             largeur: 1.1,
         };
-        asm.ajouter(cuire(poser(corps.compose(p.repere), pan, 0), pan));
+        asm.ajouter(cuire(poser(corps.compose(p.repere), &pan, 0), &pan));
     }
 }
 
 /// Pose `app` sur le port `Surface` d'un module situé du côté `dir` (monde), le
 /// premier trouvé. Sert à placer des radiateurs/arrays sur une face précise
 /// (ex. nadir −Y) sans dépendre de l'index du port.
-fn appendice_sur_module(asm: &mut Assembleur, corps: Repere, comp: Composant, dir: Vec3, app: Composant) {
+fn appendice_sur_module(asm: &mut Assembleur, corps: Repere, comp: &Composant, dir: Vec3, app: &Composant) {
     for p in comp.ports() {
         if p.genre != GenrePort::Surface {
             continue;
@@ -332,7 +332,7 @@ fn appendice_sur_module(asm: &mut Assembleur, corps: Repere, comp: Composant, di
 /// plutôt qu'un index de port : les nœuds basculent (demi-tour) à l'accouplement,
 /// donc « le port −Z » ne pointe pas forcément vers −Z monde. Renvoie le repère
 /// monde de l'enfant.
-fn porter_vers(asm: &mut Assembleur, hote_monde: Repere, hote: Composant, dir: Vec3, enfant: Composant, montage: usize) -> Repere {
+fn porter_vers(asm: &mut Assembleur, hote_monde: Repere, hote: &Composant, dir: Vec3, enfant: &Composant, montage: usize) -> Repere {
     let mut best = 0usize;
     let mut best_dot = f32::NEG_INFINITY;
     for (i, p) in hote.ports().iter().enumerate() {
@@ -364,17 +364,17 @@ pub fn preset_iss() -> EtatStation {
     // Unity (Node 1) — cœur.
     let hub = hub6();
     let hub_m = Repere::IDENTITE;
-    asm.ajouter(cuire(hub_m, hub));
+    asm.ajouter(cuire(hub_m, &hub));
 
     // ===== Poutre au zénith via boom Z1 : Unity(+Y) → Z1 → nœud S0 → poutre ±X.
     // Arrays sur la moitié externe (z < 0), radiateurs sur la moitié interne. =====
     let z1 = Composant::Treillis { profil: Profil::P1, longueur: 3.0, style: StyleTreillis::Carre };
-    let z1m = poser_sur(&mut asm, hub_m, hub, HUB_Y_PLUS, z1, 0);
+    let z1m = poser_sur(&mut asm, hub_m, &hub, HUB_Y_PLUS, &z1, 0);
     let s0 = hub6();
-    let s0m = poser_sur(&mut asm, z1m, z1, 1, s0, 1);
+    let s0m = poser_sur(&mut asm, z1m, &z1, 1, &s0, 1);
     for axe in [HUB_X_PLUS, HUB_X_MOINS] {
         let truss = Composant::Treillis { profil: Profil::P2, longueur: 15.0, style: StyleTreillis::Carre };
-        let tm = poser_sur(&mut asm, s0m, s0, axe, truss, 0);
+        let tm = poser_sur(&mut asm, s0m, &s0, axe, &truss, 0);
         for p in truss.ports() {
             if p.genre != GenrePort::Surface {
                 continue;
@@ -391,52 +391,52 @@ pub fn preset_iss() -> EtatStation {
             } else {
                 continue;
             };
-            asm.ajouter(cuire(poser(tm.compose(p.repere), app, 0), app));
+            asm.ajouter(cuire(poser(tm.compose(p.repere), &app, 0), &app));
         }
     }
 
     // ===== Segment US (aft, −Z) : Node1 → Destiny → Harmony, ramifié. =====
     let node1 = hub6();
-    let n1 = porter_vers(&mut asm, hub_m, hub, Vec3::NEG_Z, node1, 1);
+    let n1 = porter_vers(&mut asm, hub_m, &hub, Vec3::NEG_Z, &node1, 1);
     let lab = hab(VarianteModule::Labo);
-    let labm = porter_vers(&mut asm, n1, node1, Vec3::NEG_Z, lab, 1);
+    let labm = porter_vers(&mut asm, n1, &node1, Vec3::NEG_Z, &lab, 1);
     let node2 = hub6();
-    let n2 = porter_vers(&mut asm, labm, lab, Vec3::NEG_Z, node2, 1);
+    let n2 = porter_vers(&mut asm, labm, &lab, Vec3::NEG_Z, &node2, 1);
     // Columbus (tribord) et Kibō (bâbord) latéraux sur Harmony.
-    porter_vers(&mut asm, n2, node2, Vec3::X, hab(VarianteModule::Labo), 1);
-    porter_vers(&mut asm, n2, node2, Vec3::NEG_X, hab(VarianteModule::Hublots), 1);
+    porter_vers(&mut asm, n2, &node2, Vec3::X, &hab(VarianteModule::Labo), 1);
+    porter_vers(&mut asm, n2, &node2, Vec3::NEG_X, &hab(VarianteModule::Hublots), 1);
     // Module avant + nez de docking PMA/IDA (adaptateur conique P1→P0).
     let av = hab(VarianteModule::Hublots);
-    let avm = porter_vers(&mut asm, n2, node2, Vec3::NEG_Z, av, 1);
+    let avm = porter_vers(&mut asm, n2, &node2, Vec3::NEG_Z, &av, 1);
     let nez = Composant::Adaptateur { grand: Profil::P1, petit: Profil::P0, longueur: 1.2 };
-    porter_vers(&mut asm, avm, av, Vec3::NEG_Z, nez, 0);
+    porter_vers(&mut asm, avm, &av, Vec3::NEG_Z, &nez, 0);
 
     // Grappe Tranquility (Node3) sous Node1 : Cupola (nadir), BEAM (tribord),
     // PMM/Leonardo (bâbord).
     let node3 = hub6();
-    let n3 = porter_vers(&mut asm, n1, node1, Vec3::NEG_Y, node3, 1);
-    porter_vers(&mut asm, n3, node3, Vec3::NEG_Y, hab(VarianteModule::Coupole), 1);
-    porter_vers(&mut asm, n3, node3, Vec3::X, hab(VarianteModule::Gonflable), 1);
-    porter_vers(&mut asm, n3, node3, Vec3::NEG_X, hab(VarianteModule::Standard), 1);
+    let n3 = porter_vers(&mut asm, n1, &node1, Vec3::NEG_Y, &node3, 1);
+    porter_vers(&mut asm, n3, &node3, Vec3::NEG_Y, &hab(VarianteModule::Coupole), 1);
+    porter_vers(&mut asm, n3, &node3, Vec3::X, &hab(VarianteModule::Gonflable), 1);
+    porter_vers(&mut asm, n3, &node3, Vec3::NEG_X, &hab(VarianteModule::Standard), 1);
 
     // ===== Segment russe (fore, +Z) : Zarya → Zvezda (arrays) → nœud + MRM. =====
     let fgb = hab(VarianteModule::Coeur);
-    let fgbm = porter_vers(&mut asm, hub_m, hub, Vec3::Z, fgb, 1);
-    arrays_russes(&mut asm, fgbm, fgb);
+    let fgbm = porter_vers(&mut asm, hub_m, &hub, Vec3::Z, &fgb, 1);
+    arrays_russes(&mut asm, fgbm, &fgb);
     let sm = hab(VarianteModule::Coeur);
-    let smm = porter_vers(&mut asm, fgbm, fgb, Vec3::Z, sm, 1);
-    arrays_russes(&mut asm, smm, sm);
+    let smm = porter_vers(&mut asm, fgbm, &fgb, Vec3::Z, &sm, 1);
+    arrays_russes(&mut asm, smm, &sm);
     let rn = hub6();
-    let rnm = porter_vers(&mut asm, smm, sm, Vec3::Z, rn, 1);
+    let rnm = porter_vers(&mut asm, smm, &sm, Vec3::Z, &rn, 1);
     for dir in [Vec3::Y, Vec3::NEG_Y, Vec3::Z] {
-        porter_vers(&mut asm, rnm, rn, dir, hab(VarianteModule::Dore), 1);
+        porter_vers(&mut asm, rnm, &rn, dir, &hab(VarianteModule::Dore), 1);
     }
 
     // ===== Sur le cœur : Sas Quest (tribord) + radiateurs nadir sur modules. =====
-    porter_vers(&mut asm, hub_m, hub, Vec3::X, hab(VarianteModule::Sas), 1);
+    porter_vers(&mut asm, hub_m, &hub, Vec3::X, &hab(VarianteModule::Sas), 1);
     let radia = Composant::Radiateur { profil: Profil::P0, variante: VarianteRadiateur::PanneauSimple, longueur: 2.6, largeur: 1.2 };
-    appendice_sur_module(&mut asm, labm, lab, Vec3::NEG_Y, radia);
-    appendice_sur_module(&mut asm, smm, sm, Vec3::NEG_Y, radia);
+    appendice_sur_module(&mut asm, labm, &lab, Vec3::NEG_Y, &radia);
+    appendice_sur_module(&mut asm, smm, &sm, Vec3::NEG_Y, &radia);
 
     asm.terminer()
 }
@@ -467,7 +467,7 @@ fn paire_ailes(
 ) {
     for dir in [axe, -axe] {
         let pan = Composant::PanneauSolaire { profil: Profil::P0, variante, longueur, largeur };
-        appendice_sur_module(asm, corps, comp, dir, pan);
+        appendice_sur_module(asm, corps, &comp, dir, &pan);
     }
 }
 
@@ -487,7 +487,7 @@ fn vaisseau_amarre(
         variante: VarianteModule::Dore,
         longueur: 2.2,
     };
-    let vm = porter_vers(asm, hote_monde, hote, dir, corps, 1);
+    let vm = porter_vers(asm, hote_monde, &hote, dir, &corps, 1);
     paire_ailes(asm, vm, corps, axe_ailes, variante, 2.6, 0.9);
 }
 
@@ -498,9 +498,9 @@ fn vaisseau_amarre(
 fn sur_face(
     asm: &mut Assembleur,
     hote_monde: Repere,
-    hote: Composant,
+    hote: &Composant,
     dir: Vec3,
-    enfant: Composant,
+    enfant: &Composant,
 ) -> Option<Repere> {
     let ports = hote.ports();
     let cible = ports.iter().enumerate().find(|(i, p)| {
@@ -528,7 +528,7 @@ pub fn preset_comsat() -> EtatStation {
         largeur: 2.0,
     };
     let bm = Repere::IDENTITE;
-    asm.ajouter(cuire(bm, bus));
+    asm.ajouter(cuire(bm, &bus));
 
     // Ailes solaires : les deux grandes faces opposées.
     for dir in [Vec3::X, Vec3::NEG_X] {
@@ -538,7 +538,7 @@ pub fn preset_comsat() -> EtatStation {
             longueur: 6.0,
             largeur: 1.5,
         };
-        sur_face(&mut asm, bm, bus, dir, aile);
+        sur_face(&mut asm, bm, &bus, dir, &aile);
     }
     // Parabole principale vers la Terre + deux antennes secondaires.
     let grande = Composant::Antenne {
@@ -546,13 +546,13 @@ pub fn preset_comsat() -> EtatStation {
         variante: VarianteAntenne::ParaboleGG,
         taille: 1.5,
     };
-    sur_face(&mut asm, bm, bus, Vec3::Z, grande);
+    sur_face(&mut asm, bm, &bus, Vec3::Z, &grande);
     for (dir, v) in [
         (Vec3::Y, VarianteAntenne::ParaboleOffset),
         (Vec3::NEG_Y, VarianteAntenne::Cornets),
     ] {
         let a = Composant::Antenne { profil: Profil::P0, variante: v, taille: 0.9 };
-        sur_face(&mut asm, bm, bus, dir, a);
+        sur_face(&mut asm, bm, &bus, dir, &a);
     }
     // Radiateur et propulsion de maintien à poste sur les faces restantes.
     let radia = Composant::Radiateur {
@@ -561,13 +561,13 @@ pub fn preset_comsat() -> EtatStation {
         longueur: 2.2,
         largeur: 1.1,
     };
-    sur_face(&mut asm, bm, bus, Vec3::Y, radia);
+    sur_face(&mut asm, bm, &bus, Vec3::Y, &radia);
     let tuyere = Composant::Propulseur {
         profil: Profil::P0,
         variante: VariantePropulseur::EffetHall,
         taille: 0.8,
     };
-    sur_face(&mut asm, bm, bus, Vec3::NEG_Y, tuyere);
+    sur_face(&mut asm, bm, &bus, Vec3::NEG_Y, &tuyere);
 
     asm.terminer()
 }
@@ -584,7 +584,7 @@ pub fn preset_sonde() -> EtatStation {
         largeur: 1.8,
     };
     let bm = Repere::IDENTITE;
-    asm.ajouter(cuire(bm, bus));
+    asm.ajouter(cuire(bm, &bus));
 
     // Grande parabole de liaison, à l'avant.
     let hga = Composant::Antenne {
@@ -592,7 +592,7 @@ pub fn preset_sonde() -> EtatStation {
         variante: VarianteAntenne::ParaboleGG,
         taille: 1.8,
     };
-    sur_face(&mut asm, bm, bus, Vec3::Z, hga);
+    sur_face(&mut asm, bm, &bus, Vec3::Z, &hga);
     // Ailes solaires modestes : loin du Soleil, on ne peut pas compter dessus.
     for dir in [Vec3::X, Vec3::NEG_X] {
         let aile = Composant::PanneauSolaire {
@@ -601,7 +601,7 @@ pub fn preset_sonde() -> EtatStation {
             longueur: 4.2,
             largeur: 1.1,
         };
-        sur_face(&mut asm, bm, bus, dir, aile);
+        sur_face(&mut asm, bm, &bus, dir, &aile);
     }
     // Palette d'instruments sur une face, propulsion ionique de l'autre.
     let palette = Composant::ChargeUtile {
@@ -610,13 +610,13 @@ pub fn preset_sonde() -> EtatStation {
         longueur: 1.6,
         largeur: 1.0,
     };
-    sur_face(&mut asm, bm, bus, Vec3::NEG_Y, palette);
+    sur_face(&mut asm, bm, &bus, Vec3::NEG_Y, &palette);
     let moteur = Composant::Propulseur {
         profil: Profil::P0,
         variante: VariantePropulseur::IoniqueGrille,
         taille: 1.0,
     };
-    sur_face(&mut asm, bm, bus, Vec3::Y, moteur);
+    sur_face(&mut asm, bm, &bus, Vec3::Y, &moteur);
 
     // Perche de magnétomètre : un treillis fin, éloigné du bus pour fuir ses
     // perturbations magnétiques, avec le capteur au bout.
@@ -625,8 +625,8 @@ pub fn preset_sonde() -> EtatStation {
         longueur: 5.0,
         style: StyleTreillis::Triangulaire,
     };
-    let pm = poser(bm.compose(bus.ports()[0].repere), perche, 0);
-    asm.ajouter(cuire(pm, perche));
+    let pm = poser(bm.compose(bus.ports()[0].repere), &perche, 0);
+    asm.ajouter(cuire(pm, &perche));
     // Tête de capteur au bout : montage axial (index 1 = extrémité libre de la
     // poutre), le seul genre de port qu'accepte le bout d'un treillis.
     let capteur = Composant::ModuleAxial {
@@ -634,7 +634,7 @@ pub fn preset_sonde() -> EtatStation {
         variante: VarianteModule::Standard,
         longueur: 0.6,
     };
-    poser_sur(&mut asm, pm, perche, 1, capteur, 0);
+    poser_sur(&mut asm, pm, &perche, 1, &capteur, 0);
 
     asm.terminer()
 }
@@ -664,56 +664,56 @@ pub fn preset_mir() -> EtatStation {
     // Cœur DOS-7 (13,13 m), deux grandes ailes latérales + antennes arrière.
     let coeur = hab_l(VarianteModule::Coeur, cote(13.13));
     let cm = Repere::IDENTITE;
-    asm.ajouter(cuire(cm, coeur));
-    paire_ailes(&mut asm, cm, coeur, Vec3::Y, bleu, aile_l, aile_w);
+    asm.ajouter(cuire(cm, &coeur));
+    paire_ailes(&mut asm, cm, coeur.clone(), Vec3::Y, bleu, aile_l, aile_w);
     let antenne = Composant::Antenne {
         profil: Profil::P0,
         variante: VarianteAntenne::ParaboleOffset,
         taille: 0.9,
     };
-    appendice_sur_module(&mut asm, cm, coeur, Vec3::X, antenne);
+    appendice_sur_module(&mut asm, cm, &coeur, Vec3::X, &antenne);
 
     // Nœud sphérique avant (5 ports libres) + Soyouz-TM au port axial.
     let noeud = hub6();
-    let nm = porter_vers(&mut asm, cm, coeur, Vec3::Z, noeud, 1);
-    vaisseau_amarre(&mut asm, nm, noeud, Vec3::Z, Vec3::Y, bleu);
+    let nm = porter_vers(&mut asm, cm, &coeur, Vec3::Z, &noeud, 1);
+    vaisseau_amarre(&mut asm, nm, noeud.clone(), Vec3::Z, Vec3::Y, bleu);
 
     // La croix autour du nœud, dans la disposition du schéma d'assemblage :
     // Priroda au zénith, Kristall au nadir, Kvant-2 et Spektr sur les flancs.
 
     // Priroda : le seul module **sans aile** (il tournait sur batteries).
     let priroda = hab_l(VarianteModule::Labo, cote(11.90));
-    porter_vers(&mut asm, nm, noeud, Vec3::Y, priroda, 1);
+    porter_vers(&mut asm, nm, &noeud, Vec3::Y, &priroda, 1);
 
     // Kristall : **sans aile non plus** en configuration finale — les siennes
     // ont été transférées sur Kvant-1. Il porte le module d'amarrage navette
     // (4,70 m × Ø 2,20), un vrai module étroit et non un simple nez.
     let kristall = hab_l(VarianteModule::Labo, cote(11.90));
-    let kri = porter_vers(&mut asm, nm, noeud, Vec3::NEG_Y, kristall, 1);
+    let kri = porter_vers(&mut asm, nm, &noeud, Vec3::NEG_Y, &kristall, 1);
     let so = Composant::ModuleAxial {
         profil: Profil::P0,
         variante: VarianteModule::Standard,
         longueur: cote(4.70),
     };
-    let som = porter_vers(&mut asm, kri, kristall, Vec3::NEG_Y, so, 1);
-    porter_vers(&mut asm, som, so, Vec3::NEG_Y, nez_docking(), 0);
+    let som = porter_vers(&mut asm, kri, &kristall, Vec3::NEG_Y, &so, 1);
+    porter_vers(&mut asm, som, &so, Vec3::NEG_Y, &nez_docking(), 0);
 
     // Kvant-2 : le plus long des modules (13,73 m).
     let kvant2 = hab_l(VarianteModule::Hublots, cote(13.73));
-    let kv2 = porter_vers(&mut asm, nm, noeud, Vec3::X, kvant2, 1);
+    let kv2 = porter_vers(&mut asm, nm, &noeud, Vec3::X, &kvant2, 1);
     paire_ailes(&mut asm, kv2, kvant2, Vec3::Y, bleu, aile_l, aile_w);
 
     // Spektr : **quatre** ailes (deux paires croisées), sa signature.
     let spektr = hab_l(VarianteModule::Standard, cote(9.10));
-    let spe = porter_vers(&mut asm, nm, noeud, Vec3::NEG_X, spektr, 1);
-    paire_ailes(&mut asm, spe, spektr, Vec3::Y, bleu, cote(8.6), cote(3.4));
+    let spe = porter_vers(&mut asm, nm, &noeud, Vec3::NEG_X, &spektr, 1);
+    paire_ailes(&mut asm, spe, spektr.clone(), Vec3::Y, bleu, cote(8.6), cote(3.4));
     paire_ailes(&mut asm, spe, spektr, Vec3::Z, bleu, cote(7.0), cote(3.0));
 
     // Kvant-1 à l'arrière du cœur : tonneau court (5,80 m), mais porteur des
     // grandes ailes reprises de Kristall. Progress-M à son port arrière.
     let kvant1 = hab_l(VarianteModule::Dore, cote(5.80));
-    let kv1 = porter_vers(&mut asm, cm, coeur, Vec3::NEG_Z, kvant1, 1);
-    paire_ailes(&mut asm, kv1, kvant1, Vec3::Y, bleu, aile_l, aile_w);
+    let kv1 = porter_vers(&mut asm, cm, &coeur, Vec3::NEG_Z, &kvant1, 1);
+    paire_ailes(&mut asm, kv1, kvant1.clone(), Vec3::Y, bleu, aile_l, aile_w);
     vaisseau_amarre(&mut asm, kv1, kvant1, Vec3::NEG_Z, Vec3::Y, bleu);
 
     asm.terminer()
@@ -734,37 +734,37 @@ pub fn preset_tiangong() -> EtatStation {
     // Tianhe : cœur + ailes moyennes.
     let tianhe = hab_l(VarianteModule::Standard, 5.0);
     let thm = Repere::IDENTITE;
-    asm.ajouter(cuire(thm, tianhe));
-    paire_ailes(&mut asm, thm, tianhe, Vec3::Y, ailes, 4.5, 1.2);
+    asm.ajouter(cuire(thm, &tianhe));
+    paire_ailes(&mut asm, thm, tianhe.clone(), Vec3::Y, ailes, 4.5, 1.2);
     // Port arrière : cargo Tianzhou.
-    porter_vers(&mut asm, thm, tianhe, Vec3::NEG_Z, nez_docking(), 0);
+    porter_vers(&mut asm, thm, &tianhe, Vec3::NEG_Z, &nez_docking(), 0);
 
     // Nœud avant : port axial (Shenzhou / télescope) + port nadir habité.
     let noeud = hub6();
-    let nm = porter_vers(&mut asm, thm, tianhe, Vec3::Z, noeud, 1);
-    porter_vers(&mut asm, nm, noeud, Vec3::Z, nez_docking(), 0);
-    porter_vers(&mut asm, nm, noeud, Vec3::NEG_Y, nez_docking(), 0);
+    let nm = porter_vers(&mut asm, thm, &tianhe, Vec3::Z, &noeud, 1);
+    porter_vers(&mut asm, nm, &noeud, Vec3::Z, &nez_docking(), 0);
+    porter_vers(&mut asm, nm, &noeud, Vec3::NEG_Y, &nez_docking(), 0);
 
     // La barre du T : les deux laboratoires, avec leurs grandes ailes.
     let wentian = hab_l(VarianteModule::Labo, 5.0);
-    let wm = porter_vers(&mut asm, nm, noeud, Vec3::X, wentian, 1);
-    paire_ailes(&mut asm, wm, wentian, Vec3::Y, ailes, 7.5, 1.6);
+    let wm = porter_vers(&mut asm, nm, &noeud, Vec3::X, &wentian, 1);
+    paire_ailes(&mut asm, wm, wentian.clone(), Vec3::Y, ailes, 7.5, 1.6);
     // Sas EVA au bout de Wentian.
-    porter_vers(&mut asm, wm, wentian, Vec3::X, hab_l(VarianteModule::Sas, 2.0), 1);
+    porter_vers(&mut asm, wm, &wentian, Vec3::X, &hab_l(VarianteModule::Sas, 2.0), 1);
 
     let mengtian = hab_l(VarianteModule::Labo, 5.0);
-    let mm = porter_vers(&mut asm, nm, noeud, Vec3::NEG_X, mengtian, 1);
-    paire_ailes(&mut asm, mm, mengtian, Vec3::Y, ailes, 7.5, 1.6);
+    let mm = porter_vers(&mut asm, nm, &noeud, Vec3::NEG_X, &mengtian, 1);
+    paire_ailes(&mut asm, mm, mengtian.clone(), Vec3::Y, ailes, 7.5, 1.6);
     // Sas cargo au bout de Mengtian, et sa **plateforme exposée** — Mengtian
     // en porte une, qui accueille des charges utiles hors pression.
-    porter_vers(&mut asm, mm, mengtian, Vec3::NEG_X, hab_l(VarianteModule::Sas, 2.0), 1);
+    porter_vers(&mut asm, mm, &mengtian, Vec3::NEG_X, &hab_l(VarianteModule::Sas, 2.0), 1);
     let palette = Composant::ChargeUtile {
         profil: Profil::P0,
         variante: VarianteCharge::Palette,
         longueur: 2.6,
         largeur: 1.4,
     };
-    appendice_sur_module(&mut asm, mm, mengtian, Vec3::Z, palette);
+    appendice_sur_module(&mut asm, mm, &mengtian, Vec3::Z, &palette);
 
     asm.terminer()
 }
@@ -872,12 +872,12 @@ pub(crate) fn poser_anneau(
         // Segment sur l'arête, orienté le long de la corde.
         let dir = (p1 - p0).normalize_or_zero();
         let seg = style.segment(corde, StyleTreillis::Carre);
-        asm.ajouter(cuire(Repere::new((p0 + p1) * 0.5, Quat::from_rotation_arc(Vec3::Z, dir)), seg));
+        asm.ajouter(cuire(Repere::new((p0 + p1) * 0.5, Quat::from_rotation_arc(Vec3::Z, dir)), &seg));
         // Joint d'angle au sommet, aligné sur la **tangente** : un court
         // adaptateur qui masque le coude entre deux segments successifs.
         let tang = (-u * a0.sin() + v * a0.cos()).normalize_or_zero();
         let joint = Composant::Adaptateur { grand: profil, petit: profil, longueur: lj };
-        asm.ajouter(cuire(Repere::new(p0, Quat::from_rotation_arc(Vec3::Z, tang)), joint));
+        asm.ajouter(cuire(Repere::new(p0, Quat::from_rotation_arc(Vec3::Z, tang)), &joint));
     }
 }
 
@@ -919,10 +919,10 @@ pub fn preset_anneau() -> EtatStation {
     // Moyeu + épine courte le long de l'axe Z.
     let hub = Composant::Noeud { profil: Profil::P2, sorties: Sorties::Six };
     let hm = Repere::IDENTITE;
-    asm.ajouter(cuire(hm, hub));
+    asm.ajouter(cuire(hm, &hub));
     for dir in [Vec3::Z, Vec3::NEG_Z] {
         let m = Composant::ModuleAxial { profil: Profil::P2, variante: VarianteModule::Coeur, longueur: 3.0 };
-        porter_vers(&mut asm, hm, hub, dir, m, 1);
+        porter_vers(&mut asm, hm, &hub, dir, &m, 1);
     }
 
     // Anneau d'habitation dans le plan XY (axe = Z, celui de l'épine).
@@ -935,7 +935,7 @@ pub fn preset_anneau() -> EtatStation {
         let radial = Vec3::new(a.cos(), a.sin(), 0.0);
         let mid = radial * ((inner + outer) * 0.5);
         let bras = Composant::Treillis { profil: Profil::P1, longueur: outer - inner, style: StyleTreillis::Carre };
-        asm.ajouter(cuire(Repere::new(mid, Quat::from_rotation_arc(Vec3::Z, radial)), bras));
+        asm.ajouter(cuire(Repere::new(mid, Quat::from_rotation_arc(Vec3::Z, radial)), &bras));
     }
 
     asm.terminer()
@@ -947,7 +947,7 @@ pub fn preset_anneau() -> EtatStation {
 pub fn demo_radiateur_mega() -> EtatStation {
     let mut asm = Assembleur::new();
     let r = Composant::RadiateurMega { profil: Profil::P0, longueur: 26.0, largeur: 5.5, ailettes: 34 };
-    asm.ajouter(cuire(Repere::IDENTITE, r));
+    asm.ajouter(cuire(Repere::IDENTITE, &r));
     asm.terminer()
 }
 
@@ -959,10 +959,10 @@ pub fn demo_moteur_antimatiere() -> EtatStation {
     let mut asm = Assembleur::new();
     let bloc = Composant::BlocMoteur { profil: Profil::P2, largeur: 4.4 };
     let bm = Repere::IDENTITE;
-    asm.ajouter(cuire(bm, bloc));
+    asm.ajouter(cuire(bm, &bloc));
     // Habitat n°9 (Cœur) de l'autre côté de la brique technique (+Z).
     let hab9 = Composant::ModuleAxial { profil: Profil::P2, variante: VarianteModule::Coeur, longueur: 4.5 };
-    porter_vers(&mut asm, bm, bloc, Vec3::Z, hab9, 1); // montage 1 = habitat retourné
+    porter_vers(&mut asm, bm, &bloc, Vec3::Z, &hab9, 1); // montage 1 = habitat retourné
     asm.terminer()
 }
 
@@ -995,7 +995,7 @@ pub fn preset_isv() -> EtatStation {
     let decalage = longueur * 0.1;
     let y_centre = -16.0 + longueur * 0.5 + decalage;
     let base = Repere::new(vec3(0.0, y_centre, 0.0), Quat::from_rotation_arc(Vec3::Z, Vec3::Y));
-    asm.ajouter(cuire(base, charpente));
+    asm.ajouter(cuire(base, &charpente));
 
     // Deux grandes **ailes radiateur méga** près de la base évasée (côté
     // moteurs). Le vaisseau s'étend en Y ∈ [−20, +20], base vers −Y.
@@ -1018,7 +1018,7 @@ pub fn preset_isv() -> EtatStation {
         let rot = Quat::from_rotation_z(cote * tilt) * orient;
         let pos = Vec3::new(-6.5 * cote, -20.0, 0.0); // permutées, écartées un peu plus, descendues d'une demi-épine
         let repere = Repere::new(pos, rot);
-        asm.ajouter(cuire(repere, aile));
+        asm.ajouter(cuire(repere, &aile));
         // Bloc moteur docké au collecteur de CE radiateur, comme dans la vue
         // radiateur+bloc moteur. Le côté −X est le **flip** de l'autre (miroir).
         // `propulseur = true` : version **complète** (Cœur 3 noir + chapes bombées
@@ -1065,10 +1065,10 @@ pub fn preset_isv() -> EtatStation {
         let rot = base * spin * corr;
         let z = sz * (prof + res_r - 1.0); // réservoir enfoncé dans la charpente (écart −1.0)
         // Cuve d'origine.
-        asm.ajouter(cuire(Repere::new(vec3(0.0, hex_y, z), rot), reservoir));
+        asm.ajouter(cuire(Repere::new(vec3(0.0, hex_y, z), rot), &reservoir));
         // Cuve dupliquée : autre côté de la charpente + demi-tour Z.
         let rot2 = rot * Quat::from_rotation_z(PI);
-        asm.ajouter(cuire(Repere::new(vec3(0.0, hex_y - dy, z), rot2), reservoir));
+        asm.ajouter(cuire(Repere::new(vec3(0.0, hex_y - dy, z), rot2), &reservoir));
     }
 
     // **Second anneau hexagonal** au niveau du groupe de réservoirs dupliqué
@@ -1076,7 +1076,7 @@ pub fn preset_isv() -> EtatStation {
     // du pied de la charpente. Plus besoin de montants (`liaison = 0`).
     let hexa = Composant::TreillisHexagone { profil: Profil::P3, liaison: 0.0 };
     let hexa_rot = Quat::from_rotation_arc(Vec3::Z, Vec3::Y);
-    asm.ajouter(cuire(Repere::new(vec3(0.0, hex_y - dy, 0.0), hexa_rot), hexa));
+    asm.ajouter(cuire(Repere::new(vec3(0.0, hex_y - dy, 0.0), hexa_rot), &hexa));
 
     // **Modèle complet à l'horizontale** : rotation globale de 90° autour de Z
     // (l'axe +Y du vaisseau bascule vers +X), appliquée à toutes les pièces.
@@ -1094,7 +1094,7 @@ fn pivoter(etat: EtatStation, q: Quat) -> EtatStation {
     let pieces: Vec<super::Piece> = s
         .pieces()
         .iter()
-        .map(|p| super::Piece::new(rot * p.transforme, p.composant))
+        .map(|p| super::Piece::new(rot * p.transforme, p.composant.clone()))
         .collect();
     super::Station::depuis_pieces(pieces)
         .map(EtatStation::Prete)
@@ -1121,7 +1121,7 @@ pub fn preset_isv_moteur() -> EtatStation {
         largeur: lx,
         ailettes: 28,
     };
-    asm.ajouter(cuire(Repere::IDENTITE, radia));
+    asm.ajouter(cuire(Repere::IDENTITE, &radia));
 
     // Bloc moteur docké au collecteur du radiateur (radiateur au repère identité).
     // `propulseur = true` : Cœur 3 reçoit le propulseur à antimatière complet.
@@ -1147,7 +1147,7 @@ fn poser_bloc_moteur(asm: &mut Assembleur, radia: Repere, radia_largeur: f32, mi
     let bm = radia.compose(Repere::new(vec3(0.0, 0.0, face - 4.1), Quat::from_rotation_y(PI)));
 
     let bloc = Composant::BlocMoteur { profil: Profil::P2, largeur: bloc_w };
-    asm.ajouter(cuire(bm, bloc));
+    asm.ajouter(cuire(bm, &bloc));
 
     let port9 = bm.compose(bloc.ports()[1].repere); // port +Z du bloc
     // Axe de la rangée de Cœurs. `miroir` inverse le côté → l'autre moteur est
@@ -1156,15 +1156,15 @@ fn poser_bloc_moteur(asm: &mut Assembleur, radia: Repere, radia_largeur: f32, mi
 
     // Cœur 1 : P2, longueur 9.0, offset +25 % le long de xdir.
     let coeur1 = Composant::ModuleAxial { profil: Profil::P2, variante: VarianteModule::Coeur, longueur: 9.0 };
-    let mut w1 = poser(port9, coeur1, 1);
+    let mut w1 = poser(port9, &coeur1, 1);
     w1.pos += xdir * (0.25 * lx);
-    asm.ajouter(cuire(w1, coeur1));
+    asm.ajouter(cuire(w1, &coeur1));
 
     // Cœur 2 : P2, longueur 4.5, tambour contre tambour à Cœur 1 (chevauche le bloc).
     let coeur2 = Composant::ModuleAxial { profil: Profil::P2, variante: VarianteModule::Coeur, longueur: 4.5 };
     let port_tambour = w1.compose(coeur1.ports()[1].repere);
-    let w2 = poser(port_tambour, coeur2, 1);
-    asm.ajouter(cuire(w2, coeur2));
+    let w2 = poser(port_tambour, &coeur2, 1);
+    asm.ajouter(cuire(w2, &coeur2));
 
     // Chapes **bombées** sur les bouts **exposés** (+Z) de Cœur 1 et Cœur 2
     // (leurs bouts −Z sont joints tambour contre tambour). Posées **à ras du
@@ -1173,14 +1173,14 @@ fn poser_bloc_moteur(asm: &mut Assembleur, radia: Repere, radia_largeur: f32, mi
     for (w, demi) in [(w1, 9.0_f32 * 0.5), (w2, 4.5_f32 * 0.5)] {
         let coiffe = Composant::Coiffe { profil: Profil::P2, variante: VarianteCoiffe::Bombee };
         let cw = w.compose(Repere::new(vec3(0.0, 0.0, demi), Quat::IDENTITY));
-        asm.ajouter(cuire(cw, coiffe));
+        asm.ajouter(cuire(cw, &coiffe));
     }
 
     // Cœur 3 : P1 (diamètre moitié), longueur 9.0, collé sans écart côté −xdir de Cœur 1.
     let coeur3 = Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Coeur, longueur: 9.0 };
-    let mut w3 = poser(port9, coeur3, 1);
+    let mut w3 = poser(port9, &coeur3, 1);
     w3.pos = w1.pos - xdir * (Profil::P2.rayon() + Profil::P1.rayon());
-    asm.ajouter(cuire(w3, coeur3));
+    asm.ajouter(cuire(w3, &coeur3));
 
     // Propulseur à antimatière accroché au **bout libre (+Z)** de Cœur 3 : le
     // réacteur se clipse par sa **tête** (port 1), et la tuyère se monte sous sa
@@ -1192,11 +1192,11 @@ fn poser_bloc_moteur(asm: &mut Assembleur, radia: Repere, radia_largeur: f32, mi
         let taille = Profil::P1.rayon() / 0.40;
         let port_c3 = w3.compose(coeur3.ports()[0].repere); // écoutille axiale libre (+Z)
         let reacteur = Composant::ReacteurAntimatiere { profil: Profil::P1, taille };
-        let rw = poser(port_c3, reacteur, 1); // montage par la tête (+Z)
-        asm.ajouter(cuire(rw, reacteur));
+        let rw = poser(port_c3, &reacteur, 1); // montage par la tête (+Z)
+        asm.ajouter(cuire(rw, &reacteur));
         let tuyere = Composant::MoteurAntimatiere { profil: Profil::P1, taille };
         let port_base = rw.compose(reacteur.ports()[0].repere); // base −Z du réacteur
-        asm.ajouter(cuire(poser(port_base, tuyere, 0), tuyere));
+        asm.ajouter(cuire(poser(port_base, &tuyere, 0), &tuyere));
     }
 }
 
@@ -1214,7 +1214,7 @@ pub fn demo_charpente() -> EtatStation {
             courbure: 2.6,
             aiguille,
         };
-        asm.ajouter(cuire(Repere::new(vec3(dx, 0.0, 0.0), debout), ch));
+        asm.ajouter(cuire(Repere::new(vec3(dx, 0.0, 0.0), debout), &ch));
     }
     asm.terminer()
 }
@@ -1224,7 +1224,7 @@ pub fn demo_charpente() -> EtatStation {
 pub fn demo_reservoir() -> EtatStation {
     let mut asm = Assembleur::new();
     let res = Composant::Reservoir { profil: Profil::P2, longueur: 6.0, cage: false };
-    asm.ajouter(cuire(Repere::IDENTITE, res));
+    asm.ajouter(cuire(Repere::IDENTITE, &res));
     asm.terminer()
 }
 
@@ -1236,10 +1236,10 @@ pub fn demo_moteur_antimatiere_principal() -> EtatStation {
     let t = 6.0;
     let moteur = Composant::MoteurAntimatiere { profil: Profil::P2, taille: t };
     let mm = Repere::IDENTITE;
-    asm.ajouter(cuire(mm, moteur));
+    asm.ajouter(cuire(mm, &moteur));
     // Bloc réacteur/injection clipsé sur l'écoutille axiale +Z de la tuyère.
     let reacteur = Composant::ReacteurAntimatiere { profil: Profil::P2, taille: t };
-    porter_vers(&mut asm, mm, moteur, Vec3::Z, reacteur, 0);
+    porter_vers(&mut asm, mm, &moteur, Vec3::Z, &reacteur, 0);
     asm.terminer()
 }
 
@@ -1458,7 +1458,7 @@ fn corridor_libre(avant: Vec3) -> bool {
 /// coiffe pas le bout nu d'une poutre d'un nez de docking.
 fn sur_pressurise(ch: &Chantier, origine: usize) -> bool {
     matches!(
-        ch.piece(origine).map(|p| p.composant),
+        ch.piece(origine).map(|p| p.composant.clone()),
         Some(Composant::ModuleAxial { .. }) | Some(Composant::Noeud { .. })
     )
 }
@@ -1518,7 +1518,7 @@ fn brancher(
         let m = module(style, rng, longueur);
         for pos in positions {
             if let Some(i) = index_port(ch, GenrePort::ModuleRadial, pos) {
-                ch.poser(i, m, 1);
+                ch.poser(i, m.clone(), 1);
             }
         }
     }
@@ -1569,7 +1569,7 @@ fn brancher(
                 let m = module(style, rng, longueur);
                 for pos in bras.into_iter().take(2) {
                     if let Some(j) = index_port(ch, GenrePort::ModuleRadial, pos) {
-                        ch.poser(j, m, 1);
+                        ch.poser(j, m.clone(), 1);
                     }
                 }
             }
@@ -1718,7 +1718,7 @@ fn habiller_surface(
             // comme sur l'ISS — l'habiller le faisait ressembler à un mât de
             // sapin de Noël au ras des modules. Exclu des deux passes, ses
             // ports ne sont jamais garnis.
-            match ch.piece(p.origine).map(|q| q.composant) {
+            match ch.piece(p.origine).map(|q| q.composant.clone()) {
                 Some(Composant::Treillis { profil, .. }) => poutres && profil == Profil::P2,
                 // La jonction en T (sommet du boom) expose aussi des faces
                 // `Surface` — un radiateur qui y pousse ruine la barre nette.
@@ -1734,7 +1734,7 @@ fn habiller_surface(
     // pour le zonage (min = pied, max = extrémité).
     let mut bornes: Vec<(usize, f32, f32)> = Vec::new();
     for (pos, _, origine) in &ports {
-        if !matches!(ch.piece(*origine).map(|p| p.composant), Some(Composant::Treillis { .. })) {
+        if !matches!(ch.piece(*origine).map(|p| p.composant.clone()), Some(Composant::Treillis { .. })) {
             continue;
         }
         let d = pos.length();
@@ -1806,7 +1806,7 @@ fn habiller_surface(
                     && q.repere.pos.distance(*pos) < 1e-3
                     && (q.repere.avant() - *avant).length() < 1e-3
             }) {
-                ch.poser(i, app, 0);
+                ch.poser(i, app.clone(), 0);
             }
         }
     }

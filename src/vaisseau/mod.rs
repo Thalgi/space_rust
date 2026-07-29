@@ -20,9 +20,9 @@ mod unites;
 
 pub use assemblage::{Assembleur, Budget, EtatStation, Piece, Station};
 pub use composant::{
-    Composant, FamillePropulsion, Sorties, StyleTreillis, VarianteAntenne, VarianteCaisson,
-    VarianteCharge, VarianteCoiffe, VarianteModule, VariantePanneau, VariantePropulseur,
-    VarianteRadiateur,
+    Composant, DonneesSousEnsemble, FamillePropulsion, Sorties, StyleTreillis, VarianteAntenne,
+    VarianteCaisson, VarianteCharge, VarianteCoiffe, VarianteModule, VariantePanneau,
+    VariantePropulseur, VarianteRadiateur,
 };
 pub use generateur::{
     demo_anneaux, demo_charpente, demo_moteur_antimatiere, demo_moteur_antimatiere_principal,

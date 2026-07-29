@@ -1093,14 +1093,15 @@ que de coder chaque cible en dur.
 
 ## Partie E — Refonte du système de composants (vers un éditeur façon VAB)
 
-> Document de conception, phase avant code (2026-07-29) — **rien de cette
-> partie n'est encore implémenté**. Deux chantiers ordonnés : d'abord ramener
-> `composant.rs` à une taille gérable (§E.1–E.2), puis introduire un composant
+> Document de conception (2026-07-29), mis à jour au fil de l'implémentation.
+> Deux chantiers, prévus dans l'ordre E.2 puis E.3 mais **faits dans l'ordre
+> inverse** (décision utilisateur) : ramener `composant.rs` à une taille
+> gérable (§E.1–E.2, **toujours à faire**) et introduire un composant
 > **composite** capable d'agréger plusieurs pièces en une seule brique
-> réutilisable (§E.3). L'éditeur d'assemblage interactif façon VAB (Vehicle
-> Assembly Building de Kerbal Space Program) est **hors scope** de cette
-> partie : §E.4 liste ce dont il aura besoin, pour que la refonte ne lui ferme
-> aucune porte, mais sa construction est un chantier **ultérieur**, distinct.
+> réutilisable (§E.3, **fait**). L'éditeur d'assemblage interactif façon VAB
+> (Vehicle Assembly Building de Kerbal Space Program) reste **hors scope** :
+> §E.4 liste ce dont il aura besoin, pour que la refonte ne lui ferme aucune
+> porte, mais sa construction est un chantier **ultérieur**, distinct.
 
 ### E.1 Constat : pourquoi `composant.rs` doit être découpé
 
@@ -1203,19 +1204,23 @@ donc la migration a un vrai filet sur les 19 variantes, pas 10).
 3. À chaque extraction : couper-coller le bras de `match` concerné des 4
    fonctions vers le nouveau module, vérifier `cargo test`, commit.
 
-### E.3 Le composant composite : `SousEnsemble`
+### E.3 Le composant composite : `SousEnsemble` — ✅ implémenté (2026-07-29)
 
-Le découpage en fichiers (§E.2) ne change rien au **modèle** : assembler
-plusieurs composants reste aujourd'hui le travail de `Chantier`/`Assembleur`
-(Partie C), qui produit une `Station` = `Vec<Piece>`. Il n'existe **aucun
-moyen de traiter un groupe de pièces déjà assemblées comme une seule brique
-réutilisable** — impossible de construire « une paire d'ailes + adaptateur »
-une fois et de la clipser telle quelle à trois endroits différents, ou de
-docker une station entière comme module d'une mégastructure (pourtant annoncé
-en Partie D : « chaque classe supérieure réutilise les briques des classes
-inférieures »).
+> **État : fait**, sans attendre le découpage §E.2 (décision utilisateur —
+> l'ordre initialement prévu était E.2 puis E.3 ; en pratique E.3 est arrivé
+> en premier). `composant.rs` reste donc un seul fichier pour l'instant ;
+> §E.2 (découpage en modules) reste à faire, inchangé par ce qui suit.
 
-**Proposition : une 20ᵉ variante de `Composant`, composite.**
+Assembler plusieurs composants était déjà le travail de `Chantier`/
+`Assembleur` (Partie C), qui produit une `Station` = `Vec<Piece>`. Mais il
+n'existait **aucun moyen de traiter un groupe de pièces déjà assemblées comme
+une seule brique réutilisable** — impossible de construire « une paire
+d'ailes + adaptateur » une fois et de la clipser telle quelle à trois endroits
+différents, ou de docker une station entière comme module d'une
+mégastructure (pourtant annoncé en Partie D : « chaque classe supérieure
+réutilise les briques des classes inférieures »).
+
+**Une 20ᵉ variante de `Composant`, composite** (`src/vaisseau/composant.rs`) :
 
 ```rust
 /// Sous-ensemble figé : un groupe de pièces déjà assemblées (ports cuits en
@@ -1235,52 +1240,82 @@ pub struct DonneesSousEnsemble {
 }
 ```
 
-Les cinq comportements deviennent triviaux (c'est tout l'intérêt du
-Composite) :
-- `ports()` → clone de `donnees.ports_exposes` (déjà en repère local, comme
-  n'importe quel autre composant) ;
-- `dessiner(p)` → boucle sur `donnees.pieces`, pousse la transformée de
-  chacune, délègue à `piece.composant.dessiner(p)` — **exactement** ce que
-  fait déjà `Station::dessiner` (Partie C §2), donc pas de nouveau code de
-  rendu, juste un appel à la même mécanique ;
-- `cout()` / `rayon_local()` / `englobant_local()` → lecture `O(1)` des champs
-  précalculés (`englobant_local` = `(Vec3::ZERO, donnees.rayon)`, comme la
-  plupart des composants structurels) — pas de parcours à chaque appel,
-  important, `Chantier::poser` les appelle à chaque pose pour le budget et
-  l'anti-collision.
+Les cinq comportements sont triviaux (c'est tout l'intérêt du Composite) :
+`ports()` clone `donnees.ports_exposes` ; `cout()`/`rayon_local()` lisent les
+champs précalculés (`O(1)`, important car `Chantier::poser` les appelle à
+chaque pose) ; `englobant_local()` = `(Vec3::ZERO, donnees.rayon)`.
 
-**Comment on en fabrique un** : `Assembleur`/`Chantier` construisent un
-sous-arbre normalement, puis une fonction `figer(assembleur, port_montage)
--> Composant::SousEnsemble` le gèle — même idée que `Station::terminer()`
-(Partie B §1, « on ne publie qu'une fois complet »), appliquée à un
-sous-arbre au lieu de la station entière. Ça rend une **station entière**
-trivialement réutilisable comme brique d'une mégastructure : geler un
-`EtatStation::Prete(Station)` produit un `Composant::SousEnsemble` qu'on peut
-docker ailleurs — exactement le « réutilise les briques des classes
-inférieures » que demande la Partie D, mais que rien aujourd'hui ne permet
-mécaniquement.
+**`dessiner(p)` a demandé plus que prévu.** L'idée initiale — « boucle sur
+`donnees.pieces`, délègue à `piece.composant.dessiner(p)` » — bute sur un
+vrai trou d'abstraction découvert à l'implémentation : les primitives de
+`Peintre` (`cylindre`, `cube`, …) dessinent dans un repère qu'un appelant
+externe doit avoir déjà positionné (`push_model_matrix` côté GL pour
+`Immediat`, `poser_transforme` côté `Batisseur`) — mais **aucune des deux
+mécaniques n'était exposée par le trait `Peintre` lui-même**, seulement par
+les types concrets. Un composite qui doit dessiner *plusieurs* enfants,
+chacun à sa propre place, n'avait donc aucun moyen générique de le faire.
+Ajouté au trait (`src/vaisseau/peintre.rs`) :
 
-**Coût architectural honnête, à trancher avant d'implémenter** : `Composant`
-est aujourd'hui `#[derive(Clone, Copy, PartialEq, Debug)]`. Un champ
-`Rc<DonneesSousEnsemble>` **casse `Copy`** (`Rc` ne l'est pas). Deux options :
+```rust
+fn empiler_transforme(&mut self, m: Mat4); // compose par-dessus l'actif
+fn depiler_transforme(&mut self);          // restaure
+```
 
-1. **Accepter la perte de `Copy`** (`Clone` seulement) : le coût réel est que
-   les quelques call-sites qui font `let m = composant; … m.ports()[i] …
-   m.ports()[j] …` (copie implicite aujourd'hui) doivent ajouter un
-   `.clone()` explicite — mécanique, repérable à la compilation, pas un
-   risque caché. `Rc::clone` est un simple `refcount++`, pas une copie
-   profonde du sous-arbre.
-2. **Garder `Copy` via un handle** : `Composant::SousEnsemble { profil: Profil,
-   id: SousEnsembleId(u32) }`, `SousEnsembleId` étant un index `Copy` dans un
-   registre (`Vec<DonneesSousEnsemble>`) tenu par l'`Assembleur`/`Chantier` en
-   cours. Préserve `Copy` partout, mais ajoute un registre à faire vivre et
-   passer en argument (ou en `thread_local`, moins KISS).
+`Immediat` délègue à la pile GL de macroquad (qui compose déjà nativement).
+`Batisseur` n'a qu'un champ `transforme` (pas de pile native) : il gagne un
+`Vec<Mat4>` interne pour sauvegarder/restaurer. `SousEnsemble::dessiner`
+devient alors : pour chaque enfant, `empiler_transforme(piece.transforme)` →
+`piece.composant.dessiner(p)` → `depiler_transforme()` — testé explicitement
+(`sous_ensemble_dessine_ses_enfants_a_leur_vraie_place`) pour vérifier que la
+composition a bien lieu (et non un écrasement, qui aurait perdu la position
+du composite lui-même dans son propre parent).
 
-**Recommandation** : option 1 (`Rc`, perte de `Copy`). Plus simple, aucune
-gestion de cycle de vie de registre, coût mesurable et local (quelques
-`.clone()` à ajouter, visibles à la compilation). L'option 2 se justifierait
-seulement si le profilage montrait un jour un coût réel — YAGNI sinon, même
-logique que le rejet du `Box<dyn>` en Partie C §1.
+**Fabrication** : `Chantier::figer(self, profil) -> Option<Composant>`
+(`src/vaisseau/chantier.rs`) — même idée que `Station::terminer()`
+(Partie B §1, « on ne publie qu'une fois complet »), appliquée à un sous-arbre
+au lieu de la station entière. `None` si rien n'a été posé (même invariant
+que `Station::depuis_pieces`). Pas encore fait : geler un `Assembleur`/une
+`Station` déjà publiée (utile pour réutiliser un preset entier comme brique
+de mégastructure) — `figer` n'existe aujourd'hui que sur `Chantier`, qui est
+le seul des deux à suivre les ports libres.
+
+**Le coût réel de la perte de `Copy` : 120 sites, pas « quelques ».**
+`Composant` (et `Piece`, qui l'embarque) a perdu `Copy` (`Rc` ne l'est pas) —
+anticipé, mais l'estimation initiale (« quelques `.clone()` ») était fausse
+par un ordre de grandeur : la suppression a cassé la compilation à **120
+endroits**, presque tous dans les presets à la main (ISS/Mir/Tiangong/ISV de
+`generateur.rs`) qui réutilisent une variable `Composant` plusieurs fois
+(ex. un nœud avec 4 bras dockés dessus). Décidé **après avoir mesuré ce coût
+en conditions réelles** (question posée explicitement) plutôt que de garder
+`Copy` via un handle + registre : le registre aurait résolu le problème
+immédiat mais en créant un nouveau pour l'éditeur futur — croissance non
+bornée sans stratégie de réclamation (une session d'édition longue pose/
+annule/repose des centaines de fois, contrairement au générateur qui
+construit une fois et s'arrête), sérialisation impossible (un handle `u32`
+n'a de sens que dans le process qui l'a créé), et undo/redo qui aurait dû
+réinventer le comptage de références que `Rc` offre déjà. `Rc` reste donc la
+décision retenue, alignée sur ce que l'éditeur (§E.4) demandera réellement.
+
+**Comment le coût a été absorbé** (pas en modifiant 120 sites à la main) :
+- Les fonctions internes qui n'avaient besoin que de **lire** un composant
+  (`ports()`, `cout()`, `englobant_local()`) sont passées à `&Composant` —
+  `Chantier::{payer, collision, ajouter_libres, compatibles}`,
+  `montage::{port_monde, poser, cuire, cuire_symetrie}`,
+  `generateur::{poser_sur, arrays_russes, appendice_sur_module, porter_vers,
+  sur_face}`. Chacune ne clone qu'**une fois**, en interne, au moment de
+  construire un `Piece` qui doit posséder son `Composant` (`comp.clone()`) —
+  au lieu que chaque appelant s'en soucie.
+- `cargo fix --broken-code` (rustfix) a ensuite appliqué mécaniquement les
+  ~115 corrections restantes (emprunts, clones) à chaque site d'appel —
+  suggestions `MachineApplicable` du compilateur, jamais de logique nouvelle.
+- Une passe de nettoyage a retiré 42 `&x.clone()` redondants que `cargo fix`
+  avait posés par prudence (une référence directe `&x` suffisait) : il n'en
+  restait que **14 clones réellement nécessaires** dans tout le projet (les
+  cas où la même conception se pose à plusieurs endroits dans une boucle).
+- Validation : `cargo build`, `cargo build --tests` et `cargo test` (135
+  tests, tous verts) après chaque étape — aucune régression de comportement,
+  uniquement des changements de représentation (emprunt vs valeur, clone vs
+  copie implicite).
 
 ### E.4 Ce qu'il faudra à un futur éditeur façon VAB (non fait ici)
 

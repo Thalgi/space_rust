@@ -23,22 +23,31 @@ Constat d'une revue de code sans complaisance sur l'état actuel du dépôt
    « cargo clippy fix » (`136c7e1`) a réduit les avertissements (63 → ~45)
    mais **pas** corrigé cette erreur bloquante ni le point 5. Toujours
    trivial, toujours pas fait.
-3. 🔨 **`composant.rs` (2800 lignes, 5 fonctions dispatch géantes)** : conçu
-   en [`conception/stations.md`](../conception/stations.md) Partie E.2.
-   **Audit de tests fait avant de commencer** (2026-07-29) : 9 des 19
-   variantes n'avaient aucun test (`Charpente`, `RadiateurMega`, `Motrice`,
-   `BlocMoteur`, `Reservoir`, `MoteurAntimatiere`, `Coiffe`,
-   `ReacteurAntimatiere`, `TreillisHexagone`) — 9 tests de fumée ajoutés
-   (121 → **130 tests**), découpage en cours.
-4. **Fichiers morts** : `src/ecran/briques.rs` (107 lignes) et
+3. 🔨 **`composant.rs` (toujours 1 seul fichier, 5 fonctions dispatch
+   géantes)** : découpage en 12 modules conçu en
+   [`conception/stations.md`](../conception/stations.md) Partie E.2, **pas
+   encore commencé** — E.3 (composite, ci-dessous) est passé devant sur
+   décision utilisateur. **Audit de tests fait avant de commencer le
+   chantier composant** (2026-07-29) : 9 des 19 variantes n'avaient aucun
+   test (`Charpente`, `RadiateurMega`, `Motrice`, `BlocMoteur`, `Reservoir`,
+   `MoteurAntimatiere`, `Coiffe`, `ReacteurAntimatiere`, `TreillisHexagone`)
+   — 9 tests de fumée ajoutés (121 → 130 tests).
+4. ✅ **Composite `Composant::SousEnsemble` (Partie E.3)** : fait
+   (2026-07-29). `Chantier::figer` gèle un sous-arbre en brique réutilisable ;
+   le trait `Peintre` a gagné `empiler_transforme`/`depiler_transforme`
+   (nécessaire, non anticipé dans la conception initiale) ; `Composant`/
+   `Piece` ont perdu `Copy` (120 sites cassés, absorbés via des signatures
+   empruntées + `cargo fix` + nettoyage — détail en Partie E.3). 130 → **135
+   tests**.
+5. **Fichiers morts** : `src/ecran/briques.rs` (107 lignes) et
    `src/ecran/vaisseaux.rs` (93 lignes) ne sont plus déclarés dans
    `ecran/mod.rs` depuis la réorganisation du menu — ne compilent plus dans
    le binaire, jamais supprimés. Suppression triviale, toujours pas faite.
-5. **`astre::Astre` a une variante trop grosse** (`clippy::large_enum_variant`,
+6. **`astre::Astre` a une variante trop grosse** (`clippy::large_enum_variant`,
    `Planete { app: Apparence, .. }` → 376 octets pour tout l'enum). Hors
    sujet stations, toujours pas corrigé.
 
-Une fois §E.2/E.3 de la conception implémentés et les points 2/4/5 traités,
+Une fois §E.2 de la conception implémenté et les points 2/5/6 traités,
 reprendre le fil du générateur (Partie A ci-dessous) et le chantier
 « stockages de carburant » de l'ISV
 ([`conception/stations.md`](../conception/stations.md) Partie D).

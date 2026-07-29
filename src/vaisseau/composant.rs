@@ -7,10 +7,11 @@
 //! variante. Les styles/palettes viendront à l'Étape 5. Composants existants :
 //! `ModuleAxial` (cylindre) et `Noeud` (hub sphérique 4 ou 6 sorties).
 
-use super::{GenrePort, Port, Profil, Repere};
+use super::{GenrePort, Piece, Port, Profil, Repere};
 use macroquad::prelude::*;
 use super::peintre::Peintre;
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
+use std::rc::Rc;
 
 /// Épaisseur des traits (nervures, arêtes) une fois cuits en géométrie.
 /// Ignorée par la sortie immédiate, qui trace un segment d'un pixel.
@@ -60,8 +61,15 @@ const BRAS_LONG: f32 = 0.45; // longueur du bras
 const BRAS_RAYON: f32 = 0.6; // rayon du bras
 
 /// Une brique concrète, dessinable et dotée de ports. Enum fermé : on ajoute une
-/// variante ici et on complète les quatre `match`.
-#[derive(Clone, Copy, PartialEq, Debug)]
+/// variante ici et on complète les cinq `match` (`ports`, `dessiner`, `cout`,
+/// `rayon_local`, `englobant_local`).
+///
+/// **Pas `Copy`** depuis l'ajout de [`Composant::SousEnsemble`] (Partie E.3) :
+/// son champ `donnees: Rc<..>` ne l'est pas. Les 19 autres variantes restent
+/// aussi bon marché à cloner qu'à copier (champs `f32`/enums `Copy`) ; seul
+/// `SousEnsemble` fait un clone réel — un `Rc::clone`, donc un compteur de
+/// référence, pas une copie du sous-arbre.
+#[derive(Clone, PartialEq, Debug)]
 pub enum Composant {
     /// Module pressurisé cylindrique, aligné sur Z, avec une **écoutille axiale
     /// à chaque bout** (avant sortant : +Z et −Z). `profil` fixe le rayon.
@@ -148,6 +156,29 @@ pub enum Composant {
     /// `liaison` plus loin) : les deux hexagones deviennent un **prisme** relié,
     /// sans écart.
     TreillisHexagone { profil: Profil, liaison: f32 },
+    /// **Sous-ensemble figé** : un groupe de pièces déjà assemblées (par
+    /// [`crate::vaisseau::Chantier::figer`]), traité comme **une seule
+    /// brique** réutilisable (pattern Composite — voir `docs/conception/
+    /// stations.md` Partie E.3). `profil` est le profil du port de montage
+    /// présenté au parent. `dessiner` délègue à chaque pièce du sous-arbre ;
+    /// `cout`/`rayon_local`/`englobant_local` lisent des valeurs précalculées
+    /// à la congélation (pas de parcours à chaque appel).
+    SousEnsemble { profil: Profil, donnees: Rc<DonneesSousEnsemble> },
+}
+
+/// Données figées d'un [`Composant::SousEnsemble`] : le sous-arbre de pièces
+/// (repère **local** au sous-ensemble, comme dans une `Station`), les ports
+/// hôtes restés libres à la congélation (aussi en repère local — le port de
+/// montage exposé au parent n'en fait pas partie, il est encodé à part par
+/// `Composant::SousEnsemble::profil`), et le coût/rayon précalculés (sommés
+/// une fois, à la construction, plutôt que reparcourus à chaque appel de
+/// `Chantier::poser`).
+#[derive(Clone, PartialEq, Debug)]
+pub struct DonneesSousEnsemble {
+    pub pieces: Vec<Piece>,
+    pub ports_exposes: Vec<Port>,
+    pub cout: f32,
+    pub rayon: f32,
 }
 
 /// Formes de [`Composant::Coiffe`].
@@ -1589,6 +1620,8 @@ impl Composant {
             }
             // Anneau décoratif posé à la main (via un `Repere` cuit) : pas de port.
             Composant::TreillisHexagone { .. } => vec![],
+            // Ports hôtes restés libres à la congélation, déjà en repère local.
+            Composant::SousEnsemble { donnees, .. } => donnees.ports_exposes.clone(),
             Composant::Propulseur { profil, variante, .. } => {
                 if variante.axial() {
                     // Moteur principal : écoutille axiale, tuyère vers l'arrière.
@@ -2233,6 +2266,17 @@ impl Composant {
                     }
                 }
             }
+            // Composite : empile la transformée LOCALE de chaque enfant
+            // (composée par-dessus celle déjà active, cf. `Peintre::
+            // empiler_transforme`) et lui délègue son propre dessin — même
+            // mécanique que `Station::dessiner`, à un niveau d'indirection.
+            Composant::SousEnsemble { donnees, .. } => {
+                for piece in &donnees.pieces {
+                    p.empiler_transforme(piece.transforme);
+                    piece.composant.dessiner(p);
+                    p.depiler_transforme();
+                }
+            }
             Composant::Antenne { variante, taille, .. } => {
                 // Jonction hôte (bras + socle) puis mât court, puis l'antenne.
                 p.cylindre(vec3(0.0, 0.0, -BASE_ARM_PANNEAU), Vec3::ZERO, 0.08, SOMBRE);
@@ -2293,6 +2337,9 @@ impl Composant {
             Composant::ReacteurAntimatiere { .. } => 14.0,
             // anneau hexagonal en treillis : 6 baies × ~9 barres ≈ 12.
             Composant::TreillisHexagone { .. } => 12.0,
+            // sous-ensemble : précalculé une fois à la congélation (somme des
+            // enfants), pas reparcouru à chaque appel.
+            Composant::SousEnsemble { donnees, .. } => donnees.cout,
             // antenne : coût léger selon le type.
             Composant::Antenne { variante, .. } => variante.cout(),
             // adaptateur : cône + 2 collerettes.
@@ -2356,6 +2403,8 @@ impl Composant {
             Composant::ReacteurAntimatiere { taille, .. } => taille * 1.2,
             // Anneau hexagonal (+ montants de liaison le long de +Z).
             Composant::TreillisHexagone { profil, liaison } => (profil.rayon() * 1.1).max(*liaison),
+            // Sous-ensemble : rayon englobant du sous-arbre, précalculé.
+            Composant::SousEnsemble { donnees, .. } => donnees.rayon,
             // Antenne : mât + taille (les fouets/hélice dépassent un peu).
             Composant::Antenne { taille, .. } => MAST_PANNEAU + taille * 1.5,
             // Adaptateur : jusqu'au bout du col du grand côté.
@@ -2397,6 +2446,8 @@ impl Composant {
             Composant::ReacteurAntimatiere { taille, .. } => (Vec3::Z * (taille * 0.5), taille * 0.75),
             // Anneau hexagonal (+ montants) : englobant centré, borné par la liaison.
             Composant::TreillisHexagone { profil, liaison } => (Vec3::ZERO, (profil.rayon() * 1.1).max(*liaison)),
+            // Sous-ensemble : centré sur l'origine du sous-ensemble, comme une Station.
+            Composant::SousEnsemble { donnees, .. } => (Vec3::ZERO, donnees.rayon),
             Composant::PanneauSolaire { .. }
             | Composant::Radiateur { .. }
             | Composant::Antenne { .. }
@@ -2805,7 +2856,100 @@ mod tests {
     // actuelles — verrou de non-régression pour l'extraction en modules), et
     // dessiner() ne panique pas et produit de la géométrie (accumulée dans un
     // `Batisseur`, sans contexte GL réel nécessaire).
+    use super::super::chantier::Chantier;
     use super::super::maillage::Batisseur;
+
+    // --- Composant::SousEnsemble (Partie E.3) : le composite qui gèle un
+    // sous-arbre de pièces en une seule brique réutilisable.
+
+    #[test]
+    fn figer_chantier_vide_donne_rien() {
+        assert!(Chantier::new().figer(Profil::P1).is_none());
+    }
+
+    #[test]
+    fn figer_expose_les_ports_libres_restants() {
+        let mut ch = Chantier::new();
+        ch.racine(Composant::Noeud { profil: Profil::P1, sorties: Sorties::Six });
+        let sous = ch.figer(Profil::P1).expect("chantier non vide");
+        let Composant::SousEnsemble { profil, donnees } = &sous else {
+            panic!("figer doit produire un SousEnsemble");
+        };
+        assert_eq!(*profil, Profil::P1);
+        assert_eq!(donnees.pieces.len(), 1);
+        // Un Noeud Six expose 6 ports ; aucun n'a été consommé (rien posé dessus).
+        assert_eq!(donnees.ports_exposes.len(), 6);
+        assert_eq!(sous.ports().len(), 6);
+    }
+
+    #[test]
+    fn figer_precalcule_cout_et_rayon() {
+        let mut ch = Chantier::new();
+        let noeud = Composant::Noeud { profil: Profil::P1, sorties: Sorties::Six };
+        let cout_attendu = noeud.cout();
+        let rayon_attendu = noeud.rayon_local();
+        ch.racine(noeud);
+        let sous = ch.figer(Profil::P1).unwrap();
+        assert_eq!(sous.cout(), cout_attendu);
+        assert_eq!(sous.rayon_local(), rayon_attendu);
+        assert_eq!(sous.englobant_local(), (Vec3::ZERO, rayon_attendu));
+    }
+
+    #[test]
+    fn sous_ensemble_se_clipse_comme_nimporte_quel_composant() {
+        // Gèle "nœud + un module dessus" en une brique, puis clipse CETTE
+        // brique sur un port libre d'un chantier différent : la composabilité
+        // recherchée (assembler plusieurs composants, dont des composites).
+        let mut interne = Chantier::new();
+        interne.racine(Composant::Noeud { profil: Profil::P1, sorties: Sorties::Six });
+        assert!(interne.poser(0, Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 2.0 }, 1));
+        let brique = interne.figer(Profil::P1).unwrap();
+
+        let mut externe = Chantier::new();
+        externe.racine(Composant::Treillis { profil: Profil::P1, longueur: 4.0, style: StyleTreillis::Carre });
+        let port_axial = externe
+            .libres()
+            .iter()
+            .position(|p| p.genre == GenrePort::ModuleAxial)
+            .expect("le treillis a des bouts axiaux");
+        assert!(externe.poser(port_axial, brique, 0), "le composite se pose comme un composant normal");
+        assert_eq!(externe.nb_pieces(), 2);
+    }
+
+    #[test]
+    fn sous_ensemble_dessine_ses_enfants_a_leur_vraie_place() {
+        // Racine à l'origine + un second module docké sur son port axial : ce
+        // dernier se retrouve décalé le long de Z **dans le repère du
+        // sous-ensemble**. En dessinant le composite avec une transformée
+        // externe qui décale encore de 10 sur Y, tous les sommets doivent
+        // apparaître composés (offset local Z-ish **et** +10 en Y) — preuve
+        // qu'`empiler_transforme` compose bien par-dessus la transformée
+        // active plutôt que de l'écraser (ce que ferait un simple
+        // `poser_transforme` réutilisé tel quel pour chaque enfant).
+        let mut ch = Chantier::new();
+        ch.racine(Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 1.0 });
+        let axial = ch.libres().iter().position(|p| p.genre == GenrePort::ModuleAxial).unwrap();
+        assert!(ch.poser(axial, Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 1.0 }, 1));
+        let sous = ch.figer(Profil::P1).unwrap();
+
+        let mut b = Batisseur::new();
+        b.poser_transforme(Mat4::from_translation(vec3(0.0, 10.0, 0.0)));
+        sous.dessiner(&mut b);
+        let lots = b.terminer();
+        assert!(!lots.is_empty());
+        // Toute la géométrie doit rester dans une bande autour de Y=10 (rayon
+        // des modules ≪ 5) : si `empiler_transforme` ignorait ou écrasait la
+        // transformée déjà active, les sommets tomberaient près de Y=0.
+        for lot in &lots {
+            for v in &lot.vertices {
+                assert!(
+                    (v.position[1] - 10.0).abs() < 5.0,
+                    "sommet non composé avec la transformée active : {:?}",
+                    v.position
+                );
+            }
+        }
+    }
 
     #[test]
     fn charpente_deux_ports_axiaux_a_leurs_profils() {

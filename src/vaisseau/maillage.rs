@@ -57,6 +57,11 @@ pub struct Batisseur {
     verts: Vec<Vertex>,
     inds: Vec<u16>,
     transforme: Mat4,
+    /// Pile de `empiler_transforme`/`depiler_transforme` (`Composant::
+    /// SousEnsemble`) : contrairement à `Immediat`, il n'y a pas de pile GL
+    /// native ici, `transforme` est un unique champ — la pile mémorise les
+    /// valeurs à restaurer.
+    pile: Vec<Mat4>,
 }
 
 impl Default for Batisseur {
@@ -72,6 +77,7 @@ impl Batisseur {
             verts: Vec::new(),
             inds: Vec::new(),
             transforme: Mat4::IDENTITY,
+            pile: Vec::new(),
         }
     }
 
@@ -300,6 +306,21 @@ impl Peintre for Batisseur {
             self.panneau(a - d * r, axe, d * (2.0 * r), couleur);
         }
     }
+
+    // Pas de pile GL ici (un seul champ `transforme`) : on la simule à la
+    // main. `sommet()` compose déjà tout par `self.transforme`, donc composer
+    // ici (plutôt que remplacer) donne le même comportement imbriqué qu'une
+    // vraie pile de matrices modèle.
+    fn empiler_transforme(&mut self, m: Mat4) {
+        self.pile.push(self.transforme);
+        self.transforme *= m;
+    }
+
+    fn depiler_transforme(&mut self) {
+        if let Some(precedent) = self.pile.pop() {
+            self.transforme = precedent;
+        }
+    }
 }
 
 /// Maillage cuit d'une station : sa géométrie figée, en **repère station**.
@@ -495,7 +516,7 @@ mod tests {
             longueur: 3.0,
         };
         let station = Station::depuis_pieces(vec![
-            Piece::new(Mat4::IDENTITY, comp),
+            Piece::new(Mat4::IDENTITY, comp.clone()),
             Piece::new(Mat4::from_translation(vec3(0.0, 0.0, 5.0)), comp),
         ])
         .unwrap();
@@ -522,9 +543,9 @@ mod tests {
             let zs: Vec<f32> = m.lots.iter().flat_map(|l| l.vertices.iter().map(|v| v.position.z)).collect();
             zs.iter().cloned().fold(f32::MIN, f32::max) - zs.iter().cloned().fold(f32::MAX, f32::min)
         };
-        let seule = Station::depuis_pieces(vec![Piece::new(Mat4::IDENTITY, comp)]).unwrap();
+        let seule = Station::depuis_pieces(vec![Piece::new(Mat4::IDENTITY, comp.clone())]).unwrap();
         let ecartees = Station::depuis_pieces(vec![
-            Piece::new(Mat4::IDENTITY, comp),
+            Piece::new(Mat4::IDENTITY, comp.clone()),
             Piece::new(Mat4::from_translation(vec3(0.0, 0.0, 20.0)), comp),
         ])
         .unwrap();

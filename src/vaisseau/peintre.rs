@@ -44,6 +44,22 @@ pub trait Peintre {
     /// plutôt que par composition de primitives.
     fn triangles(&mut self, sommets: &[Vec3], indices: &[u16], couleur: Color);
 
+    /// Empile une transformée **composée** par-dessus celle déjà active : les
+    /// primitives émises jusqu'au `depiler_transforme` correspondant sont
+    /// placées comme si elles vivaient dans le repère local de `m`. Seul
+    /// moyen pour un composant **composite** ([`super::Composant::
+    /// SousEnsemble`]) de placer chacun de ses enfants à sa propre position
+    /// sans connaître l'implémentation concrète du peintre — `Immediat`
+    /// empile sur la pile GL de macroquad (déjà composée nativement) ;
+    /// `Batisseur` compose et sauvegarde son unique champ `transforme` (pas
+    /// de pile GL, il faut la sienne). Toujours appelé par paires
+    /// équilibrées, jamais imbriqué au-delà de la profondeur des
+    /// `SousEnsemble` eux-mêmes (quelques niveaux tout au plus).
+    fn empiler_transforme(&mut self, m: Mat4);
+
+    /// Dépile la dernière transformée empilée par `empiler_transforme`.
+    fn depiler_transforme(&mut self);
+
     /// Arêtes d'une boîte. En sortie maillage ce sont **12 fines barres** : un
     /// maillage de triangles ne porte pas de fils.
     fn cube_fil(&mut self, centre: Vec3, taille: Vec3, couleur: Color) {
@@ -141,6 +157,20 @@ impl Peintre for Immediat {
             .map(|p| Vertex::new2(*p, Vec2::ZERO, couleur))
             .collect();
         draw_mesh(&Mesh { vertices, indices: indices.to_vec(), texture: None });
+    }
+
+    // La pile GL de macroquad compose déjà nativement (chaque push multiplie
+    // par-dessus le sommet courant) : rien à sauvegarder à la main ici.
+    fn empiler_transforme(&mut self, m: Mat4) {
+        unsafe {
+            get_internal_gl().quad_gl.push_model_matrix(m);
+        }
+    }
+
+    fn depiler_transforme(&mut self) {
+        unsafe {
+            get_internal_gl().quad_gl.pop_model_matrix();
+        }
     }
 
     fn cube_fil(&mut self, centre: Vec3, taille: Vec3, couleur: Color) {

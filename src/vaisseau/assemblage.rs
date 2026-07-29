@@ -21,7 +21,11 @@ use macroquad::prelude::*;
 ///
 /// Elle référence son `composant`, qui fournit `cout()` (pondération du budget)
 /// et `rayon_local()` (contribution à la sphère englobante).
-#[derive(Clone, Copy, PartialEq, Debug)]
+///
+/// **Pas `Copy`** : `Composant` ne l'est plus depuis `SousEnsemble` (Partie
+/// E.3, champ `Rc<..>`). `Clone` reste bon marché pour les 19 autres
+/// variantes (champs `Copy`).
+#[derive(Clone, PartialEq, Debug)]
 pub struct Piece {
     pub transforme: Mat4,
     pub composant: Composant,

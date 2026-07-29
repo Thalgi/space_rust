@@ -25,7 +25,7 @@ use macroquad::prelude::*;
 ///
 /// Panique si `idx` dépasse le nombre de ports du composant (erreur de
 /// programmation, comme un accès hors bornes).
-pub fn port_monde(corps: Repere, comp: Composant, idx: usize) -> Repere {
+pub fn port_monde(corps: Repere, comp: &Composant, idx: usize) -> Repere {
     corps.compose(comp.ports()[idx].repere)
 }
 
@@ -37,14 +37,19 @@ pub fn port_monde(corps: Repere, comp: Composant, idx: usize) -> Repere {
 /// Reste en `Repere` pour pouvoir enchaîner (poser un petit-enfant sur un port
 /// libre de l'enfant). La compatibilité genre/profil relève de l'appelant (le
 /// générateur ne pioche que dans les ports compatibles, cf. `Port::compatible`).
-pub fn poser(hote: Repere, enfant: Composant, montage_idx: usize) -> Repere {
+pub fn poser(hote: Repere, enfant: &Composant, montage_idx: usize) -> Repere {
     accoupler(hote, enfant.ports()[montage_idx].repere)
 }
 
 /// Fige un composant placé (repère monde `corps`) en une [`Piece`] prête au
-/// rendu : la transformée est cuite en `Mat4` (couche cuite).
-pub fn cuire(corps: Repere, comp: Composant) -> Piece {
-    Piece::new(corps.to_mat4(), comp)
+/// rendu : la transformée est cuite en `Mat4` (couche cuite). Prend `comp` par
+/// référence et clone **une fois** en interne — la même conception se pose
+/// souvent à plusieurs endroits (plusieurs bras d'un nœud, plusieurs copies
+/// dans une boucle) ; `Composant` n'est plus `Copy` depuis `SousEnsemble`
+/// (Partie E.3), mais les 19 autres variantes restent aussi bon marché à
+/// cloner qu'à copier.
+pub fn cuire(corps: Repere, comp: &Composant) -> Piece {
+    Piece::new(corps.to_mat4(), comp.clone())
 }
 
 /// Produit le **groupe symétrique** de `Piece` d'un composant placé en `corps` :
@@ -58,7 +63,7 @@ pub fn cuire(corps: Repere, comp: Composant) -> Piece {
 /// la cuisson en `Mat4`. La première copie est toujours l'originale.
 pub fn cuire_symetrie(
     corps: Repere,
-    comp: Composant,
+    comp: &Composant,
     sym: Symetrie,
     axe: Vec3,
     normale: Vec3,
@@ -66,7 +71,7 @@ pub fn cuire_symetrie(
     let base = corps.to_mat4();
     sym.transformations(axe, normale)
         .into_iter()
-        .map(|t| Piece::new(t * base, comp))
+        .map(|t| Piece::new(t * base, comp.clone()))
         .collect()
 }
 
@@ -86,12 +91,12 @@ pub fn demo_station() -> Station {
     for (dx, sorties) in cas {
         let noeud = Composant::Noeud { profil: Profil::P1, sorties };
         let n_monde = Repere::new(vec3(dx, 0.0, 0.0), Quat::IDENTITY);
-        asm.ajouter(cuire(n_monde, noeud));
+        asm.ajouter(cuire(n_monde, &noeud));
         // Un module sur chaque **bras** (ports module) — pas sur les ports Surface.
         for (idx, port) in noeud.ports().iter().enumerate() {
             if matches!(port.genre, GenrePort::ModuleAxial | GenrePort::ModuleRadial) {
-                let hote = port_monde(n_monde, noeud, idx);
-                asm.ajouter(cuire(poser(hote, module, 1), module));
+                let hote = port_monde(n_monde, &noeud, idx);
+                asm.ajouter(cuire(poser(hote, &module, 1), &module));
             }
         }
     }
@@ -122,7 +127,7 @@ pub fn demo_poutres() -> Station {
         for (c, (profil, longueur)) in tailles.iter().enumerate() {
             let dx = (c as f32 - (tailles.len() as f32 - 1.0) / 2.0) * 4.5;
             let truss = Composant::Treillis { profil: *profil, longueur: *longueur, style: *style };
-            asm.ajouter(cuire(Repere::new(vec3(dx, dy, 0.0), Quat::IDENTITY), truss));
+            asm.ajouter(cuire(Repere::new(vec3(dx, dy, 0.0), Quat::IDENTITY), &truss));
         }
     }
     match asm.terminer() {
@@ -145,22 +150,22 @@ pub fn demo_treillis() -> Station {
 
     let t = Repere::IDENTITE;
     let mut asm = Assembleur::new();
-    asm.ajouter(cuire(t, truss));
+    asm.ajouter(cuire(t, &truss));
     let mut k = 0usize;
     for (i, port) in truss.ports().iter().enumerate() {
-        let hote = port_monde(t, truss, i);
+        let hote = port_monde(t, &truss, i);
         match port.genre {
             GenrePort::ModuleAxial => {
-                asm.ajouter(cuire(poser(hote, module, 1), module));
+                asm.ajouter(cuire(poser(hote, &module, 1), &module));
             }
             GenrePort::Surface => {
                 // Chaque niveau (paire ±X) reçoit un type d'appendice différent.
                 let app = match (k / 2) % 3 {
-                    0 => panneau,
-                    1 => radiateur,
-                    _ => antenne,
+                    0 => panneau.clone(),
+                    1 => radiateur.clone(),
+                    _ => antenne.clone(),
                 };
-                asm.ajouter(cuire(poser(hote, app, 0), app));
+                asm.ajouter(cuire(poser(hote, &app, 0), &app));
                 k += 1;
             }
             _ => {}
@@ -194,9 +199,9 @@ pub fn demo_chantier() -> Station {
     for (k, pos) in cibles.iter().enumerate() {
         if let Some(i) = ch.libres().iter().position(|p| p.genre == GenrePort::Surface && p.repere.pos.distance(*pos) < 1e-3) {
             let app = match k % 3 {
-                0 => panneau,
-                1 => radiateur,
-                _ => antenne,
+                0 => panneau.clone(),
+                1 => radiateur.clone(),
+                _ => antenne.clone(),
             };
             ch.poser(i, app, 0); // peut échouer (collision) → on passe
         }
@@ -222,11 +227,11 @@ pub fn demo_coiffes() -> Station {
         let dx = (i as f32 - (n as f32 - 1.0) / 2.0) * 4.0;
         let module = Composant::ModuleAxial { profil, variante: VarianteModule::Coeur, longueur };
         let mm = Repere::new(vec3(dx, 0.0, 0.0), mrot);
-        asm.ajouter(cuire(mm, module));
+        asm.ajouter(cuire(mm, &module));
         // Coiffe posée sur le bout +Z local du module (= son sommet +Y monde).
         let coiffe = Composant::Coiffe { profil, variante: *v };
         let cm = mm.compose(Repere::new(vec3(0.0, 0.0, demi), Quat::IDENTITY));
-        asm.ajouter(cuire(cm, coiffe));
+        asm.ajouter(cuire(cm, &coiffe));
     }
     match asm.terminer() {
         EtatStation::Prete(s) => s,
@@ -245,7 +250,7 @@ pub fn demo_habitats() -> Station {
         let m = Composant::ModuleAxial { profil: Profil::P1, variante: *v, longueur: 3.0 };
         // Modules le long de Z (leur axe), espacés sur X — détails (hublots,
         // fenêtre…) sur +Y, visibles.
-        asm.ajouter(cuire(Repere::new(vec3(dx, 0.0, 0.0), Quat::IDENTITY), m));
+        asm.ajouter(cuire(Repere::new(vec3(dx, 0.0, 0.0), Quat::IDENTITY), &m));
     }
     match asm.terminer() {
         EtatStation::Prete(s) => s,
@@ -263,7 +268,7 @@ pub fn demo_antennes() -> Station {
         let dx = (i as f32 - (n as f32 - 1.0) / 2.0) * 3.0;
         let ant = Composant::Antenne { profil: Profil::P0, variante: *v, taille: 1.4 };
         let base = Repere::new(vec3(dx, -1.0, 0.0), Quat::from_rotation_arc(Vec3::Z, Vec3::Y));
-        asm.ajouter(cuire(base, ant));
+        asm.ajouter(cuire(base, &ant));
     }
     match asm.terminer() {
         EtatStation::Prete(s) => s,
@@ -285,14 +290,14 @@ pub fn demo_caissons() -> Station {
     // Barre de structure horizontale + caissons sur ses ports hôtes.
     let poutre = Composant::Treillis { profil: Profil::P1, longueur: 11.0, style: StyleTreillis::Carre };
     let pm = Repere::new(vec3(0.0, 2.2, 0.0), Quat::from_rotation_arc(Vec3::Z, Vec3::X));
-    asm.ajouter(cuire(pm, poutre));
+    asm.ajouter(cuire(pm, &poutre));
     let mut pris = 0usize;
     for port in poutre.ports() {
         if port.genre != GenrePort::Surface || port.repere.avant().x < 0.0 || pris >= 3 {
             continue;
         }
         let c = boite(VarianteCaisson::TOUS[pris]);
-        asm.ajouter(cuire(poser(pm.compose(port.repere), c, 0), c));
+        asm.ajouter(cuire(poser(pm.compose(port.repere), &c, 0), &c));
         pris += 1;
     }
 
@@ -303,12 +308,12 @@ pub fn demo_caissons() -> Station {
         longueur: 4.0,
     };
     let mm = Repere::new(vec3(0.0, -2.6, 0.0), Quat::from_rotation_arc(Vec3::Z, Vec3::X));
-    asm.ajouter(cuire(mm, m));
+    asm.ajouter(cuire(mm, &m));
     if let Some(port) = m.ports().iter().find(|p| {
         p.genre == GenrePort::Surface && p.repere.avant().y > 0.9
     }) {
         let c = boite(VarianteCaisson::Berceau);
-        asm.ajouter(cuire(poser(mm.compose(port.repere), c, 0), c));
+        asm.ajouter(cuire(poser(mm.compose(port.repere), &c, 0), &c));
     }
 
     // Un porteur plus grand, chargé sur ses faces : c'est là qu'on voit que les
@@ -320,7 +325,7 @@ pub fn demo_caissons() -> Station {
         largeur: 2.2,
     };
     let qm = Repere::new(vec3(0.0, -6.6, 0.0), Quat::from_rotation_arc(Vec3::Z, Vec3::X));
-    asm.ajouter(cuire(qm, porteur));
+    asm.ajouter(cuire(qm, &porteur));
     let hotes: Vec<_> = porteur.ports()[1..].to_vec();
     for (i, v) in VarianteCharge::TOUS.iter().enumerate() {
         if i >= hotes.len() {
@@ -332,7 +337,7 @@ pub fn demo_caissons() -> Station {
             longueur: 2.4,
             largeur: 1.3,
         };
-        asm.ajouter(cuire(poser(qm.compose(hotes[i].repere), ch, 0), ch));
+        asm.ajouter(cuire(poser(qm.compose(hotes[i].repere), &ch, 0), &ch));
     }
 
     match asm.terminer() {
@@ -361,7 +366,7 @@ pub fn demo_propulsion(famille: FamillePropulsion) -> Station {
             longueur: 2.4,
         };
         let cm = Repere::new(vec3(dx, 1.6, 0.0), Quat::IDENTITY);
-        asm.ajouter(cuire(cm, corps));
+        asm.ajouter(cuire(cm, &corps));
         let prop = Composant::Propulseur { profil: Profil::P1, variante: **v, taille: 1.7 };
         if v.axial() {
             // En bout de corps, par l'écoutille arrière.
@@ -370,7 +375,7 @@ pub fn demo_propulsion(famille: FamillePropulsion) -> Station {
                 .into_iter()
                 .find(|p| p.genre == GenrePort::ModuleAxial && p.repere.avant().z < 0.0);
             if let Some(port) = arriere {
-                asm.ajouter(cuire(poser(cm.compose(port.repere), prop, 0), prop));
+                asm.ajouter(cuire(poser(cm.compose(port.repere), &prop, 0), &prop));
             }
         } else {
             // Sur un flanc, comme un appendice.
@@ -379,7 +384,7 @@ pub fn demo_propulsion(famille: FamillePropulsion) -> Station {
                 .into_iter()
                 .find(|p| p.genre == GenrePort::Surface && p.repere.avant().y > 0.9);
             if let Some(port) = flanc {
-                asm.ajouter(cuire(poser(cm.compose(port.repere), prop, 0), prop));
+                asm.ajouter(cuire(poser(cm.compose(port.repere), &prop, 0), &prop));
             }
         }
     }
@@ -397,7 +402,7 @@ pub fn demo_radiateurs() -> Station {
         let dx = (i as f32 - (n as f32 - 1.0) / 2.0) * 3.6;
         let rad = Composant::Radiateur { profil: Profil::P0, variante: *v, longueur: 3.0, largeur: 1.3 };
         let base = Repere::new(vec3(dx, -2.0, 0.0), Quat::from_rotation_arc(Vec3::Z, Vec3::Y));
-        asm.ajouter(cuire(base, rad));
+        asm.ajouter(cuire(base, &rad));
     }
     match asm.terminer() {
         EtatStation::Prete(s) => s,
@@ -416,7 +421,7 @@ pub fn demo_panneaux() -> Station {
         let aile = Composant::PanneauSolaire { profil: Profil::P0, variante: *v, longueur: 3.0, largeur: 1.4 };
         // Base posée en bas, pale déployée vers le haut (+Y).
         let base = Repere::new(vec3(dx, -2.0, 0.0), Quat::from_rotation_arc(Vec3::Z, Vec3::Y));
-        asm.ajouter(cuire(base, aile));
+        asm.ajouter(cuire(base, &aile));
     }
     match asm.terminer() {
         EtatStation::Prete(s) => s,
@@ -443,13 +448,13 @@ mod tests {
 
         // A posé à l'origine ; son écoutille +Z (port 0) est le port hôte libre.
         let a_monde = Repere::IDENTITE;
-        let hote = port_monde(a_monde, a, 0);
+        let hote = port_monde(a_monde, &a, 0);
 
         // B clipse son écoutille −Z (port 1) sur le port hôte de A.
-        let b_monde = poser(hote, b, 1);
+        let b_monde = poser(hote, &b, 1);
 
         // Au joint : le port de montage de B en monde coïncide avec le port hôte.
-        let joint = port_monde(b_monde, b, 1);
+        let joint = port_monde(b_monde, &b, 1);
         assert!(proche(joint.pos, hote.pos), "coïncidence {:?} / {:?}", joint.pos, hote.pos);
         // Face-à-face : avants opposés.
         assert!(proche(joint.avant(), -hote.avant()), "face-à-face");
@@ -461,7 +466,7 @@ mod tests {
         assert!(proche(b_monde.pos, vec3(0.0, 0.0, 3.0)));
 
         // Cuisson : la Piece porte la transformée, son centre = la position monde.
-        let piece_b = cuire(b_monde, b);
+        let piece_b = cuire(b_monde, &b);
         assert!(proche(piece_b.centre(), b_monde.pos));
         assert_eq!(piece_b.composant, b);
     }
@@ -472,12 +477,12 @@ mod tests {
         let m = Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 2.0 };
 
         let a_monde = Repere::IDENTITE;
-        let b_monde = poser(port_monde(a_monde, m, 0), m, 1);
+        let b_monde = poser(port_monde(a_monde, &m, 0), &m, 1);
         // Port hôte libre de B = son écoutille +Z (port 0), en monde.
-        let hote_b = port_monde(b_monde, m, 0);
-        let c_monde = poser(hote_b, m, 1);
+        let hote_b = port_monde(b_monde, &m, 0);
+        let c_monde = poser(hote_b, &m, 1);
 
-        let joint2 = port_monde(c_monde, m, 1);
+        let joint2 = port_monde(c_monde, &m, 1);
         assert!(proche(joint2.pos, hote_b.pos), "coïncidence joint 2");
         assert!(proche(joint2.avant(), -hote_b.avant()), "face-à-face joint 2");
     }
@@ -492,7 +497,7 @@ mod tests {
         let comp = Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 2.0 };
         let corps = Repere::new(vec3(5.0, 3.0, 0.0), Quat::IDENTITY);
 
-        let pieces = cuire_symetrie(corps, comp, Symetrie::Miroir, Vec3::ZERO, Vec3::X);
+        let pieces = cuire_symetrie(corps, &comp, Symetrie::Miroir, Vec3::ZERO, Vec3::X);
 
         assert_eq!(pieces.len(), 2);
         assert!(pieces[0].transforme.determinant() > 0.0, "originale : rotation");
@@ -508,7 +513,7 @@ mod tests {
         let comp = Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 2.0 };
         let corps = Repere::new(vec3(2.0, 0.0, 0.0), Quat::IDENTITY);
 
-        let pieces = cuire_symetrie(corps, comp, Symetrie::Radiale(4), Vec3::Y, Vec3::ZERO);
+        let pieces = cuire_symetrie(corps, &comp, Symetrie::Radiale(4), Vec3::Y, Vec3::ZERO);
 
         assert_eq!(pieces.len(), 4);
         for p in &pieces {
@@ -526,10 +531,10 @@ mod tests {
         let m = Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 2.0 };
 
         let n_monde = Repere::IDENTITE;
-        let hote = port_monde(n_monde, n, 2); // port radial +X du nœud
-        let m_monde = poser(hote, m, 1); // module clipsé par son écoutille −Z
+        let hote = port_monde(n_monde, &n, 2); // port radial +X du nœud
+        let m_monde = poser(hote, &m, 1); // module clipsé par son écoutille −Z
 
-        let joint = port_monde(m_monde, m, 1);
+        let joint = port_monde(m_monde, &m, 1);
         assert!(proche(joint.pos, hote.pos), "coïncidence radiale");
         assert!(proche(joint.avant(), -hote.avant()), "face-à-face radial");
     }
