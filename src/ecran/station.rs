@@ -4,7 +4,7 @@ use crate::fond::Fond;
 use crate::vaisseau::eclairage;
 use crate::vaisseau::{
     demo_anneaux, demo_antennes, demo_caissons, demo_chantier, demo_charpente, demo_coiffes,
-    demo_habitats,
+    demo_cargo, demo_habitats,
     demo_moteur_antimatiere, demo_moteur_antimatiere_principal, demo_panneaux, demo_poutres,
     demo_propulsion, demo_radiateur_mega,
     demo_radiateurs, demo_reservoir, demo_station, demo_treillis, generer, preset_anneau, preset_comsat,
@@ -31,7 +31,7 @@ pub enum Categorie {
 impl Categorie {
     fn nb(self) -> usize {
         match self {
-            Categorie::Briques => 19,
+            Categorie::Briques => 20,
             Categorie::PetitesStations => 5,
             Categorie::Generateur => 1,
             Categorie::Megastructures => 3,
@@ -140,6 +140,7 @@ impl VueStation {
                 15 => (demo_reservoir(), "RESERVOIR CARBURANT (SPHERE)".into()),
                 16 => (demo_moteur_antimatiere_principal(), "MOTEUR ANTIMATIERE : TUYERE + REACTEUR".into()),
                 17 => (EtatStation::Prete(demo_coiffes()), "COIFFES DE MODULES (3 FORMES)".into()),
+                18 => (demo_cargo(), "FRET ISV : NACELLE + RATELIERS 6/8".into()),
                 _ => (EtatStation::Prete(demo_chantier()), "CONSTRUCTEUR PAR PORTS LIBRES".into()),
             },
         };

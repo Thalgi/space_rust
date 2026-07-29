@@ -1219,6 +1219,33 @@ pub fn demo_charpente() -> EtatStation {
     asm.terminer()
 }
 
+/// Vue briques : le **fret d'échelle vaisseau** (section charge utile de l'ISV).
+/// En haut une nacelle **seule** — sa section « onigiri » (triangle arrondi) se
+/// lit de bout, avec ses trois rails d'arête et ses collerettes. En dessous deux
+/// **râteliers** de 6 et 8 nacelles : même rayon de couronne, donc des nacelles
+/// plus fines quand elles sont plus nombreuses (le pas angulaire commande).
+/// Tout est couché le long de X pour montrer l'élancement réel des conteneurs.
+pub fn demo_cargo() -> EtatStation {
+    let mut asm = Assembleur::new();
+    let couche = Quat::from_rotation_arc(Vec3::Z, Vec3::X);
+
+    // Nacelle isolée, en gros gabarit : c'est la vue qui sert à juger la section.
+    let seule = Composant::NacelleCargo { profil: Profil::P1, longueur: 15.0, spin: 0.0 };
+    asm.ajouter(cuire(Repere::new(vec3(-7.5, 11.0, 0.0), couche), &seule));
+
+    // Deux densités de râtelier, pour choisir celle qui « fait ISV ».
+    for (i, n) in [6usize, 8].into_iter().enumerate() {
+        let r = Composant::RatelierCargo {
+            profil: Profil::P2,
+            longueur: 16.0,
+            rayon: 4.5,
+            nacelles: n,
+        };
+        asm.ajouter(cuire(Repere::new(vec3(0.0, -(i as f32) * 13.0, 0.0), couche), &r));
+    }
+    asm.terminer()
+}
+
 /// Vue briques : prototype de **réservoir de carburant** cylindrique (calottes
 /// sphériques), cerclé de 4 barres métal en position tétraédrique.
 pub fn demo_reservoir() -> EtatStation {

@@ -14,7 +14,7 @@
 
 use super::peintre::Peintre;
 use macroquad::prelude::*;
-use std::f32::consts::FRAC_PI_3;
+use std::f32::consts::{FRAC_PI_3, TAU};
 
 /// Épaisseur des traits (nervures, coutures) quand ils sont cuits en géométrie.
 /// Ignorée par la sortie immédiate, qui trace un vrai segment d'un pixel.
@@ -380,5 +380,100 @@ pub(crate) fn radiateur<P: Peintre>(
     for n in 1..lignes {
         let m = coin + e2 * (n as f32 / lignes as f32);
         p.ligne(m, m + e1, TRAIT, sombre);
+    }
+}
+
+/// Nombre de segments du contour « onigiri ». 24 suffit pour que les côtés
+/// bombés lisent comme des courbes sans exploser le nombre de triangles (une
+/// grappe de fret en aligne des dizaines).
+const ONIGIRI_SEGMENTS: usize = 24;
+
+/// Bombement du contour : 0 = cercle, ~0.22 = triangle aux angles bien arrondis
+/// et aux côtés légèrement convexes — la silhouette « onigiri ».
+const ONIGIRI_BOMBE: f32 = 0.22;
+
+/// Prisme à section **onigiri** (triangle arrondi) extrudé le long de +Z, de
+/// `pied` à `pied + Z·longueur`. Le contour suit `r(θ) = rayon·(1 + b·cos 3θ)`,
+/// tourné de `spin` : trois lobes (les « coins » du triangle) et trois côtés
+/// bombés. Fermé aux deux bouts.
+///
+/// Sortie en triangles bruts plutôt qu'en primitives composées : aucune
+/// primitive du [`Peintre`] n'a de section non circulaire, et un empilement de
+/// cubes ne donnerait pas les côtés bombés.
+fn prisme_onigiri<P: Peintre>(
+    p: &mut P,
+    pied: Vec3,
+    longueur: f32,
+    rayon: f32,
+    spin: f32,
+    couleur: Color,
+) {
+    if longueur.abs() < 1e-4 || rayon < 1e-4 {
+        return;
+    }
+    let n = ONIGIRI_SEGMENTS;
+    let contour = |z: f32| -> Vec<Vec3> {
+        (0..n)
+            .map(|k| {
+                let a = TAU * k as f32 / n as f32;
+                let r = rayon * (1.0 + ONIGIRI_BOMBE * (3.0 * a).cos());
+                let t = a + spin;
+                pied + vec3(r * t.cos(), r * t.sin(), z)
+            })
+            .collect()
+    };
+    let mut sommets = contour(0.0);
+    sommets.extend(contour(longueur));
+    sommets.push(pied); // centre de l'embout bas
+    sommets.push(pied + Vec3::Z * longueur); // centre de l'embout haut
+    let (nb, cb, ch) = (n as u16, 2 * n as u16, 2 * n as u16 + 1);
+
+    let mut indices = Vec::with_capacity(n * 12);
+    for k in 0..nb {
+        let kn = (k + 1) % nb;
+        // Flanc (deux triangles par segment) puis les deux embouts en éventail.
+        indices.extend_from_slice(&[k, k + nb, kn + nb, k, kn + nb, kn]);
+        indices.extend_from_slice(&[cb, kn, k]);
+        indices.extend_from_slice(&[ch, k + nb, kn + nb]);
+    }
+    p.triangles(&sommets, &indices, couleur);
+}
+
+/// **Nacelle de fret** d'échelle vaisseau (ISV) : un long conteneur à section
+/// **onigiri** (triangle arrondi), posé depuis `pied` le long de +Z. Sa section
+/// non circulaire est ce qui permet d'en empaqueter une couronne serrée autour
+/// d'une épine sans laisser de vides — un cylindre gaspillerait l'espace entre
+/// voisins.
+///
+/// `spin` tourne la section autour de son axe : c'est ainsi qu'on présente un
+/// **lobe vers l'intérieur** de la grappe (les côtés plats se font face entre
+/// nacelles voisines). Habillage : trois rails d'arête sur les lobes et deux
+/// collerettes de bout, qui donnent l'échelle et cassent le fuselé nu.
+pub(crate) fn nacelle_cargo<P: Peintre>(
+    p: &mut P,
+    pied: Vec3,
+    longueur: f32,
+    rayon: f32,
+    spin: f32,
+    corps: Color,
+    bague: Color,
+) {
+    if longueur < 1e-4 || rayon < 1e-4 {
+        return;
+    }
+    prisme_onigiri(p, pied, longueur, rayon, spin, corps);
+
+    // Collerettes de bout : mêmes section et orientation, à peine plus larges →
+    // une arête nette au lieu d'un tube qui s'arrête dans le vide.
+    let ec = (longueur * 0.05).min(rayon * 0.6);
+    prisme_onigiri(p, pied, ec, rayon * 1.06, spin, bague);
+    prisme_onigiri(p, pied + Vec3::Z * (longueur - ec), ec, rayon * 1.06, spin, bague);
+
+    // Rails d'arête : sur les trois lobes (là où cos 3θ = 1, donc r maximal).
+    for k in 0..3 {
+        let t = spin + TAU * k as f32 / 3.0;
+        let r = rayon * (1.0 + ONIGIRI_BOMBE) * 0.99;
+        let o = vec3(r * t.cos(), r * t.sin(), 0.0);
+        p.cylindre(pied + o + Vec3::Z * ec, pied + o + Vec3::Z * (longueur - ec), rayon * 0.07, bague);
     }
 }

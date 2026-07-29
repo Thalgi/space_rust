@@ -22,6 +22,9 @@ const COULEUR: Color = Color { r: 0.85, g: 0.85, b: 0.88, a: 1.0 };
 const SOMBRE: Color = Color { r: 0.25, g: 0.25, b: 0.28, a: 1.0 };
 /// Alu clair des bagues d'accostage (bout des collerettes).
 const BAGUE: Color = Color { r: 0.62, g: 0.64, b: 0.68, a: 1.0 };
+/// Teinte des conteneurs de fret : un gris **plus chaud et plus sourd** que la
+/// coque pressurisée — le fret ne se confond pas avec l'habitat.
+const CARGO: Color = Color { r: 0.60, g: 0.58, b: 0.55, a: 1.0 };
 
 // Panneau solaire : mât entre le montage et le pied de la pale, et bras de base
 // côté hôte (−Z) qui matérialise la jonction module ↔ panneau.
@@ -156,6 +159,27 @@ pub enum Composant {
     /// `liaison` plus loin) : les deux hexagones deviennent un **prisme** relié,
     /// sans écart.
     TreillisHexagone { profil: Profil, liaison: f32 },
+    /// **Nacelle de fret** d'échelle vaisseau (ISV) : long conteneur à section
+    /// **onigiri** (triangle arrondi), déployé le long de +Z depuis son port de
+    /// montage. `profil` fixe le rayon de section, `longueur` l'élancement (les
+    /// nacelles de l'ISV sont très longues devant leur section). `spin` tourne
+    /// la section autour de son axe, pour présenter un lobe ou un côté plat au
+    /// voisin. Se monte comme un appendice (port `Surface`).
+    ///
+    /// **Pourquoi une brique neuve** : `Caisson`/`ChargeUtile` sont du
+    /// vocabulaire ISS (porteurs d'ORU, berceaux FRAM, poignées EVA) — mauvaise
+    /// échelle et mauvaise silhouette pour du fret interstellaire.
+    NacelleCargo { profil: Profil, longueur: f32, spin: f32 },
+    /// **Râtelier de fret** : une « rangée » de la section charge utile de
+    /// l'ISV. Une couronne de `nacelles` [`Composant::NacelleCargo`] serrées
+    /// autour de l'axe +Z, à la distance `rayon`, tenues par une cage ouverte
+    /// (anneaux aux deux bouts et à mi-longueur + rayons vers l'axe). Écoutilles
+    /// axiales aux deux bouts : les râteliers se **chaînent** le long de l'épine.
+    ///
+    /// Les nacelles sont dessinées **par le râtelier** (comme les ailettes d'un
+    /// [`Composant::RadiateurMega`]) : elles sont identiques et nombreuses, une
+    /// pièce par nacelle ferait exploser le compte pour rien.
+    RatelierCargo { profil: Profil, longueur: f32, rayon: f32, nacelles: usize },
     /// **Sous-ensemble figé** : un groupe de pièces déjà assemblées (par
     /// [`crate::vaisseau::Chantier::figer`]), traité comme **une seule
     /// brique** réutilisable (pattern Composite — voir `docs/conception/
@@ -1620,6 +1644,24 @@ impl Composant {
             }
             // Anneau décoratif posé à la main (via un `Repere` cuit) : pas de port.
             Composant::TreillisHexagone { .. } => vec![],
+            // Nacelle de fret : un appendice, monté par sa base (avant −Z vers
+            // l'hôte), le conteneur se déployant vers +Z.
+            Composant::NacelleCargo { profil, .. } => {
+                vec![Port::new(
+                    Repere::new(Vec3::ZERO, Quat::from_rotation_y(PI)),
+                    GenrePort::Surface,
+                    *profil,
+                )]
+            }
+            // Râtelier : deux écoutilles axiales, comme une poutre — les rangées
+            // se chaînent bout à bout le long de l'épine.
+            Composant::RatelierCargo { profil, longueur, .. } => {
+                let demi = longueur * 0.5;
+                vec![
+                    Port::new(Repere::new(vec3(0.0, 0.0, demi), Quat::IDENTITY), GenrePort::ModuleAxial, *profil),
+                    Port::new(Repere::new(vec3(0.0, 0.0, -demi), Quat::from_rotation_y(PI)), GenrePort::ModuleAxial, *profil),
+                ]
+            }
             // Ports hôtes restés libres à la congélation, déjà en repère local.
             Composant::SousEnsemble { donnees, .. } => donnees.ports_exposes.clone(),
             Composant::Propulseur { profil, variante, .. } => {
@@ -2266,6 +2308,58 @@ impl Composant {
                     }
                 }
             }
+            Composant::NacelleCargo { profil, longueur, spin } => {
+                // Nacelle seule : posée sur son port (base en Z=0), déployée +Z.
+                super::pieces::nacelle_cargo(
+                    p,
+                    Vec3::ZERO,
+                    *longueur,
+                    profil.rayon(),
+                    *spin,
+                    CARGO,
+                    SOMBRE,
+                );
+            }
+            Composant::RatelierCargo { profil, longueur, rayon, nacelles } => {
+                let n = (*nacelles).max(3);
+                let demi = longueur * 0.5;
+                let sec = profil.rayon() * 0.30; // gabarit des membrures de la cage
+                // Rayon de nacelle déduit du **pas angulaire** : les conteneurs
+                // se frôlent sans se croiser, quel que soit `nacelles`.
+                let pas = TAU * rayon / n as f32;
+                let rnac = pas * 0.36;
+                let station = |k: usize| -> Vec3 {
+                    let a = TAU * k as f32 / n as f32;
+                    vec3(a.cos(), a.sin(), 0.0) * *rayon
+                };
+                // Les nacelles s'arrêtent avant les anneaux de bout : la cage
+                // doit rester lisible par-dessus le fret.
+                let marge = demi * 0.06;
+                for k in 0..n {
+                    let a = TAU * k as f32 / n as f32;
+                    // Un **lobe vers l'axe** : côtés plats face aux voisines.
+                    super::pieces::nacelle_cargo(
+                        p,
+                        station(k) - Vec3::Z * (demi - marge),
+                        2.0 * (demi - marge),
+                        rnac,
+                        a + PI,
+                        CARGO,
+                        SOMBRE,
+                    );
+                }
+                // Cage : anneau polygonal + rayons vers l'axe, aux deux bouts et
+                // à mi-longueur (c'est ce qui tient la couronne de nacelles).
+                for zt in [-demi, 0.0, demi] {
+                    let moyeu = Vec3::Z * zt;
+                    for k in 0..n {
+                        let a = station(k) + moyeu;
+                        let b = station((k + 1) % n) + moyeu;
+                        p.cylindre(a, b, sec * 0.5, COULEUR);
+                        p.cylindre(moyeu, a, sec * 0.4, SOMBRE);
+                    }
+                }
+            }
             // Composite : empile la transformée LOCALE de chaque enfant
             // (composée par-dessus celle déjà active, cf. `Peintre::
             // empiler_transforme`) et lui délègue son propre dessin — même
@@ -2337,6 +2431,13 @@ impl Composant {
             Composant::ReacteurAntimatiere { .. } => 14.0,
             // anneau hexagonal en treillis : 6 baies × ~9 barres ≈ 12.
             Composant::TreillisHexagone { .. } => 12.0,
+            // nacelle : prisme + 2 collerettes + 3 rails ≈ 6.
+            Composant::NacelleCargo { .. } => 6.0,
+            // râtelier : la cage (3 anneaux × 2 barres par station) plus le fret.
+            Composant::RatelierCargo { nacelles, .. } => {
+                let n = (*nacelles).max(3) as f32;
+                6.0 * n + 6.0 * n
+            }
             // sous-ensemble : précalculé une fois à la congélation (somme des
             // enfants), pas reparcouru à chaque appel.
             Composant::SousEnsemble { donnees, .. } => donnees.cout,
@@ -2403,6 +2504,15 @@ impl Composant {
             Composant::ReacteurAntimatiere { taille, .. } => taille * 1.2,
             // Anneau hexagonal (+ montants de liaison le long de +Z).
             Composant::TreillisHexagone { profil, liaison } => (profil.rayon() * 1.1).max(*liaison),
+            // Nacelle : appendice déployé le long de +Z, la longueur domine.
+            Composant::NacelleCargo { profil, longueur, .. } => {
+                longueur.max(profil.rayon() * (1.0 + 0.22))
+            }
+            // Râtelier : le coin le plus loin (demi-longueur, couronne + nacelle).
+            Composant::RatelierCargo { longueur, rayon, nacelles, .. } => {
+                let pas = TAU * rayon / (*nacelles).max(3) as f32;
+                (longueur * 0.5).hypot(rayon + pas * 0.36 * 1.22)
+            }
             // Sous-ensemble : rayon englobant du sous-arbre, précalculé.
             Composant::SousEnsemble { donnees, .. } => donnees.rayon,
             // Antenne : mât + taille (les fouets/hélice dépassent un peu).
@@ -2446,6 +2556,14 @@ impl Composant {
             Composant::ReacteurAntimatiere { taille, .. } => (Vec3::Z * (taille * 0.5), taille * 0.75),
             // Anneau hexagonal (+ montants) : englobant centré, borné par la liaison.
             Composant::TreillisHexagone { profil, liaison } => (Vec3::ZERO, (profil.rayon() * 1.1).max(*liaison)),
+            // Nacelle : déployée d'un seul côté (+Z), sphère décalée à mi-corps
+            // — sinon, centrée sur le montage, elle mordrait sur les voisines.
+            Composant::NacelleCargo { profil, longueur, .. } => (
+                Vec3::Z * (longueur * 0.5),
+                (longueur * 0.5).hypot(profil.rayon() * 1.22),
+            ),
+            // Râtelier : structurel, centré sur son axe comme une poutre.
+            Composant::RatelierCargo { .. } => (Vec3::ZERO, self.rayon_local()),
             // Sous-ensemble : centré sur l'origine du sous-ensemble, comme une Station.
             Composant::SousEnsemble { donnees, .. } => (Vec3::ZERO, donnees.rayon),
             Composant::PanneauSolaire { .. }
@@ -2949,6 +3067,49 @@ mod tests {
                 );
             }
         }
+    }
+
+    // --- Fret d'échelle vaisseau (ISV) : nacelle onigiri + râtelier.
+
+    #[test]
+    fn nacelle_cargo_un_port_surface() {
+        let c = Composant::NacelleCargo { profil: Profil::P1, longueur: 15.0, spin: 0.0 };
+        let ports = c.ports();
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].genre, GenrePort::Surface);
+        // Montée par sa base : l'avant regarde l'hôte (−Z), le fret part vers +Z.
+        assert!((ports[0].repere.avant() - Vec3::NEG_Z).length() < 1e-5);
+        assert_eq!(c.cout(), 6.0);
+        assert_eq!(c.rayon_local(), 15.0); // longueur > rayon de section
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        assert!(!b.terminer().is_empty());
+    }
+
+    #[test]
+    fn ratelier_cargo_deux_ports_axiaux_chainables() {
+        let c = Composant::RatelierCargo { profil: Profil::P2, longueur: 16.0, rayon: 4.5, nacelles: 6 };
+        let ports = c.ports();
+        assert_eq!(ports.len(), 2);
+        assert!(ports.iter().all(|p| p.genre == GenrePort::ModuleAxial && p.profil == Profil::P2));
+        // Bouts opposés, à ±demi-longueur : deux râteliers se chaînent bout à bout.
+        assert!(ports.iter().any(|p| (p.repere.pos.z - 8.0).abs() < 1e-4));
+        assert!(ports.iter().any(|p| (p.repere.pos.z + 8.0).abs() < 1e-4));
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        assert!(!b.terminer().is_empty());
+    }
+
+    // Le coût et l'encombrement doivent suivre le nombre de nacelles, sinon le
+    // budget du générateur ne verrait pas la différence entre une rangée pleine
+    // et une rangée clairsemée.
+    #[test]
+    fn ratelier_cargo_cout_croit_avec_les_nacelles() {
+        let rat = |n: usize| Composant::RatelierCargo { profil: Profil::P2, longueur: 16.0, rayon: 4.5, nacelles: n };
+        assert!(rat(8).cout() > rat(6).cout());
+        // Plus de nacelles à rayon constant = nacelles plus fines : l'encombrement
+        // ne doit PAS croître (c'est le pas angulaire qui les amincit).
+        assert!(rat(8).rayon_local() < rat(6).rayon_local());
     }
 
     #[test]
