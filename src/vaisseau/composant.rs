@@ -25,6 +25,21 @@ const BAGUE: Color = Color { r: 0.62, g: 0.64, b: 0.68, a: 1.0 };
 /// Teinte des conteneurs de fret : un gris **plus chaud et plus sourd** que la
 /// coque pressurisée — le fret ne se confond pas avec l'habitat.
 const CARGO: Color = Color { r: 0.60, g: 0.58, b: 0.55, a: 1.0 };
+/// Coque **composite** des modules d'habitat : os/ivoire, franchement **non
+/// métallique**. Ce n'est pas qu'une variation de palette — l'habitat du vrai
+/// ISV est bâti quasiment sans métal, pour que les rayons cosmiques n'y
+/// produisent pas de rayonnement secondaire. La teinte doit donc le distinguer
+/// au premier coup d'œil de tout le reste du vaisseau, qui est en alu.
+const COMPOSITE: Color = Color { r: 0.80, g: 0.78, b: 0.73, a: 1.0 };
+/// Armatures et ferrures des modules d'habitat : **gris sombre**. J'avais
+/// d'abord pris un métal moyen, en pensant qu'un ton franc salirait le
+/// composite clair ; à l'écran c'est l'inverse — le contraste fort est ce qui
+/// détache les cadres de la coque et les fait lire comme de la structure.
+const HABITAT_ARMATURE: Color = Color { r: 0.24, g: 0.24, b: 0.27, a: 1.0 };
+/// Bande de repérage à mi-module : **jaune** de marquage. La seule couleur
+/// franche du vaisseau — elle donne l'échelle et casse le monochrome, comme les
+/// bandes peintes sur les lanceurs.
+const HABITAT_BANDE: Color = Color { r: 0.88, g: 0.74, b: 0.16, a: 1.0 };
 
 // Panneau solaire : mât entre le montage et le pied de la pale, et bras de base
 // côté hôte (−Z) qui matérialise la jonction module ↔ panneau.
@@ -179,7 +194,35 @@ pub enum Composant {
     /// Les nacelles sont dessinées **par le râtelier** (comme les ailettes d'un
     /// [`Composant::RadiateurMega`]) : elles sont identiques et nombreuses, une
     /// pièce par nacelle ferait exploser le compte pour rien.
-    RatelierCargo { profil: Profil, longueur: f32, rayon: f32, nacelles: usize },
+    ///
+    /// `nacelle` est le rayon hors-tout d'un conteneur. **0 = empilement
+    /// serré** : le rayon est alors déduit de `rayon` pour que les conteneurs
+    /// se touchent. Le fixer permet d'**ouvrir la couronne sans grossir le
+    /// fret** — c'est ce qu'il faut quand l'épine qui passe au milieu change de
+    /// gabarit alors que la charge utile, elle, ne doit pas changer de taille.
+    RatelierCargo { profil: Profil, longueur: f32, rayon: f32, nacelles: usize, nacelle: f32 },
+    /// **Module d'habitat principal** (ISV) — l'habitat **fixe**, solidaire de
+    /// l'épine ; à ne pas confondre avec les modules d'équipage **rotatifs**
+    /// (gravité artificielle), qui sont une autre brique, encore à faire.
+    ///
+    /// Même **section onigiri** que les
+    /// nacelles de fret, en plus gros — la famille visuelle du vaisseau tient à
+    /// ça. Coque **composite** nue (teinte os, non métallique : l'habitat du
+    /// vrai vaisseau évite le métal, qui transformerait les rayons cosmiques en
+    /// rayonnement secondaire dans les couchettes), **sans** les collerettes
+    /// sombres ni les rails d'arête de la nacelle.
+    ///
+    /// Habillage : trois **armatures triangulaires** ceinturant le fût aux quarts
+    /// (¼, ½, ¾), et — sur **un seul** côté plat, celui que désigne `spin` — une
+    /// **ferrure d'attache** (longeron + jambes) par laquelle le module se
+    /// solidarise de l'épine de l'ISV. `attache` est la portée de cette ferrure
+    /// (0 = aucune, pour un module présenté seul).
+    ///
+    /// Écoutilles axiales aux deux bouts. Brique neuve plutôt qu'une 11ᵉ
+    /// variante de `ModuleAxial` : ce dernier porte tout le vocabulaire ISS
+    /// (collerettes d'accostage, embouts, mains courantes EVA) qui n'a ni le
+    /// gabarit ni le sens ici.
+    ModuleHabitat { profil: Profil, longueur: f32, spin: f32, attache: f32 },
     /// **Sous-ensemble figé** : un groupe de pièces déjà assemblées (par
     /// [`crate::vaisseau::Chantier::figer`]), traité comme **une seule
     /// brique** réutilisable (pattern Composite — voir `docs/conception/
@@ -337,9 +380,12 @@ fn caisson_haut(largeur: f32) -> f32 {
 /// s'écartent de `√3·(D − r_nu)` quand on écarte les centres de `D`, d'où
 /// `D = r_nu + 2ρ/√3`, soit `D = r·(1 − f + 2f/√3)` avec `f` la fraction de
 /// congé. Le facteur `JEU` ajoute par-dessus un vrai jour visible.
-fn grappe_cargo(rayon: f32, nacelles: usize) -> (f32, Vec<(Vec3, f32)>) {
+fn grappe_cargo(rayon: f32, nacelles: usize, nacelle: f32) -> (f32, Vec<(Vec3, f32)>) {
     let n = nacelles.max(3);
     let dir = |a: f32| vec3(a.cos(), a.sin(), 0.0);
+    // Rayon imposé (`nacelle > 0`) : la couronne peut alors s'ouvrir sans que le
+    // fret grossisse. Sinon, on le déduit pour un empilement serré.
+    let impose = nacelle > 1e-4;
     if n == 3 {
         const JEU: f32 = 1.05;
         let f = super::pieces::ONIGIRI_FILET;
@@ -350,7 +396,7 @@ fn grappe_cargo(rayon: f32, nacelles: usize) -> (f32, Vec<(Vec3, f32)>) {
                 (dir(a) * rayon, FRAC_PI_2)
             })
             .collect();
-        (rayon / ecart, places)
+        (if impose { nacelle } else { rayon / ecart }, places)
     } else {
         let rnac = rayon * (PI / n as f32).sin() * 0.9;
         let places = (0..n)
@@ -359,7 +405,7 @@ fn grappe_cargo(rayon: f32, nacelles: usize) -> (f32, Vec<(Vec3, f32)>) {
                 (dir(a) * rayon, a + PI)
             })
             .collect();
-        (rnac, places)
+        (if impose { nacelle } else { rnac }, places)
     }
 }
 
@@ -1700,6 +1746,14 @@ impl Composant {
                     *profil,
                 )]
             }
+            // Module d'habitat : deux écoutilles axiales, comme tout fût pressurisé.
+            Composant::ModuleHabitat { profil, longueur, .. } => {
+                let demi = longueur * 0.5;
+                vec![
+                    Port::new(Repere::new(vec3(0.0, 0.0, demi), Quat::IDENTITY), GenrePort::ModuleAxial, *profil),
+                    Port::new(Repere::new(vec3(0.0, 0.0, -demi), Quat::from_rotation_y(PI)), GenrePort::ModuleAxial, *profil),
+                ]
+            }
             // Râtelier : deux écoutilles axiales, comme une poutre — les rangées
             // se chaînent bout à bout le long de l'épine.
             Composant::RatelierCargo { profil, longueur, .. } => {
@@ -2367,12 +2421,80 @@ impl Composant {
                     SOMBRE,
                 );
             }
-            Composant::RatelierCargo { longueur, rayon, nacelles, .. } => {
+            Composant::ModuleHabitat { profil, longueur, spin, attache } => {
+                let r = profil.rayon();
+                let demi = longueur * 0.5;
+
+                // Fût nu : la section onigiri des nacelles, en plus gros. Rien
+                // d'autre sur la coque — pas de collerette de bout, pas de rail
+                // d'arête : le composite reste franc, les seules pièces
+                // rapportées sont les armatures ci-dessous.
+                super::pieces::prisme_onigiri(p, -Vec3::Z * demi, *longueur, r, *spin, COMPOSITE);
+
+                // **Armatures hexagonales** au quart et aux trois quarts.
+                // Hexagone et non triangle : le côté plat d'un triangle **congé**
+                // est repoussé à `r·(0,5 + f/2)`, alors qu'une corde d'un coin au
+                // suivant passe à `r/2` — une armature triangulaire s'enfonce
+                // donc **dans** la coque à mi-côté.
+                //
+                // L'échelle n'est pas choisie à l'œil : `onigiri_hex_echelle_mini`
+                // donne le facteur en dessous duquel un segment (le court, en
+                // travers d'un coin, est le plus exigeant) replonge sous la
+                // coque. On prend cette borne, plus une marge franche.
+                let quarts = [0.25_f32, 0.75];
+                let ra = r * super::pieces::onigiri_hex_echelle_mini() * 1.04;
+                let ep = r * 0.055;
+                for t in quarts {
+                    let z = -demi + longueur * t;
+                    let h = super::pieces::onigiri_hexagone(ra, *spin, z);
+                    for k in 0..6 {
+                        p.cylindre(h[k], h[(k + 1) % 6], ep, HABITAT_ARMATURE);
+                    }
+                }
+
+                // **Bande de repérage jaune** à mi-longueur, là où était la
+                // troisième armature : un simple bandeau plaqué sur la coque
+                // (même section, à peine au large) plutôt qu'un cadre en relief.
+                let bande = longueur * 0.12;
+                super::pieces::prisme_onigiri(
+                    p,
+                    -Vec3::Z * (bande * 0.5),
+                    bande,
+                    r * 1.02,
+                    *spin,
+                    HABITAT_BANDE,
+                );
+
+                // **Ferrures d'attache**, sur un seul côté plat : celui dont la
+                // normale sortante regarde `spin + 180°`. **Deux** ferrures
+                // écartées plutôt qu'une seule centrale — deux appuis courts
+                // tiennent mieux qu'un long bras isolé — chacune à **mi-portée**
+                // de l'ancienne. Les jambes partent des stations d'armature :
+                // l'effort passe dans les cadres, pas dans la coque nue.
+                if *attache > 1e-4 {
+                    let u = vec3((spin + PI).cos(), (spin + PI).sin(), 0.0);
+                    let w = vec3(-u.y, u.x, 0.0); // le long de la face
+                    let base = super::pieces::onigiri_inscrit(r);
+                    let lat = super::pieces::onigiri_demi_face(r) * 0.5;
+                    let z0 = -demi + longueur * quarts[0];
+                    let z1 = -demi + longueur * quarts[quarts.len() - 1];
+                    for s in [-1.0_f32, 1.0] {
+                        let pied = u * base + w * (s * lat);
+                        let rail = u * (base + attache * 0.5) + w * (s * lat);
+                        p.cylindre(rail + Vec3::Z * z0, rail + Vec3::Z * z1, ep * 1.1, HABITAT_ARMATURE);
+                        for t in quarts {
+                            let z = Vec3::Z * (-demi + longueur * t);
+                            p.cylindre(pied + z, rail + z, ep, HABITAT_ARMATURE);
+                        }
+                    }
+                }
+            }
+            Composant::RatelierCargo { longueur, rayon, nacelles, nacelle, .. } => {
                 // Les nacelles seules : la cage qui les tenait a été retirée
                 // (elle noyait le fret au lieu de le structurer). La rangée est
                 // donc, pour l'instant, purement la grappe de conteneurs.
                 let demi = longueur * 0.5;
-                let (rnac, places) = grappe_cargo(*rayon, *nacelles);
+                let (rnac, places) = grappe_cargo(*rayon, *nacelles, *nacelle);
                 for (poste, spin) in places {
                     super::pieces::nacelle_cargo(
                         p,
@@ -2456,6 +2578,8 @@ impl Composant {
             Composant::ReacteurAntimatiere { .. } => 14.0,
             // anneau hexagonal en treillis : 6 baies × ~9 barres ≈ 12.
             Composant::TreillisHexagone { .. } => 12.0,
+            // module d'habitat : fût + 3 armatures triangulaires + ferrure.
+            Composant::ModuleHabitat { .. } => 16.0,
             // nacelle : prisme + 2 collerettes + 3 rails ≈ 6.
             Composant::NacelleCargo { .. } => 6.0,
             // râtelier : la cage (3 anneaux × 2 barres par station) plus le fret.
@@ -2529,12 +2653,16 @@ impl Composant {
             Composant::ReacteurAntimatiere { taille, .. } => taille * 1.2,
             // Anneau hexagonal (+ montants de liaison le long de +Z).
             Composant::TreillisHexagone { profil, liaison } => (profil.rayon() * 1.1).max(*liaison),
+            // Module d'habitat : demi-longueur, ou la ferrure si elle porte loin.
+            Composant::ModuleHabitat { profil, longueur, attache, .. } => (longueur * 0.5)
+                .max(super::pieces::onigiri_inscrit(profil.rayon()) + attache)
+                .max(profil.rayon() * 1.05),
             // Nacelle : appendice déployé le long de +Z, la longueur domine.
             Composant::NacelleCargo { profil, longueur, .. } => longueur.max(profil.rayon()),
             // Râtelier : le coin le plus loin (demi-longueur, station + nacelle).
             // Même disposition que le dessin, donc jamais de divergence.
-            Composant::RatelierCargo { longueur, rayon, nacelles, .. } => {
-                let (rnac, places) = grappe_cargo(*rayon, *nacelles);
+            Composant::RatelierCargo { longueur, rayon, nacelles, nacelle, .. } => {
+                let (rnac, places) = grappe_cargo(*rayon, *nacelles, *nacelle);
                 let etendue = places.iter().fold(0.0_f32, |m, (q, _)| m.max(q.length())) + rnac;
                 (longueur * 0.5).hypot(etendue)
             }
@@ -2587,8 +2715,10 @@ impl Composant {
                 Vec3::Z * (longueur * 0.5),
                 (longueur * 0.5).hypot(profil.rayon()),
             ),
-            // Râtelier : structurel, centré sur son axe comme une poutre.
-            Composant::RatelierCargo { .. } => (Vec3::ZERO, self.rayon_local()),
+            // Râtelier et module d'habitat : structurels, centrés sur leur axe.
+            Composant::RatelierCargo { .. } | Composant::ModuleHabitat { .. } => {
+                (Vec3::ZERO, self.rayon_local())
+            }
             // Sous-ensemble : centré sur l'origine du sous-ensemble, comme une Station.
             Composant::SousEnsemble { donnees, .. } => (Vec3::ZERO, donnees.rayon),
             Composant::PanneauSolaire { .. }
@@ -3094,6 +3224,143 @@ mod tests {
         }
     }
 
+    // --- Habitat principal d'échelle vaisseau (ISV) — pas les modules rotatifs.
+
+    #[test]
+    fn module_habitat_deux_ports_axiaux() {
+        let c = Composant::ModuleHabitat { profil: Profil::P2, longueur: 12.0, spin: 0.0, attache: 0.0 };
+        let ports = c.ports();
+        assert_eq!(ports.len(), 2);
+        assert!(ports.iter().all(|p| p.genre == GenrePort::ModuleAxial && p.profil == Profil::P2));
+        assert_eq!(c.cout(), 16.0);
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        assert!(!b.terminer().is_empty());
+    }
+
+    // Le module doit tenir **exactement** dans la longueur annoncée : c'est sur
+    // cette cote que reposent tous les placements (grappe, enfilade sur
+    // l'épine). Les armatures étant posées aux quarts, rien ne doit dépasser
+    // des bouts.
+    #[test]
+    fn module_habitat_tient_dans_sa_longueur() {
+        for (longueur, profil) in [(12.0_f32, Profil::P2), (6.0, Profil::P1), (3.0, Profil::P0)] {
+            let c = Composant::ModuleHabitat { profil, longueur, spin: 0.4, attache: 1.0 };
+            let mut b = Batisseur::new();
+            c.dessiner(&mut b);
+            let demi = longueur * 0.5;
+            for lot in b.terminer() {
+                for v in &lot.vertices {
+                    assert!(
+                        v.position[2].abs() <= demi + 1e-3,
+                        "longueur {longueur} : géométrie à z={} hors de ±{demi}",
+                        v.position[2]
+                    );
+                }
+            }
+        }
+    }
+
+    // **L'armature ne doit jamais plonger dans la coque** — le défaut trouvé
+    // deux fois à l'écran (d'abord en triangle, puis en hexagone posé sur les
+    // tangences). On échantillonne le contour hexagonal et on vérifie que
+    // chaque point est hors de la section onigiri.
+    //
+    // Test d'appartenance : la section est la somme de Minkowski d'un triangle
+    // nu (circonrayon `dv`) et d'un disque de rayon ρ ; un point est donc
+    // dedans **ssi** sa distance au triangle nu vaut au plus ρ.
+    #[test]
+    fn armature_hexagonale_reste_hors_de_la_coque() {
+        let f = super::super::pieces::ONIGIRI_FILET;
+        let mini = super::super::pieces::onigiri_hex_echelle_mini();
+
+        // Distance d'un point à un segment, dans le plan.
+        let dist_seg = |q: Vec2, a: Vec2, b: Vec2| -> f32 {
+            let ab = b - a;
+            let t = ((q - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0);
+            q.distance(a + ab * t)
+        };
+
+        for r in [1.0_f32, 2.0, 3.0] {
+            let (rho, dv) = (r * f, r * (1.0 - f));
+            for spin in [0.0_f32, 0.7, 2.3] {
+                // Sommets du triangle NU de la coque.
+                let tri: Vec<Vec2> = (0..3)
+                    .map(|k| {
+                        let a = spin + TAU * k as f32 / 3.0;
+                        Vec2::new(dv * a.cos(), dv * a.sin())
+                    })
+                    .collect();
+                let dans_coque = |q: Vec2| -> bool {
+                    let d = (0..3)
+                        .map(|k| dist_seg(q, tri[k], tri[(k + 1) % 3]))
+                        .fold(f32::INFINITY, f32::min);
+                    // Intérieur du triangle : tous les côtés « à gauche ».
+                    let dedans = (0..3).all(|k| {
+                        let (a, b) = (tri[k], tri[(k + 1) % 3]);
+                        (b - a).perp_dot(q - a) >= 0.0
+                    });
+                    dedans || d <= rho
+                };
+
+                // À l'échelle retenue par le composant, rien ne doit être dedans.
+                let ra = r * mini * 1.04;
+                let h = super::super::pieces::onigiri_hexagone(ra, spin, 0.0);
+                for k in 0..6 {
+                    let (a, b) = (h[k], h[(k + 1) % 6]);
+                    for i in 0..=20 {
+                        let q3 = a.lerp(b, i as f32 / 20.0);
+                        let q = Vec2::new(q3.x, q3.y);
+                        assert!(
+                            !dans_coque(q),
+                            "r={r} spin={spin} : armature dans la coque en {q:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // La ferrure doit sortir d'**un seul** côté, celui que désigne `spin` : c'est
+    // ce qui permet d'orienter chaque module vers l'épine dans la grappe. On
+    // vérifie que la géométrie déborde du côté visé et **pas** du côté opposé.
+    #[test]
+    fn module_habitat_ferrure_dun_seul_cote() {
+        let r = Profil::P2.rayon();
+        for spin in [0.0_f32, 1.0, 2.5] {
+            // Portée volontairement généreuse : l'armature hexagonale ceinture
+            // le module de **tous** les côtés, donc si la ferrure ne portait
+            // qu'un peu plus loin qu'elle, le test ne saurait plus les
+            // distinguer et passerait même avec une ferrure du mauvais côté.
+            let c = Composant::ModuleHabitat { profil: Profil::P2, longueur: 12.0, spin, attache: 4.0 };
+            let mut b = Batisseur::new();
+            c.dessiner(&mut b);
+            // Direction de la ferrure (normale du côté plat porteur).
+            let u = vec3((spin + PI).cos(), (spin + PI).sin(), 0.0);
+            let mut vers_ferrure = f32::MIN;
+            let mut vers_oppose = f32::MIN;
+            for lot in b.terminer() {
+                for v in &lot.vertices {
+                    let q = vec3(v.position[0], v.position[1], 0.0);
+                    vers_ferrure = vers_ferrure.max(q.dot(u));
+                    vers_oppose = vers_oppose.max(q.dot(-u));
+                }
+            }
+            // Côté ferrure : les longerons portent à **mi-`attache`**, soit 2,0
+            // au-delà du côté plat. Côté opposé : rien de plus que l'armature
+            // hexagonale et son gabarit de barre (~1,15 r) — surtout pas une
+            // ferrure, qui porterait à ~1,6 r.
+            assert!(
+                vers_ferrure > super::super::pieces::onigiri_inscrit(r) + 1.8,
+                "spin {spin} : ferrure trop courte ({vers_ferrure:.2})"
+            );
+            assert!(
+                vers_oppose <= r * 1.20,
+                "spin {spin} : ferrure du mauvais côté ({vers_oppose:.2})"
+            );
+        }
+    }
+
     // --- Fret d'échelle vaisseau (ISV) : nacelle onigiri + râtelier.
 
     #[test]
@@ -3113,7 +3380,7 @@ mod tests {
 
     #[test]
     fn ratelier_cargo_deux_ports_axiaux_chainables() {
-        let c = Composant::RatelierCargo { profil: Profil::P2, longueur: 16.0, rayon: 4.5, nacelles: 6 };
+        let c = Composant::RatelierCargo { profil: Profil::P2, longueur: 16.0, rayon: 4.5, nacelles: 6, nacelle: 0.0 };
         let ports = c.ports();
         assert_eq!(ports.len(), 2);
         assert!(ports.iter().all(|p| p.genre == GenrePort::ModuleAxial && p.profil == Profil::P2));
@@ -3129,7 +3396,7 @@ mod tests {
     // MÊME orientation posés pointe contre pointe.
     #[test]
     fn ratelier_trois_nacelles_forme_une_triforce() {
-        let (_, places) = grappe_cargo(2.6, 3);
+        let (_, places) = grappe_cargo(2.6, 3, 0.0);
         assert_eq!(places.len(), 3);
         let spin0 = places[0].1;
         assert!(places.iter().all(|(_, s)| (s - spin0).abs() < 1e-5), "orientation commune");
@@ -3147,7 +3414,7 @@ mod tests {
     #[test]
     fn ratelier_triforce_ne_se_traverse_pas() {
         for rayon in [1.5_f32, 2.6, 6.0] {
-            let (rnac, places) = grappe_cargo(rayon, 3);
+            let (rnac, places) = grappe_cargo(rayon, 3, 0.0);
             let f = super::super::pieces::ONIGIRI_FILET;
             let (rho, r_nu) = (rnac * f, rnac * (1.0 - f));
             // Pointe (du triangle NU) de chaque nacelle dirigée vers sa voisine.
@@ -3175,7 +3442,7 @@ mod tests {
     #[test]
     fn ratelier_couronne_ne_croise_jamais() {
         for n in [4usize, 5, 6, 8, 12] {
-            let (rnac, places) = grappe_cargo(4.5, n);
+            let (rnac, places) = grappe_cargo(4.5, n, 0.0);
             let d = places[0].0.distance(places[1].0);
             assert!(d > 2.0 * rnac, "n={n} : nacelles qui se croisent ({d} <= {})", 2.0 * rnac);
         }
@@ -3186,7 +3453,7 @@ mod tests {
     // et une rangée clairsemée.
     #[test]
     fn ratelier_cargo_cout_croit_avec_les_nacelles() {
-        let rat = |n: usize| Composant::RatelierCargo { profil: Profil::P2, longueur: 16.0, rayon: 4.5, nacelles: n };
+        let rat = |n: usize| Composant::RatelierCargo { profil: Profil::P2, longueur: 16.0, rayon: 4.5, nacelles: n, nacelle: 0.0 };
         assert!(rat(8).cout() > rat(6).cout());
         // Plus de nacelles à rayon constant = nacelles plus fines : l'encombrement
         // ne doit PAS croître (c'est le pas angulaire qui les amincit).

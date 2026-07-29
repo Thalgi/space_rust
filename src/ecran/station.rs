@@ -4,7 +4,7 @@ use crate::fond::Fond;
 use crate::vaisseau::eclairage;
 use crate::vaisseau::{
     demo_anneaux, demo_antennes, demo_caissons, demo_chantier, demo_charpente, demo_coiffes,
-    demo_cargo, demo_habitats,
+    demo_cargo, demo_habitat_isv, demo_habitats,
     demo_moteur_antimatiere, demo_moteur_antimatiere_principal, demo_panneaux, demo_poutres,
     demo_propulsion, demo_radiateur_mega,
     demo_radiateurs, demo_reservoir, demo_station, demo_treillis, generer, preset_anneau, preset_comsat,
@@ -31,7 +31,7 @@ pub enum Categorie {
 impl Categorie {
     fn nb(self) -> usize {
         match self {
-            Categorie::Briques => 20,
+            Categorie::Briques => 21,
             Categorie::PetitesStations => 5,
             Categorie::Generateur => 1,
             Categorie::Megastructures => 3,
@@ -118,7 +118,7 @@ impl VueStation {
             },
             Categorie::Megastructures => match i {
                 0 => (preset_anneau(), "STATION A ANNEAU (ROUE)".into()),
-                1 => (preset_isv(), "ISV — CHARPENTE + RADIATEURS".into()),
+                1 => (preset_isv(), "ISV — PROPULSION + FRET + HABITAT".into()),
                 _ => (preset_isv_moteur(), "ISV — RADIATEUR + BLOC MOTEUR".into()),
             },
             Categorie::Briques => match i {
@@ -141,6 +141,7 @@ impl VueStation {
                 16 => (demo_moteur_antimatiere_principal(), "MOTEUR ANTIMATIERE : TUYERE + REACTEUR".into()),
                 17 => (EtatStation::Prete(demo_coiffes()), "COIFFES DE MODULES (3 FORMES)".into()),
                 18 => (demo_cargo(), "FRET ISV : NACELLE + TRIFORCE + COURONNE 6".into()),
+                19 => (demo_habitat_isv(), "HABITAT PRINCIPAL ISV : MODULE + GRAPPE DE 3".into()),
                 _ => (EtatStation::Prete(demo_chantier()), "CONSTRUCTEUR PAR PORTS LIBRES".into()),
             },
         };

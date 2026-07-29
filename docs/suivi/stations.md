@@ -468,10 +468,25 @@ nouveau composant. Le seul manque *structurel* connu reste les ports `Surface`
 
 ### C.1 Ce qui existe aujourd'hui (mesuré, pas supposé)
 
-`preset_isv()` (`src/vaisseau/generateur.rs`) produit **24 pièces, coût 364,
+> **Mesure du 2026-07-29, après fret, habitat et agrandissement de l'ossature** :
+> `preset_isv()` produit **30 pièces, coût 520, rayon englobant 83,3**. Le coût
+> est monté de 364 (section propulsion seule) à 472 avec le fret, puis 520 avec
+> l'habitat — le vaisseau pèse enfin nettement plus qu'une ISS (371), ce qui est
+> le minimum attendu pour un interstellaire.
+>
+> ⚠️ Le rayon affiché **sous-estime** d'environ 9 % depuis que l'ossature est
+> agrandie par une matrice d'échelle : `Composant::rayon_local()` ignore
+> l'échelle portée par la transformée cuite. Sans conséquence — il ne sert qu'au
+> cadrage caméra, qui garde 35 % de marge.
+>
+> *(Le tableau ci-dessous liste l'état d'avant la charge utile ; les
+> 3 `RatelierCargo` et les 3 `ModuleHabitat` s'y ajoutent — voir §C.3 pour ce
+> qui reste.)*
+
+`preset_isv()` (`src/vaisseau/generateur.rs`) produisait **24 pièces, coût 364,
 rayon englobant 76,4** — soit, en coût, l'équivalent du preset ISS (371) pour
-un vaisseau censé être 30× plus long. C'est le signe que **seule la section
-propulsion est construite** :
+un vaisseau censé être 30× plus long. C'était le signe que **seule la section
+propulsion était construite** :
 
 | Pièce | × | Rôle sur le vaisseau |
 |---|---|---|
@@ -483,6 +498,8 @@ propulsion est construite** :
 | `ReacteurAntimatiere` + `MoteurAntimatiere` | 2 + 2 | le bloc propulsion antimatière au bout de Cœur 3 |
 | `Reservoir` | 4 | cuves sphériques d'hydrogène, 2 de chaque côté (±Z) de l'hexagone |
 | `TreillisHexagone` | 1 | second anneau hexagonal, bord à bord avec celui du pied |
+| `RatelierCargo` | 3 | **(2026-07-29)** rangées de fret en triforce, enfilées sur la flèche de l'épine (Y ≈ 42,5 à 57), à l'opposé des moteurs |
+| `ModuleHabitat` | 3 | **(2026-07-29)** habitat principal en couronne autour de l'épine (Y ≈ 59 à 67), boulonné dessus par ses ferrures |
 
 **Correction d'une note périmée** : la conception (Partie D) annonçait encore
 « prochain chantier : stockages de carburant ». Ils sont **faits** (les 4
@@ -508,13 +525,13 @@ poussée, et la charge utile derrière, au bout d'une longue épine en tension.
    - **cargo** : 4 rangées × 4 modules × 6 nacelles de fret, manipulées par un
      bras robotisé qui les charge sur les navettes ;
    - **2 navettes TAV** (*Valkyrie*) amarrées à des tunnels d'accès ;
-   - **habitat/cryo** : 3 gros modules (cryovaults + cuves amniotiques), en
-     composites **non métalliques** (le métal produirait du rayonnement
-     secondaire sous les rayons cosmiques) ;
-   - **2 modules d'équipage rotatifs**, aux deux bouts d'une **traverse**
-     perpendiculaire, reliés par des bras : ils **tournent** pour la gravité
-     artificielle en croisière et se **replient** le long de l'axe pendant les
-     phases d'accélération/décélération.
+   - **habitat principal** (**fixe**) : 3 gros modules (cryovaults + cuves
+     amniotiques), en composites **non métalliques** (le métal produirait du
+     rayonnement secondaire sous les rayons cosmiques) ;
+   - **2 modules d'équipage rotatifs** — **à distinguer** du précédent : aux
+     deux bouts d'une **traverse** perpendiculaire, reliés par des bras, ils
+     **tournent** pour la gravité artificielle en croisière et se **replient**
+     le long de l'axe pendant les phases d'accélération/décélération.
 4. **Bouclier antidébris (IDPS)** — plaques planes anguleuses en avant du
    vaisseau, façon bouclier Whipple étagé (barrières séparées par ~100 m).
 
@@ -524,40 +541,234 @@ au départ du système solaire — elle n'est pas là dans la configuration
 
 ### C.3 Manques, par ordre d'impact sur la silhouette
 
-1. 🔴 **Toute la section charge utile** — c'est la moitié arrière du vaisseau,
-   entièrement absente. Sans elle, notre ISV est une section propulsion seule :
-   c'est ce que dit le coût (364, comme une ISS). Décomposition :
-   - grappe cargo (rangées de nacelles sur l'épine) ;
-   - 2 navettes TAV amarrées ;
-   - 3 modules habitat/cryo ;
-   - 2 modules d'équipage rotatifs sur leur traverse.
+1. 🟠 **Section charge utile — bien avancée.** **Fret et habitat principal
+   posés** (2026-07-29) ; il manque :
+   - 2 modules d'équipage **rotatifs** sur leur traverse (à ne pas confondre
+     avec l'habitat fixe, qui est fait) ;
+   - 2 navettes TAV amarrées.
 2. 🟠 **Bouclier antidébris (IDPS)** — les plaques planes en tête ; forte
    signature visuelle, brique neuve (mais simple : des `panneau` inclinés).
 3. 🟡 **Proportions** — l'épine fait 84 unités pour un rayon englobant de 76 :
-   une fois la charge utile posée, vérifier que l'ensemble garde le rapport
-   très allongé du vrai vaisseau (l'épine domine largement).
+   à refaire quand l'habitat et les modules d'équipage seront posés (le fret
+   n'a pas bougé le rayon, l'épine commande toujours).
 4. 🟡 **Tunnel pressurisé + bouclier thermique** de l'épine — détails de
    surface, à faire seulement s'ils se voient à la silhouette.
-5. ⚪ **Aucun test sur `preset_isv`** — les presets ISS/Mir en ont un
-   (`presets_iss_et_mir_produisent_des_stations`), pas l'ISV. À ajouter en même
-   temps que la charge utile (au minimum : la station est `Prete`, le nombre de
-   pièces croît, rien ne se recouvre).
+5. ✅ **Test sur `preset_isv`** — fait avec le fret :
+   `isv_porte_son_fret_a_loppose_des_moteurs` verrouille la disposition
+   **tracteur** (fret nettement à l'opposé des moteurs) et le fait que les
+   rangées sont **enfilées sur l'axe**, pas déportées sur un flanc.
 
 ### C.4 Ordre de travail proposé
 
-Chaque étape se voit à l'écran (vue **MEGASTRUCTURES**, item « ISV — CHARPENTE
-+ RADIATEURS ») et se valide avant la suivante :
+Méthode retenue et qui marche : **la brique d'abord dans la vue BRIQUES**, on
+valide sa forme à l'écran, et **seulement ensuite** on l'assemble sur l'ISV
+(vue **MEGASTRUCTURES**, item « ISV — CHARPENTE + RADIATEURS + FRET »).
 
-1. **Grappe cargo** sur l'épine — la plus grosse masse visuelle manquante,
-   et elle réutilise `Caisson`/`ChargeUtile` (rien de neuf).
-2. **Modules habitat/cryo** — 3 gros `ModuleAxial` (`GrandGonflable`/`Coeur`).
+1. ✅ **Grappe cargo** (2026-07-29). **Rien à réutiliser** : `Caisson`/
+   `ChargeUtile` sont du vocabulaire ISS (porteurs d'ORU, berceaux FRAM,
+   poignées EVA) — mauvaise échelle, mauvaise silhouette. Deux briques neuves :
+   - `Composant::NacelleCargo` — conteneur long à section **onigiri**
+     (triangle à coins congés, côtés **droits**). Le triangle n'est pas
+     décoratif : c'est la forme qui tient, et la seule qui s'empaquette sans
+     vides autour d'une épine ;
+   - `Composant::RatelierCargo` — une rangée. Deux dispositions selon le
+     nombre : **triforce** à 3 (même orientation, pointe contre pointe, creux
+     triangulaire au milieu, retenue pour l'ISV) et **couronne** à ≥ 4 (coin
+     vers l'axe).
+
+   *Deux pièges rencontrés, corrigés, et verrouillés par des tests* : (a) des
+   collerettes posées à ras du corps ont leurs faces coplanaires avec ses bouts
+   → z-fighting ; il faut les faire déborder **et** s'enfoncer (même remède que
+   les `EMBOUT_*` de module) ; (b) des triangles à coins **congés** ne peuvent
+   pas se toucher pointe contre pointe comme des coins vifs — ce sont des
+   triangles nus gonflés de ρ, il faut écarter les centres de `r(1−f+2f/√3)`,
+   sinon ils se traversent de 0,27 ρ.
+
+   **Gabarit validé à l'œil (2026-07-29)** : `FRET_ECHELLE = 0,70` et
+   **3 rangées**. Toute la cote du fret tient dans quatre constantes de
+   `generateur.rs` — `FRET_RAYON`/`FRET_LONG`/`FRET_PAS` (gabarit de base, ne
+   bougent plus), `FRET_ECHELLE` (le seul chiffre à retoucher pour le rapport
+   fret/vaisseau) et `FRET_RANGEES`.
+
+   Le bloc est ancré par son **bord bas** (`FRET_DEBUT_Y = 42,5`, côté
+   moteurs), pas par son centre : c'est là que finit le tronçon d'épine nu et
+   que commence la charge utile. Conséquence utile — ajouter ou retirer une
+   rangée allonge ou raccourcit le bloc **vers le haut**, en libérant
+   d'autant l'extrémité. C'est ce qui a permis de passer de 4 à 3 rangées sans
+   déplacer les deux premières.
+
+   ⚠️ **Plancher d'échelle ≈ 0,67** : le creux central de la triforce vaut
+   `rayon − r_nacelle·(0,5 + f/2)` et rétrécit avec l'échelle, alors que
+   l'épine ne bouge pas (flèche fine, ~0,93 hors-tout). À 0,70 il reste 0,98 —
+   ça passe, mais de peu. En dessous de ~0,67 les conteneurs **traversent**
+   l'épine ; il faudrait alors découpler le rayon de la longueur au lieu de
+   tout mettre à l'échelle ensemble.
+2. ✅ **Habitat principal** — brique faite **et assemblée** (2026-07-29).
+
+   ⚠️ **Distinction à ne pas perdre** : il s'agit de l'habitat **fixe**,
+   solidaire de l'épine. Les **modules d'équipage rotatifs** (gravité
+   artificielle) sont une **autre brique**, traitée à l'étape 3 — ne pas les
+   confondre sous le mot « cryo ».
+
+   `Composant::ModuleHabitat` reprend la **section onigiri** des nacelles de
+   fret, en plus gros : c'est ce qui fait tenir la famille visuelle du
+   vaisseau. Écarts voulus par rapport à la nacelle : **pas** de collerettes
+   sombres ni de rails d'arête (la coque composite reste franche), trois
+   **armatures** aux quarts (¼, ½, ¾), et sur **un seul** côté plat des
+   **ferrures d'attache** par lesquelles le module se boulonne à l'épine. Le
+   champ `spin` désigne ce côté, donc oriente les ferrures ; `attache` en donne
+   la portée (0 = module présenté seul).
+
+   🐛 **Armature : deux fois enfoncée dans la coque avant d'être juste.** Le
+   même piège, sous deux formes — sur un triangle **congé**, on ne peut pas
+   raisonner comme sur un triangle à coins vifs.
+   1. *Version triangulaire* : une barre tendue d'un coin au suivant passe à
+      `0,52 r`, alors que le côté plat de la coque est repoussé à
+      `r·(0,5 + f/2) ≈ 0,61 r` → la barre plongeait à mi-côté, et il ne restait
+      de visible que les goussets sphériques d'angle (« un triangle relié par
+      des billes »).
+   2. *Version hexagonale posée sur les **points de tangence*** (±60° sur l'arc
+      de congé) : les longs côtés tombaient juste, mais la **corde courte** en
+      travers d'un coin coupe l'arc et rentre de `ρ·(1 − cos 60°) = ρ/2`.
+
+   Corrigé en plaçant les sommets à **±30°** au lieu de ±60° (la corde ne mord
+   plus que de `ρ·(1 − cos 30°)`, sept fois moins) **et** en dérivant l'échelle
+   de l'armature au lieu de la choisir à l'œil :
+   `pieces::onigiri_hex_echelle_mini()` renvoie le facteur en dessous duquel un
+   segment replonge, calculé pour les deux contraintes (le long des faces, en
+   travers des coins). Le composant prend cette borne + 4 %.
+
+   Conséquence agréable : l'angle des sommets devient un **paramètre de style
+   libre** — le changer recalcule automatiquement l'échelle minimale, donc ne
+   peut plus réintroduire le défaut. Vérifié : passer de 30° à 60° laisse le
+   test au vert (l'armature s'écarte d'elle-même), alors que forcer l'échelle à
+   1,0 le fait rougir. Le test échantillonne le contour et teste
+   l'appartenance à la section par somme de Minkowski (distance au triangle nu
+   ≤ ρ).
+
+   Ferrures : **deux** longerons écartés plutôt qu'un seul central (deux appuis
+   courts tiennent mieux qu'un long bras isolé), chacun à **mi-`attache`** ;
+   leurs jambes partent des stations d'armature, pour que l'effort passe dans
+   les cadres et non dans la coque nue.
+
+   **Réglages validés à l'écran (2026-07-29)** : longueur **−33 %** (12 → 8) ;
+   armature **centrale supprimée** (il n'en reste qu'au ¼ et au ¾) et remplacée
+   à mi-longueur par une **bande de repérage jaune** plaquée sur la coque —
+   seule couleur franche du vaisseau, elle donne l'échelle et casse le
+   monochrome, comme les bandes peintes sur les lanceurs. Bande **élargie ×2**,
+   et armatures passées en **gris sombre** : j'avais choisi un métal moyen en
+   pensant qu'un ton franc salirait le composite clair — l'écran dit l'inverse,
+   c'est le contraste qui fait lire les cadres comme de la structure.
+
+   **Posé sur l'ISV** : grappe centrée à `HAB_CENTRE_Y` (× l'échelle de
+   l'ossature), juste au-dessus du fret. L'ordre des sections le long de l'épine
+   suit celui du vrai vaisseau — moteurs, épine nue, fret, puis l'habitat le
+   plus loin possible des tuyères — et c'est désormais **testé**
+   (`isv_porte_son_fret_a_loppose_des_moteurs` vérifie aussi `habitat > fret`).
+   Le haut de l'épine reste libre pour les modules d'équipage rotatifs et le
+   bouclier antidébris.
+
+### C.5 Ossature agrandie de 20 % (2026-07-29)
+
+Demande : **épine et propulsion +20 % en taille**, fret et habitat inchangés en
+taille mais **recalés sur le nouveau gabarit**.
+
+**Pourquoi une mise à l'échelle géométrique et pas des constantes** : l'épaisseur
+du treillis, le diamètre des modules Cœur et le gabarit des hexagones viennent
+de `Profil`, un enum **discret plafonné à P3** — aucune constante ne peut les
+étirer de 20 %. L'ossature est donc bâtie dans son propre `Assembleur`, à
+l'échelle 1, puis **reversée agrandie** (`verser_a_echelle`, qui compose une
+`Mat4::from_scale` dans chaque transformée cuite, comme `pivoter` le fait pour
+une rotation). La charge utile est ajoutée après, à sa taille propre.
+
+**Le conflit géométrique, et sa résolution.** Le creux central de la triforce de
+fret était calibré au ras de l'épine (0,98 contre 0,93). Élargir l'épine de 20 %
+la porte à 1,12 : les conteneurs la traversaient. Comme le fret ne doit pas
+grossir, il a fallu **découpler la taille du conteneur du rayon de la
+couronne** — `RatelierCargo` gagne un champ `nacelle` (0 = empilement serré,
+comportement d'avant ; > 0 = rayon imposé). La couronne s'ouvre donc pour
+laisser passer l'épine pendant que le conteneur garde exactement la taille
+validée à l'écran.
+
+**Tout se déduit maintenant du gabarit** plutôt que d'être recopié à la main :
+`EPINE` (extension hors-tout de la flèche, × l'échelle) commande `FRET_RAYON`,
+`HAB_RAYON` et `HAB_ATTACHE`. Changer `ISV_ECHELLE` suffit ; rien d'autre n'est
+à re-régler.
+
+**Serrage de la charge utile contre l'épine (2026-07-29)** — deux constantes de
+« jeu », une par famille, qui sont les seuls chiffres à toucher :
+
+- `HAB_JEU` : distance du côté plat d'un module d'habitat à la surface de
+  l'épine, ramenée de 0,86 à **0,25**. Les ferrures ne franchissent que ce jeu,
+  donc elles raccourcissent avec lui. Plancher réel : **0** (contact avec
+  l'épine). J'avais d'abord écrit « plancher ≈ 0,07, sinon les modules se
+  touchent entre eux » — **faux**, vérifié en poussant le jeu à 0 : ce sont
+  toujours l'épine qui bloque, jamais les voisins (le rayon inscrit d'un module,
+  1,22, impose déjà une couronne large devant ce qu'il faudrait pour qu'ils se
+  croisent). La vérification est maintenant dans le test.
+- `FRET_JEU` : **0,02**. Le fret était déjà au ras (0,056) — ce qui commande,
+  c'est le **coin** du treillis carré. Le vide qu'on croit voir entre l'épine et
+  les conteneurs vient de ses **faces**, en retrait de ~30 % par rapport à ses
+  coins (côté à `0,5·k`, coin à `√2·0,5·k`) : on ne peut pas le combler en
+  rapprochant le fret, seulement en changeant la section de l'épine.
+
+### C.6 Fret réduit de 20 % (2026-07-29)
+
+`FRET_ECHELLE` : 0,70 → **0,56**. Elle porte désormais sur **les trois** cotes
+du fret — longueur de rangée, entraxe et taille de conteneur — pour qu'elles ne
+dérivent pas les unes par rapport aux autres ; le rayon de conteneur se déduit
+d'une base à l'échelle 1 (`FRET_NACELLE_BASE`) au lieu d'être un absolu à
+retoucher en parallèle.
+
+Effets mesurés :
+
+| | avant (0,70) | après (0,56) |
+|---|---|---|
+| largeur d'un conteneur | 4,13 | **3,30** (−20 %) |
+| rayon de couronne | 2,40 | 2,15 |
+| bloc de fret (Y) | 51,0 → 68,6 | 51,0 → **65,1** |
+| jour entre conteneurs voisins | 0,46 | **0,76** |
+
+⚠️ **Conséquence à connaître : la triforce se desserre.** La couronne ne peut
+pas se refermer autant que les conteneurs rétrécissent — son rayon est borné en
+bas par le passage de l'épine. Les conteneurs, qui se touchaient par la pointe
+au départ, sont maintenant séparés d'un jour de 0,76 pour 3,30 de large (~23 %).
+Le motif « triforce » se lit donc de moins en moins à mesure que le fret rapetisse
+ou que l'ossature grossit. Pour le retrouver serré il faudrait soit remonter le
+fret, soit affiner l'épine — les deux sont un seul chiffre (`FRET_ECHELLE`,
+`ISV_ECHELLE`).
+
+Le bloc de fret raccourcissant, il reste ~5,7 unités d'épine nue entre le fret
+(fin Y ≈ 65) et l'habitat (début Y ≈ 71) — contre ~2,2 avant. À resserrer via
+`HAB_CENTRE_Y` si le vide gêne à l'écran.
+
+🐛 *Erreur commise en chemin* : l'épine élargie, les ferrures d'habitat sont
+restées calculées pour l'ancienne — elles finissaient **plantées dans** la
+structure (0,93 contre 1,12). D'où le test
+`la_charge_utile_suit_le_gabarit_de_lepine`, qui vérifie les trois relations
+(creux du fret ≥ épine, longeron de ferrure **exactement sur** l'épine, fût
+d'habitat à distance) ; il a été confirmé rouge sur la version fautive.
+
+   Coque en teinte **os, non métallique** : l'habitat du vrai ISV évite le
+   métal, qui transformerait les rayons cosmiques en rayonnement secondaire
+   dans les couchettes. Les armatures sont en métal **moyen** et non sombre —
+   sur du composite clair, un gris franc lit comme une salissure.
+
+   Disposition : 3 modules en couronne, **coin vers l'extérieur** donc côté
+   plat (et ferrure) vers l'axe. `poser_grappe_habitat()` est partagée par la
+   vue Briques et par le futur assemblage, donc ce qui est validé à l'écran est
+   exactement ce qui partira sur le vaisseau.
+
+   **Place déjà dégagée** : le fret s'arrête à Y ≈ 57 et l'épine court jusqu'à
+   76,4, soit ~19 unités libres pour l'habitat, les modules d'équipage et le
+   bouclier antidébris.
 3. **Traverse + 2 modules d'équipage rotatifs** — réutilise `Treillis` pour la
    traverse ; c'est la silhouette la plus reconnaissable après les radiateurs.
 4. **Navettes TAV** — 2 petits assemblages amarrés ; candidat idéal au
    composite `SousEnsemble` (Partie E.3) : une navette = une brique figée,
    posée deux fois.
 5. **IDPS** — plaques de tête.
-6. **Test de non-régression** + relecture des proportions d'ensemble.
+6. **Relecture des proportions d'ensemble** une fois tout posé.
 
 ### Sources
 - [Interstellar Vehicle — Avatar Wiki](https://james-camerons-avatar.fandom.com/wiki/Interstellar_Vehicle)

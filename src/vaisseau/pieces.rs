@@ -14,7 +14,7 @@
 
 use super::peintre::Peintre;
 use macroquad::prelude::*;
-use std::f32::consts::{FRAC_PI_3, TAU};
+use std::f32::consts::{FRAC_PI_3, FRAC_PI_6, TAU};
 
 /// Épaisseur des traits (nervures, coutures) quand ils sont cuits en géométrie.
 /// Ignorée par la sortie immédiate, qui trace un vrai segment d'un pixel.
@@ -428,7 +428,7 @@ fn contour_onigiri(pied: Vec3, rayon: f32, spin: f32, z: f32) -> Vec<Vec3> {
 ///
 /// Sortie en triangles bruts plutôt qu'en primitives composées : aucune
 /// primitive du [`Peintre`] n'a de section non circulaire.
-fn prisme_onigiri<P: Peintre>(
+pub(crate) fn prisme_onigiri<P: Peintre>(
     p: &mut P,
     pied: Vec3,
     longueur: f32,
@@ -509,4 +509,63 @@ pub(crate) fn nacelle_cargo<P: Peintre>(
         let o = vec3(r * t.cos(), r * t.sin(), 0.0);
         p.cylindre(pied + o + Vec3::Z * ec, pied + o + Vec3::Z * (longueur - ec), rayon * 0.07, bague);
     }
+}
+
+/// Rayon **inscrit** d'une section onigiri (centre → milieu d'un côté plat),
+/// pour un rayon hors-tout donné. C'est la cote qui sert dès qu'on veut poser
+/// quelque chose **contre un côté** : ferrure d'attache, jeu par rapport à une
+/// épine qui passe à côté, contact entre deux nacelles côte à côte.
+pub(crate) fn onigiri_inscrit(rayon: f32) -> f32 {
+    rayon * (0.5 + 0.5 * ONIGIRI_FILET)
+}
+
+/// Demi-angle des sommets d'hexagone sur l'arc de congé, mesuré depuis l'axe du
+/// coin. **Pas 60°** (les points de tangence) : une corde tendue de tangence à
+/// tangence coupe l'arc et **rentre dans la coque** de `ρ·(1 − cos 60°) = ρ/2`
+/// au droit du coin. À 30° la corde ne mord plus que de `ρ·(1 − cos 30°)`, sept
+/// fois moins, et le facteur d'échelle de l'armature suffit à la ressortir.
+const ONIGIRI_HEX_PHI: f32 = FRAC_PI_6;
+
+/// Les **six** sommets du contour hexagonal qui ceinture une section onigiri.
+///
+/// Ordre : `A0 B0 A1 B1 A2 B2`. Les segments `B_k → A_{k+1}` longent les côtés
+/// **plats** (les longs), les segments `A_k → B_k` coupent les **coins** (les
+/// courts, sept fois plus courts).
+///
+/// **Tout le contour est en dehors** de la section de rayon `rayon / echelle`,
+/// à condition que `echelle` dépasse les deux seuils que voici (c'est le sens
+/// de [`onigiri_hex_echelle_mini`]) :
+/// - le long des faces, la corde passe à `echelle·[0,5(1−f) + f·cos(60° − φ)]`
+///   contre `0,5 + f/2` pour la coque ;
+/// - en travers d'un coin, à `echelle·[1 − f + f·cos φ]` contre `1`.
+pub(crate) fn onigiri_hexagone(rayon: f32, spin: f32, z: f32) -> [Vec3; 6] {
+    let rho = rayon * ONIGIRI_FILET;
+    let dv = rayon - rho;
+    let mut v = [Vec3::ZERO; 6];
+    for k in 0..3 {
+        let ak = spin + TAU * k as f32 / 3.0;
+        let c = vec3(dv * ak.cos(), dv * ak.sin(), z);
+        for j in 0..2 {
+            let a = ak + if j == 0 { -ONIGIRI_HEX_PHI } else { ONIGIRI_HEX_PHI };
+            v[2 * k + j] = c + vec3(rho * a.cos(), rho * a.sin(), 0.0);
+        }
+    }
+    v
+}
+
+/// Échelle **minimale** d'une armature hexagonale pour qu'aucun de ses segments
+/// ne plonge dans la coque. Le maximum des deux contraintes du §doc de
+/// [`onigiri_hexagone`] — en pratique c'est le **coin** qui commande.
+pub(crate) fn onigiri_hex_echelle_mini() -> f32 {
+    let f = ONIGIRI_FILET;
+    let phi = ONIGIRI_HEX_PHI;
+    let par_coin = 1.0 / (1.0 - f + f * phi.cos());
+    let par_face = (0.5 + 0.5 * f) / (0.5 * (1.0 - f) + f * (FRAC_PI_3 - phi).cos());
+    par_coin.max(par_face)
+}
+
+/// Demi-largeur du **côté plat** d'une section onigiri (du milieu du côté à son
+/// extrémité). Sert à répartir des ferrures sur une face sans déborder.
+pub(crate) fn onigiri_demi_face(rayon: f32) -> f32 {
+    (rayon - rayon * ONIGIRI_FILET) * 3.0_f32.sqrt() * 0.5
 }

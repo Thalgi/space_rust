@@ -25,7 +25,7 @@ pub use composant::{
     VariantePropulseur, VarianteRadiateur,
 };
 pub use generateur::{
-    demo_anneaux, demo_cargo, demo_charpente, demo_moteur_antimatiere,
+    demo_anneaux, demo_cargo, demo_charpente, demo_habitat_isv, demo_moteur_antimatiere,
     demo_moteur_antimatiere_principal, demo_radiateur_mega, demo_reservoir,
     generer, preset_anneau,
     preset_comsat, preset_iss, preset_isv, preset_isv_moteur, preset_mir, preset_sonde,

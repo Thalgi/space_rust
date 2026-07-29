@@ -71,6 +71,51 @@ briques dans `composant.rs` :
   antiprotons) puis `MoteurAntimatiere` (tuyère : **buse** cylindrique + **cage
   de 2 cercles ouverts sur 4 tiges** ancrées à la buse, cœur d'annihilation).
 
+**Ajouts 2026-07-29 (fret de vaisseau).** Deux briques pour la section charge
+utile de l'ISV, **créées de zéro** plutôt que dérivées de `Caisson`/
+`ChargeUtile` : ces derniers sont du vocabulaire ISS (porteurs d'ORU, berceaux
+FRAM, poignées EVA), à la fois trop petits et de mauvaise silhouette pour du
+fret interstellaire.
+
+- `NacelleCargo` — conteneur **long** à section **onigiri** : un triangle à
+  coins congés, aux **côtés droits** (trois arcs reliés par trois segments). La
+  section triangulaire est structurelle, pas décorative — c'est la forme qui ne
+  se déforme pas sous charge, et la seule qui s'empaquette sans vides autour
+  d'une épine (des cylindres gaspilleraient tout l'entre-deux).
+- `ModuleHabitat` — module d'**habitat principal** (fixe, solidaire de l'épine ;
+  **pas** les modules d'équipage rotatifs, qui restent à faire). Même section
+  onigiri que la nacelle, en plus gros — c'est ce qui tient la famille visuelle
+  du vaisseau — mais coque composite **nue** (ni collerette sombre ni rail
+  d'arête), trois **armatures hexagonales** aux quarts, et sur **un seul** côté
+  plat deux **ferrures d'attache** orientées par `spin` : le module se boulonne
+  à l'épine par ce côté au lieu de flotter à côté.
+
+  *Piège de section, appris en le ratant deux fois* : sur un triangle **congé**,
+  aucune intuition de triangle à coins vifs ne tient. Une corde d'un coin au
+  suivant ne longe pas le côté plat (`0,52 r` contre `0,61 r`) ; et un hexagone
+  posé sur les **points de tangence** rate encore, sa corde courte coupant l'arc
+  de congé de `ρ/2`. La forme juste met les sommets à **±30°** sur l'arc, et —
+  surtout — **l'écartement se calcule** (`pieces::onigiri_hex_echelle_mini`) au
+  lieu de se régler à l'œil : la fonction renvoie l'échelle minimale sans
+  recouvrement, pour les deux contraintes (faces et coins). L'angle des sommets
+  redevient alors un paramètre de style libre, puisque l'échelle s'y adapte.
+- `RatelierCargo` — une **rangée** de fret : couronne de nacelles autour de
+  l'axe, écoutilles axiales aux deux bouts pour chaîner les rangées. Deux
+  dispositions, dans `grappe_cargo()` (partagée par le dessin **et** par le
+  calcul d'encombrement, pour qu'ils ne divergent pas) : **triforce** à 3
+  (même orientation, pointe contre pointe, creux triangulaire central où passe
+  l'épine) et **couronne** à ≥ 4 (coin vers l'axe, côtés plats face à face).
+  Les nacelles sont dessinées **par le râtelier**, comme les ailettes d'un
+  `RadiateurMega` : identiques et nombreuses, une pièce chacune ferait exploser
+  le compte pour rien.
+
+*Deux invariants géométriques appris à l'écran, désormais testés* : une
+collerette posée **à ras** d'un bout partage son plan avec lui et clignote
+(z-fighting) — elle doit déborder *et* s'enfoncer ; et deux triangles à coins
+**congés** ne se touchent pas pointe contre pointe comme des coins vifs (ce
+sont des triangles nus gonflés du rayon de congé ρ), il faut écarter leurs
+centres de `r(1 − f + 2f/√3)` sous peine de recouvrement.
+
 Nouvelles **vues Briques** (touche **D**) : réservoir carburant, moteur
 antimatière (tuyère + réacteur assemblés), coiffes de modules (3 formes).
 Assemblages complets : `preset_isv` et `preset_isv_moteur` portent le bloc
@@ -1076,8 +1121,12 @@ brique vraiment nouvelle de cette classe.
    enfilade. Signature de l'ISV.
 4. 🔩 **assembler l'ISV** (preset, classe C) — **section propulsion complète**
    (`poser_bloc_moteur` + propulseur antimatière sur Cœur 3, chapes bombées sur
-   Cœur 1/2, **réservoirs faits**). **Reste : toute la section charge utile**
-   (cargo, habitat/cryo, modules d'équipage rotatifs, navettes TAV) + le
+   Cœur 1/2, **réservoirs faits**), **fret posé** (3 rangées en triforce) et
+   **habitat principal posé** (3 modules en couronne, boulonnés sur l'épine
+   au-delà du fret). Ossature (épine + propulsion) **agrandie de 20 %** par une
+   mise à l'échelle géométrique, la charge utile gardant sa taille et se
+   recalant sur le nouveau gabarit — 2026-07-29 : 30 pièces, coût 520.
+   **Reste : habitat/cryo, modules d'équipage rotatifs, navettes TAV**, plus le
    bouclier antidébris — détail et ordre de travail en
    [`suivi/stations.md`](../suivi/stations.md) Partie C.
 5. **Elysium** — anneau XL + rayons + moyeu + habitat de jante (surtout de la
