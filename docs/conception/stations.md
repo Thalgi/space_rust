@@ -1115,15 +1115,25 @@ Partie C §1 — enum fermé, pas de `Box<dyn>`) :
 |---|---|---|
 | `dessiner<P: Peintre>(&self, p: &mut P)` | **624** | la géométrie complète des 19 variantes, un `match` géant |
 | `ports(&self) -> Vec<Port>` | **241** | idem pour la liste de ports |
-| `cout(&self)` / `rayon_local(&self)` | (le reste) | idem, en plus petit |
+| `cout(&self)` / `rayon_local(&self)` / `englobant_local(&self)` | (le reste) | idem, en plus petit — **5 fonctions au total**, pas 4 (`englobant_local` sert l'anti-collision, cf. Partie C §7) |
 
 Conséquence directe : **ajouter ou corriger une seule variante touche un
-fichier de 2800 lignes**, oblige à naviguer 4 `match` différents pour trouver
+fichier de 2800 lignes**, oblige à naviguer 5 `match` différents pour trouver
 tous les endroits qui la concernent, et rend les diffs de revue illisibles
 (une modification d'un radiateur produit un diff au milieu d'un fichier qui
 parle aussi de réacteurs à antimatière). Le nombre de variantes n'a fait que
 grandir (2 en Partie C §4 « État 2026-07-16 », 19 aujourd'hui) — la fonction
 géante était un choix raisonnable à 2 variantes, plus du tout à 19.
+
+**Audit de couverture de tests (préalable à toute extraction, 2026-07-29)** :
+sur les 19 variantes, **9 n'avaient aucun test dédié** — exactement les
+briques « classe C / ISV » ajoutées après coup (`Charpente`, `RadiateurMega`,
+`Motrice`, `BlocMoteur`, `Reservoir`, `MoteurAntimatiere`, `Coiffe`,
+`ReacteurAntimatiere`, `TreillisHexagone`). Neuf tests de fumée ajoutés
+(ports : genre/nombre/profils ; `cout`/`rayon_local` figés à des valeurs
+concrètes ; `dessiner()` exercé via `maillage::Batisseur` — pas besoin de
+contexte GL) avant de commencer le découpage : **130 tests** au lieu de 121,
+un verrou de non-régression sur les 9 variantes qui n'en avaient aucun.
 
 **Ce qui ne change pas** : la décision Partie C §1 reste valide.
 `Composant` reste un **enum fermé, `Copy`, dispatché par `match`** — pas de
@@ -1134,10 +1144,11 @@ des fichiers**, pas le modèle de dispatch.
 
 Principe : **une variante (ou une petite famille de variantes proches) = un
 fichier**, qui regroupe pour cette famille son enum de style/variante *et* ses
-quatre comportements (`ports`, `dessiner`, `cout`, `rayon_local`) — au lieu
-d'un enum de variante isolé quelque part et son comportement dispersé dans
-4 `match` à 1000 lignes d'écart. `composant/mod.rs` ne garde que la définition
-de l'enum `Composant` et 4 `match` **d'une ligne par bras**, qui délèguent :
+cinq comportements (`ports`, `dessiner`, `cout`, `rayon_local`,
+`englobant_local`) — au lieu d'un enum de variante isolé quelque part et son
+comportement dispersé dans 5 `match` à 1000 lignes d'écart. `composant/mod.rs`
+ne garde que la définition de l'enum `Composant` et 5 `match` **d'une ligne
+par bras**, qui délèguent :
 
 ```rust
 // composant/mod.rs (esquisse)
@@ -1150,7 +1161,7 @@ impl Composant {
             // … une ligne par variante
         }
     }
-    // dessiner / cout / rayon_local : même forme
+    // dessiner / cout / rayon_local / englobant_local : même forme
 }
 ```
 
@@ -1176,9 +1187,11 @@ Douze fichiers de ~100 à ~300 lignes chacun (le plus gros, `module_axial.rs`,
 reste sous la barre grâce à ses 10 variantes qui partagent déjà beaucoup de
 code) au lieu d'un fichier de 2800 lignes. **Aucun changement de
 comportement** : c'est un déplacement de code, pas une réécriture — la
-migration se valide avec les 121 tests existants inchangés (ils testent le
-comportement de `Composant::ports/dessiner/cout/rayon_local`, pas l'endroit où
-vit le code).
+migration se valide avec les **130 tests** existants inchangés (ils testent
+le comportement de `Composant::ports/dessiner/cout/rayon_local/
+englobant_local`, pas l'endroit où vit le code ; voir l'audit de couverture
+en E.1 — les 9 variantes qui n'avaient aucun test en ont désormais un chacune,
+donc la migration a un vrai filet sur les 19 variantes, pas 10).
 
 **Ordre de migration conseillé** (chaque étape compile et passe les tests) :
 1. Créer `composant/commun.rs`, y déplacer les constantes et helpers partagés.
@@ -1222,7 +1235,7 @@ pub struct DonneesSousEnsemble {
 }
 ```
 
-Les quatre comportements deviennent triviaux (c'est tout l'intérêt du
+Les cinq comportements deviennent triviaux (c'est tout l'intérêt du
 Composite) :
 - `ports()` → clone de `donnees.ports_exposes` (déjà en repère local, comme
   n'importe quel autre composant) ;
@@ -1230,9 +1243,11 @@ Composite) :
   chacune, délègue à `piece.composant.dessiner(p)` — **exactement** ce que
   fait déjà `Station::dessiner` (Partie C §2), donc pas de nouveau code de
   rendu, juste un appel à la même mécanique ;
-- `cout()` / `rayon_local()` → lecture `O(1)` des champs précalculés (pas de
-  parcours à chaque appel — important, `Chantier::poser` les appelle à chaque
-  pose pour le budget et l'anti-collision).
+- `cout()` / `rayon_local()` / `englobant_local()` → lecture `O(1)` des champs
+  précalculés (`englobant_local` = `(Vec3::ZERO, donnees.rayon)`, comme la
+  plupart des composants structurels) — pas de parcours à chaque appel,
+  important, `Chantier::poser` les appelle à chaque pose pour le budget et
+  l'anti-collision.
 
 **Comment on en fabrique un** : `Assembleur`/`Chantier` construisent un
 sous-arbre normalement, puis une fonction `figer(assembleur, port_montage)

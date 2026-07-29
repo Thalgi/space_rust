@@ -2797,4 +2797,134 @@ mod tests {
             assert!(app.ports()[0].compatible(&hote), "appendice sur port hôte Surface");
         }
     }
+
+    // --- Briques classe C / ISV (audit préalable au découpage de composant.rs,
+    // docs/suivi/stations.md "Priorités immédiates") : ces 9 variantes n'avaient
+    // aucun test dédié. Couverture minimale par variante : ports (genre, nombre,
+    // profils), cout, rayon_local (valeurs figées à partir des formules
+    // actuelles — verrou de non-régression pour l'extraction en modules), et
+    // dessiner() ne panique pas et produit de la géométrie (accumulée dans un
+    // `Batisseur`, sans contexte GL réel nécessaire).
+    use super::super::maillage::Batisseur;
+
+    #[test]
+    fn charpente_deux_ports_axiaux_a_leurs_profils() {
+        let c = Composant::Charpente { grand: Profil::P3, petit: Profil::P0, longueur: 40.0, courbure: 2.6, aiguille: false };
+        let ports = c.ports();
+        assert_eq!(ports.len(), 2);
+        assert!(ports.iter().all(|p| p.genre == GenrePort::ModuleAxial));
+        assert!(ports.iter().any(|p| p.profil == Profil::P3));
+        assert!(ports.iter().any(|p| p.profil == Profil::P0));
+        assert_eq!(c.cout(), 43.0); // 3.0 + longueur
+        assert_eq!(c.rayon_local(), 20.0); // (40*0.5).max(P3.rayon()*0.5*1.5) = 20.0
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        assert!(!b.terminer().is_empty());
+    }
+
+    #[test]
+    fn radiateur_mega_un_port_surface() {
+        let c = Composant::RadiateurMega { profil: Profil::P0, longueur: 10.0, largeur: 5.5, ailettes: 34 };
+        let ports = c.ports();
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].genre, GenrePort::Surface);
+        assert_eq!(c.cout(), 26.0); // 16.0 + longueur
+        assert_eq!(c.rayon_local(), 10.0); // longueur.max(largeur)
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        assert!(!b.terminer().is_empty());
+    }
+
+    #[test]
+    fn motrice_un_port_axial() {
+        let c = Composant::Motrice { profil: Profil::P2, echelle: 1.0 };
+        let ports = c.ports();
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].genre, GenrePort::ModuleAxial);
+        assert_eq!(c.cout(), 40.0);
+        assert_eq!(c.rayon_local(), 12.0); // 12.0 * echelle
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        assert!(!b.terminer().is_empty());
+    }
+
+    #[test]
+    fn bloc_moteur_deux_ports_axiaux_memes_profils() {
+        let c = Composant::BlocMoteur { profil: Profil::P2, largeur: 4.0 };
+        let ports = c.ports();
+        assert_eq!(ports.len(), 2);
+        assert!(ports.iter().all(|p| p.genre == GenrePort::ModuleAxial && p.profil == Profil::P2));
+        assert_eq!(c.cout(), 20.0); // 5.0 * largeur
+        assert!((c.rayon_local() - 5.2).abs() < 1e-4); // 1.3 * largeur
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        assert!(!b.terminer().is_empty());
+    }
+
+    #[test]
+    fn reservoir_deux_ports_axiaux() {
+        let c = Composant::Reservoir { profil: Profil::P1, longueur: 6.0, cage: true };
+        let ports = c.ports();
+        assert_eq!(ports.len(), 2);
+        assert!(ports.iter().all(|p| p.genre == GenrePort::ModuleAxial && p.profil == Profil::P1));
+        assert_eq!(c.cout(), 14.0); // 8.0 + longueur
+        assert_eq!(c.rayon_local(), 4.0); // (6*0.5 + 1.0).max(1.0*3.5) = 4.0
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        assert!(!b.terminer().is_empty());
+    }
+
+    #[test]
+    fn moteur_antimatiere_un_port_axial() {
+        let c = Composant::MoteurAntimatiere { profil: Profil::P1, taille: 6.0 };
+        let ports = c.ports();
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].genre, GenrePort::ModuleAxial);
+        assert_eq!(c.cout(), 11.0);
+        assert!((c.rayon_local() - 9.72).abs() < 1e-4); // taille * 1.62
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        assert!(!b.terminer().is_empty());
+    }
+
+    #[test]
+    fn coiffe_un_port_axial_pour_chaque_forme() {
+        for v in [VarianteCoiffe::Bombee, VarianteCoiffe::Hexagonale, VarianteCoiffe::Amarrage] {
+            let c = Composant::Coiffe { profil: Profil::P1, variante: v };
+            let ports = c.ports();
+            assert_eq!(ports.len(), 1, "{:?}", v);
+            assert_eq!(ports[0].genre, GenrePort::ModuleAxial);
+            assert_eq!(c.cout(), 6.0, "{:?}", v);
+            assert!((c.rayon_local() - 1.4).abs() < 1e-4, "{:?}", v); // P1.rayon() * 1.4
+            let mut b = Batisseur::new();
+            c.dessiner(&mut b);
+            assert!(!b.terminer().is_empty(), "{:?}", v);
+        }
+    }
+
+    #[test]
+    fn reacteur_antimatiere_deux_ports_axiaux() {
+        let c = Composant::ReacteurAntimatiere { profil: Profil::P1, taille: 6.0 };
+        let ports = c.ports();
+        assert_eq!(ports.len(), 2);
+        assert!(ports.iter().all(|p| p.genre == GenrePort::ModuleAxial && p.profil == Profil::P1));
+        assert_eq!(c.cout(), 14.0);
+        assert!((c.rayon_local() - 7.2).abs() < 1e-4); // taille * 1.2
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        assert!(!b.terminer().is_empty());
+    }
+
+    #[test]
+    fn treillis_hexagone_pose_seul_sans_port() {
+        // Anneau décoratif posé à la main (via un Repere cuit) : aucun port —
+        // à distinguer du même hexagone en pied de Charpente (aiguille: true).
+        let c = Composant::TreillisHexagone { profil: Profil::P1, liaison: 0.0 };
+        assert!(c.ports().is_empty());
+        assert_eq!(c.cout(), 12.0);
+        assert!((c.rayon_local() - 1.1).abs() < 1e-4); // (P1.rayon() * 1.1).max(liaison)
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        assert!(!b.terminer().is_empty());
+    }
 }
