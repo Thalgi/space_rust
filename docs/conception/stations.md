@@ -1198,7 +1198,15 @@ un verrou de non-régression sur les 9 variantes qui n'en avaient aucun.
 trait objet, zéro allocation, monomorphisé. Le problème est la **granularité
 des fichiers**, pas le modèle de dispatch.
 
-### E.2 Découpage proposé : un module par famille de brique
+### E.2 Découpage en modules par famille — ✅ fait (2026-07-29)
+
+> **État : fait.** `composant.rs` (3 316 lignes) est devenu `composant/`,
+> 15 fichiers, aucun au-dessus de 475 lignes ; les cinq dispatch sont passés
+> de 1 087 lignes cumulées à 212 (un bras d'une ligne par variante). Le plan
+> ci-dessous a été suivi tel quel, à trois familles près, ajoutées depuis sa
+> rédaction : `cargo` (nacelle + râtelier), `habitat` et `antimatiere`.
+> Mesures et pièges rencontrés : [`suivi/stations.md`](../suivi/stations.md),
+> « Priorités immédiates » point 3.
 
 Principe : **une variante (ou une petite famille de variantes proches) = un
 fichier**, qui regroupe pour cette famille son enum de style/variante *et* ses

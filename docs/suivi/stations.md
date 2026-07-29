@@ -23,15 +23,38 @@ Constat d'une revue de code sans complaisance sur l'état actuel du dépôt
    « cargo clippy fix » (`136c7e1`) a réduit les avertissements (63 → ~45)
    mais **pas** corrigé cette erreur bloquante ni le point 5. Toujours
    trivial, toujours pas fait.
-3. 🔨 **`composant.rs` (toujours 1 seul fichier, 5 fonctions dispatch
-   géantes)** : découpage en 12 modules conçu en
-   [`conception/stations.md`](../conception/stations.md) Partie E.2, **pas
-   encore commencé** — E.3 (composite, ci-dessous) est passé devant sur
-   décision utilisateur. **Audit de tests fait avant de commencer le
-   chantier composant** (2026-07-29) : 9 des 19 variantes n'avaient aucun
-   test (`Charpente`, `RadiateurMega`, `Motrice`, `BlocMoteur`, `Reservoir`,
-   `MoteurAntimatiere`, `Coiffe`, `ReacteurAntimatiere`, `TreillisHexagone`)
-   — 9 tests de fumée ajoutés (121 → 130 tests).
+3. ✅ **`composant.rs` découpé (Partie E.2)** — fait le 2026-07-29.
+   `src/vaisseau/composant.rs` (3 316 lignes) est devenu
+   `src/vaisseau/composant/`, **15 fichiers** dont aucun ne dépasse 475
+   lignes. Les cinq fonctions de dispatch, qui totalisaient **1 087 lignes**,
+   en font **212** : un bras d'une ligne par variante, tout le corps vivant
+   dans le module de sa famille.
+
+   | fonction | avant | après |
+   |---|---|---|
+   | `dessiner` | 661 | **36** |
+   | `ports` | 257 | **33** |
+   | `rayon_local` | 72 | **54** |
+   | `cout` | 49 | **48** |
+   | `englobant_local` | 48 | **41** |
+
+   Familles : `commun` (palette + cotes partagées), `module_axial`, `noeud`,
+   `panneau_solaire`, `treillis` (poutre + charpente + hexagone), `radiateur`
+   (station + méga), `antenne`, `adaptateur` (+ coiffe), `caisson` (+ charge
+   utile), `propulsion`, `antimatiere`, `reservoir`, `cargo`, `habitat`.
+
+   **Aucun changement de comportement** : déplacement de code seul, les 147
+   tests passent à chaque étape (une famille = une étape, validée avant la
+   suivante). L'audit de couverture fait en amont (9 variantes sans test,
+   121 → 130) est ce qui a rendu l'opération sûre.
+
+   *Leçons de mécanique* : découper par plages de lignes est traître — trois
+   erreurs (bras coupé une ligne trop court, doc de l'enum emportée avec les
+   constantes, délégations interverties entre `ports` et `dessiner` parce que
+   plusieurs fonctions portent des bras au **motif identique**). Toutes
+   rattrapées par le compilateur ou les tests, aucune silencieuse. L'outil de
+   coupe a fini brace-aware **et** contraint à chercher le bras *dans la
+   fonction visée*.
 4. ✅ **Composite `Composant::SousEnsemble` (Partie E.3)** : fait
    (2026-07-29). `Chantier::figer` gèle un sous-arbre en brique réutilisable ;
    le trait `Peintre` a gagné `empiler_transforme`/`depiler_transforme`
@@ -47,7 +70,7 @@ Constat d'une revue de code sans complaisance sur l'état actuel du dépôt
    `Planete { app: Apparence, .. }` → 376 octets pour tout l'enum). Hors
    sujet stations, toujours pas corrigé.
 
-Une fois §E.2 de la conception implémenté et les points 2/5/6 traités,
+Une fois les points 2/5/6 traités,
 reprendre le fil du générateur (Partie A ci-dessous) et le chantier
 « stockages de carburant » de l'ISV
 ([`conception/stations.md`](../conception/stations.md) Partie D).
