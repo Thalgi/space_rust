@@ -140,7 +140,7 @@ impl VueStation {
                 15 => (demo_reservoir(), "RESERVOIR CARBURANT (SPHERE)".into()),
                 16 => (demo_moteur_antimatiere_principal(), "MOTEUR ANTIMATIERE : TUYERE + REACTEUR".into()),
                 17 => (EtatStation::Prete(demo_coiffes()), "COIFFES DE MODULES (3 FORMES)".into()),
-                18 => (demo_cargo(), "FRET ISV : NACELLE + RATELIERS 6/8".into()),
+                18 => (demo_cargo(), "FRET ISV : NACELLE + TRIFORCE + COURONNE 6".into()),
                 _ => (EtatStation::Prete(demo_chantier()), "CONSTRUCTEUR PAR PORTS LIBRES".into()),
             },
         };

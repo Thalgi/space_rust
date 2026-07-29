@@ -383,23 +383,46 @@ pub(crate) fn radiateur<P: Peintre>(
     }
 }
 
-/// Nombre de segments du contour « onigiri ». 24 suffit pour que les côtés
-/// bombés lisent comme des courbes sans exploser le nombre de triangles (une
-/// grappe de fret en aligne des dizaines).
-const ONIGIRI_SEGMENTS: usize = 24;
+/// Points par **coin** du contour onigiri (3 coins → 3× ce nombre au total).
+/// 8 suffit : ce sont les seules parties courbes, les côtés sont droits.
+const ONIGIRI_ARC: usize = 8;
 
-/// Bombement du contour : 0 = cercle, ~0.22 = triangle aux angles bien arrondis
-/// et aux côtés légèrement convexes — la silhouette « onigiri ».
-const ONIGIRI_BOMBE: f32 = 0.22;
+/// Rayon de congé des coins, en fraction du rayon hors-tout. Plus il est petit,
+/// plus le triangle est franc. À 0.22 les **côtés restent bien droits** et les
+/// coins sont juste adoucis : c'est la lecture « structure triangulaire », pas
+/// « tube mou ».
+const ONIGIRI_FILET: f32 = 0.22;
 
-/// Prisme à section **onigiri** (triangle arrondi) extrudé le long de +Z, de
-/// `pied` à `pied + Z·longueur`. Le contour suit `r(θ) = rayon·(1 + b·cos 3θ)`,
-/// tourné de `spin` : trois lobes (les « coins » du triangle) et trois côtés
-/// bombés. Fermé aux deux bouts.
+/// Contour d'une section onigiri de rayon hors-tout `rayon`, tourné de `spin`,
+/// dans le plan Z = `z`. **Vrai triangle à coins congés** : trois arcs de
+/// cercle reliés par trois **segments droits** (les extrémités d'arcs
+/// consécutifs sont alignées, la corde entre elles *est* le côté du triangle).
+///
+/// Le point le plus éloigné du centre vaut exactement `rayon`, dans la
+/// direction de chaque coin (`spin + k·120°`) — c'est ce qui rend l'empilement
+/// en triforce calculable sans marge empirique.
+fn contour_onigiri(pied: Vec3, rayon: f32, spin: f32, z: f32) -> Vec<Vec3> {
+    let rho = rayon * ONIGIRI_FILET; // rayon du congé
+    let dv = rayon - rho; // centre → centre de congé (max = dv + rho = rayon)
+    let mut pts = Vec::with_capacity(3 * ONIGIRI_ARC);
+    for k in 0..3 {
+        let ak = spin + TAU * k as f32 / 3.0;
+        let c = vec3(dv * ak.cos(), dv * ak.sin(), 0.0);
+        for i in 0..ONIGIRI_ARC {
+            // Chaque coin balaie 120° (angle extérieur d'un triangle équilatéral).
+            let t = i as f32 / (ONIGIRI_ARC - 1) as f32;
+            let a = ak - FRAC_PI_3 + t * 2.0 * FRAC_PI_3;
+            pts.push(pied + c + vec3(rho * a.cos(), rho * a.sin(), z));
+        }
+    }
+    pts
+}
+
+/// Prisme à section **onigiri** (triangle à coins congés) extrudé le long de
+/// +Z, de `pied` à `pied + Z·longueur`, fermé aux deux bouts.
 ///
 /// Sortie en triangles bruts plutôt qu'en primitives composées : aucune
-/// primitive du [`Peintre`] n'a de section non circulaire, et un empilement de
-/// cubes ne donnerait pas les côtés bombés.
+/// primitive du [`Peintre`] n'a de section non circulaire.
 fn prisme_onigiri<P: Peintre>(
     p: &mut P,
     pied: Vec3,
@@ -411,17 +434,8 @@ fn prisme_onigiri<P: Peintre>(
     if longueur.abs() < 1e-4 || rayon < 1e-4 {
         return;
     }
-    let n = ONIGIRI_SEGMENTS;
-    let contour = |z: f32| -> Vec<Vec3> {
-        (0..n)
-            .map(|k| {
-                let a = TAU * k as f32 / n as f32;
-                let r = rayon * (1.0 + ONIGIRI_BOMBE * (3.0 * a).cos());
-                let t = a + spin;
-                pied + vec3(r * t.cos(), r * t.sin(), z)
-            })
-            .collect()
-    };
+    let n = 3 * ONIGIRI_ARC;
+    let contour = |z: f32| contour_onigiri(pied, rayon, spin, z);
     let mut sommets = contour(0.0);
     sommets.extend(contour(longueur));
     sommets.push(pied); // centre de l'embout bas
@@ -440,15 +454,15 @@ fn prisme_onigiri<P: Peintre>(
 }
 
 /// **Nacelle de fret** d'échelle vaisseau (ISV) : un long conteneur à section
-/// **onigiri** (triangle arrondi), posé depuis `pied` le long de +Z. Sa section
-/// non circulaire est ce qui permet d'en empaqueter une couronne serrée autour
-/// d'une épine sans laisser de vides — un cylindre gaspillerait l'espace entre
-/// voisins.
+/// **onigiri** (triangle à coins congés), posé depuis `pied` le long de +Z. La
+/// section triangulaire n'est pas décorative : c'est la forme qui **tient** (le
+/// triangle ne se déforme pas sous charge) et celle qui s'empaquette sans vides
+/// autour d'une épine, là où des cylindres gaspilleraient tout l'entre-deux.
 ///
-/// `spin` tourne la section autour de son axe : c'est ainsi qu'on présente un
-/// **lobe vers l'intérieur** de la grappe (les côtés plats se font face entre
-/// nacelles voisines). Habillage : trois rails d'arête sur les lobes et deux
-/// collerettes de bout, qui donnent l'échelle et cassent le fuselé nu.
+/// `spin` tourne la section autour de son axe : c'est ainsi qu'on choisit ce
+/// qu'on présente aux voisines (un coin ou un côté plat). Habillage : trois
+/// rails d'arête sur les coins et deux collerettes de bout, qui donnent
+/// l'échelle et cassent le fuselé nu.
 pub(crate) fn nacelle_cargo<P: Peintre>(
     p: &mut P,
     pied: Vec3,
@@ -469,10 +483,10 @@ pub(crate) fn nacelle_cargo<P: Peintre>(
     prisme_onigiri(p, pied, ec, rayon * 1.06, spin, bague);
     prisme_onigiri(p, pied + Vec3::Z * (longueur - ec), ec, rayon * 1.06, spin, bague);
 
-    // Rails d'arête : sur les trois lobes (là où cos 3θ = 1, donc r maximal).
+    // Rails d'arête : dans l'axe des trois coins, au rayon hors-tout.
     for k in 0..3 {
         let t = spin + TAU * k as f32 / 3.0;
-        let r = rayon * (1.0 + ONIGIRI_BOMBE) * 0.99;
+        let r = rayon * 0.99;
         let o = vec3(r * t.cos(), r * t.sin(), 0.0);
         p.cylindre(pied + o + Vec3::Z * ec, pied + o + Vec3::Z * (longueur - ec), rayon * 0.07, bague);
     }

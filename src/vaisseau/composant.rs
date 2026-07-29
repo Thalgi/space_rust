@@ -316,6 +316,44 @@ fn caisson_haut(largeur: f32) -> f32 {
     largeur * 0.62
 }
 
+/// Disposition des nacelles d'un [`Composant::RatelierCargo`] : renvoie le rayon
+/// hors-tout d'une nacelle et, pour chacune, `(position de station, spin)`.
+/// **Partagée par le dessin et par le calcul d'encombrement** — les deux ne
+/// peuvent donc pas diverger.
+///
+/// Deux régimes, parce que trois nacelles ne se rangent pas comme six :
+/// - **3 → triforce** : trois conteneurs de **même orientation** posés aux
+///   sommets d'un triangle, qui se touchent **par la pointe** et laissent un
+///   creux triangulaire au milieu. La distance au centre vaut alors exactement
+///   le rayon hors-tout d'une nacelle (propriété du triangle : le centroïde
+///   d'un sous-triangle d'une subdivision est à une distance égale à son propre
+///   circonrayon) ;
+/// - **≥ 4 → couronne** : réparties en angle, **coin vers l'axe**, les côtés
+///   plats se faisant face. Le rayon vient du demi-pas angulaire, donc elles ne
+///   se croisent jamais quel que soit leur nombre.
+fn grappe_cargo(rayon: f32, nacelles: usize) -> (f32, Vec<(Vec3, f32)>) {
+    let n = nacelles.max(3);
+    let dir = |a: f32| vec3(a.cos(), a.sin(), 0.0);
+    if n == 3 {
+        let places = (0..3)
+            .map(|k| {
+                let a = FRAC_PI_2 + TAU * k as f32 / 3.0;
+                (dir(a) * rayon, FRAC_PI_2)
+            })
+            .collect();
+        (rayon, places)
+    } else {
+        let rnac = rayon * (PI / n as f32).sin() * 0.9;
+        let places = (0..n)
+            .map(|k| {
+                let a = TAU * k as f32 / n as f32;
+                (dir(a) * rayon, a + PI)
+            })
+            .collect();
+        (rnac, places)
+    }
+}
+
 /// Variantes de [`Composant::Caisson`] — le **porteur** technique non
 /// pressurisé, seule géométrie anguleuse du jeu de composants (tout le reste est
 /// de révolution). Il expose des ports hôtes sur ses faces : c'est lui qui
@@ -2320,44 +2358,22 @@ impl Composant {
                     SOMBRE,
                 );
             }
-            Composant::RatelierCargo { profil, longueur, rayon, nacelles } => {
-                let n = (*nacelles).max(3);
+            Composant::RatelierCargo { longueur, rayon, nacelles, .. } => {
+                // Les nacelles seules : la cage qui les tenait a été retirée
+                // (elle noyait le fret au lieu de le structurer). La rangée est
+                // donc, pour l'instant, purement la grappe de conteneurs.
                 let demi = longueur * 0.5;
-                let sec = profil.rayon() * 0.30; // gabarit des membrures de la cage
-                // Rayon de nacelle déduit du **pas angulaire** : les conteneurs
-                // se frôlent sans se croiser, quel que soit `nacelles`.
-                let pas = TAU * rayon / n as f32;
-                let rnac = pas * 0.36;
-                let station = |k: usize| -> Vec3 {
-                    let a = TAU * k as f32 / n as f32;
-                    vec3(a.cos(), a.sin(), 0.0) * *rayon
-                };
-                // Les nacelles s'arrêtent avant les anneaux de bout : la cage
-                // doit rester lisible par-dessus le fret.
-                let marge = demi * 0.06;
-                for k in 0..n {
-                    let a = TAU * k as f32 / n as f32;
-                    // Un **lobe vers l'axe** : côtés plats face aux voisines.
+                let (rnac, places) = grappe_cargo(*rayon, *nacelles);
+                for (poste, spin) in places {
                     super::pieces::nacelle_cargo(
                         p,
-                        station(k) - Vec3::Z * (demi - marge),
-                        2.0 * (demi - marge),
+                        poste - Vec3::Z * demi,
+                        *longueur,
                         rnac,
-                        a + PI,
+                        spin,
                         CARGO,
                         SOMBRE,
                     );
-                }
-                // Cage : anneau polygonal + rayons vers l'axe, aux deux bouts et
-                // à mi-longueur (c'est ce qui tient la couronne de nacelles).
-                for zt in [-demi, 0.0, demi] {
-                    let moyeu = Vec3::Z * zt;
-                    for k in 0..n {
-                        let a = station(k) + moyeu;
-                        let b = station((k + 1) % n) + moyeu;
-                        p.cylindre(a, b, sec * 0.5, COULEUR);
-                        p.cylindre(moyeu, a, sec * 0.4, SOMBRE);
-                    }
                 }
             }
             // Composite : empile la transformée LOCALE de chaque enfant
@@ -2505,13 +2521,13 @@ impl Composant {
             // Anneau hexagonal (+ montants de liaison le long de +Z).
             Composant::TreillisHexagone { profil, liaison } => (profil.rayon() * 1.1).max(*liaison),
             // Nacelle : appendice déployé le long de +Z, la longueur domine.
-            Composant::NacelleCargo { profil, longueur, .. } => {
-                longueur.max(profil.rayon() * (1.0 + 0.22))
-            }
-            // Râtelier : le coin le plus loin (demi-longueur, couronne + nacelle).
+            Composant::NacelleCargo { profil, longueur, .. } => longueur.max(profil.rayon()),
+            // Râtelier : le coin le plus loin (demi-longueur, station + nacelle).
+            // Même disposition que le dessin, donc jamais de divergence.
             Composant::RatelierCargo { longueur, rayon, nacelles, .. } => {
-                let pas = TAU * rayon / (*nacelles).max(3) as f32;
-                (longueur * 0.5).hypot(rayon + pas * 0.36 * 1.22)
+                let (rnac, places) = grappe_cargo(*rayon, *nacelles);
+                let etendue = places.iter().fold(0.0_f32, |m, (q, _)| m.max(q.length())) + rnac;
+                (longueur * 0.5).hypot(etendue)
             }
             // Sous-ensemble : rayon englobant du sous-arbre, précalculé.
             Composant::SousEnsemble { donnees, .. } => donnees.rayon,
@@ -2560,7 +2576,7 @@ impl Composant {
             // — sinon, centrée sur le montage, elle mordrait sur les voisines.
             Composant::NacelleCargo { profil, longueur, .. } => (
                 Vec3::Z * (longueur * 0.5),
-                (longueur * 0.5).hypot(profil.rayon() * 1.22),
+                (longueur * 0.5).hypot(profil.rayon()),
             ),
             // Râtelier : structurel, centré sur son axe comme une poutre.
             Composant::RatelierCargo { .. } => (Vec3::ZERO, self.rayon_local()),
@@ -3098,6 +3114,47 @@ mod tests {
         let mut b = Batisseur::new();
         c.dessiner(&mut b);
         assert!(!b.terminer().is_empty());
+    }
+
+    // La triforce n'est pas « 3 nacelles en rond » : c'est trois conteneurs de
+    // MÊME orientation qui se touchent par la pointe. Les deux propriétés se
+    // vérifient, sinon on retombe sur une couronne à trois branches.
+    #[test]
+    fn ratelier_trois_nacelles_forme_une_triforce() {
+        let rayon = 2.6_f32;
+        let (rnac, places) = grappe_cargo(rayon, 3);
+        assert_eq!(places.len(), 3);
+        // Rayon de nacelle = rayon de grappe : la condition de tangence.
+        assert!((rnac - rayon).abs() < 1e-5);
+        // Orientation commune (le motif triforce vient de là).
+        let spin0 = places[0].1;
+        assert!(places.iter().all(|(_, s)| (s - spin0).abs() < 1e-5), "orientation commune");
+        // Deux nacelles voisines partagent une pointe.
+        let coins = |(poste, spin): &(Vec3, f32)| -> Vec<Vec3> {
+            (0..3)
+                .map(|j| {
+                    let a = spin + TAU * j as f32 / 3.0;
+                    *poste + vec3(a.cos(), a.sin(), 0.0) * rnac
+                })
+                .collect()
+        };
+        let (a, b) = (coins(&places[0]), coins(&places[1]));
+        let plus_proche = a
+            .iter()
+            .flat_map(|p| b.iter().map(move |q| p.distance(*q)))
+            .fold(f32::INFINITY, f32::min);
+        assert!(plus_proche < 1e-4, "pointes non jointives : {plus_proche}");
+    }
+
+    // En couronne, les nacelles doivent se frôler sans jamais se croiser, quel
+    // que soit leur nombre — c'est ce que garantit le calcul par demi-pas.
+    #[test]
+    fn ratelier_couronne_ne_croise_jamais() {
+        for n in [4usize, 5, 6, 8, 12] {
+            let (rnac, places) = grappe_cargo(4.5, n);
+            let d = places[0].0.distance(places[1].0);
+            assert!(d > 2.0 * rnac, "n={n} : nacelles qui se croisent ({d} <= {})", 2.0 * rnac);
+        }
     }
 
     // Le coût et l'encombrement doivent suivre le nombre de nacelles, sinon le

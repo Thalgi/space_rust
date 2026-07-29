@@ -1233,14 +1233,12 @@ pub fn demo_cargo() -> EtatStation {
     let seule = Composant::NacelleCargo { profil: Profil::P1, longueur: 15.0, spin: 0.0 };
     asm.ajouter(cuire(Repere::new(vec3(-7.5, 11.0, 0.0), couche), &seule));
 
-    // Deux densités de râtelier, pour choisir celle qui « fait ISV ».
-    for (i, n) in [6usize, 8].into_iter().enumerate() {
-        let r = Composant::RatelierCargo {
-            profil: Profil::P2,
-            longueur: 16.0,
-            rayon: 4.5,
-            nacelles: n,
-        };
+    // Deux dispositions de râtelier : la **triforce** (3 nacelles de même
+    // orientation qui se touchent par la pointe, creux triangulaire au milieu)
+    // et la **couronne** de 6 (coin vers l'axe). Le rayon de triforce est plus
+    // petit : à 3, la nacelle fait à elle seule tout le rayon de la grappe.
+    for (i, (n, rayon)) in [(3usize, 2.6_f32), (6, 4.5)].into_iter().enumerate() {
+        let r = Composant::RatelierCargo { profil: Profil::P2, longueur: 16.0, rayon, nacelles: n };
         asm.ajouter(cuire(Repere::new(vec3(0.0, -(i as f32) * 13.0, 0.0), couche), &r));
     }
     asm.terminer()
