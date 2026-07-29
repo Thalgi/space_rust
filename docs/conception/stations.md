@@ -1043,7 +1043,13 @@ Cœur 3 (réacteur monté par sa tête, tuyère sous sa base, poussée vers
 l'extérieur ; taille calée pour que le corps du réacteur ait le **même diamètre**
 que Cœur 3 au raccord). Réservoirs sphériques de part et d'autre de l'hexagone.
 Le tout via le helper `poser_bloc_moteur(.., propulseur: bool)`.
-Prochain chantier : **stockages de carburant**.
+
+**Mise à jour 2026-07-29** : les stockages de carburant, annoncés ici comme
+« prochain chantier », sont **faits** (4 `Reservoir` autour de l'hexagone).
+L'état mesuré du preset et le vrai reste à faire — essentiellement **toute la
+section charge utile** (cargo, habitat/cryo, modules d'équipage rotatifs,
+navettes TAV) — sont dans [`suivi/stations.md`](../suivi/stations.md)
+**Partie C**, avec l'anatomie du vaisseau réel et les sources.
 
 ##### Elysium — classe C (tore de Stanford, anneau **ouvert** ~1,8 km)
 Réutilise **directement** `poser_anneau` mis à l'échelle + `poser_rayons`
@@ -1068,10 +1074,12 @@ brique vraiment nouvelle de cette classe.
    pied) porte moteurs, radiateurs et réservoirs.
 3. ✅ **Voiles radiateurs** — `RadiateurMega` (aile en arête de poisson) en
    enfilade. Signature de l'ISV.
-4. 🔩 **assembler l'ISV** (preset, classe C) — **bloc propulsion fait**
+4. 🔩 **assembler l'ISV** (preset, classe C) — **section propulsion complète**
    (`poser_bloc_moteur` + propulseur antimatière sur Cœur 3, chapes bombées sur
-   Cœur 1/2). **Reste : stockages de carburant** (prochain chantier), puis
-   grappe habitée et finitions.
+   Cœur 1/2, **réservoirs faits**). **Reste : toute la section charge utile**
+   (cargo, habitat/cryo, modules d'équipage rotatifs, navettes TAV) + le
+   bouclier antidébris — détail et ordre de travail en
+   [`suivi/stations.md`](../suivi/stations.md) Partie C.
 5. **Elysium** — anneau XL + rayons + moyeu + habitat de jante (surtout de la
    réutilisation).
 6. **Coque cylindrique rayée** + capots + miroirs (nouveau composant).

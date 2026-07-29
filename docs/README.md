@@ -30,7 +30,7 @@ la trace de ce qui existe).
 
 | Fichier | Sujet |
 |---|---|
-| [`stations.md`](suivi/stations.md) | **Priorités immédiates en tête** (à corriger avant tout), puis passation du chantier générateur de stations (état des lieux, bugs résolus) + audit de référence du preset ISS. Fusion de 2 anciens docs. |
+| [`stations.md`](suivi/stations.md) | **Priorités immédiates en tête** (à corriger avant tout), puis passation du chantier générateur de stations (état des lieux, bugs résolus), audit de référence du preset ISS, et **état/manques de l'ISV Venture Star** (Partie C). Fusion de 2 anciens docs. |
 | [`planetes.md`](suivi/planetes.md) | Bilan de la refonte v2 du rendu tellurique (fichiers touchés, perfs, tests) + catalogue des ~126 presets. Fusion de 2 anciens docs. |
 | [`geantes_gazeuses.md`](suivi/geantes_gazeuses.md) | Catalogue des géantes gazeuses (archétypes, features, presets) et bilan de la V2. |
 | [`etoiles.md`](suivi/etoiles.md) | Catalogue de la galerie des étoiles (types, rendu, chantiers restants). |

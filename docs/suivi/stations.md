@@ -456,3 +456,111 @@ nouveau composant. Le seul manque *structurel* connu reste les ports `Surface`
 - [Tranquility (Node 3) — Wikipedia](https://en.wikipedia.org/wiki/Tranquility_(ISS_module))
 - [Unity (Node 1) — Wikipedia](https://en.wikipedia.org/wiki/Unity_(ISS_module))
 - [US Orbital Segment — Wikipedia](https://en.wikipedia.org/wiki/United_States_Orbital_Segment)
+
+---
+
+## Partie C — ISV Venture Star : état et manques
+
+> Ajouté le 2026-07-29. Chantier **classe C** (cf.
+> [`conception/stations.md`](../conception/stations.md) Partie D). Objectif :
+> un ISV *inspiré* d'Avatar, pas une copie au rivet près — la silhouette et
+> l'articulation des grandes masses priment sur le détail.
+
+### C.1 Ce qui existe aujourd'hui (mesuré, pas supposé)
+
+`preset_isv()` (`src/vaisseau/generateur.rs`) produit **24 pièces, coût 364,
+rayon englobant 76,4** — soit, en coût, l'équivalent du preset ISS (371) pour
+un vaisseau censé être 30× plus long. C'est le signe que **seule la section
+propulsion est construite** :
+
+| Pièce | × | Rôle sur le vaisseau |
+|---|---|---|
+| `Charpente` | 1 | épine dorsale courbe (P3 base → P1 flèche), longueur 84, anneau hexagonal au pied |
+| `RadiateurMega` | 2 | les deux grandes voiles radiantes, inclinées de 5° (pointe vers l'intérieur → tuyères vers l'extérieur) |
+| `BlocMoteur` | 2 | caisse collecteur de chaque nacelle |
+| `ModuleAxial` (Cœur) | 6 | 3 Cœurs par nacelle (rangée étagée) |
+| `Coiffe` | 4 | chapes bombées sur les bouts exposés de Cœur 1 & 2 |
+| `ReacteurAntimatiere` + `MoteurAntimatiere` | 2 + 2 | le bloc propulsion antimatière au bout de Cœur 3 |
+| `Reservoir` | 4 | cuves sphériques d'hydrogène, 2 de chaque côté (±Z) de l'hexagone |
+| `TreillisHexagone` | 1 | second anneau hexagonal, bord à bord avec celui du pied |
+
+**Correction d'une note périmée** : la conception (Partie D) annonçait encore
+« prochain chantier : stockages de carburant ». Ils sont **faits** (les 4
+`Reservoir` ci-dessus). Le vrai reste à faire est ailleurs (§C.3).
+
+### C.2 Référence : anatomie du vrai ISV Venture Star
+
+Le vaisseau réel fait **1 646 m** et se lit en trois blocs (sources en fin de
+partie). Point de vocabulaire qui prête à confusion : l'ISV est un **tracteur**
+— il *tire* sa charge utile. La section propulsion est donc à l'**avant** en
+poussée, et la charge utile derrière, au bout d'une longue épine en tension.
+
+1. **Section propulsion (avant)** — deux moteurs hybrides antimatière/fusion
+   **écartés de quelques degrés** de l'axe (pour que les panaches d'échappement
+   ne touchent pas la structure), leurs **tours de radiateurs** au-dessus, et
+   les **cuves sphériques** d'hydrogène cryogénique (isolées « zéro
+   évaporation »).
+2. **Épine en tension** — treillis en composite de nanotubes de carbone,
+   **long et fuselé**, qui transmet la poussée en tirant. Il porte un
+   **bouclier thermique** (l'échappement est « plus chaud que le Soleil ») et
+   un **tunnel pressurisé** en son cœur, qui relie l'habitat aux navettes.
+3. **Section charge utile (arrière)** — quatre sous-ensembles :
+   - **cargo** : 4 rangées × 4 modules × 6 nacelles de fret, manipulées par un
+     bras robotisé qui les charge sur les navettes ;
+   - **2 navettes TAV** (*Valkyrie*) amarrées à des tunnels d'accès ;
+   - **habitat/cryo** : 3 gros modules (cryovaults + cuves amniotiques), en
+     composites **non métalliques** (le métal produirait du rayonnement
+     secondaire sous les rayons cosmiques) ;
+   - **2 modules d'équipage rotatifs**, aux deux bouts d'une **traverse**
+     perpendiculaire, reliés par des bras : ils **tournent** pour la gravité
+     artificielle en croisière et se **replient** le long de l'axe pendant les
+     phases d'accélération/décélération.
+4. **Bouclier antidébris (IDPS)** — plaques planes anguleuses en avant du
+   vaisseau, façon bouclier Whipple étagé (barrières séparées par ~100 m).
+
+*Hors périmètre assumé* : la **voile solaire** de 16 km, déployée uniquement
+au départ du système solaire — elle n'est pas là dans la configuration
+« en orbite de Pandora » que l'on modélise.
+
+### C.3 Manques, par ordre d'impact sur la silhouette
+
+1. 🔴 **Toute la section charge utile** — c'est la moitié arrière du vaisseau,
+   entièrement absente. Sans elle, notre ISV est une section propulsion seule :
+   c'est ce que dit le coût (364, comme une ISS). Décomposition :
+   - grappe cargo (rangées de nacelles sur l'épine) ;
+   - 2 navettes TAV amarrées ;
+   - 3 modules habitat/cryo ;
+   - 2 modules d'équipage rotatifs sur leur traverse.
+2. 🟠 **Bouclier antidébris (IDPS)** — les plaques planes en tête ; forte
+   signature visuelle, brique neuve (mais simple : des `panneau` inclinés).
+3. 🟡 **Proportions** — l'épine fait 84 unités pour un rayon englobant de 76 :
+   une fois la charge utile posée, vérifier que l'ensemble garde le rapport
+   très allongé du vrai vaisseau (l'épine domine largement).
+4. 🟡 **Tunnel pressurisé + bouclier thermique** de l'épine — détails de
+   surface, à faire seulement s'ils se voient à la silhouette.
+5. ⚪ **Aucun test sur `preset_isv`** — les presets ISS/Mir en ont un
+   (`presets_iss_et_mir_produisent_des_stations`), pas l'ISV. À ajouter en même
+   temps que la charge utile (au minimum : la station est `Prete`, le nombre de
+   pièces croît, rien ne se recouvre).
+
+### C.4 Ordre de travail proposé
+
+Chaque étape se voit à l'écran (vue **MEGASTRUCTURES**, item « ISV — CHARPENTE
++ RADIATEURS ») et se valide avant la suivante :
+
+1. **Grappe cargo** sur l'épine — la plus grosse masse visuelle manquante,
+   et elle réutilise `Caisson`/`ChargeUtile` (rien de neuf).
+2. **Modules habitat/cryo** — 3 gros `ModuleAxial` (`GrandGonflable`/`Coeur`).
+3. **Traverse + 2 modules d'équipage rotatifs** — réutilise `Treillis` pour la
+   traverse ; c'est la silhouette la plus reconnaissable après les radiateurs.
+4. **Navettes TAV** — 2 petits assemblages amarrés ; candidat idéal au
+   composite `SousEnsemble` (Partie E.3) : une navette = une brique figée,
+   posée deux fois.
+5. **IDPS** — plaques de tête.
+6. **Test de non-régression** + relecture des proportions d'ensemble.
+
+### Sources
+- [Interstellar Vehicle — Avatar Wiki](https://james-camerons-avatar.fandom.com/wiki/Interstellar_Vehicle)
+- [ISV Venture Star — Grokipedia](https://grokipedia.com/page/ISV_Venture_Star)
+- [Interstellar voyages with the Venture Star — State of Flux](https://kimbody1535.wordpress.com/2013/04/10/interstellar-voyages-with-the-venture-star-a-look-at-the-best-part-of-avatar/)
+- [ISV Venture Star — NamuWiki](https://en.namu.wiki/w/ISV%20%EB%B2%A4%EC%B2%98%20%EC%8A%A4%ED%83%80)
