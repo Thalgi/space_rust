@@ -152,13 +152,27 @@ assemblage écrit avec les mêmes helpers que le générateur.
 **Menu** (`ecran/accueil.rs`) : deux blocs de boutons, « Astres & galeries » et
 « Stations & mégastructures ». Ce second bloc route vers quatre entrées qui
 partagent la même vue (`ecran/station.rs`, enum `Categorie`) mais cyclent
-chacune leurs **propres** items à la touche **D** : `Briques` (19 vitrines de
+chacune leurs **propres** items à la touche **D** : `Briques` (27 vitrines de
 composants), `PetitesStations` (ISS / Mir / Tiangong / comsat / sonde),
 `Generateur` (1 item, réglable par G/S/1-4/O), `Megastructures` (anneau / ISV
-charpente+radiateurs / ISV radiateur+bloc moteur). Touches debug/rendu
+complet en **épine carrée** / le même en **épine hexagonale** / ISV radiateur+bloc
+moteur). Deux **boutons** s'ajoutent sur les vues
+qui montrent une section d'équipage (la brique dédiée et l'ISV complet) : mise en
+**rotation** et **repli**/déploiement ; ailleurs ils restent visibles mais grisés,
+pour que la fonction se voie sans laisser croire qu'elle agit. Touches debug/rendu
 communes : **P** gizmos de ports, **N** numéros de pièce (index d'assemblage
 projeté à l'écran — sert à désigner une pièce à corriger), **X** filtre pixel,
 **M** bascule maillage cuit / rendu immédiat.
+
+**Boussole d'axes** (`ui::boussole_axes`, coin bas-droit de la vue station) : le
+repère XYZ du monde projeté en 2D, X rouge / Y vert / Z bleu selon la convention
+des logiciels 3D. Projection **orthographique** — un gizmo d'orientation montre
+des directions, pas des positions, et une perspective y fausserait la lecture des
+angles. Les axes qui **fuient** la caméra sont atténués : c'est ce qui distingue
+`+X` de `−X`, dont les projections se superposent. La base vient de
+`camera::base_orbite`, la même que celle de l'éclairage, si bien que la boussole ne
+peut pas se désynchroniser de la vue. Les boutons de la section d'équipage sont
+décalés vers le haut de `BOUSSOLE_BOITE` pour ne pas se disputer le coin.
 
 **Sortie de géométrie abstraite** (`src/vaisseau/peintre.rs` +
 `src/vaisseau/maillage.rs`, nouveau) : toutes les briques de dessin
@@ -175,6 +189,25 @@ cuit, il tient en quelques `draw_mesh` (découpés en lots de
 ≤ 1600 sommets / 2400 indices, la limite du batcher macroquad).
 `Station::cout_total()` (somme de `Composant::cout()`) donne la mesure de
 complexité affichée à l'écran à côté du nombre de lots/sommets/triangles.
+
+**Pièces mobiles : deux régimes, pas un.** Un maillage cuit est figé, ce qui
+oblige à trancher pour chaque mouvement — et la réponse n'est pas la même selon
+qu'il *déplace un solide* ou qu'il *déforme la géométrie* :
+
+- **Mouvement rigide** (la section d'équipage qui tourne) → une **matrice modèle**
+  poussée au moment du rendu. Le maillage ne bouge pas d'un sommet ; on peut
+  tourner à chaque frame pour le prix d'une `Mat4`. Il faut en revanche que ce qui
+  tourne soit **cuit séparément** de ce qui reste fixe, sinon la matrice emporte
+  tout le vaisseau : d'où `preset_isv_fixe()` + `preset_isv_equipage()` en deux
+  maillages, la vue ne poussant la rotation que sur le second.
+- **Mouvement articulé** (le repli, qui plie des bras autour de charnières) → il
+  n'y a pas de matrice unique qui le décrive, et la géométrie doit être
+  **reconstruite**. Le coût est alors réel, donc on ne reconstruit **que la
+  partie concernée** (`recuire_repli()`), jamais le vaisseau entier.
+
+Corollaire pour la suite : découper un modèle en maillages suit les **axes de
+liberté**, pas les familles de composants. Chaque sous-ensemble qui bougera d'un
+bloc mérite son propre maillage ; le reste gagne à être cuit ensemble.
 
 **Couche rendu** (`src/vaisseau/eclairage.rs` + `src/shaders/station.*.glsl`) :
 un material unique ombre **toutes** les primitives macroquad via des normales de
@@ -1041,12 +1074,34 @@ inférieures et n'ajoute que ce qui lui est propre.
   `PanneauSolaire`, `Radiateur`, `Antenne`, `Caisson`, `ChargeUtile`,
   `Propulseur` (3 familles). **Briques classe C (ISV) :** `Charpente` (treillis
   courbe à section variable), `RadiateurMega` (aile en arête de poisson),
-  `Motrice`, `BlocMoteur`, `Reservoir` (cuve sphérique en cage tétraédrique),
+  `CharpenteHexa` (la même en section **hexagonale** : variante candidate, plus
+  lisible sous filtre pixel car sa largeur apparente ne varie que de 1,15 contre
+  1,41, et dont le pied (`PiedHexa`) est soit une **tour** hexagonale coaxiale qui
+  prolonge le cône, soit un **pavillon** — une corolle qui continue de s'ouvrir
+  jusqu'à un large hexagone ouvert, coiffé d'un **fût** droit qui portera la
+  propulsion (monté sur l'ISV hexagonal). Voir
+  `suivi/stations.md` §C.9 et §C.11),
+  `Motrice`, `BlocMoteur`, `Reservoir`
+  (cuve sphérique en cage tétraédrique),
   `Coiffe` (capuchon de nez, 3 formes : bombée / hexagonale à face plate /
   adaptateur d'amarrage) et le **bloc propulsion antimatière** en deux briques
   chaînées — `ReacteurAntimatiere` (cuve sombre + bobines EM + tuyauterie +
   pièges à antiprotons) puis `MoteurAntimatiere` (tuyère : buse + cage de deux
-  cercles ouverts sur 4 tiges).
+  cercles ouverts sur 4 tiges). S'y ajoutent la **charge utile ISV** —
+  `NacelleCargo`/`RatelierCargo` et `ModuleHabitat` (fixe) à section **onigiri** —
+  et la **section d'équipage rotative** : `ModuleEquipage` (fût *cylindrique*),
+  `CollierRotatif` (tambour, `rayon` libre hors grille `Profil`) et `Charniere`
+  (chape + axe + vérin). Enfin les **boucliers de tête**, en deux briques :
+  `BouclierPetit` (hexagone régulier, face avant striée / face arrière nervurée)
+  et `BouclierGrand` (le même hexagone **étiré**, **épaules remontées** (longs
+  bords courts) et **rogné d'un méplat aux deux pointes** — huit sommets, donc —
+  **rétréci de 20 % en largeur seule** (le rayon garde le moyeu, qui doit laisser
+  passer le mât commun), miroir bleuté **uni** sur ses deux faces, portant huit
+  rayons ancrés au moyeu et rien en travers). Enfin `BouclierThermique` — bardage
+  d'**écailles imbriquées** sur l'épine, qui recouvrent vers l'avant pour que le
+  rayonnement des tuyères ne rencontre jamais de tranche. Toutes deux ont un **moyeu percé et deux ports axiaux** : les quatre
+  plaques s'enfilent sur un mât commun au lieu de se bouter l'une l'autre, et
+  c'est l'**espacement** entre elles qui blinde, pas leur épaisseur.
 - **L2 — assemblages typés** (helpers qui posent des groupes) : `poser_anneau`,
   `greffer_structure_puissance` (boom + poutre + arrays), `paire_ailes`,
   `vaisseau_amarre`, `sur_face`. *À venir* : `poser_epine`, `poser_rayons`,
@@ -1119,15 +1174,19 @@ brique vraiment nouvelle de cette classe.
    pied) porte moteurs, radiateurs et réservoirs.
 3. ✅ **Voiles radiateurs** — `RadiateurMega` (aile en arête de poisson) en
    enfilade. Signature de l'ISV.
-4. 🔩 **assembler l'ISV** (preset, classe C) — **section propulsion complète**
+4. ✅ **assembler l'ISV** (preset, classe C) — **structure validée le
+   2026-07-30** : 168 de long, rayon 12,6, 43 pièces, coût 683. Reste les 2
+   navettes TAV et une relecture des proportions. Détail ci-dessous.
+   **Section propulsion complète**
    (`poser_bloc_moteur` + propulseur antimatière sur Cœur 3, chapes bombées sur
    Cœur 1/2, **réservoirs faits**), **fret posé** (3 rangées en triforce) et
    **habitat principal posé** (3 modules en couronne, boulonnés sur l'épine
    au-delà du fret). Ossature (épine + propulsion) **agrandie de 20 %** par une
    mise à l'échelle géométrique, la charge utile gardant sa taille et se
    recalant sur le nouveau gabarit — 2026-07-29 : 30 pièces, coût 520.
-   **Reste : habitat/cryo, modules d'équipage rotatifs, navettes TAV**, plus le
-   bouclier antidébris — détail et ordre de travail en
+   **Boucliers de tête posés** au bout opposé aux moteurs (petite plaque + 3
+   grandes sur un mât, raccord conique au sommet d'épine) : 43 pièces, coût 683,
+   168 de long. **Reste : navettes TAV** — détail et ordre de travail en
    [`suivi/stations.md`](../suivi/stations.md) Partie C.
 5. **Elysium** — anneau XL + rayons + moyeu + habitat de jante (surtout de la
    réutilisation).

@@ -4,13 +4,14 @@ use crate::fond::Fond;
 use crate::vaisseau::eclairage;
 use crate::vaisseau::{
     demo_anneaux, demo_antennes, demo_caissons, demo_chantier, demo_charpente, demo_coiffes,
-    demo_cargo, demo_habitat_isv, demo_habitats,
+    demo_bouclier_grand, demo_bouclier_petit, demo_bouclier_thermique, demo_cargo, demo_charpente_hexa, demo_epine_pavillon, demo_equipage,
+    demo_habitat_isv, demo_habitats,
     demo_moteur_antimatiere, demo_moteur_antimatiere_principal, demo_panneaux, demo_poutres,
     demo_propulsion, demo_radiateur_mega,
     demo_radiateurs, demo_reservoir, demo_station, demo_treillis, generer, preset_anneau, preset_comsat,
-    preset_iss, preset_isv, preset_isv_moteur, preset_mir,
-    preset_sonde, preset_tiangong, EtatStation, FamillePropulsion, MaillageStation, Ossature,
-    ParamsStation, Style,
+    preset_iss, preset_isv_equipage, preset_isv_fixe, preset_isv_moteur, preset_mir,
+    preset_sonde, preset_tiangong, Epine, EtatStation, FamillePropulsion, MaillageStation, Ossature,
+    EtatEquipage, ParamsStation, Style, ISV_AXE,
 };
 use macroquad::prelude::*;
 
@@ -28,10 +29,38 @@ pub enum Categorie {
     Megastructures,
 }
 
+/// Index de la brique « équipage rotatif » dans la catégorie Briques : la
+/// seule vue où la rotation ait un sens (c'est la seule pièce tournante du
+/// vaisseau).
+const BRIQUE_EQUIPAGE: usize = 20;
+
+/// Index des **ISV complets** dans les mégastructures : les deux seuls items où
+/// la section d'équipage est montée sur un vaisseau (épine carrée, puis
+/// hexagonale). Ce sont eux qui activent les boutons de rotation et de repli.
+const MEGA_ISV: [usize; 1] = [1];
+
+/// Vitesse de rotation de la section d'équipage, en radians par seconde.
+/// Choisie pour la lecture — un tour en ~13 s — et non pour la fidélité :
+/// l'ISV réel tourne bien plus lentement.
+const VITESSE_ROTATION: f32 = 0.48;
+
+/// Durée du repli (ou du déploiement) complet, en secondes. Assez lent pour
+/// qu'on voie la charnière travailler.
+const DUREE_REPLI: f32 = 2.5;
+
+/// Rayon des branches de la boussole d'axes (coin bas-droit).
+const BOUSSOLE_RAYON: f32 = 34.0;
+/// Encombrement total de la boussole, fond et étiquettes comprises.
+///
+/// C'est **cette** valeur qui décale les boutons vers le haut : les deux se
+/// disputent le coin bas-droit, et la faire dériver du rayon évite de les voir se
+/// chevaucher au prochain réglage.
+const BOUSSOLE_BOITE: f32 = BOUSSOLE_RAYON * 2.0 + 44.0;
+
 impl Categorie {
     fn nb(self) -> usize {
         match self {
-            Categorie::Briques => 21,
+            Categorie::Briques => 27,
             Categorie::PetitesStations => 5,
             Categorie::Generateur => 1,
             Categorie::Megastructures => 3,
@@ -63,8 +92,28 @@ pub struct VueStation {
     pixel: FiltrePixel,
     /// Géométrie cuite de la station courante (refaite à chaque `charger`).
     maillage: Option<MaillageStation>,
+    /// **Moitié tournante**, quand l'item en a une : sur l'ISV, seule la section
+    /// d'équipage tourne, pas le vaisseau. On la garde dans un état et un
+    /// maillage séparés pour lui appliquer sa propre matrice au moment du rendu.
+    ///
+    /// `None` = rien de dissocié, et la rotation s'applique alors à l'item
+    /// entier (c'est le cas de la brique de démonstration, qui *est* la section).
+    tournant: Option<(EtatStation, Option<MaillageStation>)>,
     /// `true` = maillage cuit, `false` = rendu immédiat (bascule M).
     cuit: bool,
+    /// Rotation de la section d'équipage sur elle-même. Le bouton qui la pilote
+    /// n'a de sens que sur les vues qui en montrent une (brique de démo, ISV
+    /// complet) : ailleurs, rien ne tourne, et il est grisé.
+    tourne: bool,
+    /// Angle courant, en radians. Cumulé tant que `tourne` est vrai.
+    angle: f32,
+    /// Repli **courant** de la section d'équipage : 0 déployé, 1 replié. C'est
+    /// un état du vaisseau (déployé en orbite, replié en transit) et non un
+    /// simple réglage d'affichage — d'où l'animation entre les deux.
+    repli: f32,
+    /// État **visé** de la section. C'est lui qui porte le sens (en transit /
+    /// en orbite) ; `repli` n'est que sa valeur animée.
+    equipage: EtatEquipage,
 }
 
 impl VueStation {
@@ -85,7 +134,12 @@ impl VueStation {
             numeros: false,
             pixel: FiltrePixel::new(),
             maillage: None,
+            tournant: None,
             cuit: true,
+            tourne: false,
+            angle: 0.0,
+            repli: 0.0,
+            equipage: EtatEquipage::Deploye,
         };
         vue.charger();
         vue
@@ -94,6 +148,8 @@ impl VueStation {
     /// (Re)construit l'item courant de la catégorie et son titre.
     fn charger(&mut self) {
         let i = self.idx % self.categorie.nb();
+        // Dissocié par défaut : seul l'ISV complet le renseigne.
+        self.tournant = None;
         let (etat, titre) = match self.categorie {
             Categorie::Generateur => (
                 generer(&self.params),
@@ -118,7 +174,28 @@ impl VueStation {
             },
             Categorie::Megastructures => match i {
                 0 => (preset_anneau(), "STATION A ANNEAU (ROUE)".into()),
-                1 => (preset_isv(), "ISV — PROPULSION + FRET + HABITAT".into()),
+                // **L'ISV complet**, épine hexagonale. Le vaisseau est chargé en
+                // **deux morceaux** — la coque fixe d'un côté, la section
+                // d'équipage de l'autre — pour que les boutons de rotation et de
+                // repli agissent sur elle seule. Assemblés, les deux redonnent le
+                // preset entier.
+                //
+                // La variante à **épine carrée** n'est plus exposée : elle a servi
+                // à valider l'hexagonale par comparaison (vue Briques n° 23), et
+                // c'est l'hexagonale qui est retenue. [`Epine::Carree`] et tout ce
+                // qu'elle entraîne restent en place — `preset_isv()` la construit
+                // encore et des tests s'en servent — seule la vitrine disparaît.
+                1 => {
+                    // Une seule source pour la correspondance item → épine.
+                    let epine = self.epine_courante().unwrap_or_default();
+                    let section = preset_isv_equipage(epine, self.repli);
+                    let maillage = section.doit_dessiner().map(MaillageStation::cuire);
+                    self.tournant = Some((section, maillage));
+                    (
+                        preset_isv_fixe(epine),
+                        format!("ISV COMPLET — {} (FRET + HABITAT + EQUIPAGE)", epine.nom()),
+                    )
+                }
                 _ => (preset_isv_moteur(), "ISV — RADIATEUR + BLOC MOTEUR".into()),
             },
             Categorie::Briques => match i {
@@ -142,6 +219,12 @@ impl VueStation {
                 17 => (EtatStation::Prete(demo_coiffes()), "COIFFES DE MODULES (3 FORMES)".into()),
                 18 => (demo_cargo(), "FRET ISV : NACELLE + TRIFORCE + COURONNE 6".into()),
                 19 => (demo_habitat_isv(), "HABITAT PRINCIPAL ISV : MODULE + GRAPPE DE 3".into()),
+                20 => (demo_equipage(self.repli), "EQUIPAGE ROTATIF ISV : MODULE + TRAVERSE".into()),
+                21 => (demo_bouclier_petit(), "PETIT BOUCLIER ISV : FACE AVANT STRIEE / FACE ARRIERE NERVUREE".into()),
+                22 => (demo_bouclier_grand(), "GRAND BOUCLIER ISV : PLAQUE MIROIR ELANCEE + PILE DE 3".into()),
+                23 => (demo_bouclier_thermique(), "BOUCLIER THERMIQUE D'EPINE : BARDAGE D'ECAILLES".into()),
+                24 => (demo_charpente_hexa(), "EPINE : CARREE (ACTUELLE) vs HEXAGONALE (CANDIDATE)".into()),
+                25 => (demo_epine_pavillon(), "EPINE HEXA : PIED TOUR vs PIED PAVILLON (COROLLE)".into()),
                 _ => (EtatStation::Prete(demo_chantier()), "CONSTRUCTEUR PAR PORTS LIBRES".into()),
             },
         };
@@ -152,10 +235,132 @@ impl VueStation {
         self.cadrer();
     }
 
+    /// Recuit ce que le **repli** vient de déformer, et rien de plus.
+    ///
+    /// Sur l'ISV, recuire tout le vaisseau à chaque frame de l'animation serait
+    /// du gaspillage : seule la section d'équipage change, les milliers de
+    /// sommets du fret et de la propulsion sont identiques d'une frame à
+    /// l'autre. On ne refait donc que la moitié tournante quand elle existe.
+    /// La brique de démonstration, elle, *est* la section : `charger` suffit.
+    fn recuire_repli(&mut self) {
+        match self.epine_courante() {
+            Some(epine) => {
+                let section = preset_isv_equipage(epine, self.repli);
+                let maillage = section.doit_dessiner().map(MaillageStation::cuire);
+                self.tournant = Some((section, maillage));
+            }
+            None => self.charger(),
+        }
+    }
+
+    /// Épine du vaisseau affiché, s'il s'agit d'un ISV complet.
+    ///
+    /// La section d'équipage doit être **rebâtie avec la même épine** que la
+    /// coque : son alésage de collier se déduit du gabarit, et le reconstruire
+    /// avec l'autre variante le décalerait de 3,2 % — assez pour que le collier
+    /// morde dans la flèche ou s'en détache.
+    fn epine_courante(&self) -> Option<Epine> {
+        if self.categorie != Categorie::Megastructures {
+            return None;
+        }
+        match self.idx % self.categorie.nb() {
+            1 => Some(Epine::Hexagonale),
+            _ => None,
+        }
+    }
+
     fn cadrer(&mut self) {
-        let demi = self.etat.doit_dessiner().map(|s| s.rayon()).unwrap_or(3.0);
+        // La moitié tournante est prise en compte : sur l'ISV c'est justement
+        // l'extrémité la plus éloignée du centre, donc celle qui déborderait.
+        let rayon = |e: &EtatStation| e.doit_dessiner().map(|s| s.rayon()).unwrap_or(0.0);
+        let demi = rayon(&self.etat)
+            .max(self.tournant.as_ref().map_or(0.0, |(e, _)| rayon(e)))
+            .max(3.0);
         let demi_fov = 45.0_f32.to_radians() * 0.5;
         self.cam.set_dist((demi + 0.5) / demi_fov.tan() * 1.35);
+    }
+
+    /// L'item affiché comporte-t-il une section d'équipage à faire tourner ou à
+    /// replier ? Deux vues sont concernées : la brique de démonstration, et l'ISV
+    /// complet où la section est montée sur le vaisseau.
+    fn rotation_possible(&self) -> bool {
+        let i = self.idx % self.categorie.nb();
+        match self.categorie {
+            Categorie::Briques => i == BRIQUE_EQUIPAGE,
+            Categorie::Megastructures => MEGA_ISV.contains(&i),
+            _ => false,
+        }
+    }
+
+    /// Axe de rotation de la section, **dans le repère de l'item affiché**.
+    ///
+    /// Il diffère d'une vue à l'autre : la brique est présentée collier le long
+    /// de +Y, tandis que le modèle de l'ISV est couché, son épine sur
+    /// [`ISV_AXE`]. Se tromper d'axe fait tourner la section de travers — c'est
+    /// exactement l'erreur qu'on avait au premier essai.
+    fn axe_rotation(&self) -> Vec3 {
+        match self.categorie {
+            Categorie::Megastructures => ISV_AXE,
+            _ => Vec3::Y,
+        }
+    }
+
+    /// Un bouton de la vue : rendu normal s'il est actif, **grisé et inerte**
+    /// sinon. On le garde visible même éteint — l'utilisateur voit ainsi que la
+    /// fonction existe et à quelle vue elle se rattache.
+    fn bouton(r: Rect, label: &str, actif: bool, souris: Vec2, clic: bool) -> bool {
+        if actif {
+            crate::ui::minitel_ligne(r, label, souris);
+            return clic && r.contains(souris);
+        }
+        draw_rectangle(r.x, r.y, r.w, r.h, Color::new(0.06, 0.06, 0.08, 1.0));
+        draw_rectangle_lines(r.x, r.y, r.w, r.h, 1.0, Color::new(0.28, 0.28, 0.30, 1.0));
+        crate::police::texte(
+            label,
+            r.x + 10.0,
+            r.y + r.h * 0.5 + 6.0,
+            20.0,
+            Color::new(0.38, 0.38, 0.40, 1.0),
+        );
+        false
+    }
+
+    /// Les deux commandes de la section d'équipage : sa **rotation** et son
+    /// **repli**. Toutes deux n'ont de sens que là où une section est affichée —
+    /// la brique de démonstration et l'ISV complet ; ailleurs elles sont grisées.
+    fn boutons_equipage(&mut self, souris: Vec2, clic: bool) {
+        let actif = self.rotation_possible();
+        let (x, w, h) = (screen_width() - 250.0, 230.0, 34.0);
+        // Empilés **au-dessus** de la boussole, qui occupe tout le bas du coin.
+        // `bas` est le bord inférieur de la pile : la boîte de la boussole, plus
+        // une marge, sinon le coin d'un bouton vient mordre sur ses étiquettes.
+        let bas = screen_height() - BOUSSOLE_BOITE - 8.0;
+
+        let rot = Rect::new(x, bas - h, w, h);
+        let label_rot = match (actif, self.tourne) {
+            (false, _) => "ROTATION (N/A)",
+            (true, true) => "ROTATION: ON",
+            (true, false) => "ROTATION: OFF",
+        };
+        if Self::bouton(rot, label_rot, actif, souris, clic) {
+            self.tourne = !self.tourne;
+        }
+
+        // Le libellé dit l'**état du vaisseau**, pas l'action : c'est ce qu'on
+        // veut lire d'un coup d'œil quand cet état suivra le déplacement du
+        // vaisseau (replié en transit, déployé en orbite).
+        let rep = Rect::new(x, bas - h - 38.0, w, h);
+        let label_rep = match (actif, self.equipage) {
+            (false, _) => "EQUIPAGE (N/A)",
+            (true, EtatEquipage::Replie) => "EQUIPAGE: REPLIE",
+            (true, EtatEquipage::Deploye) => "EQUIPAGE: DEPLOYE",
+        };
+        if Self::bouton(rep, label_rep, actif, souris, clic) {
+            self.equipage = match self.equipage {
+                EtatEquipage::Deploye => EtatEquipage::Replie,
+                EtatEquipage::Replie => EtatEquipage::Deploye,
+            };
+        }
     }
 
     /// Une frame. Renvoie `true` pour revenir à l'accueil (Échap).
@@ -210,6 +415,30 @@ impl VueStation {
             }
         }
 
+        // Souris : lue une fois par frame, partagée par le bouton de rotation.
+        let m = vec2(mouse_position().0, mouse_position().1);
+        let clic = is_mouse_button_pressed(MouseButton::Left);
+
+        // Avance de la rotation. Elle ne tourne que là où elle a un sens, et
+        // l'angle est **conservé** quand on la met en pause : couper la
+        // rotation ne doit pas faire sauter la section à zéro.
+        if self.tourne && self.rotation_possible() {
+            self.angle = (self.angle + get_frame_time() * VITESSE_ROTATION) % std::f32::consts::TAU;
+        }
+
+        // Repli : on avance vers la cible et on **recuit** la géométrie, parce
+        // que plier des bras déplace des sommets — contrairement à la rotation,
+        // qui n'est qu'une matrice.
+        let cible = self.equipage.repli();
+        if self.rotation_possible() && (self.repli - cible).abs() > 1e-4 {
+            let pas = get_frame_time() / DUREE_REPLI;
+            self.repli += (cible - self.repli).clamp(-pas, pas);
+            if (self.repli - cible).abs() < 1e-4 {
+                self.repli = cible;
+            }
+            self.recuire_repli();
+        }
+
         self.cam.input_orbite(false);
 
         let aspect = screen_width() / screen_height();
@@ -224,21 +453,54 @@ impl VueStation {
         // Couche station : éclairée, éventuellement pixelisée par-dessus le fond.
         self.pixel.preparer(&mut cam3d);
         set_camera(&cam3d);
-        if let Some(station) = self.etat.doit_dessiner() {
-            let (cuit, maillage) = (self.cuit, self.maillage.as_ref());
+        // La rotation est poussée comme **matrice modèle** plutôt que recuite
+        // dans le maillage : une matrice contre quelques milliers de sommets à
+        // chaque frame. Elle ne s'applique qu'à ce qui tourne réellement —
+        // la moitié dissociée si l'item en a une (ISV : le vaisseau reste fixe,
+        // seule la section pivote), l'item entier sinon (brique de démo).
+        let cuit = self.cuit;
+        let axe = self.axe_rotation();
+        let angle = self.angle;
+        let dessiner = |etat: &EtatStation, maillage: Option<&MaillageStation>, pivote: bool| {
+            let Some(station) = etat.doit_dessiner() else { return };
+            let pivote = pivote && angle.abs() > 1e-6;
+            if pivote {
+                unsafe {
+                    get_internal_gl()
+                        .quad_gl
+                        .push_model_matrix(Mat4::from_axis_angle(axe, angle));
+                }
+            }
             eclairage::avec(cam_info.pos, || match (cuit, maillage) {
                 (true, Some(m)) => m.dessiner(), // quelques draw calls
                 _ => station.dessiner(),         // un draw call par primitive
             });
+            if pivote {
+                unsafe {
+                    get_internal_gl().quad_gl.pop_model_matrix();
+                }
+            }
             if self.ports {
                 station.dessiner_ports();
             }
+        };
+        match &self.tournant {
+            Some((section, m_section)) => {
+                dessiner(&self.etat, self.maillage.as_ref(), false);
+                dessiner(section, m_section.as_ref(), true);
+            }
+            None => dessiner(&self.etat, self.maillage.as_ref(), true),
         }
         set_default_camera();
         self.pixel.presenter();
 
         // Numéros de pièce (index d'assemblage) projetés à l'écran, pour pointer
         // les pièces à corriger. L'index = ordre de construction dans le code.
+        //
+        // Volontairement limité à la moitié **fixe** : les numéros sont projetés
+        // depuis les positions cuites, qui ignorent la rotation appliquée au
+        // rendu — sur la section tournante ils dériveraient de leur pièce. La
+        // brique de démonstration reste le bon endroit pour les numéroter.
         if self.numeros {
             if let Some(station) = self.etat.doit_dessiner() {
                 // Chemin complet : le trait `Camera` de macroquad porte le même
@@ -258,6 +520,23 @@ impl VueStation {
                 }
             }
         }
+
+        // **Boussole d'axes**, coin bas-droit. Dessinée en 2D après
+        // `set_default_camera`, donc jamais pixelisée par le filtre ni cachée par
+        // la géométrie : c'est un repère de lecture, il doit rester net.
+        //
+        // Elle reçoit la base de `cam_info` — les mêmes vecteurs que l'éclairage —
+        // pour ne pas pouvoir se désynchroniser de la vue.
+        crate::ui::boussole_axes(
+            vec2(
+                screen_width() - BOUSSOLE_BOITE * 0.5,
+                screen_height() - BOUSSOLE_BOITE * 0.5,
+            ),
+            BOUSSOLE_RAYON,
+            cam_info.right,
+            cam_info.up,
+            cam_info.forward,
+        );
 
         let h = screen_height();
         crate::police::texte(&self.titre, 20.0, h - 24.0, 24.0, WHITE);
@@ -283,6 +562,12 @@ impl VueStation {
                 GRAY,
             );
         }
+        // **Bouton de rotation**, actif seulement là où quelque chose tourne
+        // vraiment (la brique d'équipage). Ailleurs il reste visible mais
+        // **grisé** : ça vaut mieux que de le faire disparaître, l'utilisateur
+        // voit que la fonction existe et à quoi elle se rattache.
+        self.boutons_equipage(m, clic);
+
         let etat_ports = if self.ports { "ON" } else { "OFF" };
         let etat_num = if self.numeros { "ON" } else { "OFF" };
         let etat_pix = if self.pixel.actif { "ON" } else { "OFF" };

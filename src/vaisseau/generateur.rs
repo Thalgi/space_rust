@@ -6,12 +6,13 @@
 use super::chantier::Chantier;
 use super::montage::{cuire, port_monde, poser};
 use super::{
-    Assembleur, Composant, EtatStation, GenrePort, Profil, Repere, Sorties, StyleTreillis,
+    Assembleur, Composant, EtatStation, GenrePort, PiedHexa, Profil, Repere, Sorties, StyleTreillis,
+    BOUCLIER_ELANCEMENT,
     VarianteAntenne, VarianteCaisson, VarianteCharge, VarianteCoiffe, VarianteModule,
     VariantePanneau, VariantePropulseur, VarianteRadiateur,
 };
 use macroquad::prelude::*;
-use std::f32::consts::{FRAC_PI_2, PI, TAU};
+use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2, PI, TAU};
 
 // ---------------------------------------------------------------------------
 // RNG déterministe (splitmix64) — pas de dépendance externe.
@@ -231,6 +232,130 @@ const EPINE_FLECHE: f32 = 0.5 * std::f32::consts::SQRT_2 + 0.225;
 /// taille, mais leurs rayons de couronne se recalent là-dessus.
 const EPINE: f32 = EPINE_FLECHE * ISV_ECHELLE;
 
+/// La même cote pour l'épine **hexagonale**, à l'échelle 1.
+///
+/// Même forme que [`EPINE_FLECHE`], et ce n'est pas un hasard : le circonradius
+/// de la section hexagonale est **repris des coins du carré** (`0,5·√2`, cf.
+/// `treillis::hexa_rayons`), donc les sommets sont à la même distance de l'axe.
+/// Seule diffère l'épaisseur des longerons — `0,12 · 1,5·√2 = 0,2546` contre
+/// `0,15 · 1,5 = 0,225`.
+///
+/// ⚠️ L'épine hexagonale est donc **3,2 % plus large hors-tout**. Ça paraît
+/// négligeable et ça ne l'est pas : c'est exactement la nature de l'erreur de
+/// §C.6, où l'épine avait grossi et la charge utile s'était retrouvée plantée
+/// dans la structure. D'où le paramétrage qui suit — aucun rayon de couronne
+/// n'est écrit en dur, tous se déduisent de la variante d'épine.
+const EPINE_FLECHE_HEXA: f32 = 0.5 * std::f32::consts::SQRT_2 + 0.2546;
+
+/// Section de l'épine du vaisseau. Les deux variantes coexistent le temps de
+/// trancher à l'écran — voir `docs/suivi/stations.md` §C.9.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Epine {
+    /// Treillis à section **carrée** : l'épine historique.
+    #[default]
+    Carree,
+    /// Treillis à section **hexagonale** : silhouette bien plus constante selon
+    /// l'angle (donc lisible sous filtre pixel), et pied en **tour coaxiale** qui
+    /// prolonge le cône au lieu d'un cadre couché à raccorder.
+    Hexagonale,
+}
+
+impl Epine {
+    /// Hors-tout de la flèche, **au gabarit du vaisseau**. C'est la référence de
+    /// tout ce qui vient se placer autour de l'épine : la charge utile garde sa
+    /// taille propre, mais ses rayons de couronne se recalent là-dessus.
+    const fn hors_tout(self) -> f32 {
+        ISV_ECHELLE
+            * match self {
+                Epine::Carree => EPINE_FLECHE,
+                Epine::Hexagonale => EPINE_FLECHE_HEXA,
+            }
+    }
+
+    /// La charpente correspondante, à cotes identiques.
+    fn charpente(self, grand: Profil, petit: Profil, longueur: f32, courbure: f32) -> Composant {
+        match self {
+            Epine::Carree => Composant::Charpente { grand, petit, longueur, courbure, aiguille: true },
+            Epine::Hexagonale => {
+                // **Pied en pavillon** (§C.11) : la corolle et son fût, sur lequel
+                // la propulsion viendra se reposer. C'est le seul point où les deux
+                // ISV diffèrent en plus de la section de leur épine.
+                Composant::CharpenteHexa {
+                    grand,
+                    petit,
+                    longueur,
+                    courbure,
+                    pied: PiedHexa::Pavillon,
+                }
+            }
+        }
+    }
+
+    /// Libellé pour la vue.
+    pub fn nom(self) -> &'static str {
+        match self {
+            Epine::Carree => "EPINE CARREE",
+            Epine::Hexagonale => "EPINE HEXAGONALE",
+        }
+    }
+}
+
+/// **Déport latéral** (±X) des deux ensembles propulsion — aile radiateur et bloc
+/// moteur — dans le repère de l'ossature.
+///
+/// Descendu à **6,5** (2026-07-30) pour que la propulsion se **pose sur** l'épine
+/// au lieu de la longer : 6,5 → 9,5 → 8,5 → 6,5, au fil des passes visuelles.
+///
+/// ⚠️ **La valeur se mesure, elle ne se déduit pas**, et de deux façons :
+///
+/// 1. le rayon interne de l'aile n'est pas `déport − largeur/2` — le collecteur du
+///    radiateur rentre plus près de l'axe que la pointe des ailettes ;
+/// 2. il faut mesurer **dans la tranche que l'aile et le pied partagent**. Sur
+///    l'ensemble de sa longueur, l'aile descend bien plus près de l'axe que là où
+///    elle croise le fût : à 7,5 on lisait un engagement de −1,31 alors qu'au droit
+///    du fût il n'était que de **−0,04**. Autant dire aucun contact.
+///
+/// Relevé au droit du fût (bande partagée), pied à 5,65 :
+///
+/// | déport | rayon interne de l'aile | engagement |
+/// |---|---|---|
+/// | 7,5 | 5,61 | −0,04 — se frôlent à peine |
+/// | 7,0 | 5,01 | −0,64 |
+/// | **6,5** | **4,41** | **−1,24** |
+/// | 6,0 | 3,81 | −1,84 |
+const PROPULSION_DEPORT: f32 = 6.5;
+
+/// **Avancée** de la propulsion et des cuves le long de l'épine, **vers les
+/// tuyères** (donc −Y dans le repère de l'ossature, −X sur le modèle couché).
+///
+/// ⚠️ **Bornée par le fût.** L'aile radiateur s'enracine à `−20` et se déploie vers
+/// le bas ; le fût, lui, s'arrête à `−22`. Seuls ces 2 unités de recouvrement font
+/// que la propulsion touche encore la structure. Avancer de plus de ~2 la ferait
+/// **sortir sous le fût** : elle pendrait alors dans le vide, et l'engagement
+/// latéral obtenu en resserrant `PROPULSION_DEPORT` ne servirait plus à rien.
+const PROPULSION_AVANCE: f32 = 1.0;
+
+/// **Jeu** entre les deux cuves de carburant d'un même côté.
+///
+/// Leur écart se déduit de leur propre rayon (`2·res_r + jeu`) et **non** de
+/// l'écartement des plaques hexagonales, avec lequel il était confondu — deux
+/// cotes qui n'ont aucune raison d'être égales, et qui laissaient les cuves
+/// s'interpénétrer de 1,30.
+const RESERVOIR_JEU: f32 = 0.7;
+
+/// Longueur de la charpente-épine **à l'échelle 1**. L'évasement de la base
+/// étant à distance absolue, la rallonger n'allonge que la flèche.
+const EPINE_LONGUEUR: f32 = 84.0;
+/// Ancrage de la base de l'épine, côté tuyères.
+const EPINE_BASE_Y: f32 = -16.0;
+/// Décalage supplémentaire vers le haut, en fraction de la longueur : la
+/// charpente monte, radiateurs et moteurs restent en bas.
+const EPINE_DECALAGE: f32 = 0.1;
+/// **Sommet de l'épine** à l'échelle 1. C'est la limite au-delà de laquelle une
+/// charge utile n'aurait plus rien à quoi s'accrocher — la section d'équipage,
+/// qui est la pièce la plus haute du vaisseau, doit rester en dessous.
+const EPINE_SOMMET_Y: f32 = EPINE_BASE_Y + EPINE_LONGUEUR * (1.0 + EPINE_DECALAGE);
+
 // --- Section fret de l'ISV -------------------------------------------------
 // Gabarit de base d'une rangée, puis une **échelle** unique par-dessus : c'est
 // le rapport fret/vaisseau qui se juge à l'œil, et on le règle d'un seul
@@ -238,7 +363,7 @@ const EPINE: f32 = EPINE_FLECHE * ISV_ECHELLE;
 const FRET_LONG: f32 = 6.6; // longueur d'une rangée
 const FRET_PAS: f32 = 7.2; // entraxe entre rangées
 /// Nombre de rangées enfilées sur l'épine.
-const FRET_RANGEES: usize = 3;
+const FRET_RANGEES: usize = 4;
 /// Bord **bas** du bloc de fret (côté moteurs), le long de l'épine, **à
 /// l'échelle 1** (il est multiplié par [`ISV_ECHELLE`] à la pose, comme tout ce
 /// qui se repère le long de l'épine).
@@ -274,7 +399,12 @@ const FRET_JEU: f32 = 0.02;
 /// Rayon de la couronne de fret : juste assez pour que le creux central laisse
 /// passer l'épine. Le creux vaut `rayon − r_nacelle·(0,5 + f/2)`, d'où la
 /// formule — plus de nombre magique à re-régler quand [`ISV_ECHELLE`] bouge.
-const FRET_RAYON: f32 = EPINE + FRET_JEU + FRET_NACELLE * (0.5 + 0.5 * 0.22);
+const fn fret_rayon(epine: f32) -> f32 {
+    epine + FRET_JEU + FRET_NACELLE * (0.5 + 0.5 * 0.22)
+}
+/// Le même, pour l'épine carrée — la valeur historique, gardée pour les tests et
+/// pour que le calcul n'existe **qu'une fois**.
+const FRET_RAYON: f32 = fret_rayon(EPINE);
 
 /// Modules P1 par grande aile solaire (preset : 13/8 ≈ 1,6 ; réel : 16/8 = 2).
 const MODULES_PAR_ARRAY: f32 = 1.6;
@@ -1036,6 +1166,41 @@ pub fn demo_moteur_antimatiere() -> EtatStation {
 /// haut, d'un seul tenant. Moteurs, habitat et voiles radiateurs viendront s'y
 /// accrocher ensuite.
 pub fn preset_isv() -> EtatStation {
+    isv(Epine::Carree, true)
+}
+
+/// Le **second ISV**, identique au premier à une chose près : son épine est
+/// [`Epine::Hexagonale`].
+///
+/// Les deux presets partagent **tout le reste du code** — même ossature, même
+/// propulsion, même charge utile, même section d'équipage rotative. C'est
+/// délibéré : à la moindre duplication, la comparaison ne voudrait plus rien dire,
+/// puisqu'on ne saurait plus si un écart vient de la section d'épine ou d'une
+/// dérive entre deux copies.
+///
+/// Les rayons de couronne, eux, **se recalent tout seuls** : l'épine hexagonale
+/// est 3,2 % plus large hors-tout, et fret, habitat et alésage de collier se
+/// déduisent tous de `Epine::hors_tout()`.
+// Non réexporté (cf. `vaisseau/mod.rs`) : la vue passe par les deux moitiés, et
+// seul un test consomme le vaisseau d'un seul tenant.
+#[allow(dead_code)]
+pub fn preset_isv_hexa() -> EtatStation {
+    isv(Epine::Hexagonale, true)
+}
+
+/// L'ISV **sans** sa section d'équipage : tout ce qui ne tourne pas.
+///
+/// La vue s'en sert pour cuire le vaisseau en **deux maillages** — le fixe et le
+/// tournant ([`preset_isv_equipage`]) — et n'appliquer la rotation qu'au second.
+/// Sans cette séparation, faire tourner la section obligerait soit à faire
+/// tourner le vaisseau entier, soit à le recuire à chaque frame.
+pub fn preset_isv_fixe(epine: Epine) -> EtatStation {
+    isv(epine, false)
+}
+
+fn isv(epine: Epine, avec_equipage: bool) -> EtatStation {
+    // Gabarit hors-tout de l'épine : **toute** la charge utile s'y recale.
+    let gabarit = epine.hors_tout();
     let mut asm = Assembleur::new();
     // L'**ossature** (épine + propulsion) se construit dans son propre tampon,
     // à l'échelle 1, puis est reversée agrandie de [`ISV_ECHELLE`]. Passer par
@@ -1051,21 +1216,17 @@ pub fn preset_isv() -> EtatStation {
     // → l'évasement se concentre en bas, le reste file en flèche fine.
     // Évasement fixe (distance absolue) → rallonger `longueur` n'allonge que la
     // flèche : ~34 → 40 ajoute un tiers de tige sans toucher à la base.
-    // `aiguille: true` → anneau hexagonal en treillis à la base (côté moteurs).
-    let longueur = 84.0; // flèche rallongée (+20 % : la « barre » agrandie)
-    let charpente = Composant::Charpente {
-        grand: Profil::P3,
-        petit: Profil::P1, // bout agrandi (P0 → P1, section doublée)
-        longueur,
-        courbure: 2.6,
-        aiguille: true,
-    };
+    // Pied posé (`aiguille`) : anneau hexagonal couché pour l'épine carrée, tour
+    // hexagonale coaxiale pour l'hexagonale. `petit` = P1 (bout agrandi, section
+    // doublée par rapport au P0 d'origine).
+    let longueur = EPINE_LONGUEUR;
+    let charpente = epine.charpente(Profil::P3, Profil::P1, longueur, 2.6);
     // Position = centre local de la charpente. Base ancrée à Y = −16, la
     // rallonge part vers le **haut** (Y_centre = base + L/2), plus un **décalage
     // vers le haut d'un bon dixième de la hauteur** (la charpente monte, les
     // radiateurs/moteurs restent en bas).
-    let decalage = longueur * 0.1;
-    let y_centre = -16.0 + longueur * 0.5 + decalage;
+    let decalage = longueur * EPINE_DECALAGE;
+    let y_centre = EPINE_BASE_Y + longueur * 0.5 + decalage;
     let base = Repere::new(vec3(0.0, y_centre, 0.0), Quat::from_rotation_arc(Vec3::Z, Vec3::Y));
     oss.ajouter(cuire(base, &charpente));
 
@@ -1088,7 +1249,7 @@ pub fn preset_isv() -> EtatStation {
         };
         let orient = Quat::from_rotation_arc(Vec3::Z, Vec3::NEG_Y); // sens inversé
         let rot = Quat::from_rotation_z(cote * tilt) * orient;
-        let pos = Vec3::new(-6.5 * cote, -20.0, 0.0); // permutées, écartées un peu plus, descendues d'une demi-épine
+        let pos = Vec3::new(-PROPULSION_DEPORT * cote, -20.0 - PROPULSION_AVANCE, 0.0);
         let repere = Repere::new(pos, rot);
         oss.ajouter(cuire(repere, &aile));
         // Bloc moteur docké au collecteur de CE radiateur, comme dans la vue
@@ -1122,12 +1283,20 @@ pub fn preset_isv() -> EtatStation {
     // orientées à l'envers dans la vue ISV).
     let spin = Quat::from_rotation_z(PI / 6.0 + PI);
     // **Deux cuves par côté** : l'existante au niveau de l'hexagone, et une
-    // dupliquée de l'**autre côté de la charpente** (sous l'hexagone, −Y) avec un
-    // **demi-tour en Z** supplémentaire.
-    // Écart = **2·ap** : les deux plaques hexagonales (demi-hauteur `ap` en Y) se
-    // touchent bord à bord (plus d'écart). Les réservoirs suivent (léger
-    // chevauchement des cuves accepté).
+    // dupliquée plus bas le long de la charpente, avec un **demi-tour en Z**
+    // supplémentaire.
+    //
+    // Écart des **plaques hexagonales** = `2·ap` : leurs demi-hauteurs (`ap` en Y)
+    // se touchent alors bord à bord, sans montants.
     let dy = 2.0 * ap;
+    // Écart des **cuves**, désormais **découplé** de celui des plaques.
+    //
+    // Les deux tenaient le même écart, et c'était trop juste pour elles : deux
+    // sphères de rayon `res_r` distantes de `2·ap` = 5,20 s'interpénètrent de
+    // **1,30**, ce qui se voyait — la note « léger chevauchement accepté » sous-
+    // estimait franchement. La cote se déduit maintenant du rayon des cuves plutôt
+    // que de la géométrie des plaques, qui n'a rien à voir avec elles.
+    let res_ecart = 2.0 * res_r + RESERVOIR_JEU;
     for sz in [1.0_f32, -1.0] {
         let base = if sz > 0.0 { Quat::IDENTITY } else { Quat::from_rotation_x(PI) };
         // Le retournement (rotation_x PI) de la cuve −Z **mire** le triangle, ce qui
@@ -1137,10 +1306,12 @@ pub fn preset_isv() -> EtatStation {
         let rot = base * spin * corr;
         let z = sz * (prof + res_r - 1.0); // réservoir enfoncé dans la charpente (écart −1.0)
         // Cuve d'origine.
-        oss.ajouter(cuire(Repere::new(vec3(0.0, hex_y, z), rot), &reservoir));
-        // Cuve dupliquée : autre côté de la charpente + demi-tour Z.
+        oss.ajouter(cuire(Repere::new(vec3(0.0, hex_y - PROPULSION_AVANCE, z), rot), &reservoir));
+        // Cuve dupliquée : plus bas le long de la charpente + demi-tour Z. Elle
+        // descend selon `res_ecart` et non `dy` — c'est ce découplage qui la
+        // décolle de sa jumelle sans déplacer les plaques hexagonales.
         let rot2 = rot * Quat::from_rotation_z(PI);
-        oss.ajouter(cuire(Repere::new(vec3(0.0, hex_y - dy, z), rot2), &reservoir));
+        oss.ajouter(cuire(Repere::new(vec3(0.0, hex_y - res_ecart - PROPULSION_AVANCE, z), rot2), &reservoir));
     }
 
     // **Second anneau hexagonal** au niveau du groupe de réservoirs dupliqué
@@ -1179,7 +1350,7 @@ pub fn preset_isv() -> EtatStation {
             longueur: rat_long,
             // La couronne s'ouvre pour laisser passer l'épine élargie ; le
             // conteneur, lui, garde exactement sa taille validée à l'écran.
-            rayon: FRET_RAYON,
+            rayon: fret_rayon(gabarit),
             nacelles: 3,
             nacelle: FRET_NACELLE,
         };
@@ -1192,11 +1363,77 @@ pub fn preset_isv() -> EtatStation {
     // l'habitat le plus loin possible des tuyères. Les ferrures de chaque
     // module viennent se poser sur la flèche (leur portée est calée dessus,
     // cf. `HAB_ATTACHE`).
-    poser_grappe_habitat(&mut asm, HAB_CENTRE_Y * ISV_ECHELLE, hexa_rot);
+    poser_grappe_habitat(&mut asm, HAB_CENTRE_Y * ISV_ECHELLE, hexa_rot, gabarit);
+
+    // **Section d'équipage rotative**, au-delà de l'habitat : le point du
+    // vaisseau le plus éloigné des tuyères. Elle n'est incluse ici que pour un
+    // rendu d'un seul tenant ; la vue, qui doit la faire tourner, la reprend
+    // séparément via `preset_isv_equipage`.
+    if avec_equipage {
+        poser_equipage(
+            &mut asm,
+            EQUIPAGE_CENTRE_Y * ISV_ECHELLE,
+            hexa_rot,
+            EtatEquipage::default().repli(),
+            gabarit,
+        );
+    }
+
+    // **Bouclier thermique** sur la partie droite de l'épine, entre le pied et
+    // le fret : le tronçon nu qui prend le rayonnement des tuyères de plein
+    // fouet. C'est un **détail de surface** — il n'ajoute ni masse visible ni
+    // encombrement, et ne change donc rien aux proportions d'ensemble.
+    asm.ajouter(cuire(
+        Repere::new(vec3(0.0, THERMIQUE_DEBUT_Y, 0.0), hexa_rot),
+        &Composant::BouclierThermique {
+            rayon: THERMIQUE_RAYON,
+            longueur: THERMIQUE_FIN_Y - THERMIQUE_DEBUT_Y,
+            rangs: THERMIQUE_RANGS,
+        },
+    ));
+
+    // **Tête de bouclier**, tout au bout : la petite plaque puis les trois
+    // grandes, enfilées sur leur propre mât au-delà du sommet d'épine. Elle est
+    // posée avec la coque fixe et non avec la section d'équipage — c'est de la
+    // structure, elle ne tourne pas.
+    poser_tete_bouclier(&mut asm, BOUCLIER_DEBUT_Y, hexa_rot);
 
     // **Modèle complet à l'horizontale** : rotation globale de 90° autour de Z
     // (l'axe +Y du vaisseau bascule vers +X), appliquée à toutes les pièces.
-    pivoter(asm.terminer(), Quat::from_rotation_z(-FRAC_PI_2))
+    pivoter(asm.terminer(), ISV_COUCHE)
+}
+
+/// Pivot final du modèle : le vaisseau est couché, son axe +Y basculant sur +X.
+/// Sorti en constante parce que **les deux moitiés** de l'ISV (la partie fixe et
+/// la section d'équipage) doivent subir exactement le même, sous peine de ne
+/// plus se rejoindre.
+const ISV_COUCHE: Quat = Quat::from_xyzw(0.0, 0.0, -FRAC_1_SQRT_2, FRAC_1_SQRT_2);
+
+/// L'**axe du vaisseau** dans le modèle final (après [`ISV_COUCHE`]) : c'est
+/// autour de lui que tourne la section d'équipage.
+pub const ISV_AXE: Vec3 = Vec3::X;
+
+/// La **seule section d'équipage** de l'ISV, placée dans le repère du vaisseau
+/// fini — donc superposable à [`preset_isv`].
+///
+/// Elle est fournie à part précisément parce qu'elle **tourne** : la faire
+/// pivoter revient à composer une matrice sur ce maillage-là, au lieu de recuire
+/// tout le vaisseau à chaque frame. Le repli, lui, change la géométrie et
+/// impose bien une reconstruction — d'où le paramètre.
+/// `repli` est la valeur **continue** (0 déployé → 1 replié) et non un
+/// [`EtatEquipage`] : la vue anime le passage d'un état à l'autre, et a donc
+/// besoin des positions intermédiaires.
+pub fn preset_isv_equipage(epine: Epine, repli: f32) -> EtatStation {
+    let mut asm = Assembleur::new();
+    let hexa_rot = Quat::from_rotation_arc(Vec3::Z, Vec3::Y);
+    poser_equipage(
+        &mut asm,
+        EQUIPAGE_CENTRE_Y * ISV_ECHELLE,
+        hexa_rot,
+        repli,
+        epine.hors_tout(),
+    );
+    pivoter(asm.terminer(), ISV_COUCHE)
 }
 
 /// Recopie les pièces d'un état dans `dest`, en composant une **mise à
@@ -1355,6 +1592,80 @@ pub fn demo_charpente() -> EtatStation {
     asm.terminer()
 }
 
+/// Vue briques : l'**épine hexagonale candidate**, à côté de l'épine carrée
+/// actuelle pour que la comparaison soit directe et non de mémoire.
+///
+/// De gauche à droite : carrée nue, **hexagonale nue**, carrée avec cadre de
+/// propulsion, **hexagonale avec cadre**. Ce sont les deux paires qui comptent —
+/// la silhouette de la poutre, et la façon dont le pied se raccorde au cadre.
+///
+/// Ce qu'il faut juger :
+/// 1. **de loin, filtre pixel (X) allumé** : l'hexagonale doit rester visible
+///    sous tous les angles alors que la carrée maigrit de trois quarts. C'est le
+///    grief d'origine, et la seule chose que le calcul promet
+///    (`pieces::HEXA_GAIN_SILHOUETTE`) ;
+/// 2. **au pied** : la transition six-pour-six et sa baie de torsion, contre les
+///    quatre coins convergeant sur deux sommets de la version carrée.
+///
+/// **Rien n'est encore monté sur l'ISV** : `preset_isv` utilise toujours
+/// `Composant::Charpente`. Le remplacement attend la validation à l'écran.
+pub fn demo_charpente_hexa() -> EtatStation {
+    let mut asm = Assembleur::new();
+    let debout = Quat::from_rotation_arc(Vec3::Z, Vec3::Y);
+    // Écartement : de quoi séparer les quatre spécimens sans les perdre de vue.
+    for (dx, hexa, aiguille) in [
+        (-21.0_f32, false, false),
+        (-7.0, true, false),
+        (7.0, false, true),
+        (21.0, true, true),
+    ] {
+        let (grand, petit, longueur, courbure) = (Profil::P3, Profil::P0, 40.0, 2.6);
+        let ch = if hexa {
+            let pied = if aiguille { PiedHexa::Tour } else { PiedHexa::Aucun };
+            Composant::CharpenteHexa { grand, petit, longueur, courbure, pied }
+        } else {
+            Composant::Charpente { grand, petit, longueur, courbure, aiguille }
+        };
+        asm.ajouter(cuire(Repere::new(vec3(dx, 0.0, 0.0), debout), &ch));
+    }
+    asm.terminer()
+}
+
+/// Vue briques : l'épine hexagonale **à pavillon**, la forme demandée au schéma
+/// du 2026-07-30 — le cône ne s'arrête plus sur une tour, il **continue de
+/// s'ouvrir** jusqu'à une large embouchure hexagonale évidée.
+///
+/// À gauche la version **tour** (§C.9), à droite la version **pavillon** (§C.11) :
+/// c'est le même cône, seul le pied change, et les deux se comparent d'un regard.
+///
+/// Ce qu'il faut juger :
+/// 1. **l'ouverture** — la corolle doit lire comme une corolle, pas comme un cône
+///    tronqué (`PAVILLON_OUVERTURE`, `PAVILLON_HAUTEUR`) ;
+/// 2. **l'anneau d'embouchure** vu de bout (tourner la caméra pour regarder dans
+///    l'axe) : hexagone extérieur, hexagone intérieur, six panneaux. Son
+///    écrasement selon Y donne **quatre** arêtes obliques égales et **deux**
+///    arêtes horizontales égales — les A…F du schéma
+///    (`PAVILLON_ETIREMENT` ; à 1 les six redeviendraient égales).
+///
+/// **Rien n'est monté sur l'ISV** : les deux presets restent en pied *tour*. Le
+/// pavillon attend sa validation, et la structure de propulsion qui viendra s'y
+/// poser.
+pub fn demo_epine_pavillon() -> EtatStation {
+    let mut asm = Assembleur::new();
+    let debout = Quat::from_rotation_arc(Vec3::Z, Vec3::Y);
+    for (dx, pied) in [(-11.0_f32, PiedHexa::Tour), (11.0, PiedHexa::Pavillon)] {
+        let ch = Composant::CharpenteHexa {
+            grand: Profil::P3,
+            petit: Profil::P0,
+            longueur: 40.0,
+            courbure: 2.6,
+            pied,
+        };
+        asm.ajouter(cuire(Repere::new(vec3(dx, 0.0, 0.0), debout), &ch));
+    }
+    asm.terminer()
+}
+
 /// Vue briques : le **fret d'échelle vaisseau** (section charge utile de l'ISV).
 /// En haut une nacelle **seule** — sa section « onigiri » (triangle arrondi) se
 /// lit de bout, avec ses trois rails d'arête et ses collerettes. En dessous deux
@@ -1403,7 +1714,11 @@ const HAB_JEU: f32 = 0.25;
 /// Rayon de la couronne d'habitat (axe → centre de module), déduit du jeu et du
 /// gabarit de l'épine : la grappe suit d'elle-même tout changement d'échelle de
 /// l'ossature.
-const HAB_RAYON: f32 = EPINE + HAB_JEU + HAB_INSCRIT;
+const fn hab_rayon(epine: f32) -> f32 {
+    epine + HAB_JEU + HAB_INSCRIT
+}
+/// Le même, pour l'épine carrée (valeur historique, et calcul unique).
+const HAB_RAYON: f32 = hab_rayon(EPINE);
 /// Portée de la ferrure d'attache : du côté plat du module jusqu'à la surface
 /// de l'épine. Le module se pose **contre** la structure, il ne flotte pas à
 /// côté.
@@ -1426,7 +1741,8 @@ const HAB_CENTRE_Y: f32 = 63.0;
 ///
 /// Partagée par la vue Briques et par `preset_isv` : ce qu'on valide à l'écran
 /// est **exactement** ce qui part sur le vaisseau.
-fn poser_grappe_habitat(asm: &mut Assembleur, y_centre: f32, orient: Quat) {
+fn poser_grappe_habitat(asm: &mut Assembleur, y_centre: f32, orient: Quat, epine: f32) {
+    let rayon = hab_rayon(epine);
     for k in 0..HAB_MODULES {
         let a = FRAC_PI_2 + TAU * k as f32 / HAB_MODULES as f32;
         let module = Composant::ModuleHabitat {
@@ -1438,7 +1754,7 @@ fn poser_grappe_habitat(asm: &mut Assembleur, y_centre: f32, orient: Quat) {
         // Décalage radial exprimé dans le repère de la grappe, puis tourné avec
         // elle : la couronne reste perpendiculaire à l'épine quel que soit
         // `orient`.
-        let radial = orient * (vec3(a.cos(), a.sin(), 0.0) * HAB_RAYON);
+        let radial = orient * (vec3(a.cos(), a.sin(), 0.0) * rayon);
         asm.ajouter(cuire(Repere::new(radial + Vec3::Y * y_centre, orient), &module));
     }
 }
@@ -1461,7 +1777,467 @@ pub fn demo_habitat_isv() -> EtatStation {
     };
     asm.ajouter(cuire(Repere::new(vec3(0.0, 11.0, 0.0), couche), &seul));
 
-    poser_grappe_habitat(&mut asm, 0.0, couche);
+    poser_grappe_habitat(&mut asm, 0.0, couche, EPINE);
+    asm.terminer()
+}
+
+// --- Section d'équipage rotative de l'ISV -----------------------------------
+// Gabarit **divisé par deux** le 2026-07-30 : à la taille précédente (bras 9,
+// module 7, donc 16 unités de demi-envergure) la section dominait la silhouette
+// et venait chevaucher les panaches de propulsion à l'écran.
+//
+// Le **collier ne suit pas** cette réduction : son rayon extérieur est imposé
+// par l'épine qu'il doit envelopper (cf. `EQUIPAGE_ALESAGE`), pas par les
+// proportions de la section. Il consomme donc une constante de 2 unités sur la
+// demi-envergure, qui passe de 16 à 9 — un peu plus que la moitié.
+
+/// Longueur d'un module d'équipage (du raccord au plancher).
+const EQUIPAGE_LONG: f32 = 3.5;
+/// Demi-envergure de la traverse : distance axe → raccord d'un module. C'est
+/// elle qui fixe le rayon de rotation, donc la gravité obtenue. Le bras utile
+/// vaut cette valeur **moins** le rayon du collier.
+const EQUIPAGE_BRAS: f32 = 5.5;
+/// Longueur du collier de rotation le long de l'épine.
+const EQUIPAGE_COLLIER: f32 = 1.4;
+/// Rayon extérieur du collier — **réduit de 30 %** le 2026-07-30 (2,0 → 1,4) :
+/// le tambour dominait encore le centre de la section.
+///
+/// Cote **libre et non un cran de `Profil`** : elle se règle contre l'épine, et
+/// les crans (1,0 puis 2,0) n'offrent rien entre « plus maigre que la flèche »
+/// et « le double ». Sa borne basse est dure — il faut rester **au-dessus** de
+/// [`EPINE`] (1,12), sinon les longerons ressortent à travers la jaquette. À 1,4
+/// il ne reste que 0,28 de marge : c'est le test
+/// `le_collier_dequipage_enveloppe_lepine_sans_jour` qui la garde.
+const EQUIPAGE_COLLIER_RAYON: f32 = 1.4;
+/// Alésage du collier : le trou par lequel passe l'épine.
+///
+/// Pris **volontairement plus étroit que l'épine** ([`EPINE`]), donc plus étroit
+/// que sa propre section inscrite : les membrures de la flèche mordent alors dans
+/// la paroi du tambour et il ne subsiste **aucun jour** entre les deux. On ne voit
+/// plus que les surfaces extérieures du collier, et il lit comme solidaire de
+/// l'épine.
+///
+/// Un alésage plus large que l'épine — ce qu'un vrai palier demanderait — laisse
+/// au contraire voir l'anneau de vide tout autour, et la pièce a l'air *enfilée*
+/// sur la flèche comme une chaussette plutôt que montée dessus. Le rendu a été
+/// tranché en faveur de la lecture : c'est la seule cote de la section qui ne
+/// décrit pas une mécanique plausible.
+const fn equipage_alesage(epine: f32) -> f32 {
+    epine * 0.45
+}
+/// Le même, pour l'épine carrée (valeur historique, et calcul unique).
+const EQUIPAGE_ALESAGE: f32 = equipage_alesage(EPINE);
+/// Gabarit de la charnière de repli (demi-largeur de chape).
+const EQUIPAGE_CHARNIERE: f32 = 0.31;
+/// Centre de la section d'équipage le long de l'épine (à l'échelle 1) : au-delà
+/// de l'habitat, sur le tronçon d'épine encore libre. C'est le bout du vaisseau
+/// le plus loin des tuyères, donc celui où l'équipage vit le mieux.
+const EQUIPAGE_CENTRE_Y: f32 = 71.0;
+
+/// Pose la **section d'équipage rotative** : une traverse perpendiculaire à
+/// l'épine, centrée sur `y_centre`, et un module habité à **chaque bout**,
+/// tourné vers l'extérieur.
+///
+/// Déployée (configuration de croisière, celle qui tourne) plutôt que repliée
+/// le long de la coque : c'est la silhouette reconnaissable du vaisseau, et le
+/// repli n'a de sens que sous poussée.
+///
+/// Partagée par la vue Briques et par `preset_isv`, comme les autres grappes :
+/// ce qui est validé à l'écran est ce qui part sur le vaisseau.
+/// Configuration de la section d'équipage. **C'est un état du vaisseau**, pas
+/// un réglage de maquette : il change avec ce que le vaisseau est en train de
+/// faire.
+///
+/// - **Déployée** — en station devant un astre : les bras sont sortis et la
+///   section tourne, ce qui donne sa gravité à l'équipage ;
+/// - **Repliée** — en transit : bras rabattus le long de la coque. C'est
+///   obligatoire sous poussée (une structure sortie encaisserait mal
+///   l'accélération) et ça réduit la cible offerte aux poussières à 0,7 c.
+///
+/// `repli()` donne la valeur continue, pour animer le passage de l'un à
+/// l'autre plutôt que de sauter.
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub enum EtatEquipage {
+    /// En orbite : bras sortis, section en rotation.
+    #[default]
+    Deploye,
+    /// En transit : bras rabattus le long de la coque.
+    Replie,
+}
+
+impl EtatEquipage {
+    /// Fraction de repli : 0 = déployé, 1 = replié.
+    pub fn repli(self) -> f32 {
+        match self {
+            EtatEquipage::Deploye => 0.0,
+            EtatEquipage::Replie => 1.0,
+        }
+    }
+}
+
+/// Direction de pivot du bras `dehors` (dans le repère local de la grappe, où
+/// l'épine est +Z) : perpendiculaire au bras **et** à l'épine, donc le
+/// tangentiel. Les deux bras tournent autour d'axes opposés et se rabattent
+/// donc symétriquement.
+fn axe_pivot(dehors: Vec3) -> Vec3 {
+    dehors.cross(Vec3::Z).normalize()
+}
+
+fn poser_equipage(asm: &mut Assembleur, y_centre: f32, orient: Quat, repli: f32, epine: f32) {
+    // **Collier de rotation** au centre : le moyeu qui porte les bras. Son
+    // alésage est plus étroit que l'épine (cf. `EQUIPAGE_ALESAGE`), si bien que
+    // la flèche traverse la paroi du tambour au lieu de flotter dans un jour —
+    // c'est ce qui le fait lire comme solidaire du vaisseau. Son rayon extérieur
+    // (P2) est la seule cote de la section calée sur l'épine et non sur les
+    // proportions de la section : il faut qu'il **dépasse** le hors-tout de la
+    // flèche, sinon les longerons ressortiraient à travers sa jaquette.
+    let collier = Composant::CollierRotatif {
+        profil: Profil::P2,
+        rayon: EQUIPAGE_COLLIER_RAYON,
+        alesage: equipage_alesage(epine),
+        longueur: EQUIPAGE_COLLIER,
+    };
+    asm.ajouter(cuire(Repere::new(Vec3::Y * y_centre, orient), &collier));
+
+    // Deux bras **séparés**, partant de la jaquette du collier : une poutre
+    // unique de part en part ne passerait pas, l'alésage devant rester vide.
+    // Le bras comble ce que le collier ne prend pas : rétrécir le tambour
+    // **allonge** le bras d'autant, et la demi-envergure (donc le rayon de
+    // rotation) ne bouge pas. C'est `EQUIPAGE_BRAS` qui tient la silhouette.
+    let r_collier = EQUIPAGE_COLLIER_RAYON;
+    let bras_long = EQUIPAGE_BRAS - r_collier;
+    let angle = repli.clamp(0.0, 1.0) * FRAC_PI_2;
+    let base = Vec3::Y * y_centre;
+
+    for cote in [1.0_f32, -1.0] {
+        let dehors = if cote > 0.0 { Vec3::X } else { Vec3::NEG_X };
+        let axe = axe_pivot(dehors);
+        // Le bras pivote **autour de la charnière**, donc autour du point où il
+        // rejoint la jaquette — pas autour du centre du collier.
+        let plie = Quat::from_axis_angle(axe, angle);
+        let dir = plie * dehors; // direction du bras une fois replié
+        let pivot = dehors * r_collier;
+
+        // Charnière au pivot : son +Z local suit le bras **déployé**, son +X
+        // l'axe d'articulation. Sa partie mobile se replie toute seule, du même
+        // angle que le bras — les deux lisent donc la même valeur.
+        let hx = axe;
+        let hz = dehors;
+        let hy = hz.cross(hx);
+        let rot_charniere = orient * Quat::from_mat3(&Mat3::from_cols(hx, hy, hz));
+        let charniere = Composant::Charniere { taille: EQUIPAGE_CHARNIERE, repli };
+        asm.ajouter(cuire(Repere::new(orient * pivot + base, rot_charniere), &charniere));
+
+        // Bras en treillis **triangulaire** : trois longerons, c'est la section
+        // qui ne se déforme pas — et elle se distingue du carré employé partout
+        // ailleurs sur le vaisseau.
+        // Section divisée par deux comme le reste : `Profil` étant discret,
+        // ça se fait d'un cran (P1 → P0, soit 1,0 → 0,5) et non par un facteur.
+        let bras = Composant::Treillis {
+            profil: Profil::P0,
+            longueur: bras_long,
+            style: StyleTreillis::Triangulaire,
+        };
+        let rot = orient * Quat::from_rotation_arc(Vec3::Z, dir);
+        let milieu = orient * (pivot + dir * (bras_long * 0.5)) + base;
+        asm.ajouter(cuire(Repere::new(milieu, rot), &bras));
+
+        // Module au bout, axe **vers l'extérieur** (son +Z fuit la charnière).
+        let module = Composant::ModuleEquipage {
+            profil: Profil::P0,
+            longueur: EQUIPAGE_LONG,
+            hublots: 8,
+        };
+        let pos = orient * (pivot + dir * bras_long) + base;
+        asm.ajouter(cuire(Repere::new(pos, rot), &module));
+    }
+}
+
+// --- Boucliers de tête -------------------------------------------------------
+/// Rayon (circonradius) de la **petite** plaque de tête.
+///
+/// Cette cote a une contrainte qu'on ne devine pas en la regardant : c'est elle
+/// qui fixe le **plus petit alésage de la pile**, donc la section maximale du
+/// mât commun (`rayon × MOYEU × ALESAGE` = 0,396 ici). Un mât plus gros ne
+/// passerait pas la petite plaque, quand bien même il passerait les trois
+/// grandes — voir [`BOUCLIER_MAT`].
+const BOUCLIER_PETIT_RAYON: f32 = 5.5;
+/// Rayon de la **grande** plaque, mesuré sur son petit axe. La hauteur vaut
+/// `rayon × élancement × 2` (≈ 26) et la largeur `rayon × √3 × étroitesse`
+/// (≈ 13,9) : c'est la hauteur qui fait le gabarit, et elle se compare au
+/// diamètre du vaisseau aux radiateurs (25,2).
+const BOUCLIER_GRAND_RAYON: f32 = 10.0;
+/// Nombre de grandes plaques. Le schéma en demande **trois identiques** derrière
+/// la petite : c'est un étagement, et un étage ne se lit pas.
+const BOUCLIER_GRANDS: usize = 3;
+/// Espacement entre plaques le long du mât. C'est **la** cote qui blinde — elle
+/// donne au nuage de plasma la place de s'étaler avant la plaque suivante. Sur
+/// le vrai ISV c'est ~100 m ; ici on garde un rapport lisible à l'échelle du
+/// modèle.
+const BOUCLIER_ECART: f32 = 8.0;
+
+/// Profil du **mât** qui enfile les quatre plaques.
+///
+/// P0 et pas plus gros : sa section transversale mesurée est 0,290, contre un
+/// alésage de 0,396 sur la petite plaque. Le cran au-dessus (0,58) ne passerait
+/// pas, et l'ouvrir en agrandissant la petite plaque la porterait à un gabarit
+/// que le schéma ne montre pas. Élancement du mât ≈ 100:1, exactement celui de
+/// la flèche d'épine qu'il prolonge — donc rien d'anormal à l'œil.
+const BOUCLIER_MAT: Profil = Profil::P0;
+
+/// Jeu entre la fin du raccord conique et la première plaque : de quoi voir le
+/// mât sortir de son col avant qu'une plaque s'y enfile.
+const BOUCLIER_JEU: f32 = 0.9;
+
+/// Position de la **première** plaque (la petite) le long de l'axe, au gabarit
+/// final : juste après le raccord posé au sommet d'épine.
+///
+/// **Déduite et non écrite en dur.** Elle valait 95,0 en clair, ce qui marchait
+/// tant que l'épine gardait sa longueur — et la laissait en place si on la
+/// changeait, la tête restant plantée dans le vide à distance du vaisseau. C'est
+/// exactement le défaut que le gabarit d'épine (`Epine::hors_tout`) évite pour
+/// la charge utile ; il n'y a pas de raison que la tête y échappe. Trouvé en
+/// vérifiant rouge le test de proportions : raccourcir l'épine de moitié ne
+/// raccourcissait pas le vaisseau.
+const BOUCLIER_DEBUT_Y: f32 = EPINE_SOMMET_Y * ISV_ECHELLE + BOUCLIER_RACCORD + BOUCLIER_JEU;
+
+/// Longueur du **raccord conique** entre le sommet d'épine et le mât.
+///
+/// Il n'est pas décoratif. La flèche d'épine finit à 0,9 de rayon et le mât fait
+/// 0,29 : posés bout à bout, la section chute d'un facteur **trois d'un coup**,
+/// et la tête a l'air rapportée plutôt que portée. Le raccord ramène ça à deux
+/// marches franches — 0,9 → 1,0 (léger débord, jamais une face coplanaire) puis
+/// 1,0 → 0,5 sur sa longueur — après quoi le mât sort de son col.
+///
+/// C'est aussi ce qui borne `BOUCLIER_DEBUT_Y` par le bas : le col du raccord
+/// fait 0,5 de rayon, plus que l'alésage de la petite plaque (0,396). Poser la
+/// plaque avant la fin du raccord la ferait empaler dessus.
+const BOUCLIER_RACCORD: f32 = 2.4;
+
+/// Pose la **tête de bouclier** : le mât, la petite plaque, puis les trois
+/// grandes espacées de [`BOUCLIER_ECART`].
+///
+/// **À quel bout du vaisseau** : à l'opposé des moteurs, sur le haut d'épine
+/// libre. La question traînait depuis §C.8, où nos propres notes se
+/// contredisaient (§C.2 plaçait le bouclier « en avant », donc côté moteurs,
+/// puisque l'ISV est un tracteur ; §C.4 et §C.6 le mettaient en haut d'épine).
+/// Le schéma d'assemblage tranche : il montre les quatre plaques **au bout
+/// opposé aux radiateurs**, après la charge utile. C'est aussi le seul bout
+/// dégagé — côté moteurs il faudrait composer avec les tuyères et des ailes de
+/// rayon 12,6.
+///
+/// Les plaques sont **perpendiculaires à l'axe**, et leur grand axe est mis dans
+/// le **plan des radiateurs** : les deux extrémités du vaisseau se lisent alors
+/// dans la même vue de profil, comme sur le schéma. Sans la rotation
+/// supplémentaire d'un quart de tour, le grand axe tomberait perpendiculaire aux
+/// ailes et la tête paraîtrait plate de trois quarts.
+fn poser_tete_bouclier(asm: &mut Assembleur, base_y: f32, axe: Quat) {
+    // Un quart de tour autour de l'axe de la plaque : met son grand axe dans le
+    // plan des ailes radiateur.
+    let pose = axe * Quat::from_rotation_z(FRAC_PI_2);
+
+    let petite = Composant::BouclierPetit { profil: Profil::P1, rayon: BOUCLIER_PETIT_RAYON };
+    asm.ajouter(cuire(Repere::new(vec3(0.0, base_y, 0.0), pose), &petite));
+
+    let grande = Composant::BouclierGrand {
+        profil: Profil::P1,
+        rayon: BOUCLIER_GRAND_RAYON,
+        elancement: BOUCLIER_ELANCEMENT,
+    };
+    for k in 1..=BOUCLIER_GRANDS {
+        let y = base_y + k as f32 * BOUCLIER_ECART;
+        asm.ajouter(cuire(Repere::new(vec3(0.0, y, 0.0), pose), &grande));
+    }
+
+    // Raccord conique au sommet d'épine, grand bout (−Z local) contre elle.
+    let pied = EPINE_SOMMET_Y * ISV_ECHELLE;
+    let raccord = Composant::Adaptateur {
+        grand: Profil::P1,
+        petit: BOUCLIER_MAT,
+        longueur: BOUCLIER_RACCORD,
+    };
+    asm.ajouter(cuire(
+        Repere::new(vec3(0.0, pied + BOUCLIER_RACCORD * 0.5, 0.0), axe),
+        &raccord,
+    ));
+
+    // Mât : il part du **sommet d'épine** et non de la première plaque — sinon
+    // la tête flotterait devant le vaisseau sans rien qui l'y rattache — et
+    // dépasse d'un demi-écart au-delà de la dernière, comme un vrai longeron
+    // qu'on ne coupe pas à ras de sa dernière ferrure. Sa première section est
+    // noyée dans le raccord, qui est plein : le mât en **sort**, il n'y est pas
+    // simplement accolé.
+    let bout = base_y + BOUCLIER_GRANDS as f32 * BOUCLIER_ECART + BOUCLIER_ECART * 0.5;
+    let mat = Composant::Treillis {
+        profil: BOUCLIER_MAT,
+        longueur: bout - pied,
+        style: StyleTreillis::Triangulaire,
+    };
+    asm.ajouter(cuire(Repere::new(vec3(0.0, (pied + bout) * 0.5, 0.0), axe), &mat));
+}
+
+// --- Bouclier thermique d'épine ---------------------------------------------
+/// Rayon du bardage, au gabarit final. L'épine hors-tout mesure **1,15** sur sa
+/// partie droite (mesuré) : 1,25 laisse le jeu d'un revêtement posé dessus, pas
+/// d'une gaine flottant autour.
+const THERMIQUE_RAYON: f32 = 1.25;
+/// Début du bardage le long de l'axe, au gabarit final.
+///
+/// **Pas au ras des moteurs**, et c'est un compromis assumé : l'épine s'évase de
+/// 1,84 à 1,15 sur ses quinze premières unités, alors que le bardage est un
+/// manchon **droit**. Le poser plus bas le ferait flotter au-dessus de
+/// l'évasement. La zone laissée nue est celle du pied en pavillon et des deux
+/// anneaux hexagonaux — déjà chargée en structure, où un bardage ne se lirait
+/// pas. C'est la limite honnête d'un détail de surface à ce prix.
+const THERMIQUE_DEBUT_Y: f32 = 12.0;
+/// Fin du bardage : juste avant la première rangée de fret (51,3).
+const THERMIQUE_FIN_Y: f32 = 48.0;
+/// Nombre de rangs d'écailles. Réglé pour que chaque écaille soit **plus large
+/// que longue** — une facette d'épine fait ~1,25 de large, et 30 rangs sur 36
+/// donnent un pas de 1,19.
+const THERMIQUE_RANGS: usize = 30;
+
+/// Vue briques : le **bouclier thermique d'épine** — le bardage d'écailles
+/// imbriquées qui pare le rayonnement des tuyères.
+///
+/// En haut un tronçon court, pour juger une écaille : sa saillie, sa lèvre
+/// sombre, et le sens du recouvrement. En dessous le tronçon tel qu'il est monté
+/// sur le vaisseau, enfilé sur un bout d'épine hexagonale — c'est le seul moyen
+/// de vérifier ce qui compte vraiment, à savoir que le bardage **plaque** sur la
+/// poutre au lieu de flotter autour.
+pub fn demo_bouclier_thermique() -> EtatStation {
+    let mut asm = Assembleur::new();
+    let couche = Quat::from_rotation_arc(Vec3::Z, Vec3::X);
+
+    let court = Composant::BouclierThermique {
+        rayon: THERMIQUE_RAYON * 2.4,
+        longueur: 9.0,
+        rangs: 5,
+    };
+    asm.ajouter(cuire(Repere::new(vec3(-4.5, 7.0, 0.0), couche), &court));
+
+    // Monté sur son épine : bardage et poutre à la même échelle et au même
+    // endroit, sans quoi on ne juge que le bardage seul.
+    let long = 16.0;
+    let epine = Composant::CharpenteHexa {
+        grand: Profil::P1,
+        petit: Profil::P1,
+        longueur: long + 4.0,
+        courbure: 2.6,
+        pied: PiedHexa::Aucun,
+    };
+    asm.ajouter(cuire(Repere::new(vec3(-2.0, -3.0, 0.0), couche), &epine));
+    let manchon = Composant::BouclierThermique {
+        rayon: THERMIQUE_RAYON,
+        longueur: long,
+        rangs: 13,
+    };
+    asm.ajouter(cuire(Repere::new(vec3(-8.0, -3.0, 0.0), couche), &manchon));
+
+    asm.terminer()
+}
+
+/// Vue briques : la **petite plaque de tête**, présentée sur ses deux faces.
+///
+/// À gauche la **face avant** (+Z, côté poussière), striée ; à droite la même
+/// plaque retournée, donc sa **face arrière** et son ossature. Les deux côte à
+/// côte dans le même plan : c'est la seule mise en scène qui laisse juger les
+/// deux faces d'un même point de vue, comme sur le schéma. En bas la plaque par
+/// la **tranche**, pour voir l'épaisseur et le débord des nervures.
+///
+/// **Pas encore posée sur l'ISV** : brique d'abord, assemblage ensuite.
+pub fn demo_bouclier_petit() -> EtatStation {
+    let mut asm = Assembleur::new();
+    let plaque = Composant::BouclierPetit { profil: Profil::P1, rayon: BOUCLIER_PETIT_RAYON };
+    let ecart = BOUCLIER_PETIT_RAYON * 1.35;
+
+    asm.ajouter(cuire(Repere::new(vec3(-ecart, 3.0, 0.0), Quat::IDENTITY), &plaque));
+    asm.ajouter(cuire(
+        Repere::new(vec3(ecart, 3.0, 0.0), Quat::from_rotation_y(std::f32::consts::PI)),
+        &plaque,
+    ));
+    asm.ajouter(cuire(
+        Repere::new(
+            vec3(0.0, -BOUCLIER_PETIT_RAYON * 1.6, 0.0),
+            Quat::from_rotation_arc(Vec3::Z, Vec3::X),
+        ),
+        &plaque,
+    ));
+
+    asm.terminer()
+}
+
+/// Vue briques : la **grande plaque de tête** — l'hexagone étiré, miroir bleuté
+/// uni sur ses deux faces, portant le motif du schéma : huit rayons partant du
+/// moyeu et deux barres transversales qui détachent les deux pointes.
+///
+/// À gauche de face, à droite par la tranche : c'est de profil que se lit le
+/// nœud papillon des nervures, épaisses au moyeu et effilées à la jante. En bas
+/// les **trois** plaques telles qu'elles seront enfilées sur le mât, pour juger
+/// l'espacement — qui est ce qui blinde, bien plus que l'épaisseur des plaques.
+///
+/// Le mât est le même que sur le vaisseau ([`BOUCLIER_MAT`]) : c'est la petite
+/// plaque, et non les grandes, qui borne sa section.
+pub fn demo_bouclier_grand() -> EtatStation {
+    let mut asm = Assembleur::new();
+    let plaque = Composant::BouclierGrand {
+        profil: Profil::P1,
+        rayon: BOUCLIER_GRAND_RAYON,
+        elancement: BOUCLIER_ELANCEMENT,
+    };
+    let haut = BOUCLIER_GRAND_RAYON * BOUCLIER_ELANCEMENT;
+
+    asm.ajouter(cuire(
+        Repere::new(vec3(-BOUCLIER_GRAND_RAYON * 1.3, haut * 1.15, 0.0), Quat::IDENTITY),
+        &plaque,
+    ));
+    asm.ajouter(cuire(
+        Repere::new(
+            vec3(BOUCLIER_GRAND_RAYON * 1.6, haut * 1.15, 0.0),
+            Quat::from_rotation_arc(Vec3::Z, Vec3::X),
+        ),
+        &plaque,
+    ));
+
+    // La pile, couchée le long de +X : les trois plaques enfilées, plus le mât
+    // qui les traverse.
+    let base = vec3(-BOUCLIER_ECART, -haut * 1.05, 0.0);
+    let couche = Quat::from_rotation_arc(Vec3::Z, Vec3::X);
+    for k in 0..BOUCLIER_GRANDS {
+        asm.ajouter(cuire(
+            Repere::new(base + Vec3::X * (k as f32 * BOUCLIER_ECART), couche),
+            &plaque,
+        ));
+    }
+    let mat = Composant::Treillis {
+        profil: BOUCLIER_MAT,
+        longueur: (BOUCLIER_GRANDS - 1) as f32 * BOUCLIER_ECART + BOUCLIER_ECART * 0.5,
+        style: StyleTreillis::Triangulaire,
+    };
+    asm.ajouter(cuire(
+        Repere::new(base - Vec3::X * (BOUCLIER_ECART * 0.25), couche),
+        &mat,
+    ));
+
+    asm.terminer()
+}
+
+/// Vue briques : la **section d'équipage rotative** de l'ISV — la seule partie
+/// tournante du vaisseau. En haut un module seul (fût cylindrique, plancher
+/// bombé vers l'extérieur, couronne de hublots au niveau du pont) ; en dessous
+/// l'ensemble déployé : traverse et un module à chaque bout, tournés vers
+/// l'extérieur, tel qu'il sera posé sur l'épine.
+pub fn demo_equipage(repli: f32) -> EtatStation {
+    let mut asm = Assembleur::new();
+
+    let seul = Composant::ModuleEquipage { profil: Profil::P0, longueur: EQUIPAGE_LONG, hublots: 8 };
+    asm.ajouter(cuire(Repere::new(vec3(0.0, 7.0, 0.0), Quat::from_rotation_arc(Vec3::Z, Vec3::X)), &seul));
+
+    // Orientée **comme sur le vaisseau** (collier le long de Y, l'axe de
+    // l'épine), et pas à plat : c'est ce qui fait que l'axe de rotation de la
+    // vue est le même ici et là-bas — sinon le bouton ferait tourner la
+    // maquette autour du mauvais axe.
+    poser_equipage(&mut asm, 0.0, Quat::from_rotation_arc(Vec3::Z, Vec3::Y), repli, EPINE);
     asm.terminer()
 }
 
@@ -2103,6 +2879,161 @@ mod tests {
         assert!(nb(&preset_mir()) >= 4);
     }
 
+    // Le repli doit amener le bras **le long de l'épine**, et le déploiement le
+    // remettre radial — c'est tout l'intérêt du geste. Les deux bras pivotent
+    // autour d'axes opposés, donc se rabattent du même côté, pas en ciseaux.
+    #[test]
+    fn le_repli_couche_les_bras_le_long_de_lepine() {
+        for dehors in [Vec3::X, Vec3::NEG_X] {
+            let axe = axe_pivot(dehors);
+            // Déployé : le bras reste radial.
+            let d0 = Quat::from_axis_angle(axe, 0.0) * dehors;
+            assert!((d0 - dehors).length() < 1e-5);
+            // Replié : le bras est aligné sur l'épine (+Z du repère de grappe),
+            // et du **bon côté** — pas rabattu vers les moteurs.
+            let d1 = Quat::from_axis_angle(axe, FRAC_PI_2) * dehors;
+            assert!(
+                (d1 - Vec3::Z).length() < 1e-5,
+                "bras {dehors:?} replié vers {d1:?} au lieu de +Z"
+            );
+            // À mi-course, il est bien en diagonale (l'animation passe par là).
+            let dm = Quat::from_axis_angle(axe, FRAC_PI_2 * 0.5) * dehors;
+            assert!(dm.z > 0.6 && dm.dot(dehors) > 0.6);
+        }
+    }
+
+    // La section d'équipage est montée **entre l'habitat et le bout de l'épine**.
+    // Ce créneau est étroit et il n'est délimité par rien de visible : trop bas,
+    // le collier tourne dans l'habitat fixe ; trop haut, il tourne autour de
+    // rien. Ces deux bornes ne se voient qu'en tournant la caméra, d'où le test.
+    #[test]
+    fn la_section_dequipage_se_glisse_entre_lhabitat_et_le_bout_de_lepine() {
+        // ⚠️ **Deux unités à ne pas mélanger.** Les `*_CENTRE_Y` sont des
+        // positions le long de l'épine et sont multipliées par `ISV_ECHELLE` à la
+        // pose ; les longueurs de composants, elles, ne le sont **pas** (la
+        // charge utile garde sa taille, cf. `la_charge_utile_suit_le_gabarit_de_
+        // lepine`). Comparer un centre brut à une demi-longueur donne un résultat
+        // faux — conservateur ici, mais qui dériverait si `ISV_ECHELLE` bougeait.
+        let hab_sommet = HAB_CENTRE_Y * ISV_ECHELLE + HAB_LONG * 0.5;
+        let centre = EQUIPAGE_CENTRE_Y * ISV_ECHELLE;
+        let collier_bas = centre - EQUIPAGE_COLLIER * 0.5;
+        let collier_haut = centre + EQUIPAGE_COLLIER * 0.5;
+        let epine_sommet = EPINE_SOMMET_Y * ISV_ECHELLE;
+
+        assert!(
+            collier_bas > hab_sommet,
+            "le collier descend à {collier_bas} alors que l'habitat monte à {hab_sommet} : \
+             la section tournerait dans les modules fixes"
+        );
+        assert!(
+            collier_haut < epine_sommet,
+            "le collier monte à {collier_haut}, au-delà du sommet d'épine \
+             {epine_sommet} : il n'aurait plus de support"
+        );
+    }
+
+    // Le collier doit **envelopper** l'épine sans laisser de jour : les deux
+    // bornes sont serrées et se contredisent si on les relâche, d'où le test.
+    //
+    // ⚠️ Ce test dit l'**inverse** de son ancêtre, qui exigeait un jeu franc
+    // autour de la flèche comme le voudrait un vrai palier. Cette version-là
+    // donnait un anneau de vide visible tout autour, et la pièce avait l'air
+    // enfilée sur l'épine plutôt que montée dessus (arbitrage rendu à l'écran le
+    // 2026-07-30 : le rendu l'emporte sur le mécanisme). Ne pas « réparer » le
+    // sens de ces assertions sans avoir regardé la vue.
+    #[test]
+    fn le_collier_dequipage_enveloppe_lepine_sans_jour() {
+        let r_collier = EQUIPAGE_COLLIER_RAYON;
+
+        // Borne basse : l'alésage passe **sous** le hors-tout de la flèche, donc
+        // sous sa section inscrite. Les membrures mordent dans la paroi du
+        // tambour et il ne reste rien à voir entre les deux.
+        assert!(
+            EQUIPAGE_ALESAGE < EPINE,
+            "alésage {EQUIPAGE_ALESAGE:.3} ≥ épine {EPINE:.3} : le jour redevient visible"
+        );
+        // Borne haute : la jaquette doit dépasser le hors-tout de la flèche,
+        // sinon les longerons ressortent **à travers** le collier.
+        assert!(
+            r_collier > EPINE,
+            "jaquette {r_collier:.3} ≤ épine {EPINE:.3} : les longerons traversent le collier"
+        );
+        // Et il reste de la matière : un tambour n'est pas une feuille.
+        assert!(
+            r_collier - EQUIPAGE_ALESAGE > 0.5,
+            "paroi de collier trop mince ({:.3})",
+            r_collier - EQUIPAGE_ALESAGE
+        );
+        // Les bras partent de la jaquette : l'envergure doit la dépasser, sinon
+        // les modules seraient posés dans le collier lui-même.
+        assert!(
+            EQUIPAGE_BRAS > r_collier,
+            "envergure {EQUIPAGE_BRAS} ≤ rayon de collier {r_collier}"
+        );
+    }
+
+    // La tête est un **étagement**, pas un blindage feuilleté : c'est le vide
+    // entre plaques qui laisse au nuage de plasma la place de s'étaler. Une pile
+    // resserrée ne pare plus rien à 0,7 c. Ce test garde donc le rapport
+    // écart/plaque, qui est la seule chose que le montage doit *dire*.
+    #[test]
+    fn la_tete_reste_un_etagement() {
+        assert!(
+            BOUCLIER_GRANDS >= 3,
+            "moins de 3 grandes plaques : l'étagement ne se lit plus"
+        );
+        // L'espacement doit rester du même ordre que la plaque, pas un joint.
+        let rapport = BOUCLIER_ECART / BOUCLIER_GRAND_RAYON;
+        assert!(
+            rapport > 0.5,
+            "écart {BOUCLIER_ECART} pour un rayon {BOUCLIER_GRAND_RAYON} (rapport {rapport:.2}) : \
+             les plaques se touchent presque, l'étagement ne se lit plus"
+        );
+        // Mais la pile doit rester une **tête**, pas un fuselage : plus longue
+        // que haute et elle cesse de lire comme un bouclier.
+        let prof = (BOUCLIER_GRANDS - 1) as f32 * BOUCLIER_ECART;
+        let haut = 2.0 * BOUCLIER_GRAND_RAYON * BOUCLIER_ELANCEMENT;
+        assert!(
+            prof < haut,
+            "pile longue de {prof:.1} pour une plaque haute de {haut:.1} : c'est un fût, plus une tête"
+        );
+        // Et la petite plaque doit rester la **petite** : c'est elle qui prend
+        // le premier choc, et le schéma la veut nettement en retrait.
+        assert!(
+            BOUCLIER_PETIT_RAYON < BOUCLIER_GRAND_RAYON * 0.85,
+            "petite plaque de {BOUCLIER_PETIT_RAYON} contre {BOUCLIER_GRAND_RAYON} : elles ne se distinguent plus"
+        );
+    }
+
+    // La section a été **divisée par deux** le 2026-07-30 parce qu'elle écrasait
+    // la silhouette. Ce test garde la trace du gabarit retenu : c'est un choix
+    // d'échelle validé à l'œil, donc exactement le genre de valeur qu'une
+    // retouche ultérieure risque de défaire sans s'en apercevoir.
+    #[test]
+    fn la_section_dequipage_reste_a_lechelle_du_vaisseau() {
+        let demi_envergure = EQUIPAGE_BRAS + EQUIPAGE_LONG;
+        // Elle doit rester **sous** la moitié de l'ancien gabarit (16), à la
+        // constante près qu'impose le collier.
+        assert!(
+            demi_envergure < 10.0,
+            "demi-envergure {demi_envergure} : la section redomine la silhouette"
+        );
+        // Mais rester lisible : une section qui ne dépasse plus du fret n'a plus
+        // l'air de tourner autour de quoi que ce soit.
+        assert!(
+            demi_envergure > FRET_RAYON,
+            "demi-envergure {demi_envergure} sous le rayon du fret {FRET_RAYON:.3}"
+        );
+        // Bras et module gardent leur proportion d'origine (≈ 1:1) : c'est ce
+        // rapport qui fait lire « nacelle au bout d'une traverse ».
+        let bras_utile = EQUIPAGE_BRAS - EQUIPAGE_COLLIER_RAYON;
+        let rapport = bras_utile / EQUIPAGE_LONG;
+        assert!(
+            (0.7..1.4).contains(&rapport),
+            "bras {bras_utile} / module {EQUIPAGE_LONG} = {rapport:.2}, hors du 1:1 voulu"
+        );
+    }
+
     // La charge utile garde sa taille, mais elle est **calée sur le gabarit de
     // l'épine** : si `ISV_ECHELLE` bouge, rayons de couronne et portées de
     // ferrure doivent suivre tout seuls. C'est exactement ce qui a été raté une
@@ -2110,32 +3041,436 @@ mod tests {
     // pour l'ancienne, donc plantées **dans** la structure.
     #[test]
     fn la_charge_utile_suit_le_gabarit_de_lepine() {
-        // Fret : le creux central de la triforce laisse passer l'épine.
-        let creux = FRET_RAYON - FRET_NACELLE * (0.5 + 0.5 * 0.22);
-        assert!(creux >= EPINE, "creux du fret {creux:.3} < épine {EPINE:.3}");
-        // Habitat : le longeron de ferrure vient **sur** l'épine — ni enfoncé
-        // dedans, ni suspendu dans le vide.
-        let rail = HAB_RAYON - HAB_INSCRIT - HAB_ATTACHE * 0.5;
-        assert!(
-            (rail - EPINE).abs() < 1e-3,
-            "ferrure d'habitat à {rail:.3}, épine à {EPINE:.3}"
-        );
-        // ...et le fût lui-même reste à distance de l'épine.
-        let face = HAB_RAYON - HAB_INSCRIT;
-        assert!(face > EPINE, "l'habitat mord l'épine ({face:.3} vs {EPINE:.3})");
+        // **Les deux variantes d'épine sont vérifiées.** L'hexagonale est 3,2 %
+        // plus large hors-tout : c'est peu, et c'est justement l'ordre de
+        // grandeur qui replante la charge utile dans la structure sans qu'on le
+        // remarque (§C.6). Boucler ici est ce qui garantit qu'ajouter une
+        // variante d'épine ne peut pas passer sans recaler les couronnes.
+        for epine in [Epine::Carree, Epine::Hexagonale] {
+            let g = epine.hors_tout();
+            let nom = epine.nom();
 
-        // **Les trois modules ne se gênent pas entre eux.** Support d'une
-        // section onigiri P2 dans la direction de sa voisine (à 60° d'un coin) :
-        // `dv·cos 30° + ρ`. C'est ce qui dit que le serrage n'est borné que par
-        // l'épine — sans ce calcul, le « plancher » du jeu ne serait qu'une
-        // supposition.
-        let (dv, rho) = (2.0 * (1.0 - 0.22), 2.0 * 0.22);
-        let portee = dv * (PI / 6.0).cos() + rho;
-        let entre_axes = 2.0 * HAB_RAYON * (PI / 3.0).sin();
+            // Fret : le creux central de la triforce laisse passer l'épine.
+            let creux = fret_rayon(g) - FRET_NACELLE * (0.5 + 0.5 * 0.22);
+            assert!(creux >= g, "{nom} : creux du fret {creux:.3} < épine {g:.3}");
+
+            // Habitat : le longeron de ferrure vient **sur** l'épine — ni enfoncé
+            // dedans, ni suspendu dans le vide.
+            let rail = hab_rayon(g) - HAB_INSCRIT - HAB_ATTACHE * 0.5;
+            assert!(
+                (rail - g).abs() < 1e-3,
+                "{nom} : ferrure d'habitat à {rail:.3}, épine à {g:.3}"
+            );
+            // ...et le fût lui-même reste à distance de l'épine.
+            let face = hab_rayon(g) - HAB_INSCRIT;
+            assert!(face > g, "{nom} : l'habitat mord l'épine ({face:.3} vs {g:.3})");
+
+            // Collier d'équipage : sa jaquette doit toujours dépasser la flèche,
+            // sinon les longerons ressortent à travers (cf. §C.8). C'est la marge
+            // la plus serrée du vaisseau, et l'épine hexagonale la rogne encore.
+            assert!(
+                EQUIPAGE_COLLIER_RAYON > g,
+                "{nom} : jaquette de collier {EQUIPAGE_COLLIER_RAYON} <= épine {g:.3}"
+            );
+            // ...et son alésage doit rester **sous** la flèche, pour qu'aucun jour
+            // ne se rouvre entre le tambour et la structure.
+            assert!(
+                equipage_alesage(g) < g,
+                "{nom} : alésage de collier {:.3} >= épine {g:.3}",
+                equipage_alesage(g)
+            );
+
+            // **Les trois modules ne se gênent pas entre eux.** Support d'une
+            // section onigiri P2 dans la direction de sa voisine (à 60° d'un
+            // coin) : `dv·cos 30° + ρ`. C'est ce qui dit que le serrage n'est
+            // borné que par l'épine — sans ce calcul, le « plancher » du jeu ne
+            // serait qu'une supposition.
+            let (dv, rho) = (2.0 * (1.0 - 0.22), 2.0 * 0.22);
+            let portee = dv * (PI / 6.0).cos() + rho;
+            let entre_axes = 2.0 * hab_rayon(g) * (PI / 3.0).sin();
+            assert!(
+                entre_axes > 2.0 * portee,
+                "{nom} : modules d'habitat qui se croisent ({entre_axes:.3} <= {:.3})",
+                2.0 * portee
+            );
+        }
+    }
+
+    // Les deux cuves d'un même côté ne doivent plus se traverser. Cote purement
+    // sphérique : deux sphères de rayon `r` se touchent à `2r`, il faut donc
+    // davantage.
+    #[test]
+    fn les_cuves_de_carburant_ne_se_traversent_pas() {
+        let res_long = 5.0_f32;
+        let res_r = res_long * 0.5 * 1.3;
+        let ecart = 2.0 * res_r + RESERVOIR_JEU;
         assert!(
-            entre_axes > 2.0 * portee,
-            "modules d'habitat qui se croisent ({entre_axes:.3} <= {:.3})",
-            2.0 * portee
+            ecart > 2.0 * res_r,
+            "écart {ecart:.3} pour des cuves de rayon {res_r:.3} : elles se traversent"
+        );
+        // Et l'ancien écart, celui des plaques hexagonales, est bien insuffisant :
+        // c'est ce qui justifie d'avoir découplé les deux cotes.
+        let sg = Profil::P3.rayon() * 0.5;
+        let ap = 2.0 * sg * 3.0_f32.sqrt() * 0.5;
+        assert!(
+            2.0 * ap < 2.0 * res_r,
+            "l'écart des plaques ({:.3}) suffirait aux cuves : le découplage serait inutile",
+            2.0 * ap
+        );
+    }
+
+    // **La propulsion doit maintenant TOUCHER le pied de l'épine**, pas le dégager.
+    //
+    // ⚠️ Ce test a changé de sens **deux fois**, et chaque fois délibérément — ce
+    // n'est pas une dérive, c'est l'intention de conception qui a bougé :
+    //   1. « jeu franc > 0,4 » — la propulsion pendait à côté du pied et le
+    //      traversait, il fallait l'écarter ;
+    //   2. « pas de recouvrement franc > −0,25 » — déport resserré, contact toléré ;
+    //   3. **ici** : engagement **exigé**, la propulsion devant se lire comme montée
+    //      sur l'épine et non suspendue à côté.
+    // Ne pas « corriger » le sens de ces assertions sans avoir regardé la vue.
+    //
+    // Mesuré sur la géométrie cuite du preset, jamais sur les cotes : le rayon
+    // interne de l'aile n'est pas déductible du déport (cf. `PROPULSION_DEPORT`).
+    #[test]
+    fn la_propulsion_touche_le_pied_de_lepine() {
+        use crate::vaisseau::maillage::Batisseur;
+        let EtatStation::Prete(s) = preset_isv_hexa() else { panic!("preset vide") };
+
+        // Le modèle est couché : l'axe du vaisseau est X, le rayon se lit en Y-Z.
+        let mut pied: Vec<Vec3> = Vec::new(); // sommets du pied, côté moteurs
+        let mut aile: Vec<Vec3> = Vec::new(); // sommets des ailes radiateur
+        for p in s.pieces() {
+            let charpente = matches!(&p.composant, Composant::CharpenteHexa { .. });
+            let radiateur = matches!(&p.composant, Composant::RadiateurMega { .. });
+            if !charpente && !radiateur {
+                continue;
+            }
+            let mut b = Batisseur::new();
+            p.composant.dessiner(&mut b);
+            for lot in b.terminer() {
+                for v in &lot.vertices {
+                    let w = p
+                        .transforme
+                        .transform_point3(vec3(v.position[0], v.position[1], v.position[2]));
+                    // Bande du pied : au-delà de la base du cône, côté tuyères.
+                    if charpente && w.x < -10.0 {
+                        pied.push(w);
+                    }
+                    if radiateur {
+                        aile.push(w);
+                    }
+                }
+            }
+        }
+
+        // ⚠️ **Les deux mesures doivent porter sur la même tranche du vaisseau.**
+        // Comparer le rayon minimal de l'aile au rayon maximal du pied *sans* cette
+        // précaution rend un « engagement » qui n'existe pas dès que les deux pièces
+        // ne sont plus à la même hauteur : c'est exactement ce que produit
+        // `PROPULSION_AVANCE`, qui fait glisser l'aile sous le fût. On restreint donc
+        // au **recouvrement axial** des deux, et son absence est en soi un échec.
+        let borne = |v: &[Vec3], f: fn(f32, f32) -> f32, init: f32| {
+            v.iter().fold(init, |acc, w| f(acc, w.x))
+        };
+        let bas = borne(&pied, f32::max, f32::MIN).min(borne(&aile, f32::max, f32::MIN));
+        let haut = borne(&pied, f32::min, f32::MAX).max(borne(&aile, f32::min, f32::MAX));
+        // Et ce recouvrement doit rester **substantiel**. Réduit à un liseré, il ne
+        // porte plus que quelques sommets de bord et la mesure part en vrille : à
+        // `PROPULSION_AVANCE = 1,5` la bande tombe à 0,1 et le « jeu » bascule à
+        // +1,34, c'est-à-dire l'inverse de la réalité. Une mesure sur trop peu de
+        // matière est pire qu'aucune mesure.
+        assert!(
+            bas - haut > 0.3,
+            "recouvrement axial de {:.2} seulement (bande [{haut:.1} ; {bas:.1}]) :              l'aile a glissé sous le fût, la mesure n'a plus de sens",
+            bas - haut
+        );
+
+        let pied_max = pied
+            .iter()
+            .filter(|w| (haut..=bas).contains(&w.x))
+            .fold(0.0f32, |m, w| m.max(w.yz().length()));
+        let radia_min = aile
+            .iter()
+            .filter(|w| (haut..=bas).contains(&w.x))
+            .fold(f32::MAX, |m, w| m.min(w.yz().length()));
+        let jeu = radia_min - pied_max;
+        // **Elle mord dans le pied** : c'est cet engagement qui la fait lire comme
+        // montée sur l'épine. Un simple affleurement (−0,11, l'état précédent) ne
+        // suffit pas — de trois quarts, il laisse encore voir un jour entre les deux.
+        assert!(
+            jeu < -0.3,
+            "engagement de {jeu:.2} — radiateur à {radia_min:.2}, pied à {pied_max:.2} : \
+             la propulsion effleure l'épine au lieu de s'y poser"
+        );
+        // **Mais elle ne l'avale pas.** Au-delà, l'aile traverserait le fût de part
+        // en part et ressortirait de l'autre côté.
+        assert!(
+            jeu > -3.0,
+            "engagement de {jeu:.2} : l'aile traverse le pied au lieu de s'y ancrer"
+        );
+    }
+
+    // Les tests ci-dessus vérifient les **formules**. Celui-ci vérifie le
+    // **câblage** : que `isv()` passe bien le gabarit de son épine à la charge
+    // utile, au lieu de lire la constante carrée. C'est une erreur invisible aux
+    // tests de formules — et c'est littéralement le bug de §C.6, où le calcul
+    // était juste mais appliqué à l'ancien gabarit.
+    #[test]
+    fn le_second_isv_recale_vraiment_sa_charge_utile() {
+        let cotes = |e: EtatStation| {
+            let EtatStation::Prete(s) = e else { panic!("preset vide") };
+            let mut ratelier = None;
+            let mut alesage = None;
+            let mut hexa = false;
+            let mut carree = false;
+            for p in s.pieces() {
+                match &p.composant {
+                    Composant::RatelierCargo { rayon, .. } => ratelier = Some(*rayon),
+                    Composant::CollierRotatif { alesage: a, .. } => alesage = Some(*a),
+                    Composant::CharpenteHexa { .. } => hexa = true,
+                    Composant::Charpente { .. } => carree = true,
+                    _ => {}
+                }
+            }
+            (ratelier.expect("pas de fret"), alesage.expect("pas de collier"), hexa, carree)
+        };
+
+        let (r_c, a_c, hexa_c, carree_c) = cotes(preset_isv());
+        let (r_h, a_h, hexa_h, carree_h) = cotes(preset_isv_hexa());
+
+        // Chacun porte bien la charpente qu'il annonce, et **seulement** elle.
+        assert!(carree_c && !hexa_c, "le premier ISV n'est plus en épine carrée");
+        assert!(hexa_h && !carree_h, "le second ISV n'est pas en épine hexagonale");
+
+        // La couronne de fret et l'alésage du collier ont suivi le gabarit.
+        let g = Epine::Hexagonale.hors_tout();
+        assert!(r_h > r_c, "couronne de fret non recalée ({r_h:.4} vs {r_c:.4})");
+        assert!((r_h - fret_rayon(g)).abs() < 1e-4, "fret à {r_h:.4}, attendu {:.4}", fret_rayon(g));
+        assert!(a_h > a_c, "alésage de collier non recalé ({a_h:.4} vs {a_c:.4})");
+        assert!((a_h - equipage_alesage(g)).abs() < 1e-4);
+
+        // Et le premier ISV est resté sur ses cotes historiques.
+        assert!((r_c - FRET_RAYON).abs() < 1e-4);
+        assert!((a_c - EQUIPAGE_ALESAGE).abs() < 1e-4);
+    }
+
+    // Les constantes historiques doivent rester **exactement** celles de l'épine
+    // carrée : le second preset ne doit rien changer au premier. Sans ça, on
+    // comparerait deux vaisseaux qui diffèrent par autre chose que leur épine.
+    #[test]
+    fn le_gabarit_carre_est_inchange_par_lajout_de_lhexagonal() {
+        assert!((Epine::Carree.hors_tout() - EPINE).abs() < 1e-6);
+        assert!((fret_rayon(EPINE) - FRET_RAYON).abs() < 1e-6);
+        assert!((hab_rayon(EPINE) - HAB_RAYON).abs() < 1e-6);
+        assert!((equipage_alesage(EPINE) - EQUIPAGE_ALESAGE).abs() < 1e-6);
+        // Et l'hexagonale est bien **plus large**, sinon tout ce recalage serait
+        // du vent.
+        let h = Epine::Hexagonale.hors_tout();
+        assert!(h > EPINE, "épine hexagonale {h:.4} pas plus large que {EPINE:.4}");
+        let ecart = h / EPINE - 1.0;
+        assert!(
+            (0.02..0.05).contains(&ecart),
+            "écart de gabarit {:.1} %, hors du ~3 % attendu",
+            ecart * 100.0
+        );
+    }
+
+    // **Proportions d'ensemble.** Ce qui fait qu'un ISV lit comme un ISV et non
+    // comme une fusée quelconque tient à trois rapports, et à rien d'autre : un
+    // très long tronçon d'épine **nu**, une charge utile dominée par son fret, et
+    // un vaisseau qui reste franchement plus long que large. Chacun des trois se
+    // perd par accumulation de petites retouches, sans qu'aucune ne soit fautive
+    // prise isolément — d'où ce test, qui les mesure sur le vaisseau assemblé.
+    //
+    // Les bornes sont larges à dessein : elles ne prescrivent pas une silhouette,
+    // elles interdisent de la perdre.
+    #[test]
+    fn les_proportions_densemble_de_lisv_tiennent() {
+        let EtatStation::Prete(s) = preset_isv_fixe(Epine::Hexagonale) else {
+            panic!("l'ISV doit être prête");
+        };
+        // Étendue axiale et rayon d'une famille de pièces, mesurés sur la
+        // géométrie cuite : les `rayon_local()` ignorent l'échelle portée par la
+        // transformée de l'ossature (cf. §C.1) et sous-estimeraient tout.
+        let etendue = |f: &dyn Fn(&Composant) -> bool| -> (f32, f32, f32) {
+            let (mut a, mut z, mut r) = (f32::MAX, f32::MIN, 0.0f32);
+            for p in s.pieces().iter().filter(|p| f(&p.composant)) {
+                let mut b = crate::vaisseau::maillage::Batisseur::new();
+                b.poser_transforme(p.transforme);
+                p.composant.dessiner(&mut b);
+                for lot in b.terminer() {
+                    for v in &lot.vertices {
+                        let w = vec3(v.position[0], v.position[1], v.position[2]);
+                        a = a.min(w.x);
+                        z = z.max(w.x);
+                        r = r.max(w.yz().length());
+                    }
+                }
+            }
+            (a, z, r)
+        };
+
+        let (x0, x1, rayon) = etendue(&|_| true);
+        let long = x1 - x0;
+
+        // La **propulsion** est un bloc à un bout : moteurs, nacelles, cuves,
+        // ailes. On en prend le bout le plus éloigné des tuyères.
+        let (_, prop_fin, _) = etendue(&|c| {
+            matches!(
+                c,
+                Composant::MoteurAntimatiere { .. }
+                    | Composant::ReacteurAntimatiere { .. }
+                    | Composant::RadiateurMega { .. }
+                    | Composant::BlocMoteur { .. }
+                    | Composant::Reservoir { .. }
+            )
+        });
+        // La **charge utile** est un bloc à l'autre bout, la tête exclue.
+        let (util_debut, util_fin, _) = etendue(&|c| {
+            matches!(
+                c,
+                Composant::RatelierCargo { .. }
+                    | Composant::ModuleHabitat { .. }
+                    | Composant::ModuleEquipage { .. }
+            )
+        });
+        let (fret_a, fret_b, _) = etendue(&|c| matches!(c, Composant::RatelierCargo { .. }));
+        let (hab_a, hab_b, _) = etendue(&|c| matches!(c, Composant::ModuleHabitat { .. }));
+
+        // 1. L'**épine nue** entre les deux blocs : la signature du vaisseau.
+        //    C'est une poutre en **tension**, et ce qui le dit est sa longueur à
+        //    vide — pas le treillis, qui court d'un bout à l'autre.
+        let nu = util_debut - prop_fin;
+        assert!(
+            nu > long * 0.25,
+            "épine nue de {nu:.1} sur {long:.1} ({:.0} %) : le vaisseau n'a plus sa longue poutre en tension",
+            nu / long * 100.0
+        );
+        let utile = util_fin - util_debut;
+        assert!(
+            nu > utile,
+            "épine nue de {nu:.1} contre {utile:.1} de charge utile : la poutre ne domine plus"
+        );
+
+        // 2. Le **fret** domine la charge utile. Le vrai ISV porte 4 rangées de
+        //    4 modules : c'est la plus grosse masse embarquée, et si l'habitat
+        //    lui dispute la place, le vaisseau cesse d'être un cargo.
+        let (f, h) = (fret_b - fret_a, hab_b - hab_a);
+        assert!(
+            f > h * 1.8,
+            "fret {f:.1} contre habitat {h:.1} : le vaisseau ne lit plus comme un cargo"
+        );
+
+        // 3. **Élancement.** Le diamètre hors-tout est pris aux ailes radiateur ;
+        //    en deçà de six fois, la silhouette s'épaissit et l'ISV commence à
+        //    ressembler à une station.
+        let elancement = long / (2.0 * rayon);
+        assert!(
+            elancement > 6.0,
+            "élancement {elancement:.1} ({long:.1} de long pour {:.1} de diamètre)",
+            2.0 * rayon
+        );
+    }
+
+    // **À quel bout va la tête de bouclier** — la question ouverte depuis §C.8,
+    // où nos propres notes se contredisaient. Tranchée par le schéma
+    // d'assemblage : au bout **opposé aux moteurs**, après toute la charge utile,
+    // sur le haut d'épine libre. Ce test fige la réponse, parce qu'elle ne se
+    // déduit d'aucune autre et qu'un déplacement de rangée pourrait la brouiller.
+    #[test]
+    fn la_tete_de_bouclier_coiffe_le_bout_oppose_aux_moteurs() {
+        let EtatStation::Prete(s) = preset_isv_fixe(Epine::Hexagonale) else {
+            panic!("l'ISV doit être prête");
+        };
+        let x = |f: &dyn Fn(&Composant) -> bool| -> Vec<f32> {
+            s.pieces().iter().filter(|p| f(&p.composant)).map(|p| p.centre().x).collect()
+        };
+        let moteurs = x(&|c| matches!(c, Composant::MoteurAntimatiere { .. }));
+        let petite = x(&|c| matches!(c, Composant::BouclierPetit { .. }));
+        let grandes = x(&|c| matches!(c, Composant::BouclierGrand { .. }));
+        let habitat = x(&|c| matches!(c, Composant::ModuleHabitat { .. }));
+        assert_eq!(petite.len(), 1, "une seule petite plaque en tête");
+        assert_eq!(grandes.len(), BOUCLIER_GRANDS, "trois grandes plaques");
+
+        let moteur_max = moteurs.iter().fold(f32::MIN, |m, v| m.max(*v));
+        let hab_max = habitat.iter().fold(f32::MIN, |m, v| m.max(*v));
+        let tete_min = petite[0].min(grandes.iter().fold(f32::MAX, |m, v| m.min(*v)));
+        assert!(
+            tete_min > hab_max,
+            "tête à {tete_min:.1} : elle n'est pas au-delà de l'habitat ({hab_max:.1})"
+        );
+        assert!(
+            tete_min > moteur_max + 80.0,
+            "tête à {tete_min:.1} : pas franchement à l'opposé des moteurs ({moteur_max:.1})"
+        );
+        // La **petite** plaque vient en premier, les trois grandes derrière : le
+        // schéma est explicite là-dessus, et l'ordre a un sens — c'est la plaque
+        // sacrificielle qui prend le grain, les grandes encaissent le nuage.
+        assert!(
+            grandes.iter().all(|g| *g > petite[0]),
+            "la petite plaque ({:.1}) n'est pas en tête des grandes ({grandes:?})",
+            petite[0]
+        );
+        // Et rien de la tête ne redescend sur l'épine, qui est déjà occupée.
+        let sommet = EPINE_SOMMET_Y * ISV_ECHELLE;
+        assert!(
+            tete_min > sommet,
+            "tête à {tete_min:.1}, sommet d'épine à {sommet:.1} : les plaques mordent sur l'épine"
+        );
+    }
+
+    // Les quatre plaques sont **enfilées sur un mât commun**. C'est donc la
+    // **plus petite** qui borne la section du mât, pas les grandes : son alésage
+    // est proportionnel à son rayon, et il est le plus étroit de la pile.
+    //
+    // Le piège est qu'un mât trop gros ne se voit pas — il traverse le moyeu et
+    // ressort de l'autre côté sans que rien ne l'arrête, et la pile a l'air
+    // enfilée alors qu'elle est empalée. On mesure donc les deux sur la
+    // géométrie cuite, plutôt que de refaire le calcul des fractions ici.
+    #[test]
+    fn le_mat_de_tete_passe_le_plus_petit_alesage() {
+        let transversal = |c: &Composant, garder: &dyn Fn(f32) -> bool| -> (f32, f32) {
+            let mut b = crate::vaisseau::maillage::Batisseur::new();
+            c.dessiner(&mut b);
+            let (mut mini, mut maxi) = (f32::MAX, 0.0f32);
+            for lot in b.terminer() {
+                for v in &lot.vertices {
+                    if !garder(v.position[2]) {
+                        continue;
+                    }
+                    let r = vec2(v.position[0], v.position[1]).length();
+                    mini = mini.min(r);
+                    maxi = maxi.max(r);
+                }
+            }
+            (mini, maxi)
+        };
+
+        // Alésage : les sommets du moyeu sont les seuls à vivre loin du plan
+        // médian de la plaque.
+        let seuil = BOUCLIER_PETIT_RAYON * 0.05;
+        let (alesage, _) = transversal(
+            &Composant::BouclierPetit { profil: Profil::P1, rayon: BOUCLIER_PETIT_RAYON },
+            &|z| z.abs() > seuil,
+        );
+        let (_, mat) = transversal(
+            &Composant::Treillis {
+                profil: BOUCLIER_MAT,
+                longueur: 20.0,
+                style: StyleTreillis::Triangulaire,
+            },
+            &|_| true,
+        );
+        assert!(
+            mat < alesage - 0.05,
+            "mât de {mat:.3} pour un alésage de {alesage:.3} : il n'enfile pas la petite plaque, il la traverse"
+        );
+        // Et pas ridiculement fin non plus : un mât qui flotte dans son alésage
+        // ne porte visiblement rien.
+        assert!(
+            mat > alesage * 0.5,
+            "mât de {mat:.3} pour un alésage de {alesage:.3} : il flotte dans le moyeu"
         );
     }
 
@@ -2342,3 +3677,10 @@ mod tests {
         }
     }
 }
+
+
+
+
+
+
+

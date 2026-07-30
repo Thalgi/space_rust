@@ -20,17 +20,26 @@ mod unites;
 
 pub use assemblage::{Assembleur, Budget, EtatStation, Piece, Station};
 pub use composant::{
-    Composant, DonneesSousEnsemble, FamillePropulsion, Sorties, StyleTreillis, VarianteAntenne,
+    Composant, DonneesSousEnsemble, FamillePropulsion, PiedHexa, Sorties, StyleTreillis, VarianteAntenne,
+    BOUCLIER_ELANCEMENT,
     VarianteCaisson, VarianteCharge, VarianteCoiffe, VarianteModule, VariantePanneau,
     VariantePropulseur, VarianteRadiateur,
 };
+// `preset_isv` et `preset_isv_hexa` (les vaisseaux **d'un seul tenant**) ne sont
+// volontairement pas réexportés : la vue a besoin des deux moitiés séparément
+// pour ne faire tourner que la section d'équipage, via
+// `preset_isv_fixe(epine)` + `preset_isv_equipage(epine, repli)`. Rien d'autre ne
+// consomme les versions assemblées — seuls des tests s'en servent, par leur
+// chemin local, pour vérifier que les deux moitiés recomposent le vaisseau et que
+// le second preset recale bien sa charge utile.
 pub use generateur::{
-    demo_anneaux, demo_cargo, demo_charpente, demo_habitat_isv, demo_moteur_antimatiere,
+    demo_anneaux, demo_bouclier_grand, demo_bouclier_petit, demo_bouclier_thermique, demo_cargo, demo_charpente, demo_charpente_hexa,
+    demo_epine_pavillon, demo_equipage, demo_habitat_isv, demo_moteur_antimatiere,
     demo_moteur_antimatiere_principal, demo_radiateur_mega, demo_reservoir,
     generer, preset_anneau,
-    preset_comsat, preset_iss, preset_isv, preset_isv_moteur, preset_mir, preset_sonde,
-    preset_tiangong, Ossature,
-    ParamsStation, Style,
+    preset_comsat, preset_iss, preset_isv_equipage, preset_isv_fixe, preset_isv_moteur, preset_mir,
+    preset_sonde, preset_tiangong, Epine, EtatEquipage, Ossature,
+    ParamsStation, Style, ISV_AXE,
 };
 pub use maillage::MaillageStation;
 pub use montage::{

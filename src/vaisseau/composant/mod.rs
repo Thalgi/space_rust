@@ -12,6 +12,7 @@ use macroquad::prelude::*;
 use super::peintre::Peintre;
 
 mod commun;
+mod equipage;
 mod habitat;
 mod antimatiere;
 mod adaptateur;
@@ -30,10 +31,13 @@ pub use panneau_solaire::VariantePanneau;
 pub use antenne::VarianteAntenne;
 mod caisson;
 pub use caisson::{VarianteCaisson, VarianteCharge};
+mod bouclier;
+mod thermique;
+pub use bouclier::ELANCEMENT as BOUCLIER_ELANCEMENT;
 mod cargo;
 mod reservoir;
 mod treillis;
-pub use treillis::StyleTreillis;
+pub use treillis::{PiedHexa, StyleTreillis};
 use commun::*;
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 use std::rc::Rc;
@@ -91,6 +95,16 @@ pub enum Composant {
     /// (1 = cône droit, >1 = base évasée puis longue flèche, type ISV).
     /// Écoutilles axiales aux deux bouts, à leurs profils respectifs.
     Charpente { grand: Profil, petit: Profil, longueur: f32, courbure: f32, aiguille: bool },
+    /// **Charpente à section hexagonale** : même loi de taille et mêmes ports que
+    /// [`Composant::Charpente`], mais six longerons au lieu de quatre.
+    ///
+    /// Variante **candidate** pour l'épine de l'ISV, pas encore assemblée. Deux
+    /// raisons : sa largeur apparente ne varie que de 1,15 selon l'angle (contre
+    /// 1,41 pour un carré), ce qui la rend lisible sous le filtre pixel d'où
+    /// qu'on la regarde ; et son pied se raccorde au cadre hexagonal de la
+    /// propulsion **six sommets pour six**, là où le carré faisait converger
+    /// quatre coins sur deux sommets.
+    CharpenteHexa { grand: Profil, petit: Profil, longueur: f32, courbure: f32, pied: PiedHexa },
     /// **Radiateur de mégastructure** : aile en arête de poisson (boom central +
     /// `ailettes` panneaux plats de chaque côté), à l'échelle du vaisseau/km, pas
     /// des petits radiateurs de station. Se monte par un port `Surface`.
@@ -183,6 +197,60 @@ pub enum Composant {
     /// (collerettes d'accostage, embouts, mains courantes EVA) qui n'a ni le
     /// gabarit ni le sens ici.
     ModuleHabitat { profil: Profil, longueur: f32, spin: f32, attache: f32 },
+    /// **Module d'équipage rotatif** (ISV) : nacelle habitée au bout d'une
+    /// traverse, mise en rotation pour fabriquer de la gravité. Fût
+    /// **cylindrique** — un plancher courbe est ce qu'impose la rotation, là où
+    /// une section onigiri ferait varier l'inclinaison du « bas » le long de la
+    /// paroi. Axe +Z **vers l'extérieur** : ce bout est le plancher, les
+    /// `hublots` le ceinturent, et le port de montage est à l'autre bout.
+    ///
+    /// À distinguer de [`Composant::ModuleHabitat`], qui est l'habitat **fixe**.
+    ModuleEquipage { profil: Profil, longueur: f32, hublots: usize },
+    /// **Petit bouclier de tête** (ISV) : plaque hexagonale **régulière**,
+    /// première de la pile de quatre qui pare la poussière interstellaire à
+    /// 0,7 c. Deux faces distinctes — l'avant (+Z, côté poussière) est strié,
+    /// l'arrière porte les nervures. Moyeu **traversant** : les quatre plaques
+    /// sont enfilées sur un mât commun, d'où deux ports axiaux.
+    ///
+    /// À distinguer du **bouclier thermique** de l'épine, qui pare l'échappement
+    /// des moteurs et n'est qu'un détail de surface.
+    BouclierPetit { profil: Profil, rayon: f32 },
+    /// **Grand bouclier de tête** (ISV) : le même hexagone **étiré** selon Y
+    /// (`elancement`), donc à deux longs bords parallèles et une pointe en haut
+    /// et en bas. Miroir bleuté sur ses **deux** faces, ossature centrée sur le
+    /// plan de la plaque. La tête en porte trois identiques, derrière le
+    /// [`Composant::BouclierPetit`].
+    BouclierGrand { profil: Profil, rayon: f32, elancement: f32 },
+    /// **Bouclier thermique d'épine** (ISV) : bardage d'**écailles imbriquées**
+    /// qui protège la poutre du rayonnement des tuyères. Section hexagonale
+    /// comme l'épine qu'il habille, axe +Z, base (côté moteurs) à l'origine.
+    ///
+    /// Chaque écaille recouvre la **suivante vers +Z**, donc dans le sens où
+    /// s'éloigne la chaleur : le flux glisse d'une plaque à l'autre sans
+    /// rencontrer de tranche. Monté à l'envers, chaque joint offrirait une arête
+    /// au rayonnement.
+    ///
+    /// À distinguer de [`Composant::BouclierPetit`] / [`Composant::
+    /// BouclierGrand`], qui parent la poussière interstellaire à l'autre bout du
+    /// vaisseau. Pièce de surface, posée à la main : pas de port.
+    BouclierThermique { rayon: f32, longueur: f32, rangs: usize },
+    /// **Collier de rotation** de la section d'équipage : tambour **creux** qui
+    /// ceinture l'épine et porte les bras. `alesage` est le rayon intérieur
+    /// libre — il doit dégager l'épine, sinon la section ne pourrait pas
+    /// tourner. Écoutilles axiales aux deux bouts.
+    /// `rayon` est la jaquette extérieure, **découplée de `profil`** comme le
+    /// `rayon` de [`Composant::RatelierCargo`] : cette cote se règle contre la
+    /// structure traversante, et les crans de `Profil` (0,5 / 1 / 2 / 3) sont
+    /// trop grossiers pour ça — il n'y a rien entre « trop maigre pour couvrir
+    /// l'épine » et « deux fois trop gros ». `profil` ne sert plus qu'à déclarer
+    /// les ports.
+    CollierRotatif { profil: Profil, rayon: f32, alesage: f32, longueur: f32 },
+    /// **Charnière de repli** d'un bras d'équipage : chape à deux joues, axe
+    /// traversant et **vérin** télescopique en biais. `repli` va de 0 (bras
+    /// déployé, radial) à 1 (bras rabattu le long de la coque), et le vérin
+    /// s'allonge réellement avec lui. Pièce d'articulation : pas de port, elle
+    /// se pose à la main entre le collier et le bras.
+    Charniere { taille: f32, repli: f32 },
     /// **Sous-ensemble figé** : un groupe de pièces déjà assemblées (par
     /// [`crate::vaisseau::Chantier::figer`]), traité comme **une seule
     /// brique** réutilisable (pattern Composite — voir `docs/conception/
@@ -296,6 +364,7 @@ impl Composant {
             Composant::Caisson { profil, longueur, largeur, .. } => caisson::ports(*profil, *longueur, *largeur),
             Composant::ChargeUtile { profil, .. } => caisson::charge_ports(*profil),
             Composant::Charpente { grand, petit, longueur, .. } => treillis::charpente_ports(*grand, *petit, *longueur),
+            Composant::CharpenteHexa { grand, petit, longueur, .. } => treillis::charpente_hexa_ports(*grand, *petit, *longueur),
             Composant::RadiateurMega { profil, .. } => radiateur::mega_ports(*profil),
             Composant::Motrice { profil, echelle } => propulsion::motrice_ports(*profil, *echelle),
             Composant::BlocMoteur { profil, largeur } => propulsion::bloc_ports(*profil, *largeur),
@@ -310,6 +379,16 @@ impl Composant {
             Composant::NacelleCargo { profil, .. } => cargo::nacelle_ports(*profil),
             // Module d'habitat : deux écoutilles axiales, comme tout fût pressurisé.
             Composant::ModuleHabitat { profil, longueur, .. } => habitat::ports(*profil, *longueur),
+            Composant::ModuleEquipage { profil, .. } => equipage::ports(*profil),
+            // Boucliers de tête : enfilés sur un mât, donc un port à chaque bout
+            // du moyeu — c'est la même logique que le collier rotatif.
+            Composant::BouclierPetit { profil, rayon } => bouclier::ports(*profil, *rayon),
+            Composant::BouclierGrand { profil, rayon, .. } => bouclier::ports(*profil, *rayon),
+            // Bardage de surface enfilé sur l'épine, posé à la main : pas de port.
+            Composant::BouclierThermique { .. } => vec![],
+            Composant::CollierRotatif { profil, longueur, .. } => equipage::collier_ports(*profil, *longueur),
+            // Articulation posée à la main : aucun port.
+            Composant::Charniere { .. } => vec![],
             // Râtelier : deux écoutilles axiales, comme une poutre — les rangées
             // se chaînent bout à bout le long de l'épine.
             Composant::RatelierCargo { profil, longueur, .. } => cargo::ratelier_ports(*profil, *longueur),
@@ -334,6 +413,7 @@ impl Composant {
             Composant::ChargeUtile { variante, longueur, largeur, .. } => caisson::charge_dessiner(p, *variante, *longueur, *largeur),
             Composant::Propulseur { variante, taille, .. } => propulsion::dessiner(p, *variante, *taille),
             Composant::Charpente { grand, petit, longueur, courbure, aiguille } => treillis::charpente_dessiner(p, *grand, *petit, *longueur, *courbure, *aiguille),
+            Composant::CharpenteHexa { grand, petit, longueur, courbure, pied } => treillis::charpente_hexa_dessiner(p, *grand, *petit, *longueur, *courbure, *pied),
             Composant::RadiateurMega { longueur, largeur, ailettes, .. } => radiateur::mega_dessiner(p, *longueur, *largeur, *ailettes),
             Composant::Motrice { echelle, .. } => propulsion::motrice_dessiner(p, *echelle),
             Composant::BlocMoteur { largeur, .. } => propulsion::bloc_dessiner(p, *largeur),
@@ -344,6 +424,12 @@ impl Composant {
             Composant::TreillisHexagone { profil, liaison } => treillis::hexagone_dessiner(p, *profil, *liaison),
             Composant::NacelleCargo { profil, longueur, spin } => cargo::nacelle_dessiner(p, *profil, *longueur, *spin),
             Composant::ModuleHabitat { profil, longueur, spin, attache } => habitat::dessiner(p, *profil, *longueur, *spin, *attache),
+            Composant::ModuleEquipage { profil, longueur, hublots } => equipage::dessiner(p, *profil, *longueur, *hublots),
+            Composant::BouclierPetit { rayon, .. } => bouclier::petit_dessiner(p, *rayon),
+            Composant::BouclierGrand { rayon, elancement, .. } => bouclier::grand_dessiner(p, *rayon, *elancement),
+            Composant::BouclierThermique { rayon, longueur, rangs } => thermique::dessiner(p, *rayon, *longueur, *rangs),
+            Composant::CollierRotatif { rayon, alesage, longueur, .. } => equipage::collier_dessiner(p, *rayon, *alesage, *longueur),
+            Composant::Charniere { taille, repli } => equipage::charniere_dessiner(p, *taille, *repli),
             Composant::RatelierCargo { longueur, rayon, nacelles, nacelle, .. } => cargo::ratelier_dessiner(p, *longueur, *rayon, *nacelles, *nacelle),
             // Composite : empile la transformée LOCALE de chaque enfant
             // (composée par-dessus celle déjà active, cf. `Peintre::
@@ -383,6 +469,7 @@ impl Composant {
             Composant::Propulseur { variante, .. } => variante.cout(),
             // charpente : treillis évasé, coût qui croît avec la longueur.
             Composant::Charpente { longueur, .. } => treillis::charpente_cout(*longueur),
+            Composant::CharpenteHexa { longueur, .. } => treillis::charpente_hexa_cout(*longueur),
             // radiateur méga : grande aile, coût lourd (échelle mégastructure).
             Composant::RadiateurMega { longueur, .. } => radiateur::mega_cout(*longueur),
             // nacelle moteur : très lourde (bloc propulsion complet).
@@ -399,6 +486,12 @@ impl Composant {
             Composant::TreillisHexagone { .. } => treillis::hexagone_cout(),
             // module d'habitat : fût + 3 armatures triangulaires + ferrure.
             Composant::ModuleHabitat { .. } => habitat::cout(),
+            Composant::ModuleEquipage { .. } => equipage::cout(),
+            Composant::BouclierPetit { .. } => bouclier::petit_cout(),
+            Composant::BouclierGrand { .. } => bouclier::grand_cout(),
+            Composant::BouclierThermique { .. } => thermique::cout(),
+            Composant::CollierRotatif { .. } => equipage::collier_cout(),
+            Composant::Charniere { .. } => equipage::charniere_cout(),
             // nacelle : prisme + 2 collerettes + 3 rails ≈ 6.
             Composant::NacelleCargo { .. } => cargo::nacelle_cout(),
             // râtelier : la cage (3 anneaux × 2 barres par station) plus le fret.
@@ -439,6 +532,17 @@ impl Composant {
             Composant::Charpente { grand, longueur, .. } => {
                 (longueur * 0.5).max(grand.rayon() * TREILLIS_SECTION * 1.5)
             }
+            // Idem, au circonradius hexagonal (√2 fois la demi-largeur carrée),
+            // **tour du pied comprise** : elle pend sous la base, donc c'est elle
+            // qui fixe l'extension quand l'aiguille est posée.
+            Composant::CharpenteHexa { grand, longueur, pied, .. } => {
+                let rg = grand.rayon() * TREILLIS_SECTION * std::f32::consts::SQRT_2;
+                let bas = treillis::charpente_hexa_pied(*grand, *pied);
+                // Le pavillon déborde en **rayon** autant qu'en longueur : les
+                // deux comptent, sinon sa corolle sort de l'englobant.
+                let large = rg.max(treillis::charpente_hexa_pied_rayon(*grand, *pied));
+                (longueur * 0.5 + bas).hypot(large).max(large * 1.5)
+            }
             // Radiateur méga : déploiement (longueur) ou demi-envergure.
             Composant::RadiateurMega { longueur, largeur, .. } => radiateur::mega_rayon_local(*longueur, *largeur),
             // Nacelle moteur : extension max (hub avant → boucliers arrière).
@@ -457,6 +561,12 @@ impl Composant {
             Composant::TreillisHexagone { profil, liaison } => (profil.rayon() * 1.1).max(*liaison),
             // Module d'habitat : demi-longueur, ou la ferrure si elle porte loin.
             Composant::ModuleHabitat { profil, longueur, attache, .. } => habitat::rayon_local(*profil, *longueur, *attache),
+            Composant::ModuleEquipage { profil, longueur, .. } => equipage::rayon_local(*profil, *longueur),
+            Composant::BouclierPetit { rayon, .. } => bouclier::petit_rayon_local(*rayon),
+            Composant::BouclierGrand { rayon, elancement, .. } => bouclier::grand_rayon_local(*rayon, *elancement),
+            Composant::BouclierThermique { rayon, longueur, .. } => thermique::rayon_local(*rayon, *longueur),
+            Composant::CollierRotatif { rayon, longueur, .. } => equipage::collier_rayon_local(*rayon, *longueur),
+            Composant::Charniere { taille, .. } => equipage::charniere_rayon_local(*taille),
             // Nacelle : appendice déployé le long de +Z, la longueur domine.
             Composant::NacelleCargo { profil, longueur, .. } => cargo::nacelle_rayon_local(*profil, *longueur),
             // Râtelier : le coin le plus loin (demi-longueur, station + nacelle).
@@ -478,10 +588,13 @@ impl Composant {
     pub fn englobant_local(&self) -> (Vec3, f32) {
         match self {
             Composant::ModuleAxial { .. }
+            | Composant::CollierRotatif { .. }
+            | Composant::Charniere { .. }
             | Composant::Noeud { .. }
             | Composant::Treillis { .. }
             | Composant::Adaptateur { .. }
             | Composant::Charpente { .. }
+            | Composant::CharpenteHexa { .. }
             | Composant::Motrice { .. }
             | Composant::BlocMoteur { .. }
             | Composant::Reservoir { .. } => (Vec3::ZERO, self.rayon_local()),
@@ -500,6 +613,11 @@ impl Composant {
             // Nacelle : déployée d'un seul côté (+Z), sphère décalée à mi-corps
             // — sinon, centrée sur le montage, elle mordrait sur les voisines.
             Composant::NacelleCargo { profil, longueur, .. } => cargo::nacelle_englobant(*profil, *longueur),
+            // Module d'équipage : déployé vers l'extérieur depuis la traverse.
+            Composant::ModuleEquipage { profil, longueur, .. } => equipage::englobant(*profil, *longueur),
+            Composant::BouclierPetit { rayon, .. } => bouclier::petit_englobant(*rayon),
+            Composant::BouclierGrand { rayon, elancement, .. } => bouclier::grand_englobant(*rayon, *elancement),
+            Composant::BouclierThermique { rayon, longueur, .. } => thermique::englobant(*rayon, *longueur),
             // Râtelier et module d'habitat : structurels, centrés sur leur axe.
             Composant::RatelierCargo { .. } | Composant::ModuleHabitat { .. } => {
                 (Vec3::ZERO, self.rayon_local())
@@ -1011,6 +1129,881 @@ mod tests {
     }
 
     // --- Habitat principal d'échelle vaisseau (ISV) — pas les modules rotatifs.
+
+    #[test]
+    fn module_equipage_un_port_axial_a_la_base() {
+        let c = Composant::ModuleEquipage { profil: Profil::P1, longueur: 7.0, hublots: 8 };
+        let ports = c.ports();
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].genre, GenrePort::ModuleAxial);
+        // Monté par sa base : l'avant regarde la traverse (−Z), le module se
+        // déploie vers l'extérieur (+Z), où se trouve le plancher.
+        assert!((ports[0].repere.avant() - Vec3::NEG_Z).length() < 1e-5);
+        assert_eq!(c.cout(), 12.0);
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        assert!(!b.terminer().is_empty());
+    }
+
+    // --- Épine hexagonale candidate ---------------------------------------
+
+    /// Largeur apparente d'une section vue depuis l'angle `phi`, dans son plan.
+    fn largeur_silhouette(section: &[Vec2], phi: f32) -> f32 {
+        // On regarde selon `phi` : la largeur est l'extension selon la normale.
+        let n = vec2(-phi.sin(), phi.cos());
+        let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+        for v in section {
+            let d = v.dot(n);
+            lo = lo.min(d);
+            hi = hi.max(d);
+        }
+        hi - lo
+    }
+
+    /// Pire et meilleur angle, balayés finement.
+    fn extremes(section: &[Vec2]) -> (f32, f32) {
+        let (mut mini, mut maxi) = (f32::MAX, f32::MIN);
+        for i in 0..3600 {
+            let w = largeur_silhouette(section, TAU * i as f32 / 3600.0);
+            mini = mini.min(w);
+            maxi = maxi.max(w);
+        }
+        (mini, maxi)
+    }
+
+    // **Le calcul qui justifie le passage en hexagone.** À circonradius égal,
+    // l'hexagone doit avoir le même encombrement **maximal** que le carré (donc
+    // ne pas grossir l'épine) mais être franchement plus large dans son **pire**
+    // angle — c'est le pire angle qui décide de la lisibilité sous filtre pixel.
+    #[test]
+    fn la_section_hexagonale_est_plus_constante_que_la_carree() {
+        let s = 1.5_f32; // demi-largeur du carré actuel
+        let r = s * std::f32::consts::SQRT_2; // même circonradius (ses coins)
+
+        let carre: Vec<Vec2> = vec![vec2(-s, -s), vec2(s, -s), vec2(s, s), vec2(-s, s)];
+        let hexa: Vec<Vec2> = (0..6)
+            .map(|k| {
+                let a = std::f32::consts::FRAC_PI_3 * k as f32;
+                vec2(r * a.cos(), r * a.sin())
+            })
+            .collect();
+
+        let (c_min, c_max) = extremes(&carre);
+        let (h_min, h_max) = extremes(&hexa);
+
+        // Même silhouette maximale : l'épine hexagonale n'est pas plus grosse.
+        assert!(
+            (h_max - c_max).abs() < 1e-2,
+            "encombrement max différent : carré {c_max:.3} vs hexa {h_max:.3}"
+        );
+        // Et un gain net dans le pire angle, égal au rapport annoncé.
+        let gain = h_min / c_min;
+        assert!(
+            (gain - crate::vaisseau::pieces::HEXA_GAIN_SILHOUETTE).abs() < 5e-3,
+            "gain mesuré {gain:.4}, annoncé {:.4}",
+            crate::vaisseau::pieces::HEXA_GAIN_SILHOUETTE
+        );
+        // Et la variation angulaire est bien celle qui rend le carré capricieux.
+        assert!(c_max / c_min > 1.40, "carré : {:.3}", c_max / c_min);
+        assert!(h_max / h_min < 1.16, "hexa : {:.3}", h_max / h_min);
+    }
+
+    /// Rayon maximal des sommets cuits dont le `z` tombe dans `[z0, z1]`.
+    fn rayon_tranche(c: &Composant, z0: f32, z1: f32) -> f32 {
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        let mut r: f32 = 0.0;
+        for lot in b.terminer() {
+            for v in &lot.vertices {
+                let z = v.position[2];
+                if (z0..=z1).contains(&z) {
+                    r = r.max(vec2(v.position[0], v.position[1]).length());
+                }
+            }
+        }
+        r
+    }
+
+    // **La tour du pied prolonge le cône, elle ne s'y raccorde pas.** C'est tout
+    // l'intérêt d'avoir basculé le cadre de 90° : sa section est désormais
+    // parallèle à celle du cône, donc de même rayon, et les longerons descendent
+    // tout droit. Deux choses à vérifier — que la tour ne se rétrécit pas (c'est
+    // un prisme, pas un second cône) et qu'elle part bien du rayon de base du cône.
+    #[test]
+    fn la_tour_du_pied_prolonge_le_cone_sans_se_rétrecir() {
+        let (grand, petit, longueur) = (Profil::P3, Profil::P0, 40.0);
+        let demi = longueur * 0.5;
+        let hexa = Composant::CharpenteHexa { grand, petit, longueur, courbure: 2.6, pied: PiedHexa::Tour };
+
+        // Rayon du cône juste au-dessus de sa base, et de la tour juste en dessous.
+        let r_cone = rayon_tranche(&hexa, -demi + 0.01, -demi + 1.0);
+        let r_haut = rayon_tranche(&hexa, -demi - 1.0, -demi - 0.01);
+        assert!(
+            (r_cone - r_haut).abs() < 0.05 * r_cone,
+            "la tour démarre à {r_haut:.3} alors que la base du cône fait {r_cone:.3}"
+        );
+
+        // Et en bas de tour, le même rayon : aucun rétrécissement.
+        let pied = treillis::charpente_hexa_pied(grand, PiedHexa::Tour);
+        let r_bas = rayon_tranche(&hexa, -demi - pied, -demi - pied + 0.6);
+        assert!(
+            (r_bas - r_cone).abs() < 0.05 * r_cone,
+            "bas de tour à {r_bas:.3} contre {r_cone:.3} en haut : la tour se rétrécit"
+        );
+
+        // La tour lit comme une tour : plus haute que large.
+        assert!(pied > r_cone, "tour haute de {pied:.3} pour un rayon {r_cone:.3}");
+    }
+
+    // **Le pavillon s'ouvre**, là où la tour garde une section constante. C'est
+    // toute la demande du schéma : « que le cône s'épanouisse encore plus ».
+    #[test]
+    fn le_pavillon_souvre_au_lieu_de_prolonger_droit() {
+        let (grand, petit, longueur) = (Profil::P3, Profil::P0, 40.0);
+        let demi = longueur * 0.5;
+        let faire = |pied| Composant::CharpenteHexa { grand, petit, longueur, courbure: 2.6, pied };
+
+        let tour = faire(PiedHexa::Tour);
+        let pav = faire(PiedHexa::Pavillon);
+
+        // Au raccord, les deux partent du **même** rayon que la base du cône :
+        // l'accostage exact ne doit pas être perdu en changeant de pied.
+        let r_cone = rayon_tranche(&tour, -demi + 0.01, -demi + 1.0);
+        let r_col_t = rayon_tranche(&tour, -demi - 0.8, -demi - 0.01);
+        let r_col_p = rayon_tranche(&pav, -demi - 0.8, -demi - 0.01);
+        assert!((r_col_t - r_cone).abs() < 0.08 * r_cone, "tour : col à {r_col_t:.3} vs {r_cone:.3}");
+        assert!((r_col_p - r_cone).abs() < 0.15 * r_cone, "pavillon : col à {r_col_p:.3} vs {r_cone:.3}");
+
+        // Mais au bord, le pavillon est **franchement** plus large — et la tour,
+        // elle, n'a pas bougé.
+        let bas_t = treillis::charpente_hexa_pied(grand, PiedHexa::Tour);
+        let bas_p = treillis::charpente_hexa_pied(grand, PiedHexa::Pavillon);
+        let bord_t = rayon_tranche(&tour, -demi - bas_t, -demi - bas_t + 0.6);
+        let bord_p = rayon_tranche(&pav, -demi - bas_p, -demi - bas_p + 0.6);
+        assert!(
+            bord_p > bord_t * 1.5,
+            "le pavillon ne s'ouvre pas assez : bord {bord_p:.3} contre {bord_t:.3} pour la tour"
+        );
+        // Et l'englobant suit cette ouverture radiale.
+        assert!(
+            pav.rayon_local() >= bord_p,
+            "englobant {:.3} plus petit que la corolle {bord_p:.3}",
+            pav.rayon_local()
+        );
+    }
+
+    /// Empreinte (étendue en X, étendue en Y) des sommets cuits dont le `z` tombe
+    /// dans `[z0, z1]`.
+    ///
+    /// Mesurer **les deux** axes séparément est le point : `rayon_tranche` ne rend
+    /// que la distance maximale à l'axe, or un écrasement selon Y laisse les
+    /// sommets portés par X intacts — le rayon maximal ne bouge donc pas d'un
+    /// poil. C'est précisément ce qui a laissé passer un col écrasé.
+    fn etendues_dessin<F: FnOnce(&mut Batisseur)>(dessin: F, z0: f32, z1: f32) -> (f32, f32) {
+        let mut b = Batisseur::new();
+        dessin(&mut b);
+        let (mut x, mut y) = (0.0f32, 0.0f32);
+        for lot in b.terminer() {
+            for v in &lot.vertices {
+                let z = v.position[2];
+                if (z0..=z1).contains(&z) {
+                    x = x.max(v.position[0].abs());
+                    y = y.max(v.position[1].abs());
+                }
+            }
+        }
+        (2.0 * x, 2.0 * y)
+    }
+
+    // **Le col du pavillon doit épouser la base du cône**, qui est un hexagone
+    // régulier. L'écrasement ne peut donc pas être appliqué d'emblée : il part de 1
+    // au col et ne se creuse qu'en descendant vers l'embouchure.
+    //
+    // 🐛 Ce test existe parce que le premier jet écrasait la section dès le col :
+    // les quatre sommets obliques tombaient à un autre Y que ceux du cône et le
+    // raccord se voyait. `le_pavillon_souvre_au_lieu_de_prolonger_droit` ne l'avait
+    // pas vu — il ne compare que des **rayons**, et l'écrasement selon Y ne change
+    // pas le rayon maximal. D'où la mesure des deux étendues séparément.
+    #[test]
+    fn le_col_du_pavillon_epouse_la_section_du_cone() {
+        use crate::vaisseau::pieces::etirement_progressif;
+        // Condition de forme, exacte : aucun écrasement au col.
+        assert_eq!(etirement_progressif(0.0, treillis::PAVILLON_ETIREMENT), 1.0);
+        // ...et l'écrasement demandé bien atteint au bord.
+        assert!((etirement_progressif(1.0, 0.55) - 0.55).abs() < 1e-6);
+
+        // **Le pavillon est mesuré seul**, sans le cône. Mesuré sur la charpente
+        // complète, la tranche du col contient aussi le cadre de base du cône —
+        // un hexagone régulier dont l'épaisseur déborde de part et d'autre du plan
+        // de jonction. C'est *lui* qu'on mesurerait, et le test resterait vert avec
+        // un col écrasé : vérifié.
+        let (r_col, r_bord, hauteur) = (2.0_f32, 4.2, 4.0);
+        let e = treillis::PAVILLON_ETIREMENT;
+        let pavillon = |b: &mut Batisseur| {
+            crate::vaisseau::pieces::pavillon_hexagonal(
+                b, Vec3::ZERO, r_col, r_bord, hauteur, e, 3, COULEUR, SOMBRE,
+            )
+        };
+
+        // Au col : hexagone **régulier**, dont l'empreinte vaut 2R en X et R√3 en
+        // Y, soit un rapport de 2/√3 ≈ 1,155.
+        let (lx, ly) = etendues_dessin(pavillon, -hauteur * 0.10, -0.01);
+        let regulier = 2.0 / 3.0_f32.sqrt();
+        assert!(
+            (lx / ly - regulier).abs() < 0.12,
+            "au col, largeur/hauteur = {:.3} au lieu de {regulier:.3} : le col est déjà écrasé, \
+             il ne peut pas épouser la base du cône",
+            lx / ly
+        );
+
+        // À l'embouchure, en revanche, la pierre est bien taillée.
+        let (mx, my) = etendues_dessin(pavillon, -hauteur, -hauteur * 0.90);
+        assert!(
+            mx / my > 1.7,
+            "à l'embouchure, largeur/hauteur = {:.3} : l'écrasement ne s'est pas installé",
+            mx / my
+        );
+    }
+
+    // **La tour qui couronne le pavillon se pose sur l'embouchure**, donc sur une
+    // section **écrasée** — pas sur un hexagone régulier comme la tour du pied.
+    //
+    // C'est le même piège que le col, à l'autre bout : `tour_hexagonale` dessinait
+    // une section régulière, et la réutiliser telle quelle aurait recréé le
+    // désaccord tout juste corrigé. On mesure donc de part et d'autre du plan
+    // d'embouchure, en X **et** en Y — un rapport ne suffit pas d'un seul côté.
+    #[test]
+    fn la_tour_du_pavillon_reprend_la_section_de_lembouchure() {
+        let (grand, petit, longueur) = (Profil::P3, Profil::P0, 40.0);
+        let demi = longueur * 0.5;
+        let pav =
+            Composant::CharpenteHexa { grand, petit, longueur, courbure: 2.6, pied: PiedHexa::Pavillon };
+        let dessin = |b: &mut Batisseur| pav.dessiner(b);
+
+        // Plan de l'embouchure : fin de la corolle, début de la tour.
+        let bouche = -demi - treillis::charpente_hexa_embouchure(grand);
+        let bas = treillis::charpente_hexa_pied(grand, PiedHexa::Pavillon);
+        let h_tour = bas - treillis::charpente_hexa_embouchure(grand);
+
+        // ⚠️ On échantillonne **aux niveaux**, pas entre eux : un cylindre cuit ne
+        // porte de sommets qu'à ses deux bouts, si bien qu'une tranche prise au
+        // milieu d'une baie est **vide** — la mesure y rendait NaN.
+        let (bx, by) = etendues_dessin(dessin, bouche - 0.5, bouche + 0.5);
+        let (tx, ty) = etendues_dessin(dessin, -demi - bas - 0.5, -demi - bas + 0.5);
+
+        let (r_bouche, r_tour) = (bx / by, tx / ty);
+
+        // L'embouchure est bien écrasée…
+        assert!(r_bouche > 1.7, "embouchure à {r_bouche:.3} : pas écrasée");
+        // …et la tour **aussi**, au lieu d'être régulière (1,155). C'est
+        // l'assertion qui attrape une `tour_hexagonale` laissée à `etirement = 1`.
+        assert!(
+            r_tour > 1.7,
+            "la tour est à {r_tour:.3} : section régulière posée sur une embouchure écrasée"
+        );
+        // Les deux sections se ressemblent : la tour prolonge l'embouchure.
+        assert!(
+            (r_tour - r_bouche).abs() < 0.25,
+            "embouchure {r_bouche:.3} contre tour {r_tour:.3} : les deux sections divergent"
+        );
+        // Et la tour ne se rétrécit pas : elle reprend le rayon de l'embouchure.
+        assert!(
+            (tx - bx).abs() < 0.12 * bx,
+            "tour large de {tx:.3} contre {bx:.3} à l'embouchure : elle n'est pas droite"
+        );
+        // **Gabarit du fût.** Ce n'est plus la virole d'interface d'origine : la
+        // hauteur a été multipliée par six (2026-07-30) pour en faire le fût qui
+        // porte la propulsion. L'assertion précédente — « reste plus courte que la
+        // moitié de l'embouchure » — disait donc l'inverse de l'intention actuelle
+        // et a été remplacée, pas assouplie.
+        //
+        // Ce qui reste à tenir : un fût à peu près aussi haut que l'embouchure est
+        // large. Plus court, il redevient une bague ; beaucoup plus long, il
+        // rallonge le vaisseau du mauvais côté et concurrence l'épine elle-même.
+        let elance = h_tour / tx;
+        assert!(
+            (0.7..1.6).contains(&elance),
+            "fût haut de {h_tour:.3} pour une embouchure large de {tx:.3} (rapport {elance:.2})"
+        );
+        // Et il reste une extrémité, pas une seconde épine.
+        assert!(
+            h_tour < longueur * 0.35,
+            "fût de {h_tour:.3} sur une épine de {longueur} : il concurrence la charpente"
+        );
+        // L'englobant tient compte de la tour, sinon la pièce serait sous-estimée.
+        assert!(pav.rayon_local() > (demi + bas) * 0.99);
+    }
+
+    // **Les A…F du schéma.** L'embouchure doit avoir **deux familles
+    // d'arêtes** : quatre obliques égales, et deux (perpendiculaires à Y) égales
+    // entre elles mais différentes des autres. Un hexagone régulier n'en aurait
+    // qu'une seule famille — c'est l'écrasement selon Y qui les sépare.
+    #[test]
+    fn lembouchure_a_quatre_aretes_obliques_et_deux_droites() {
+        // La **vraie** constante de production, pas une copie : sinon le test
+        // resterait vert alors que la pièce livrée aurait perdu son écrasement.
+        let (r, etirement) = (3.0_f32, treillis::PAVILLON_ETIREMENT);
+        let v = crate::vaisseau::pieces::hexa_section(Vec3::ZERO, Vec3::X, Vec3::Y * etirement, r);
+        let cote = |i: usize| (v[(i + 1) % 6] - v[i]).length();
+
+        // Sommets 0 et 3 sont sur ±X : les arêtes 1-2 (haut) et 4-5 (bas) sont les
+        // deux horizontales, ce sont les C et F du schéma.
+        let (c, f) = (cote(4), cote(1));
+        let obliques = [cote(0), cote(2), cote(3), cote(5)];
+
+        // C = F.
+        assert!((c - f).abs() < 1e-4, "C={c:.4} et F={f:.4} devraient être égales");
+        // A = B = D = E.
+        for (i, o) in obliques.iter().enumerate() {
+            assert!(
+                (o - obliques[0]).abs() < 1e-4,
+                "arête oblique {i} = {o:.4}, attendu {:.4}",
+                obliques[0]
+            );
+        }
+        // Et les deux familles sont bien **distinctes** : sans ça la contrainte du
+        // schéma serait satisfaite par un hexagone régulier, donc vide de sens.
+        assert!(
+            (obliques[0] - c).abs() > 0.05 * r,
+            "les deux familles se confondent ({:.4} vs {c:.4}) : l'écrasement ne sert à rien",
+            obliques[0]
+        );
+
+        // **Silhouette « taille émeraude »** : deux longs côtés dominants et quatre
+        // biseaux courts. Le simple fait que les deux familles diffèrent ne suffit
+        // pas — à 0,82 elles différaient déjà (rapport 1,15) et la section lisait
+        // comme un hexagone vaguement irrégulier. C'est le **contraste** qui fait
+        // la forme, d'où un seuil sur le rapport et non sur une simple inégalité.
+        let contraste = c / obliques[0];
+        assert!(
+            contraste > 1.35,
+            "grand côté / biseau = {contraste:.2} : trop peu contrasté pour lire une pierre taillée"
+        );
+        // Mais pas au point d'aplatir l'hexagone en losange : les biseaux doivent
+        // rester de vraies arêtes.
+        assert!(
+            contraste < 1.9,
+            "grand côté / biseau = {contraste:.2} : la section s'aplatit, les biseaux disparaissent"
+        );
+        // Empreinte nettement plus large que haute, comme une table de pierre.
+        let (largeur, hauteur) = (2.0 * r, 2.0 * v[1].y);
+        let allonge = largeur / hauteur;
+        assert!(
+            (1.8..2.8).contains(&allonge),
+            "largeur/hauteur = {allonge:.2}, hors du gabarit émeraude visé"
+        );
+        // Les horizontales gardent la longueur du rayon (elles sont portées par X,
+        // que l'écrasement ne touche pas).
+        assert!((c - r).abs() < 1e-4, "C devrait valoir le rayon {r}, vaut {c:.4}");
+    }
+
+    // Sans aiguille, rien ne doit dépasser sous la base : c'est la tour, et elle
+    // seule, qui allonge la pièce vers l'arrière.
+    #[test]
+    fn sans_aiguille_la_charpente_hexa_sarrete_a_sa_base() {
+        let (grand, petit, longueur) = (Profil::P3, Profil::P0, 40.0);
+        let demi = longueur * 0.5;
+        let nue = Composant::CharpenteHexa { grand, petit, longueur, courbure: 2.6, pied: PiedHexa::Aucun };
+        let mut b = Batisseur::new();
+        nue.dessiner(&mut b);
+        for lot in b.terminer() {
+            for v in &lot.vertices {
+                assert!(
+                    v.position[2] >= -demi - 0.4,
+                    "sommet à z={} sous la base {}", v.position[2], -demi
+                );
+            }
+        }
+        // Et l'englobant reflète la différence entre les deux.
+        let avec = Composant::CharpenteHexa { grand, petit, longueur, courbure: 2.6, pied: PiedHexa::Tour };
+        assert!(
+            avec.rayon_local() > nue.rayon_local(),
+            "la tour n'est pas comptée dans l'extension de la pièce"
+        );
+    }
+
+    #[test]
+    fn charpente_hexa_expose_les_memes_ports_que_la_carree() {
+        let (grand, petit, longueur) = (Profil::P3, Profil::P0, 40.0);
+        let carre = Composant::Charpente { grand, petit, longueur, courbure: 2.6, aiguille: true };
+        let hexa = Composant::CharpenteHexa { grand, petit, longueur, courbure: 2.6, pied: PiedHexa::Tour };
+        let (pc, ph) = (carre.ports(), hexa.ports());
+        assert_eq!(pc.len(), ph.len());
+        for (a, b) in pc.iter().zip(ph.iter()) {
+            assert_eq!(a.genre, b.genre);
+            assert_eq!(a.profil, b.profil);
+            assert!((a.repere.pos - b.repere.pos).length() < 1e-5);
+        }
+        // Et elle dessine quelque chose, cadre compris.
+        let mut b = Batisseur::new();
+        hexa.dessiner(&mut b);
+        assert!(!b.terminer().is_empty());
+    }
+
+    // --- Bouclier thermique d'épine ----------------------------------------
+
+    /// Sommets du bardage, groupés par **niveau axial** : rayon max à chaque
+    /// cote où la pièce a de la matière. Une nappe cuite n'a de sommets qu'aux
+    /// bords de ses facettes, donc interroger une tranche quelconque ne
+    /// donnerait rien — c'est le piège déjà payé sur les cylindres et les cônes.
+    fn niveaux_du_bardage(c: &Composant) -> Vec<(f32, f32)> {
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        let mut n: Vec<(f32, f32)> = Vec::new();
+        for lot in b.terminer() {
+            for v in &lot.vertices {
+                let (z, r) = (v.position[2], vec2(v.position[0], v.position[1]).length());
+                match n.iter_mut().find(|(cz, _)| (*cz - z).abs() < 1e-3) {
+                    Some(e) => e.1 = e.1.max(r),
+                    None => n.push((z, r)),
+                }
+            }
+        }
+        n.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        n
+    }
+
+    // Deux propriétés, et il faut les deux — la première seule ne dit presque
+    // rien (vérifié : elle reste verte avec un recouvrement **nul**, où les
+    // écailles se touchent bord à bord au lieu de se chevaucher).
+    //
+    // 1. le rayon **monte puis retombe** à chaque rang : l'écaille se relève
+    //    jusqu'à sa lèvre, la suivante repart plaquée contre l'épine. C'est ce
+    //    qui sépare un bardage d'un manchon conique, lequel ne redescend jamais ;
+    // 2. les écailles se **recouvrent vraiment** : le bord libre d'un rang est
+    //    axialement **au-delà** du bord plaqué du rang suivant. C'est là que
+    //    tient toute la fonction — une écaille libre de se dilater sous sa
+    //    voisine, et un flux qui ne rencontre jamais de tranche de face. Bord à
+    //    bord, la pièce a exactement la même silhouette et ne protège plus rien.
+    #[test]
+    fn les_ecailles_du_bardage_se_recouvrent() {
+        let (rayon, rangs) = (1.25_f32, 13usize);
+        let n = niveaux_du_bardage(&Composant::BouclierThermique { rayon, longueur: 16.0, rangs });
+
+        let retombees = n.windows(2).filter(|w| w[1].1 < w[0].1 - 1e-4).count();
+        assert!(
+            retombees >= rangs - 2,
+            "{retombees} retombées de rayon pour {rangs} rangs : ce n'est plus un bardage mais un manchon"
+        );
+
+        // Bords **plaqués** (rayon nu) et bords **libres** (rayon max), triés.
+        let maxi = n.iter().fold(0.0f32, |m, (_, r)| m.max(*r));
+        let marge = (maxi - rayon) * 0.05;
+        let niveaux = |garder: &dyn Fn(f32) -> bool| -> Vec<f32> {
+            n.iter().filter(|(_, r)| garder(*r)).map(|(z, _)| *z).collect()
+        };
+        let plaques = niveaux(&|r| r < rayon + marge);
+        let libres = niveaux(&|r| r > maxi - marge);
+        assert_eq!(plaques.len(), rangs, "un bord plaqué par rang attendu");
+        assert_eq!(libres.len(), rangs, "un bord libre par rang attendu");
+
+        let pas = plaques[1] - plaques[0];
+        for j in 0..rangs - 1 {
+            let chevauchement = (libres[j] - plaques[j + 1]) / pas;
+            assert!(
+                chevauchement > 0.2,
+                "rang {j} : le bord libre déborde de {chevauchement:.2} pas sur le rang suivant — \
+                 les écailles se touchent au lieu de se recouvrir"
+            );
+        }
+    }
+
+    // « Pas très épais » : le bardage **habille** l'épine, il ne la double pas.
+    // La borne est en dur et non lue sur la constante — c'est justement la
+    // consigne qu'on garde, pas la valeur du jour.
+    #[test]
+    fn le_bardage_thermique_reste_mince() {
+        let rayon = 1.25_f32;
+        let n = niveaux_du_bardage(&Composant::BouclierThermique { rayon, longueur: 16.0, rangs: 13 });
+        let maxi = n.iter().fold(0.0f32, |m, (_, r)| m.max(*r));
+        let epaisseur = (maxi - rayon) / rayon;
+        assert!(
+            epaisseur < 0.20,
+            "saillie de {:.0} % du rayon : ce ne sont plus des écailles mais des ailettes",
+            epaisseur * 100.0
+        );
+        assert!(epaisseur > 0.04, "saillie de {epaisseur:.3} : le relief ne se verra pas");
+    }
+
+    // Le bardage occupe une **place réservée** sur l'épine, entre le pied et le
+    // fret. S'il débordait de la longueur annoncée il entrerait dans l'un ou
+    // l'autre, et l'englobant mentirait. Le dernier rang déborde du sien de tout
+    // le recouvrement : c'est le pas qui doit en tenir compte, pas la pièce qui
+    // doit dépasser.
+    #[test]
+    fn le_bardage_thermique_tient_dans_sa_longueur() {
+        for (longueur, rangs) in [(16.0_f32, 13usize), (9.0, 5), (36.0, 30)] {
+            let n = niveaux_du_bardage(&Composant::BouclierThermique { rayon: 1.25, longueur, rangs });
+            let (bas, haut) = (n[0].0, n[n.len() - 1].0);
+            assert!(
+                (-1e-3..=1e-3).contains(&bas),
+                "bardage commençant à {bas:.3} au lieu de 0 ({rangs} rangs)"
+            );
+            assert!(
+                (haut - longueur).abs() < 1e-3,
+                "bardage finissant à {haut:.3} pour une longueur annoncée de {longueur} ({rangs} rangs)"
+            );
+        }
+    }
+
+    // --- Boucliers de tête -------------------------------------------------
+
+    // Une plaque s'**enfile** sur le mât commun aux quatre boucliers : elle doit
+    // donc offrir une sortie de l'autre côté, sinon la pile ne peut pas se
+    // chaîner et il faudrait poser chaque plaque à la main.
+    #[test]
+    fn les_boucliers_setirent_sur_un_mat_traversant() {
+        for c in [
+            Composant::BouclierPetit { profil: Profil::P1, rayon: 3.0 },
+            Composant::BouclierGrand { profil: Profil::P1, rayon: 4.2, elancement: 1.75 },
+        ] {
+            let ports = c.ports();
+            assert_eq!(ports.len(), 2, "{c:?} : une plaque enfilée a deux sorties");
+            assert!(ports.iter().all(|p| p.genre == GenrePort::ModuleAxial));
+            // Un port de chaque côté, et **dos à dos** : celui de +Z regarde
+            // l'avant, celui de −Z regarde le vaisseau.
+            let avant = ports.iter().find(|p| p.repere.pos.z > 0.0).expect("port avant");
+            let arriere = ports.iter().find(|p| p.repere.pos.z < 0.0).expect("port arrière");
+            assert!((avant.repere.avant() - Vec3::Z).length() < 1e-5);
+            assert!((arriere.repere.avant() - Vec3::NEG_Z).length() < 1e-5);
+
+            let mut b = Batisseur::new();
+            c.dessiner(&mut b);
+            assert!(!b.terminer().is_empty());
+        }
+    }
+
+    // Une plaque est **symétrique de part et d'autre de son plan** — c'est ce
+    // qui la distingue de toutes les autres pièces, montées par un bout. Son
+    // englobant est donc centré sur l'origine, et sa géométrie doit rester mince
+    // en Z : une plaque qui s'épaissirait ne serait plus une plaque.
+    #[test]
+    fn une_plaque_de_bouclier_reste_mince_et_centree() {
+        for (c, rayon) in [
+            (Composant::BouclierPetit { profil: Profil::P1, rayon: 3.0 }, 3.0_f32),
+            (Composant::BouclierGrand { profil: Profil::P1, rayon: 4.2, elancement: 1.75 }, 4.2),
+        ] {
+            let (centre, r) = c.englobant_local();
+            assert_eq!(centre, Vec3::ZERO, "{c:?} : englobant décentré");
+            let mut b = Batisseur::new();
+            c.dessiner(&mut b);
+            let mut epaisseur = 0.0f32;
+            for lot in b.terminer() {
+                for v in &lot.vertices {
+                    let p = vec3(v.position[0], v.position[1], v.position[2]);
+                    assert!(
+                        (p - centre).length() <= r + 1e-3,
+                        "sommet {p:?} hors de l'englobant (rayon {r})"
+                    );
+                    epaisseur = epaisseur.max(p.z.abs());
+                }
+            }
+            // Le moyeu et les nervures dépassent, c'est voulu ; ce qui ne doit
+            // pas arriver, c'est qu'ils prennent le pas sur la plaque.
+            assert!(
+                epaisseur < rayon * 0.20,
+                "demi-épaisseur {epaisseur:.2} pour un rayon {rayon} : ce n'est plus une plaque"
+            );
+        }
+    }
+
+    // Une nappe cousue à l'envers ne s'affiche **pas du tout** : macroquad ne
+    // double-face pas les triangles. C'est une panne muette — la plaque perd une
+    // face et rien ne le signale, ni au compilateur ni aux autres tests. On
+    // vérifie donc que chaque peau regarde bien dehors, en isolant ses triangles
+    // par leur cote (les deux peaux sont les seules surfaces rigoureusement
+    // planes de la pièce ; cônes et tubes n'ont jamais trois sommets à la même).
+    #[test]
+    fn les_deux_peaux_dune_plaque_regardent_chacune_dehors() {
+        for (c, rayon) in [
+            (Composant::BouclierPetit { profil: Profil::P1, rayon: 3.0 }, 3.0_f32),
+            (Composant::BouclierGrand { profil: Profil::P1, rayon: 4.2, elancement: 1.75 }, 4.2),
+        ] {
+            let peau = bouclier::demi_epaisseur(rayon);
+            let mut b = Batisseur::new();
+            c.dessiner(&mut b);
+            let (mut devant, mut derriere) = (0usize, 0usize);
+            for lot in b.terminer() {
+                for t in lot.indices.chunks_exact(3) {
+                    let p: Vec<Vec3> = t
+                        .iter()
+                        .map(|i| {
+                            let v = lot.vertices[*i as usize].position;
+                            vec3(v[0], v[1], v[2])
+                        })
+                        .collect();
+                    let cote = |z: f32| (p[0].z - z).abs() < 1e-4 && (p[1].z - z).abs() < 1e-4 && (p[2].z - z).abs() < 1e-4;
+                    let nz = (p[1] - p[0]).cross(p[2] - p[0]).z;
+                    if cote(peau) {
+                        assert!(nz > 0.0, "{c:?} : triangle de face avant cousu à l'envers (nz={nz:.4})");
+                        devant += 1;
+                    } else if cote(-peau) {
+                        assert!(nz < 0.0, "{c:?} : triangle de face arrière cousu à l'envers (nz={nz:.4})");
+                        derriere += 1;
+                    }
+                }
+            }
+            // Et les deux peaux existent bel et bien : un test qui ne trouve
+            // aucun triangle passerait en vert sans rien avoir mesuré.
+            assert!(devant >= 12, "{c:?} : {devant} triangles de face avant seulement");
+            assert!(derriere >= 12, "{c:?} : {derriere} triangles de face arrière seulement");
+        }
+    }
+
+    // L'étirement est **toute** la différence de forme entre les deux plaques :
+    // la grande doit être franchement plus haute que large, la petite
+    // rigoureusement régulière. Mesuré sur la géométrie cuite et non sur la
+    // constante, sinon le test ne dit rien de ce qui est dessiné.
+    #[test]
+    fn la_grande_plaque_est_elancee_la_petite_reguliere() {
+        let mesurer = |c: &Composant| {
+            let mut b = Batisseur::new();
+            c.dessiner(&mut b);
+            let (mut x, mut y) = (0.0f32, 0.0f32);
+            for lot in b.terminer() {
+                for v in &lot.vertices {
+                    x = x.max(v.position[0].abs());
+                    y = y.max(v.position[1].abs());
+                }
+            }
+            y / x
+        };
+        // Hexagone régulier pointe en haut : demi-hauteur R, demi-largeur
+        // R·cos30 = 0,866 R, donc un rapport de 1,155 et pas de 1.
+        let petit = mesurer(&Composant::BouclierPetit { profil: Profil::P1, rayon: 3.0 });
+        assert!(
+            (petit - 2.0 / 3.0f32.sqrt()).abs() < 0.02,
+            "petit bouclier : rapport hauteur/largeur {petit:.3}, il n'est plus régulier"
+        );
+        // L'étirement doit **arriver jusqu'à la géométrie** : c'est le seul
+        // moyen de savoir que la constante n'est pas restée en chemin.
+        //
+        // Mesuré d'une **grande plaque à l'autre** et non contre la petite : le
+        // rognage des pointes raccourcit la hauteur de ≈ TAB/2, si bien que le
+        // rapport grand/petit ne vaut plus l'élancement. Entre deux grandes il
+        // se simplifie, puisqu'elles portent le même méplat.
+        let grand = |e: f32| {
+            mesurer(&Composant::BouclierGrand { profil: Profil::P1, rayon: 3.0, elancement: e })
+        };
+        let etire = grand(bouclier::ELANCEMENT) / grand(1.0);
+        assert!(
+            (etire - bouclier::ELANCEMENT).abs() < 0.02,
+            "étirement mesuré {etire:.3} au lieu de {:.3}",
+            bouclier::ELANCEMENT
+        );
+        // Et la grande reste franchement plus élancée que la petite, méplat
+        // compris — sans quoi les deux pièces ne se distinguent plus de loin.
+        assert!(
+            grand(bouclier::ELANCEMENT) > petit * 1.15,
+            "grand bouclier : rapport {:.3} contre {petit:.3} pour le petit",
+            grand(bouclier::ELANCEMENT)
+        );
+        // Et l'élancement doit rester dans la fourchette relevée sur le schéma
+        // (rapport hauteur/largeur ≈ 1,35, cliché pris de biais donc un peu
+        // plus). En dessous elle ne se distingue plus de la petite ; au-dessus
+        // elle redevient la pierre taillée en long qu'on a corrigée.
+        assert!(
+            (1.15..=1.5).contains(&bouclier::ELANCEMENT),
+            "élancement {} hors de ce que montre le schéma",
+            bouclier::ELANCEMENT
+        );
+    }
+
+    // La grande plaque est **rétrécie en largeur seule**, sans que rien d'autre
+    // bouge. Le vérifier demande de comparer deux plaques de **même rayon** : à
+    // rayon égal, la petite donne la largeur pleine et la grande la largeur
+    // rabotée, si bien que leur rapport isole exactement le facteur cherché.
+    //
+    // Il ne suffit pas de mesurer la largeur : la raboter en réduisant le rayon
+    // aurait donné la même largeur tout en emportant le moyeu, dont l'alésage ne
+    // laisse que 0,012 de jeu au mât. On vérifie donc aussi que le **moyeu n'a
+    // pas bougé** — c'est là qu'était le vrai risque.
+    #[test]
+    fn la_grande_plaque_est_retrecie_en_largeur_seule() {
+        let rayon = 3.0_f32;
+        let peau = |c: &Composant| {
+            let mut b = Batisseur::new();
+            c.dessiner(&mut b);
+            let mut large = 0.0f32;
+            let mut alesage = f32::MAX;
+            for lot in b.terminer() {
+                for v in &lot.vertices {
+                    let p = vec3(v.position[0], v.position[1], v.position[2]);
+                    if (p.z.abs() - bouclier::demi_epaisseur(rayon)).abs() < 1e-4 {
+                        large = large.max(p.x.abs());
+                    }
+                    // Sommets du moyeu : les seuls à vivre loin du plan médian.
+                    if p.z.abs() > rayon * 0.05 {
+                        alesage = alesage.min(p.xy().length());
+                    }
+                }
+            }
+            (large, alesage)
+        };
+        let (l_petit, a_petit) = peau(&Composant::BouclierPetit { profil: Profil::P1, rayon });
+        let (l_grand, a_grand) =
+            peau(&Composant::BouclierGrand { profil: Profil::P1, rayon, elancement: 1.3 });
+        let rabot = l_grand / l_petit;
+        assert!(
+            (rabot - bouclier::ETROITESSE).abs() < 0.02,
+            "largeur rabotée d'un facteur {rabot:.3} au lieu de {:.3}",
+            bouclier::ETROITESSE
+        );
+        assert!(
+            (a_grand - a_petit).abs() < 1e-3,
+            "alésage {a_grand:.3} contre {a_petit:.3} : le moyeu a suivi le rétrécissement, \
+             le mât commun ne passera plus"
+        );
+    }
+
+    // Les deux **longs bords** — les seuls parallèles à Y — ont été raccourcis de
+    // moitié en remontant les épaules vers le milieu. La cote qui compte est leur
+    // longueur *rapportée à la hauteur*, parce que c'est elle qui décrit la
+    // silhouette : un hexagone régulier étiré donne exactement 0,5, et la moitié
+    // de ça vise ≈ 0,27 une fois les pointes rognées.
+    //
+    // Borné des deux côtés. Trop long, le raccourcissement n'a pas eu lieu ; trop
+    // court, les épaules se rejoignent et la plaque devient un losange — elle
+    // perd les deux bords parallèles qui font toute sa forme.
+    #[test]
+    fn les_longs_bords_dune_grande_plaque_sont_reduits_de_moitie() {
+        let rayon = 4.2_f32;
+        let peau = bouclier::demi_epaisseur(rayon);
+        let c = Composant::BouclierGrand { profil: Profil::P1, rayon, elancement: 1.3 };
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        let nappe: Vec<Vec3> = b
+            .terminer()
+            .iter()
+            .flat_map(|l| l.vertices.iter())
+            .map(|v| vec3(v.position[0], v.position[1], v.position[2]))
+            .filter(|v| (v.z.abs() - peau).abs() < 1e-4)
+            .collect();
+        let (haut, large) = nappe.iter().fold((0.0f32, 0.0f32), |(h, l), v| (h.max(v.y), l.max(v.x)));
+        // Le long bord vit à l'abscisse extrême : sa longueur est l'amplitude en
+        // Y des sommets qui s'y trouvent.
+        let bord: Vec<f32> = nappe
+            .iter()
+            .filter(|v| (v.x.abs() - large).abs() < 1e-3)
+            .map(|v| v.y)
+            .collect();
+        assert!(!bord.is_empty(), "aucun sommet au bord : rien n'a été mesuré");
+        let long = bord.iter().fold(f32::MIN, |m, y| m.max(*y))
+            - bord.iter().fold(f32::MAX, |m, y| m.min(*y));
+        let part = long / (2.0 * haut);
+        assert!(
+            part < 0.40,
+            "long bord de {long:.2} pour une hauteur de {:.2} ({part:.3}) : \
+             c'est encore la proportion d'un hexagone régulier (0,5)",
+            2.0 * haut
+        );
+        assert!(
+            part > 0.12,
+            "long bord de {long:.2} pour une hauteur de {:.2} ({part:.3}) : \
+             les épaules se rejoignent, la plaque n'est plus qu'un losange",
+            2.0 * haut
+        );
+    }
+
+    // Les deux pointes d'une grande plaque sont **rognées** d'un méplat, en haut
+    // comme en bas. Deux façons de le rater, opposées et toutes deux muettes :
+    // ne pas le poser du tout (la plaque reste pointue), ou le poser si large
+    // que la plaque devient un tonneau. On mesure donc la largeur du bord droit
+    // à l'extrémité, et on la borne des deux côtés.
+    #[test]
+    fn les_pointes_dune_grande_plaque_sont_rognees_dun_meplat() {
+        let rayon = 4.2_f32;
+        let peau = bouclier::demi_epaisseur(rayon);
+        let c = Composant::BouclierGrand { profil: Profil::P1, rayon, elancement: 1.3 };
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        // Sommets de nappe uniquement : la jante et les nervures sont des
+        // cylindres, dont les couronnes dépasseraient du contour et élargiraient
+        // artificiellement le méplat.
+        let nappe: Vec<Vec3> = b
+            .terminer()
+            .iter()
+            .flat_map(|l| l.vertices.iter())
+            .map(|v| vec3(v.position[0], v.position[1], v.position[2]))
+            .filter(|v| (v.z.abs() - peau).abs() < 1e-4)
+            .collect();
+        let (haut, large) = nappe.iter().fold((0.0f32, 0.0f32), |(h, l), v| (h.max(v.y), l.max(v.x)));
+        // Largeur du bord droit tout en haut, mesurée sur les sommets qui y sont.
+        let meplat = 2.0
+            * nappe
+                .iter()
+                .filter(|v| (v.y - haut).abs() < 1e-3)
+                .fold(0.0f32, |m, v| m.max(v.x.abs()));
+        let part = meplat / (2.0 * large);
+        assert!(
+            part > 0.05,
+            "méplat de {meplat:.2} pour une largeur de {:.2} ({part:.3}) : la pointe est restée franche",
+            2.0 * large
+        );
+        assert!(
+            part < 0.30,
+            "méplat de {meplat:.2} pour une largeur de {:.2} ({part:.3}) : ce n'est plus une pointe rognée mais un bout coupé",
+            2.0 * large
+        );
+    }
+
+    // Le grief à l'écran : la plaque « lisait comme une pierre taillée ». La
+    // cause était le facettage — six triangles de valeurs différentes rayonnant
+    // du moyeu, ce qui *est* le dessin d'une gemme. Un miroir est **uniforme**,
+    // et ce sont les nervures posées dessus qui le structurent. On vérifie donc
+    // que chaque face n'a qu'un seul ton, ce qu'aucun test de forme ne dirait.
+    #[test]
+    fn les_faces_dun_grand_bouclier_sont_des_miroirs_unis() {
+        let rayon = 4.2_f32;
+        let peau = bouclier::demi_epaisseur(rayon);
+        let c = Composant::BouclierGrand { profil: Profil::P1, rayon, elancement: 1.3 };
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        let mut tons: Vec<[u8; 4]> = Vec::new();
+        for lot in b.terminer() {
+            for t in lot.indices.chunks_exact(3) {
+                let s: Vec<&macroquad::models::Vertex> =
+                    t.iter().map(|i| &lot.vertices[*i as usize]).collect();
+                // Triangle de nappe : ses trois sommets à la cote d'une peau.
+                if !s.iter().all(|v| (v.position[2].abs() - peau).abs() < 1e-4) {
+                    continue;
+                }
+                let couleur = s[0].color;
+                if !tons.contains(&couleur) {
+                    tons.push(couleur);
+                }
+            }
+        }
+        // Deux tons : un par face, et rien de plus. La différence avant/arrière
+        // est voulue — sans elle on ne sait plus quelle face on regarde.
+        assert_eq!(
+            tons.len(),
+            2,
+            "{} tons sur les nappes : la plaque est facettée comme une gemme",
+            tons.len()
+        );
+    }
+
+    // Le module tourne : sa géométrie doit tenir dans sa longueur annoncée,
+    // sinon le rayon de rotation calculé depuis la traverse serait faux — et
+    // rester **d'un seul côté** du montage, celui de l'extérieur.
+    #[test]
+    fn module_equipage_se_deploie_vers_lexterieur() {
+        for longueur in [4.0_f32, 7.0, 12.0] {
+            let c = Composant::ModuleEquipage { profil: Profil::P1, longueur, hublots: 8 };
+            let mut b = Batisseur::new();
+            c.dessiner(&mut b);
+            for lot in b.terminer() {
+                for v in &lot.vertices {
+                    let z = v.position[2];
+                    assert!(
+                        (-1e-3..=longueur + 1e-3).contains(&z),
+                        "longueur {longueur} : géométrie à z={z}, hors de [0, {longueur}]"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn module_habitat_deux_ports_axiaux() {

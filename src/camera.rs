@@ -2,6 +2,25 @@ use crate::astre::CameraInfo;
 use crate::systeme::Systeme;
 use macroquad::prelude::*;
 
+/// Base orthonormée **(droite, haut, avant)** d'une caméra orbitale de lacet
+/// `yaw` et de tangage `pitch`. Indépendante de la distance : la direction
+/// cible → caméra est déjà unitaire.
+///
+/// Sortie de [`Camera::construire`] pour être **testable sans contexte
+/// graphique** — `Camera::new` lit la position de la souris, la struct est donc
+/// inconstructible hors du run macroquad. La boussole d'axes de l'interface
+/// s'appuie sur cette même base, et c'est ce partage qui garantit qu'elle ne peut
+/// pas mentir sur l'orientation de la vue.
+pub fn base_orbite(yaw: f32, pitch: f32) -> (Vec3, Vec3, Vec3) {
+    let cp = pitch.cos();
+    // Direction cible → caméra, unitaire (cp²·sin² + sin²p + cp²·cos² = 1).
+    let dir = vec3(cp * yaw.sin(), pitch.sin(), cp * yaw.cos());
+    let forward = -dir;
+    let right = forward.cross(Vec3::Y).normalize();
+    let up = right.cross(forward).normalize();
+    (right, up, forward)
+}
+
 /// Caméra orbitale : tourne autour d'une cible (origine ou astre focalisé),
 /// gère le glisser/zoom et la sélection au clic.
 pub struct Camera {
@@ -69,16 +88,8 @@ impl Camera {
 
     /// Construit le repère caméra (billboards/éclairage) et la caméra 3D.
     pub fn construire(&self, target: Vec3, aspect: f32) -> (CameraInfo, Camera3D) {
-        let cp = self.pitch.cos();
-        let offset = vec3(
-            self.dist * cp * self.yaw.sin(),
-            self.dist * self.pitch.sin(),
-            self.dist * cp * self.yaw.cos(),
-        );
-        let pos = target + offset;
-        let forward = (target - pos).normalize();
-        let right = forward.cross(Vec3::Y).normalize();
-        let up = right.cross(forward).normalize();
+        let (right, up, forward) = base_orbite(self.yaw, self.pitch);
+        let pos = target - forward * self.dist;
         let info = CameraInfo {
             pos,
             right,

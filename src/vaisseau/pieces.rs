@@ -326,6 +326,250 @@ pub(crate) fn treillis_conique<P: Peintre>(
     }
 }
 
+/// Rayon d'un longeron, en fraction du circonradius de la section de **référence**
+/// de la pièce.
+///
+/// « De référence » et non « courante » : un longeron ne s'épaissit **pas** parce que
+/// la section s'évase. Le cône hexagonal et le pavillon prennent donc tous deux la
+/// section de leur base, et la tour qui couronne le pavillon doit faire de même —
+/// sinon ses barres grossissent avec l'embouchure et écrasent la silhouette.
+pub(crate) const LONGERON: f32 = 0.12;
+/// Ceinture et diagonale, en fraction de l'épaisseur de longeron. Rapports repris
+/// du treillis d'origine (0,09 et 0,07 pour 0,12).
+const CEINTURE: f32 = 0.75;
+const DIAGONALE: f32 = 0.583;
+
+/// Rapport de largeur de silhouette entre un hexagone régulier et le **carré de
+/// même circonradius**, dans leur orientation la plus défavorable.
+///
+/// C'est le chiffre qui justifie de passer l'épine en section hexagonale. La
+/// largeur apparente d'un polygone régulier de circonradius `R` oscille, selon
+/// l'angle de vue, entre `2R·cos(π/n)` (vu de face) et `2R` (vu par un sommet) :
+///
+/// | | mini | maxi | rapport |
+/// |---|---|---|---|
+/// | carré (n=4) | 1,414 R | 2 R | **1,41** |
+/// | hexagone (n=6) | 1,732 R | 2 R | **1,15** |
+///
+/// À circonradius égal, l'hexagone a donc le **même encombrement maximal** que
+/// le carré, mais il est **22 % plus large dans son pire angle** — et c'est le
+/// pire angle qui décide de la lisibilité : sous le filtre pixel, un montant qui
+/// tombe sous le pixel dans certaines orientations disparaît par intermittence.
+/// Un hexagone garde une épaisseur quasi constante d'où qu'on le regarde.
+// Valeur de référence : elle documente et verrouille le gain, et n'est consommée
+// que par le test qui le mesure — d'où l'attribut.
+#[allow(dead_code)]
+pub(crate) const HEXA_GAIN_SILHOUETTE: f32 = 1.224_744_9; // √(3)/√(2) = cos30°/cos45°
+
+/// Sommets d'une section **hexagonale régulière**, premier sommet sur `+d`.
+///
+/// L'orientation n'est pas libre : c'est elle qui met **deux longerons dans le
+/// plan (axe, d)**, donc pile en face des deux sommets latéraux du cadre
+/// hexagonal du pied. Sans ça la jupe de raccord n'a aucune arête franche.
+pub(crate) fn hexa_section(centre: Vec3, d: Vec3, h: Vec3, rayon: f32) -> [Vec3; 6] {
+    let mut v = [Vec3::ZERO; 6];
+    for k in 0..6 {
+        let a = FRAC_PI_3 * k as f32;
+        v[k] = centre + d * (rayon * a.cos()) + h * (rayon * a.sin());
+    }
+    v
+}
+
+/// **Treillis conique à section hexagonale** : six longerons courant de `a` à
+/// `b`, la section passant du circonradius `rayon_a` à `rayon_b` selon la même
+/// loi que [`treillis_conique`] (évasement sur une distance absolue, donc
+/// rallonger la poutre n'allonge que la partie fine).
+///
+/// Version hexagonale de l'épine — voir [`HEXA_GAIN_SILHOUETTE`] pour le pourquoi.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn treillis_conique_hexa<P: Peintre>(
+    p: &mut P,
+    a: Vec3,
+    b: Vec3,
+    rayon_a: f32,
+    rayon_b: f32,
+    courbure: f32,
+    metal: Color,
+    sombre: Color,
+) {
+    let axe = b - a;
+    let long = axe.length();
+    if long < 1e-4 {
+        return;
+    }
+    let (_, d, h) = repere(axe);
+    let epais = rayon_a.max(rayon_b);
+    let baies = ((long / (epais.max(0.4) * 1.3)) as usize).clamp(10, 40);
+    // Évasement sur une **distance absolue** (cf. `treillis_conique`).
+    let flare = (rayon_a * 9.0).min(long);
+    let section = |t: f32| {
+        let f = (t * long / flare).min(1.0);
+        rayon_b + (rayon_a - rayon_b) * (1.0 - f).powf(courbure)
+    };
+    let anneau = |k: usize| {
+        let t = k as f32 / baies as f32;
+        let s = section(t);
+        (hexa_section(a + axe * t, d, h, s), s)
+    };
+    let (mut prev, mut ps) = anneau(0);
+    for w in 0..6 {
+        p.cylindre(prev[w], prev[(w + 1) % 6], ps * 0.10, sombre); // cadre de base
+    }
+    for k in 1..=baies {
+        let (cur, cs) = anneau(k);
+        for i in 0..6 {
+            // Longeron à **Ø constant** : il doit garder la même épaisseur que
+            // les tiges du cadre hexagonal qu'il rejoint (cf. `treillis_conique`).
+            p.cylindre(prev[i], cur[i], rayon_a * LONGERON, metal);
+        }
+        for w in 0..6 {
+            p.cylindre(cur[w], cur[(w + 1) % 6], cs * 0.10, sombre); // cadre
+        }
+        // Diagonales sur une face sur deux : de quoi trianguler sans tripler le
+        // nombre de cylindres par rapport à la version carrée.
+        for i in [0usize, 2, 4] {
+            p.cylindre(prev[i], cur[(i + 1) % 6], ps * 0.075, sombre);
+        }
+        prev = cur;
+        ps = cs;
+    }
+}
+
+/// **Tour hexagonale** droite, coaxiale à l'axe Z local, suspendue sous
+/// `sommet` : un prisme hexagonal de `etages` niveaux, montants aux six sommets,
+/// ceinture à chaque niveau et diagonales alternées.
+///
+/// À ne pas confondre avec [`treillis_hexagone`], qui est un cadre **plat** dont
+/// le plan *contient* l'axe : celui-là se présente de travers à une poutre
+/// axiale, et il faut une jupe vrillée pour l'y raccorder. La tour, elle, a sa
+/// section **perpendiculaire** à l'axe — donc parallèle à celle de la poutre, et
+/// le raccord devient une simple continuation.
+///
+/// ⚠️ **Aucune ceinture au niveau 0** (le sommet), volontairement : ce niveau est
+/// déjà fermé par le cadre de base de la poutre qui s'y pose. En dessiner une
+/// deuxième mettrait deux anneaux exactement coplanaires — du z-fighting garanti.
+///
+/// Les sommets viennent de [`hexa_section`], la **même** fonction que la section
+/// de [`treillis_conique_hexa`] : à rayon **et écrasement** égaux, l'accostage est
+/// exact par construction, il n'y a rien à faire coïncider à la main.
+///
+/// ⚠️ `etirement` doit reprendre celui de la pièce sur laquelle la tour se pose —
+/// 1 sur la base d'un cône (section régulière), celui de l'embouchure quand elle
+/// couronne un [`pavillon_hexagonal`]. Le laisser à 1 sur une embouchure écrasée
+/// remettrait exactement le désaccord que l'écrasement progressif a corrigé : les
+/// deux sommets portés par X coïncideraient, les quatre obliques non.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tour_hexagonale<P: Peintre>(
+    p: &mut P,
+    sommet: Vec3,
+    rayon: f32,
+    hauteur: f32,
+    etirement: f32,
+    epaisseur: f32,
+    etages: usize,
+    metal: Color,
+    sombre: Color,
+) {
+    let n = etages.max(1);
+    let pas = hauteur / n as f32;
+    let haut = Vec3::Y * etirement;
+    let niveau =
+        |k: usize| hexa_section(sommet - Vec3::Z * (k as f32 * pas), Vec3::X, haut, rayon);
+    let mut prev = niveau(0);
+    for k in 1..=n {
+        let cur = niveau(k);
+        for i in 0..6 {
+            p.cylindre(prev[i], cur[i], epaisseur, metal); // montant
+            p.cylindre(cur[i], cur[(i + 1) % 6], epaisseur * CEINTURE, sombre); // ceinture
+        }
+        // Diagonale sur une face sur deux, sens inversé d'un étage au suivant :
+        // c'est le motif qui fait lire une tour treillis plutôt qu'un fût strié.
+        let dec = k % 2;
+        for i in 0..3 {
+            let a = (2 * i + dec) % 6;
+            p.cylindre(prev[a], cur[(a + 1) % 6], epaisseur * DIAGONALE, sombre);
+        }
+        prev = cur;
+    }
+}
+
+/// **Pavillon hexagonal** : la corolle qui termine l'épine côté propulsion.
+///
+/// Le cône ne s'arrête plus sur une tour à section constante — il **continue de
+/// s'ouvrir** jusqu'à une large embouchure, dont le bord est un **anneau** :
+/// hexagone extérieur *et* hexagone intérieur, reliés par six panneaux radiaux.
+/// C'est cet anneau qui portera la propulsion, et c'est pour ça qu'il est évidé :
+/// une embouchure pleine ne servirait qu'à cacher les tuyères.
+///
+/// `etirement_bord` écrase la section selon Y, **à l'embouchure seulement**. Sa
+/// conséquence est la raison d'être du paramètre : à 1 l'hexagone est régulier et
+/// ses six côtés sont égaux, tandis qu'en dessous les **deux** côtés
+/// perpendiculaires à Y gardent leur longueur (ils sont portés par X) alors que les
+/// **quatre** côtés obliques raccourcissent. Deux familles d'arêtes, 4 et 2 — la
+/// seule façon d'y arriver avec un hexagone.
+///
+/// ⚠️ **L'écrasement est progressif, et il doit l'être.** Il vaut 1 au col et
+/// n'atteint `etirement_bord` qu'au bord. Appliqué d'emblée, il désaccorderait le
+/// col de la base du cône, qui est un hexagone **régulier** : les quatre sommets
+/// obliques tomberaient à un autre Y et le raccord se verrait. La section *morphe*
+/// donc d'un hexagone régulier vers la pierre taillée le long de la corolle.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn pavillon_hexagonal<P: Peintre>(
+    p: &mut P,
+    sommet: Vec3,
+    rayon_col: f32,
+    rayon_bord: f32,
+    hauteur: f32,
+    etirement_bord: f32,
+    etages: usize,
+    metal: Color,
+    sombre: Color,
+) {
+    let n = etages.max(1);
+    // Section écrasée en passant un `h` mis à l'échelle : `hexa_section` place le
+    // sommet `k` à `d·r·cos + h·r·sin`, donc un `h` plus court écrase la section
+    // sans toucher aux deux sommets portés par `d`. Aucune primitive de plus.
+    let niveau = |k: usize| {
+        let t = k as f32 / n as f32;
+        // Évasement **linéaire** : le tracé demandé a des flancs droits, pas une
+        // courbe de cloche.
+        let r = rayon_col + (rayon_bord - rayon_col) * t;
+        let e = etirement_progressif(t, etirement_bord);
+        (hexa_section(sommet - Vec3::Z * (hauteur * t), Vec3::X, Vec3::Y * e, r), r)
+    };
+
+    let (mut prev, _) = niveau(0);
+    for k in 1..=n {
+        let (cur, r) = niveau(k);
+        let bord = k == n;
+        for i in 0..6 {
+            p.cylindre(prev[i], cur[i], rayon_col * LONGERON, metal); // longeron de corolle
+            // Ceinture d'embouchure plus forte : c'est la **jante** de la corolle,
+            // et c'est tout ce qui la termine depuis qu'il n'y a plus d'anneau.
+            let (ep, teinte) = if bord { (r * 0.075, metal) } else { (r * 0.055, sombre) };
+            p.cylindre(cur[i], cur[(i + 1) % 6], ep, teinte);
+        }
+        // Diagonales alternées, comme sur la tour : c'est ce motif qui fait lire
+        // un treillis et non une tôle pliée.
+        let dec = k % 2;
+        for i in 0..3 {
+            let a = (2 * i + dec) % 6;
+            p.cylindre(prev[a], cur[(a + 1) % 6], rayon_col * 0.07, sombre);
+        }
+        prev = cur;
+    }
+}
+
+/// Écrasement de la section d'un pavillon à l'avancement `t` (0 au col, 1 au bord).
+///
+/// Sorti pour être testable : `etirement_progressif(0, _) == 1` **exactement** est
+/// ce qui garantit que le col reste un hexagone régulier, donc superposable à la
+/// base du cône. C'est la condition d'accostage, et elle était fausse au premier
+/// jet — l'écrasement était appliqué d'emblée.
+pub(crate) fn etirement_progressif(t: f32, etirement_bord: f32) -> f32 {
+    1.0 + (etirement_bord - 1.0) * t
+}
+
 /// Une pale solaire : deux lés séparés par une couture centrale, un cadre et
 /// des nervures de cellules. Déployée depuis `racine` le long de `deploy`,
 /// large de `largeur` selon `largeur_axe`.
@@ -568,4 +812,49 @@ pub(crate) fn onigiri_hex_echelle_mini() -> f32 {
 /// extrémité). Sert à répartir des ferrures sur une face sans déborder.
 pub(crate) fn onigiri_demi_face(rayon: f32) -> f32 {
     (rayon - rayon * ONIGIRI_FILET) * 3.0_f32.sqrt() * 0.5
+}
+
+/// **Tube creux** (anneau extrudé) de `pied` le long de +Z : paroi extérieure,
+/// paroi **intérieure**, et les deux couronnes de bout qui les relient.
+///
+/// Un `cylindre` ne convient pas : il est plein et fermé, donc tout ce qui
+/// passerait dans l'axe s'y enfoncerait. Ici l'alésage est vraiment vide — ce
+/// qu'il faut pour un collier qui tourne **autour** d'une épine sans la
+/// toucher.
+pub(crate) fn tube<P: Peintre>(
+    p: &mut P,
+    pied: Vec3,
+    longueur: f32,
+    r_ext: f32,
+    r_int: f32,
+    couleur: Color,
+) {
+    if longueur < 1e-4 || r_ext <= r_int || r_int < 0.0 {
+        return;
+    }
+    const N: usize = 28;
+    let mut s: Vec<Vec3> = Vec::with_capacity(4 * N);
+    for k in 0..N {
+        let a = TAU * k as f32 / N as f32;
+        let (c, si) = (a.cos(), a.sin());
+        s.push(pied + vec3(r_ext * c, r_ext * si, 0.0)); // 0 : ext bas
+        s.push(pied + vec3(r_ext * c, r_ext * si, longueur)); // 1 : ext haut
+        s.push(pied + vec3(r_int * c, r_int * si, 0.0)); // 2 : int bas
+        s.push(pied + vec3(r_int * c, r_int * si, longueur)); // 3 : int haut
+    }
+    let mut ix: Vec<u16> = Vec::with_capacity(N * 24);
+    for k in 0..N {
+        let a = (4 * k) as u16;
+        let b = (4 * ((k + 1) % N)) as u16;
+        let (eb, et, ib, it) = (a, a + 1, a + 2, a + 3);
+        let (eb2, et2, ib2, it2) = (b, b + 1, b + 2, b + 3);
+        // Paroi extérieure (normale sortante) et intérieure (normale rentrante,
+        // donc enroulement inversé : c'est elle qui borde l'alésage).
+        ix.extend_from_slice(&[eb, et, et2, eb, et2, eb2]);
+        ix.extend_from_slice(&[ib, it2, it, ib, ib2, it2]);
+        // Couronnes de bout, qui ferment l'épaisseur de paroi.
+        ix.extend_from_slice(&[eb, ib2, ib, eb, eb2, ib2]);
+        ix.extend_from_slice(&[et, it, it2, et, it2, et2]);
+    }
+    p.triangles(&s, &ix, couleur);
 }
