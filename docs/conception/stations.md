@@ -1099,7 +1099,9 @@ inférieures et n'ajoute que ce qui lui est propre.
   passer le mât commun), miroir bleuté **uni** sur ses deux faces, portant huit
   rayons ancrés au moyeu et rien en travers). Enfin `BouclierThermique` — bardage
   d'**écailles imbriquées** sur l'épine, qui recouvrent vers l'avant pour que le
-  rayonnement des tuyères ne rencontre jamais de tranche. Toutes deux ont un **moyeu percé et deux ports axiaux** : les quatre
+  rayonnement des tuyères ne rencontre jamais de tranche, et `Panache` — le jet
+  d'antimatière, **effet** sans coût ni encombrement, piloté par le même régime
+  moteur que la chauffe des radiateurs. Toutes deux ont un **moyeu percé et deux ports axiaux** : les quatre
   plaques s'enfilent sur un mât commun au lieu de se bouter l'une l'autre, et
   c'est l'**espacement** entre elles qui blinde, pas leur épaisseur.
 - **L2 — assemblages typés** (helpers qui posent des groupes) : `poser_anneau`,
@@ -1174,9 +1176,10 @@ brique vraiment nouvelle de cette classe.
    pied) porte moteurs, radiateurs et réservoirs.
 3. ✅ **Voiles radiateurs** — `RadiateurMega` (aile en arête de poisson) en
    enfilade. Signature de l'ISV.
-4. ✅ **assembler l'ISV** (preset, classe C) — **structure validée le
-   2026-07-30** : 168 de long, rayon 12,6, 43 pièces, coût 683. Reste les 2
-   navettes TAV et une relecture des proportions. Détail ci-dessous.
+4. ✅ **assembler l'ISV** (preset, classe C) — **ASSET CLOS le 2026-07-31** :
+   168 de long, rayon 12,6, 45 pièces, coût 725, 110 k sommets en 204 lots.
+   Navettes TAV **hors périmètre**. Bilan et enseignements en
+   [`suivi/stations.md`](../suivi/stations.md) §C.29. Détail ci-dessous.
    **Section propulsion complète**
    (`poser_bloc_moteur` + propulseur antimatière sur Cœur 3, chapes bombées sur
    Cœur 1/2, **réservoirs faits**), **fret posé** (3 rangées en triforce) et
@@ -1442,6 +1445,13 @@ décision retenue, alignée sur ce que l'éditeur (§E.4) demandera réellement.
   copie implicite).
 
 ### E.4 Ce qu'il faudra à un futur éditeur façon VAB (non fait ici)
+
+> **Suite : [`assembleur.md`](assembleur.md) (2026-07-31).** Cette section liste
+> les *fonctionnalités* manquantes ; le document dédié audite le parc de tests
+> existant (utiles / inutiles / manquants) et dit quelles **garanties** l'éditeur
+> exigera — dont trois défauts de conception qu'aucune de ces fonctionnalités ne
+> laissait voir (indices de ports libres instables, collision purement sphérique,
+> catalogue de briques à trois sources).
 
 Rappel : **ce qui suit n'est pas construit maintenant**. Ça sert seulement à
 vérifier que §E.2/E.3 ne ferment aucune porte. Un éditeur d'assemblage

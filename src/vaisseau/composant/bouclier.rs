@@ -67,7 +67,15 @@ const MOYEU: f32 = 0.09;
 const MOYEU_DEMI: f32 = 0.09;
 /// Alésage du moyeu, en fraction du moyeu : les quatre boucliers sont **enfilés
 /// sur un mât commun**, pas boutés l'un contre l'autre.
-const ALESAGE: f32 = 0.45;
+///
+/// ⚠️ Cette fraction est **liée au moyeu et au mât à la fois**. Le moyeu ayant
+/// été resserré (0,16 → 0,09 du rayon de plaque), un alésage à 0,45 ne laissait
+/// plus que 0,223 de passage pour un mât qui en fait 0,290 : la petite plaque
+/// était **empalée** au lieu d'être enfilée. Porté à 0,75, le trou revient à
+/// 0,371 et le mât repasse. Le moyeu est devenu une **bague** (paroi de 0,124
+/// pour un extérieur de 0,495) plutôt qu'un disque percé — ce qui est d'ailleurs
+/// plus juste pour une pièce qu'on enfile.
+const ALESAGE: f32 = 0.75;
 
 /// Demi-épaisseur de la nappe. Deux peaux plutôt qu'une seule à double face :
 /// une plaque doit avoir une tranche, sinon elle lit comme une découpe de

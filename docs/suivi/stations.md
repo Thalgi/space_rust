@@ -774,8 +774,9 @@ profil : la tête paraîtrait plate de trois quarts au moment même où les aile
 sont de face.
 
 **C'est la petite plaque qui dimensionne le mât**, pas les grandes. Son alésage
-vaut `rayon × MOYEU × ALESAGE` = **0,396**, le plus étroit de la pile ; le mât
-est donc un `Treillis` **P0** (section transversale mesurée 0,290). Le cran
+vaut `rayon × MOYEU × ALESAGE`, le plus étroit de la pile ; le mât est donc un
+`Treillis` **P0** (section transversale mesurée 0,290). *(Cotes du moyeu revues
+depuis — voir §C.25.)* Le cran
 au-dessus fait 0,580 et ne passerait pas — vérifié rouge, *« mât de 0,580 pour un
 alésage de 0,396 : il n'enfile pas la petite plaque, il la traverse »*. Et c'est
 bien un défaut **muet** : un mât trop gros ressort de l'autre côté du moyeu sans
@@ -938,13 +939,11 @@ l'épine, il ne la double pas), `RECOUVREMENT = 0,35` du pas, lèvre sombre sur
 22 % de l'écaille. Sur le vaisseau : rayon 1,25 contre 1,15 d'épine hors-tout,
 de X = 12 à X = 48, 30 rangs.
 
-**Ce que le bardage ne couvre pas, et pourquoi.** L'épine s'évase de 1,84 à 1,15
-sur ses quinze premières unités, alors que le manchon est **droit** : posé plus
-bas, il flotterait au-dessus de l'évasement. La zone laissée nue est celle du
-pied en pavillon et des deux anneaux hexagonaux — déjà chargée en structure, où
-un bardage ne se lirait pas. C'est la limite honnête d'un détail de surface à ce
-prix ; un manchon conique le suivrait, au prix d'une seconde loi d'évasement à
-tenir d'accord avec celle du treillis.
+> ⚠️ **Emprise et manchon droit revus le lendemain** — voir §C.25. Le bardage
+> était posé de X = 12 à 48, sur le tronçon nu, alors qu'il doit être au droit
+> des moteurs ; et il est passé de droit à **évasé** pour épouser l'épine là où
+> elle s'ouvre. Les cotes d'écaille ci-dessus (saillie, recouvrement, lèvre)
+> n'ont pas bougé.
 
 🐛 **Mon premier test mesurait la mauvaise propriété.** Il comptait les
 **retombées de rayon** le long de l'axe, en tenant que « ça monte puis ça
@@ -972,6 +971,331 @@ flotter autour.
 revêtement, il n'ajoute ni masse visible ni encombrement, et
 `les_proportions_densemble_de_lisv_tiennent` reste vert sans retouche.
 
+### C.25 Bardage thermique déplacé au droit des moteurs (2026-07-31)
+
+Grief à l'écran : le bardage était **au mauvais endroit**. Il courait de X = 12 à
+48, c'est-à-dire sur le long tronçon nu, loin des tuyères qui s'arrêtent à −1,3.
+Un bouclier thermique se met **là où est la chaleur**.
+
+**Nouvelle emprise : X = −9 → +4**, treize unités au droit des moteurs
+(−9,8 → −1,3), qui les dépassent de cinq et s'arrêtent là. Le long tronçon nu
+redevient nu, ce qui est doublement juste : il n'a rien à parer, et un bardage
+l'aurait fait lire comme une gaine technique.
+
+**Conséquence : le bardage devient évasé.** C'est tout l'intérêt du déplacement
+et c'était le vrai travail. Au droit des moteurs, l'épine n'est pas droite — elle
+s'ouvre vers son pied, de 2,81 à 1,28 de rayon sur l'emprise couverte. Un manchon
+droit y serait traversé à un bout et flotterait à l'autre. La section suit donc
+la **même loi en puissance** que le treillis : `bout + (pied − bout)·(1 − t)^c`.
+
+Trois cotes mesurées sur l'épine assemblée et non calculées : `pied = 3,50`,
+`bout = 1,70`, `courbure = 1,5`. Jeu au fil de l'emprise : **+0,12 à +0,25**,
+positif partout et **au pire cas** (voir ci-dessous).
+
+🐛 **Le premier essai partait de X = −12 et flottait de 0,93.** Cause mesurée :
+entre −12 et −10,5 le rayon de l'épine tombe de 3,75 à 2,85 **d'un coup**, puis
+reprend une décroissance douce. Aucune loi en puissance ne suit ce décrochement.
+En reculant le départ à −9, le profil est régulier — et l'exposant ajusté tombe à
+**2,0 ± 0,05 aux trois tranches du milieu**, c'est-à-dire que le profil de
+l'épine *est* une loi en puissance sur cette portion. Ça n'allait pas de soi :
+la loi du treillis est écrite depuis la base de la charpente, dix unités plus
+bas, avec le pied en pavillon par-dessus.
+
+🐛 **Et le deuxième essai pinçait encore, alors que le test était vert.** Griefs
+successifs à l'écran : « ça accroche légèrement l'épine ». Le test comparait les
+**circonradius** des deux pièces et trouvait un jeu positif partout. Il mesurait
+la mauvaise chose, pour une raison qui ne saute pas aux yeux :
+
+> Les deux hexagones — celui du bardage et celui du treillis — ne sont calés sur
+> **aucune orientation commune**. Le bardage a son repère propre, l'épine tient
+> le sien de `repere(axe)`. Dans le pire cas ils sont décalés d'un demi-pas, et
+> c'est alors le **milieu de facette** du bardage (rayon **inscrit**, 0,866 × le
+> circonradius) qui passe au droit d'un **longeron** de l'épine.
+
+Comparer deux circonradius, c'est donc comparer les deux points les plus
+*éloignés* de l'axe alors que le contact se joue entre le point le plus rentrant
+de l'un et le plus saillant de l'autre. Le test compare maintenant
+`circonradius_bardage × 0,866` au circonradius de l'épine, et les cotes sont
+dimensionnées là-dessus — d'où le facteur 1,155 sur les rayons relevés. C'est le
+prix de ne pas dépendre d'un calage angulaire que rien ne garantit.
+
+Deux autres corrections de mesure au passage, toutes deux du même genre :
+
+- **le bardage était pris par ses sommets**, lèvres comprises. Une tranche qui ne
+  contient qu'une lèvre — relevée par construction — lit un rayon bien trop grand
+  et fait croire à un bardage qui flotte (0,41 et 0,45 mesurés là où il ne
+  flottait pas). Il est maintenant pris par sa **section de calcul**, la surface
+  qui se plaque réellement sur la poutre ;
+- **l'épine était prise tranche par tranche**, et certaines tranches ne coupent
+  que des diagonales : elles lisent un rayon anormalement bas (1,62 là où la
+  voisine donne 1,84). Le rayon est maintenant pris sur une **fenêtre d'une
+  baie**.
+
+`le_bardage_thermique_epouse_lepine` borne des deux côtés — trop serré l'épine
+ressort au travers, trop lâche le bardage flotte — et rien de tout ça ne se
+déduit du composant seul : c'est un ajustement entre **deux** pièces, vérifiable
+seulement assemblé. Vérifié rouge dans les trois sens : *« pincement de 0,21 »*
+et *« de 0,10 »* en revenant aux rayons d'avant, *« flotte de 1,14 »* en gonflant
+le pied.
+
+**Moyeu des plaques de tête resserré, et l'alésage a dû suivre.** Le rayon de
+moyeu est passé de 0,16 à **0,09** du rayon de plaque. Effet de bord non voulu :
+à alésage constant (0,45), le trou tombait à 0,223 pour un mât qui en fait
+0,290 — la petite plaque était **empalée** au lieu d'être enfilée.
+`le_mat_de_tete_passe_le_plus_petit_alesage` l'a signalé immédiatement, ce qui
+est exactement ce qu'on lui demande : le défaut est invisible, un mât trop gros
+ressortant de l'autre côté du moyeu sans que rien ne l'arrête.
+
+Corrigé du bon côté — `ALESAGE` porté à **0,75**, trou à 0,371, le mât repasse
+avec 0,08 de marge. Le moyeu devient une **bague** (paroi 0,124 pour un extérieur
+de 0,495) plutôt qu'un disque percé, ce qui est d'ailleurs plus juste pour une
+pièce qu'on enfile. ⚠️ Réagir en annulant le resserrement aurait été le mauvais
+réflexe : le test signale une **incompatibilité entre deux cotes**, il ne désigne
+pas laquelle des deux est en tort.
+
+### C.26 Chauffe des radiateurs, au bouton (2026-07-31)
+
+Deuxième détail de surface. Un bouton **RADIATEURS: FROID / CHAUD** dans la vue,
+et les ailes montent au rouge puis à l'orange en trois secondes et demie.
+
+**Ce n'est pas un réglage d'affichage, c'est de la géométrie.** Les couleurs
+vivent dans les **sommets** du maillage cuit : chauffer une aile veut dire la
+recuire. D'où `chaleur: f32` sur `Composant::RadiateurMega` et sur
+`preset_isv_fixe`, plutôt qu'un drapeau dans la vue. C'est la même nature que le
+repli, et pas celle de la rotation — qui, elle, n'est qu'une matrice.
+
+**Où passe la chaleur : seulement le gris.** Panneau, tubes calorifiques et rails
+de bord chauffent ; la colonne vertébrale et le réservoir restent noirs. Ce ne
+sont pas des surfaces radiantes mais des organes internes, et les voir rougir
+ferait mentir la pièce.
+
+**Gris → rouge sombre → orange**, et pas gris → orange. Un métal qui chauffe
+**rougit d'abord** (point de Draper, ~525 °C) ; sauter cette étape donne un
+radiateur peint plutôt que chaud. C'est aussi ce qui rend le début de la montée
+lisible : un mélange direct vers l'orange éclaircit tout de suite et le seuil
+disparaît. Trois secondes et demie de transition, plus lent que le repli — une
+masse chauffe lentement, et c'est ce que la durée doit dire.
+
+⚠️ **Le dégradé n'est pas un effet, c'est la fonction de la pièce.** Un radiateur
+est exactement l'objet qui se refroidit sur sa longueur : le fluide entre chaud à
+la racine et ressort tiède à la pointe. Une aile qui rougirait uniformément ne
+dirait pas qu'elle radie, elle dirait qu'elle est peinte. La chaleur locale perd
+donc 55 % de la racine à la pointe. Conséquence de dessin : le panneau, qui était
+un quadrilatère d'une seule couleur, est découpé en **sept bandes** — un
+quadrilatère ne peut pas porter de dégradé.
+
+**`charger()` scindé en `rebatir()` + `cadrer()`.** La montée refait la géométrie
+à chaque frame, et `charger()` recadrait la caméra : le zoom de l'utilisateur
+aurait été annulé en continu pendant toute l'animation. On ne recadre plus qu'au
+**changement d'item**, seul moment où le gabarit change vraiment.
+
+Le recuit porte ici sur la moitié **fixe** du vaisseau (les ailes sont sur
+l'ossature, elles ne tournent pas), donc sur tout le maillage. Coût assumé et
+**borné** : la montée dure trois secondes et s'arrête, là où le commentaire de
+§C.7 visait une rotation recuite, qui tournerait indéfiniment.
+
+🐛 **Compter une proportion ne disait rien.** Mon premier test vérifiait que
+« moins de 95 % des sommets sont chauds », en tenant que le reste serait le noir.
+Il virait au rouge à **98 %** — non parce que le noir avait rougi, mais parce que
+les tubes calorifiques pèsent à eux seuls presque tous les sommets de l'aile et
+que la colonne noire disparaît dans l'arrondi. Le test suit maintenant les
+sommets **un par un** : les noirs sont repérés à froid, et comme la chauffe ne
+déplace rien, le sommet `i` est le même dans les deux versions. Vérifié rouge en
+passant le réservoir dans `chauffer()` — *« sommet 3570 : la colonne vertébrale
+a rougi »*.
+
+`le_radiateur_est_plus_chaud_a_sa_racine_qu_a_sa_pointe` garde le dégradé,
+vérifié rouge à refroidissement nul (*« racine 220 contre pointe 220 »*).
+
+Bouton actif sur **deux** vues : l'ISV complet et la brique n° 6 du radiateur
+méga — c'est là, l'aile présentée en grand, qu'on juge le dégradé de près.
+### C.27 Panache d'antimatière, et un seul régime moteur (2026-07-31)
+
+Le bouton **RADIATEURS: FROID/CHAUD** devient **PROPULSION: ALLUMEE/ETEINTE**, et
+pilote désormais les deux : les ailes rougissent *et* les tuyères crachent.
+
+**Un seul nombre, deux manifestations.** `regime` (0 à 1) remplace `chaleur` dans
+la vue et se propage à `preset_isv_fixe`. Ce n'est pas de la simplification : les
+radiateurs chauffent **parce que** les moteurs poussent. Deux réglages séparés
+auraient permis un vaisseau qui pousse sans évacuer sa chaleur, ce qui n'existe
+pas — et c'est exactement la « notion de régime moteur » que §C.22 annonçait
+manquante.
+
+> ⚠️ **Le rendu a changé le lendemain** — voir §C.28. Le panache n'est plus de
+> la géométrie pleine mais un **ruban en additif**, comme les jets de pulsar. Le
+> raisonnement de forme ci-dessous reste valable ; c'est la façon de le peindre
+> qui était fausse.
+
+**Ce n'est pas une flamme, et la forme le dit.** Trois conséquences, aucune
+décorative :
+
+- **pas de disques de Mach.** Ils demandent une pression ambiante pour
+  recomprimer le jet ; dans le vide il n'y en a pas. Un panache perlé serait le
+  dessin d'un moteur-fusée atmosphérique ;
+- **détente libre et lente** — `t^1,45`, donc serré au col puis s'ouvrant, comme
+  un plasma que le champ magnétique lâche progressivement. Un cône droit
+  s'ouvrirait dès la sortie, ce qui est le dessin d'une tuyère sans confinement ;
+- **il s'éteint en refroidissant**, pas en s'effaçant. Le rendu n'a pas de
+  transparence : la disparition passe par la **valeur**, blanc-bleu → bleu →
+  violet → magenta sombre → noir du fond. C'est d'ailleurs juste, un plasma qui
+  se détend perd sa température de couleur exactement comme ça.
+
+**Longueur : 336, soit deux longueurs de vaisseau**, comme demandé. Un jet de
+pions relativistes n'a rien qui l'arrête, et sa portée dit ce que cette
+propulsion a d'inhabituel. À l'allumage il **pousse** depuis la tuyère (15 % de
+sa portée au ralenti) plutôt que d'apparaître d'un bloc : c'est la seule façon de
+voir un allumage et non un interrupteur.
+
+⚠️ **Le panache est un effet, pas une pièce** : coût nul, `rayon_local` nul,
+englobant nul. Renvoyer sa vraie longueur ferait reculer la caméra de deux
+longueurs de vaisseau au moment précis où l'on veut regarder le vaisseau. Et
+moteur coupé il n'est **pas dessiné du tout** — un panache éteint n'est pas un
+panache noir, ce serait un masque sur les étoiles.
+
+**Le braquage de 5° prend enfin son sens.** Il a été décidé bien avant qu'il y
+ait un panache à regarder, au motif que « le moteur ne tire plus dans la
+station ». Mesuré maintenant : les jets partent de (−1,25 ; ±11,6) selon
+(+0,996 ; ±0,087) — vers **+X**, c'est-à-dire le long du vaisseau remorqué, et
+5° vers l'extérieur. C'est la configuration tracteur, et sans le braquage la
+charge utile baignerait dans le plasma.
+
+`le_panache_ne_leche_pas_la_charge_utile` mesure le jeu entre chaque jet et
+chaque pièce **remorquée** (fret, habitat, équipage, plaques de tête —
+l'ossature de propulsion est exclue, le jet en sort). Jeu minimal **3,93**, borné
+à 1,0. C'est un rapport entre **trois** choses — l'angle des tuyères, l'évasement
+du jet, le gabarit de ce qui est derrière — dont aucune ne se voit sur le
+composant seul. Vérifié rouge des deux façons de le casser : bout à 40
+(*« passe à 0,5 »*) et évasement à 0,5, c'est-à-dire un jet qui s'ouvre dès la
+sortie (*« passe à −4,0 »*).
+### C.28 Le panache repris comme un jet de pulsar (2026-07-31)
+
+Grief à l'écran : le panache « ne donne pas le résultat voulu ». Diagnostic
+juste du premier coup — *« regarde comment on a fait l'éjection polaire du
+pulsar »*. Le vaisseau en avait déjà un, et il marche.
+
+**La cause n'était pas la forme, c'était la matière.** Le profil, la longueur, la
+rampe de couleur, le braquage : tout ça restait bon. Ce qui clochait, c'est que
+je l'avais dessiné en **cônes pleins**, avec le `Peintre` comme tout le reste du
+vaisseau. Or un jet de plasma **n'a pas de silhouette** — et ce sont exactement
+les qualités d'un solide qui le trahissaient : une arête nette, une face opaque,
+un bord franc sur le fond étoilé. D'où le tube de plastique planté dans la
+tuyère.
+
+**Le procédé du pulsar** (`shaders/soleil.frag.glsl`, branche
+`couronne_type ∈ ]0,5 ; 1,5[`) fait tout l'inverse : un quad **face-caméra**, un
+fragment shader qui reconstruit une **densité**, et un blending **additif**. Il
+n'y a plus de surface, seulement une concentration : là où elle est faible, les
+étoiles passent au travers. Repris tel quel, avec ce qu'un jet de tuyère demande
+en plus — un **ruban** suivant l'axe plutôt qu'un disque, et un profil
+d'évasement le long de sa longueur.
+
+Trois choix hérités du pulsar, et chacun corrige un symptôme précis :
+
+- **profil en cœur** en travers du ruban (`(1 − x²)^2,2`) : sans lui le ruban a
+  une arête, et on retombe sur le tube ;
+- **turbulence qui file vers le bout** (`fbm` avec un terme en `−time` sur l'axe
+  du jet) : c'est ce qui distingue un jet d'un fuseau peint — la matière doit
+  visiblement partir ;
+- **prémultiplié en additif** : la composante noire n'ajoute rien, donc le bord
+  du ruban s'éteint au lieu de se découper.
+
+**Le composant ne dessine plus rien.** `panache::dessiner` est vide, et le dit :
+`Composant::Panache` ne sert plus qu'à **porter la pose** — où est la tuyère, où
+va le jet, à quelles cotes — dans l'assemblage. C'est exactement ce qu'un
+composant sait faire et qu'un effet d'écran ne saurait pas : le panache hérite
+ainsi de la transformée du bloc moteur, braquage de 5° compris, sans qu'on ait à
+recalculer quoi que ce soit. Le rendu, lui, vit dans `ecran/panache.rs` avec son
+material.
+
+⚠️ **`depth_write: false`.** Le jet est un milieu, pas une surface : l'écrire
+dans le Z-buffer masquerait le vaisseau et les étoiles derrière lui. Et il est
+dessiné **après** la coque mais **dans** la passe pixelisée — sans quoi il
+flotterait en net par-dessus un vaisseau pixelisé.
+
+**Ce qui ne change pas** : le braquage, l'évasement `t^1,45`, la longueur de deux
+vaisseaux, la rampe de température, et `le_panache_ne_leche_pas_la_charge_utile`,
+qui mesure des cotes et non des pixels — il reste vert sans retouche. C'est
+d'ailleurs le signe que la séparation est propre : changer la façon de peindre
+n'a rien changé à la géométrie du problème.
+
+**Largeur divisée par deux** dans la foulée, jugée à l'écran : bout 22 → **11**,
+col 0,30 → **0,15** de la taille du moteur. Le col passe ainsi sous le rayon des
+anneaux de stabilisation, ce qui est juste plutôt que gênant — une tuyère
+magnétique **pince** le faisceau plus étroit que l'ouverture qui le laisse
+passer. Jeu à la charge utile : 3,93 → **6,22**.
+
+⚠️ Le test garde le fait **physique** (le jet ne baigne pas ce qui est remorqué),
+pas la largeur du jour : à 6,2 de marge il ne rattraperait pas un doublement de
+la cote. C'est délibéré — la largeur se juge à l'œil, le contact se calcule.
+Vérifié rouge à bout = 45 (*« passe à −0,4 »*).
+### C.29 ISV — asset CLOS (2026-07-31)
+
+Validé à l'écran, propulsion allumée. **Le vaisseau est fini** : plus rien à
+poser, plus rien à régler. Les navettes TAV sont explicitement **hors périmètre**
+et ne bloquent pas la clôture.
+
+| | éteint | allumé |
+|---|---|---|
+| Pièces | 43 | 45 |
+| Coût | 725 | 725 |
+| Longueur | 168,2 (X −45,2 → 123,0) | + panaches sur 336 |
+| Rayon max | 12,6 | 12,6 |
+| Sommets cuits | 110 008 en 204 lots | idem |
+
+*(Les deux panaches comptent comme pièces mais ne produisent aucun sommet : ils
+sont rendus à part, en additif.)*
+
+Découpage en trois maillages, un par **degré de liberté** — le principe posé en
+§C.7 et qui a tenu jusqu'au bout :
+
+| | pièces | sommets | ce qui le fait recuire |
+|---|---|---|---|
+| Coque fixe | 40 | 102 130 | le régime moteur (chauffe + panache) |
+| Section d'équipage | 7 | 7 878 | le repli |
+| Panaches | — | — | rien : rendus par l'écran, pas cuits |
+
+La rotation, elle, ne recuit **rien** : c'est une matrice.
+
+**186 tests**, dont une trentaine propres à l'ISV. Aucun n'a été écrit après coup
+pour décrire ce qui existait : chacun garde une **décision** — l'ordre des
+sections, le braquage des tuyères, l'alésage qui doit laisser passer le mât, le
+sens de recouvrement des écailles, le fait que le fret domine l'habitat.
+
+#### Ce que ce chantier a appris, et qui vaut au-delà de l'ISV
+
+1. **Brique d'abord, assemblage ensuite.** Aucune pièce n'est allée sur le
+   vaisseau avant d'avoir été jugée seule. Les cinq allers-retours sur les
+   boucliers de tête (§C.16 → §C.20) se sont tous faits sur la brique.
+2. **Une cote qui se règle contre une autre pièce ne tombe pas sur une grille.**
+   Vu trois fois : le collier d'équipage (§C.8), le rayon de fret, la largeur des
+   grandes plaques. À chaque fois, sortir la cote de `Profil` était la réponse.
+3. **Une source unique par famille de cotes.** `Epine::hors_tout()` a permis de
+   passer l'épine de carrée à hexagonale sans recaler une seule cote de charge
+   utile. Le seul endroit qui y avait échappé — la position de la tête — s'est
+   fait attraper par un red-check (§C.23).
+4. **Presque toutes les erreurs ont été des tests qui mesuraient autre chose que
+   ce qu'ils prétendaient.** Jamais des erreurs de géométrie. Le catalogue :
+   pièces comparées à des hauteurs différentes (§C.15), tranche prise là où un
+   maillage cuit n'a pas de sommets (§C.13, §C.21), seuil recalculé au lieu
+   d'être lu (§C.14), corollaire mesuré à la place de la chose (§C.24),
+   circonradius comparés quand c'est le rayon inscrit qui touche (§C.25),
+   proportion comptée quand 98 % des sommets sont dans une seule famille (§C.26).
+5. **Le red-check est le seul filet.** Casser exprès ce qu'une assertion
+   surveille. Il a trouvé trois défauts du **code** et non du test.
+6. **La physique donne la forme, et il faut la suivre jusqu'au bout.** Les
+   écailles se recouvrent dans le sens du flux, le radiateur refroidit vers sa
+   pointe, le panache n'a pas de disques de Mach dans le vide, les tuyères sont
+   braquées pour ne pas baigner ce qu'elles remorquent. Chaque fois qu'un choix a
+   été fait « parce que c'est joli », il a fallu le refaire.
+7. **Tout n'est pas de la géométrie.** Le panache l'a montré : un jet de plasma
+   n'a pas de silhouette, et le peindre en solide le trahit quoi qu'on fasse
+   (§C.28). Certains objets sont des **milieux** et se rendent en additif.
+
+#### Dettes laissées ouvertes
+
+- `cargo clippy` ne compile toujours pas (`src/planete/terrain.rs:154`) — dette
+  d'avant ce chantier, sans rapport avec l'ISV ;
+- 37 avertissements `dead_code` sur le binaire, tous antérieurs.
 ### Sources
 - [Integrated Truss Structure — Wikipedia](https://en.wikipedia.org/wiki/Integrated_Truss_Structure)
 - [Integrated Truss Structure — NASA](https://www.nasa.gov/international-space-station/integrated-truss-structure/)
@@ -1074,10 +1398,9 @@ au départ du système solaire — elle n'est pas là dans la configuration
 3. ✅ **Proportions** — relecture faite le 2026-07-31 (§C.23) : équilibre
    d'ensemble conforme, une 4ᵉ rangée de fret ajoutée, trois rapports verrouillés
    par `les_proportions_densemble_de_lisv_tiennent`.
-4. 🟠 **Détails de surface** — **bouclier thermique d'épine fait** (2026-07-31,
-   §C.24). Restent la **montée en température des radiateurs** et l'**allumage
-   du panache antimatière**, qui ne sont pas de la géométrie mais de l'**état**.
-   Le tunnel pressurisé est abandonné : il ne se verrait pas à la silhouette.
+4. ✅ **Détails de surface** — bouclier thermique d'épine (§C.24–C.25), chauffe
+   des radiateurs et **panache d'antimatière** (§C.26–C.27). Le tunnel
+   pressurisé est abandonné : il ne se verrait pas à la silhouette.
 5. ✅ **Test sur `preset_isv`** — fait avec le fret :
    `isv_porte_son_fret_a_loppose_des_moteurs` verrouille la disposition
    **tracteur** (fret nettement à l'opposé des moteurs) et le fait que les
@@ -1326,15 +1649,15 @@ d'habitat à distance) ; il a été confirmé rouge sur la version fautive.
    Les deux boutons (rotation, repli) sont actifs sur la brique **et** sur l'ISV
    complet, grisés ailleurs. Le repli porte un sens : replié en transit, déployé
    en orbite (`EtatEquipage`).
-4. **Navettes TAV** — 2 petits assemblages amarrés ; candidat idéal au
-   composite `SousEnsemble` (Partie E.3) : une navette = une brique figée,
-   posée deux fois.
+4. ⛔ **Navettes TAV** — **hors périmètre**, décidé le 2026-07-31. Elles
+   restent le candidat idéal au composite `SousEnsemble` (Partie E.3) le jour où
+   elles reviendront à la feuille de route, mais l'ISV est clos sans elles.
 5. ✅ **Boucliers de tête** — briques faites **et posées** (2026-07-30).
    `Composant::BouclierPetit` + `Composant::BouclierGrand`, vues Briques n° 21 et
    22, montés sur l'ISV au bout opposé aux moteurs (§C.16, §C.21). La pile
    Whipple de §C.8 est **abandonnée**, et la question « à quel bout ? » qu'elle
    laissait ouverte est **tranchée**.
-6. **Relecture des proportions d'ensemble** une fois tout posé.
+6. ✅ **Relecture des proportions d'ensemble** — faite le 2026-07-31 (§C.23).
 
 ### C.7 Section d'équipage divisée par deux, et collier enfoncé dans l'épine (2026-07-30)
 

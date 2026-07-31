@@ -1138,9 +1138,9 @@ pub fn preset_anneau() -> EtatStation {
 /// Vue détachée d'**un seul** radiateur méga, en gros, pour travailler sa forme :
 /// collecteur (parallélépipède fin + connecteur central) + aile trapézoïdale
 /// courbe très allongée.
-pub fn demo_radiateur_mega() -> EtatStation {
+pub fn demo_radiateur_mega(chaleur: f32) -> EtatStation {
     let mut asm = Assembleur::new();
-    let r = Composant::RadiateurMega { profil: Profil::P0, longueur: 26.0, largeur: 5.5, ailettes: 34 };
+    let r = Composant::RadiateurMega { profil: Profil::P0, longueur: 26.0, largeur: 5.5, ailettes: 34, chaleur };
     asm.ajouter(cuire(Repere::IDENTITE, &r));
     asm.terminer()
 }
@@ -1166,7 +1166,7 @@ pub fn demo_moteur_antimatiere() -> EtatStation {
 /// haut, d'un seul tenant. Moteurs, habitat et voiles radiateurs viendront s'y
 /// accrocher ensuite.
 pub fn preset_isv() -> EtatStation {
-    isv(Epine::Carree, true)
+    isv(Epine::Carree, true, 0.0)
 }
 
 /// Le **second ISV**, identique au premier à une chose près : son épine est
@@ -1185,7 +1185,7 @@ pub fn preset_isv() -> EtatStation {
 // seul un test consomme le vaisseau d'un seul tenant.
 #[allow(dead_code)]
 pub fn preset_isv_hexa() -> EtatStation {
-    isv(Epine::Hexagonale, true)
+    isv(Epine::Hexagonale, true, 0.0)
 }
 
 /// L'ISV **sans** sa section d'équipage : tout ce qui ne tourne pas.
@@ -1194,11 +1194,15 @@ pub fn preset_isv_hexa() -> EtatStation {
 /// tournant ([`preset_isv_equipage`]) — et n'appliquer la rotation qu'au second.
 /// Sans cette séparation, faire tourner la section obligerait soit à faire
 /// tourner le vaisseau entier, soit à le recuire à chaque frame.
-pub fn preset_isv_fixe(epine: Epine) -> EtatStation {
-    isv(epine, false)
+/// `chaleur` (0 à 1) porte les ailes radiateur au rouge puis à l'orange. Elle
+/// est ici et non dans un réglage d'affichage parce qu'elle **change la
+/// géométrie cuite** : les couleurs sont dans les sommets, donc chauffer un
+/// radiateur veut dire le recuire.
+pub fn preset_isv_fixe(epine: Epine, chaleur: f32) -> EtatStation {
+    isv(epine, false, chaleur)
 }
 
-fn isv(epine: Epine, avec_equipage: bool) -> EtatStation {
+fn isv(epine: Epine, avec_equipage: bool, chaleur: f32) -> EtatStation {
     // Gabarit hors-tout de l'épine : **toute** la charge utile s'y recale.
     let gabarit = epine.hors_tout();
     let mut asm = Assembleur::new();
@@ -1246,6 +1250,7 @@ fn isv(epine: Epine, avec_equipage: bool) -> EtatStation {
             longueur: 16.5,
             largeur: radia_w,
             ailettes: 28,
+            chaleur,
         };
         let orient = Quat::from_rotation_arc(Vec3::Z, Vec3::NEG_Y); // sens inversé
         let rot = Quat::from_rotation_z(cote * tilt) * orient;
@@ -1256,7 +1261,7 @@ fn isv(epine: Epine, avec_equipage: bool) -> EtatStation {
         // radiateur+bloc moteur. Le côté −X est le **flip** de l'autre (miroir).
         // `propulseur = true` : version **complète** (Cœur 3 noir + chapes bombées
         // sur Cœur 1/2 + propulseur antimatière) intégrée à la charpente.
-        poser_bloc_moteur(&mut oss, repere, radia_w, cote < 0.0, true);
+        poser_bloc_moteur(&mut oss, repere, radia_w, cote < 0.0, true, chaleur);
     }
 
     // **Réservoirs de carburant** : une cuve sphérique de **chaque côté (±X)** du
@@ -1379,17 +1384,13 @@ fn isv(epine: Epine, avec_equipage: bool) -> EtatStation {
         );
     }
 
-    // **Bouclier thermique** sur la partie droite de l'épine, entre le pied et
-    // le fret : le tronçon nu qui prend le rayonnement des tuyères de plein
-    // fouet. C'est un **détail de surface** — il n'ajoute ni masse visible ni
-    // encombrement, et ne change donc rien aux proportions d'ensemble.
+    // **Bouclier thermique** au droit des moteurs, là où l'épine prend le
+    // rayonnement des tuyères de plein fouet. C'est un **détail de surface** —
+    // il n'ajoute ni masse visible ni encombrement, et ne change donc rien aux
+    // proportions d'ensemble.
     asm.ajouter(cuire(
         Repere::new(vec3(0.0, THERMIQUE_DEBUT_Y, 0.0), hexa_rot),
-        &Composant::BouclierThermique {
-            rayon: THERMIQUE_RAYON,
-            longueur: THERMIQUE_FIN_Y - THERMIQUE_DEBUT_Y,
-            rangs: THERMIQUE_RANGS,
-        },
+        &bouclier_thermique(),
     ));
 
     // **Tête de bouclier**, tout au bout : la petite plaque puis les trois
@@ -1493,12 +1494,13 @@ pub fn preset_isv_moteur() -> EtatStation {
         longueur: 33.0,
         largeur: lx,
         ailettes: 28,
+        chaleur: 0.0,
     };
     asm.ajouter(cuire(Repere::IDENTITE, &radia));
 
     // Bloc moteur docké au collecteur du radiateur (radiateur au repère identité).
     // `propulseur = true` : Cœur 3 reçoit le propulseur à antimatière complet.
-    poser_bloc_moteur(&mut asm, Repere::IDENTITE, lx, false, true);
+    poser_bloc_moteur(&mut asm, Repere::IDENTITE, lx, false, true, 0.0);
 
     asm.terminer()
 }
@@ -1507,7 +1509,8 @@ pub fn preset_isv_moteur() -> EtatStation {
 /// **docké au collecteur** du radiateur dont le repère monde est `radia` (de
 /// largeur `radia_largeur`) — exactement comme la vue « radiateur + bloc moteur ».
 /// Tout est composé dans le repère du radiateur, donc valable même incliné.
-fn poser_bloc_moteur(asm: &mut Assembleur, radia: Repere, radia_largeur: f32, miroir: bool, propulseur: bool) {
+#[allow(clippy::too_many_arguments)]
+fn poser_bloc_moteur(asm: &mut Assembleur, radia: Repere, radia_largeur: f32, miroir: bool, propulseur: bool, regime: f32) {
     let bloc_w = 4.4_f32;
     let hy = bloc_w * 0.42;
     let lx = 4.0 * (hy * 1.05 * 0.66) + 2.0 * (hy * 0.5 * 0.66); // envergure rangée
@@ -1569,9 +1572,57 @@ fn poser_bloc_moteur(asm: &mut Assembleur, radia: Repere, radia_largeur: f32, mi
         asm.ajouter(cuire(rw, &reacteur));
         let tuyere = Composant::MoteurAntimatiere { profil: Profil::P1, taille };
         let port_base = rw.compose(reacteur.ports()[0].repere); // base −Z du réacteur
-        asm.ajouter(cuire(poser(port_base, &tuyere, 0), &tuyere));
+        let pose = poser(port_base, &tuyere, 0);
+        asm.ajouter(cuire(pose, &tuyere));
+
+        // **Panache**, posé au bout de la tuyère et dans son axe. Le jet part le
+        // long du **−Z local** du moteur (c'est là que sont la buse et les deux
+        // anneaux de stabilisation) : on retourne donc le repère d'un demi-tour.
+        if regime > 1e-3 {
+            let sortie = Repere::new(
+                pose.pos + pose.rot * (Vec3::NEG_Z * (taille * PANACHE_SORTIE)),
+                pose.rot * Quat::from_rotation_y(PI),
+            );
+            asm.ajouter(cuire(
+                sortie,
+                &Composant::Panache {
+                    longueur: PANACHE_LONGUEUR / ISV_ECHELLE,
+                    rayon_col: taille * PANACHE_COL,
+                    rayon_bout: PANACHE_BOUT / ISV_ECHELLE,
+                    intensite: regime,
+                },
+            ));
+        }
     }
 }
+
+// --- Panache d'antimatière ---------------------------------------------------
+/// Longueur du jet à pleine poussée, **au gabarit final**.
+///
+/// Deux longueurs de vaisseau (168 × 2 ≈ 336). Ce n'est pas une exagération : un
+/// jet de pions relativistes n'a rien qui l'arrête, et sa portée visible dit
+/// exactement ce que la propulsion a d'inhabituel. Une queue courte donnerait un
+/// moteur chimique.
+const PANACHE_LONGUEUR: f32 = 336.0;
+/// Rayon du jet à son bout, au gabarit final.
+///
+/// ⚠️ **Cette cote décide si le panache lèche la charge utile.** Les tuyères sont
+/// braquées de 5° vers l'extérieur précisément pour que le jet passe à côté du
+/// vaisseau remorqué ; un panache trop ouvert annulerait ce braquage et
+/// reviendrait sur la coque. Gardée par `le_panache_ne_leche_pas_la_charge_utile`.
+///
+/// Réglée à l'écran : 22 jugé trop large, **divisé par deux**.
+const PANACHE_BOUT: f32 = 11.0;
+/// Rayon au col, en fraction de la taille du moteur.
+///
+/// La moitié des anneaux de stabilisation (0,30), et non leur diamètre : le jet
+/// sort **pincé** par la tuyère magnétique, plus étroit que l'ouverture qui le
+/// laisse passer. C'est d'ailleurs ce que fait un col magnétique — il resserre
+/// le faisceau avant de le lâcher.
+const PANACHE_COL: f32 = 0.15;
+/// Distance de la sortie au repère du moteur, en fraction de sa taille — juste
+/// au-delà du second anneau de stabilisation (1,60).
+const PANACHE_SORTIE: f32 = 1.66;
 
 /// Vue briques : la **charpente de l'ISV** (treillis conique courbe) à gauche, et
 /// à droite la **même mais terminée en tête d'aiguille** (apex prolongé en flèche
@@ -2077,25 +2128,77 @@ fn poser_tete_bouclier(asm: &mut Assembleur, base_y: f32, axe: Quat) {
 }
 
 // --- Bouclier thermique d'épine ---------------------------------------------
-/// Rayon du bardage, au gabarit final. L'épine hors-tout mesure **1,15** sur sa
-/// partie droite (mesuré) : 1,25 laisse le jeu d'un revêtement posé dessus, pas
-/// d'une gaine flottant autour.
-const THERMIQUE_RAYON: f32 = 1.25;
-/// Début du bardage le long de l'axe, au gabarit final.
+// Le bardage se monte **au droit des moteurs**, et s'arrête peu après les
+// tuyères : c'est là qu'est la chaleur. Il ne couvre pas le long tronçon nu, qui
+// n'a rien à parer et que le bardage ferait lire comme une gaine technique.
+//
+// Toutes les cotes ci-dessous sont relevées sur l'épine assemblée, dont le rayon
+// hors-tout décroît ainsi le long de l'axe : 3,75 à X = −12, 2,81 à −9, 2,28 à
+// −6, 1,84 à −3, 1,53 à 0, 1,32 à +3, puis 1,15 constant au-delà de +12.
+
+/// Début du bardage : au pied des tuyères, qui s'étendent de −9,8 à −1,3.
 ///
-/// **Pas au ras des moteurs**, et c'est un compromis assumé : l'épine s'évase de
-/// 1,84 à 1,15 sur ses quinze premières unités, alors que le bardage est un
-/// manchon **droit**. Le poser plus bas le ferait flotter au-dessus de
-/// l'évasement. La zone laissée nue est celle du pied en pavillon et des deux
-/// anneaux hexagonaux — déjà chargée en structure, où un bardage ne se lirait
-/// pas. C'est la limite honnête d'un détail de surface à ce prix.
-const THERMIQUE_DEBUT_Y: f32 = 12.0;
-/// Fin du bardage : juste avant la première rangée de fret (51,3).
-const THERMIQUE_FIN_Y: f32 = 48.0;
-/// Nombre de rangs d'écailles. Réglé pour que chaque écaille soit **plus large
-/// que longue** — une facette d'épine fait ~1,25 de large, et 30 rangs sur 36
-/// donnent un pas de 1,19.
-const THERMIQUE_RANGS: usize = 30;
+/// **Pas plus bas**, et la raison est mesurée : entre −12 et −10,5 le rayon de
+/// l'épine tombe de 3,75 à 2,85 d'un seul coup, puis se remet à décroître
+/// doucement. Aucune loi en puissance ne suit ce décrochement, et un bardage qui
+/// part de −12 flotte de **0,93** au-dessus de la poutre trois unités plus loin
+/// (mesuré). À partir de −9 le profil est régulier et l'exposant 2,0 le suit à
+/// deux centièmes près.
+const THERMIQUE_DEBUT_Y: f32 = -9.0;
+/// Fin du bardage. Les tuyères s'arrêtent à −1,3 : le bardage les dépasse de
+/// cinq unités et s'arrête là. Au-delà, il n'y a plus rien à parer.
+const THERMIQUE_FIN_Y: f32 = 4.0;
+/// Rayon au **pied** (côté moteurs), pris au **circonradius** comme celui de
+/// l'épine (2,81 au même endroit).
+///
+/// ⚠️ Il ne suffit pas de dépasser 2,81. Les deux hexagones — celui du bardage
+/// et celui du treillis — n'ont **aucune raison d'être calés sur la même
+/// orientation** : le bardage a son repère propre, l'épine tient le sien de
+/// `repere(axe)`. Dans le pire cas ils sont décalés d'un demi-pas, et c'est
+/// alors le **milieu de facette** du bardage (son rayon inscrit, 0,866 × le
+/// circonradius) qui passe au droit d'un **longeron** de l'épine. C'est ce
+/// pincement qui se voyait à l'écran, alors même que les circonradius
+/// mesuraient un jeu positif partout.
+///
+/// Les rayons sont donc dimensionnés sur le **cas le plus défavorable** :
+/// `circonradius_bardage × 0,866 ≥ circonradius_épine + jeu`. D'où le facteur
+/// 1,155 appliqué aux cotes relevées — c'est le prix de ne pas dépendre d'un
+/// calage angulaire que rien ne garantit.
+const THERMIQUE_RAYON_PIED: f32 = 3.50;
+/// Rayon au **bout**, au circonradius. L'épine y mesure ≈ 1,28.
+const THERMIQUE_RAYON_BOUT: f32 = 1.70;
+/// Courbure de l'évasement, ajustée pour que le bardage **épouse** l'épine.
+///
+/// Elle est réglée par la mesure et non par le calcul : la loi du treillis est
+/// écrite depuis la base de la charpente, alors que le bardage commence dix
+/// unités plus haut, et le pied en pavillon s'ajoute par-dessus. Refaire
+/// l'algèbre donnerait une formule juste pour une pièce qui n'est pas tout à
+/// fait celle qu'on habille.
+///
+/// Ajustée sur les rayons relevés **majorés du facteur de calage** (voir
+/// [`THERMIQUE_RAYON_PIED`]), elle tombe à **1,7 ± 0,05** aux trois tranches du
+/// milieu : le profil de l'épine *est* une loi en puissance sur cette portion,
+/// ce qui n'allait pas de soi. Le jeu résultant, mesuré au pire cas, tient entre
+/// **+0,05 et +0,09** sur toute l'emprise — vérifié par
+/// `le_bardage_thermique_epouse_lepine`.
+const THERMIQUE_COURBURE: f32 = 1.5;
+/// Nombre de rangs d'écailles. Réglé pour que le pas (≈ 1,3) reste inférieur à
+/// la largeur d'une facette, y compris au bout où elle n'est plus que de 1,4.
+const THERMIQUE_RANGS: usize = 10;
+
+/// Le bardage tel qu'il est monté sur l'ISV. Sorti en fonction pour que la
+/// vitrine et le vaisseau montrent **la même pièce** : c'est tout l'intérêt de
+/// la méthode brique-d'abord, et une vitrine qui diverge du montage ne valide
+/// plus rien.
+fn bouclier_thermique() -> Composant {
+    Composant::BouclierThermique {
+        rayon_pied: THERMIQUE_RAYON_PIED,
+        rayon_bout: THERMIQUE_RAYON_BOUT,
+        courbure: THERMIQUE_COURBURE,
+        longueur: THERMIQUE_FIN_Y - THERMIQUE_DEBUT_Y,
+        rangs: THERMIQUE_RANGS,
+    }
+}
 
 /// Vue briques : le **bouclier thermique d'épine** — le bardage d'écailles
 /// imbriquées qui pare le rayonnement des tuyères.
@@ -2110,29 +2213,30 @@ pub fn demo_bouclier_thermique() -> EtatStation {
     let couche = Quat::from_rotation_arc(Vec3::Z, Vec3::X);
 
     let court = Composant::BouclierThermique {
-        rayon: THERMIQUE_RAYON * 2.4,
+        rayon_pied: 3.0,
+        rayon_bout: 2.6,
+        courbure: THERMIQUE_COURBURE,
         longueur: 9.0,
-        rangs: 5,
+        rangs: 4,
     };
-    asm.ajouter(cuire(Repere::new(vec3(-4.5, 7.0, 0.0), couche), &court));
+    asm.ajouter(cuire(Repere::new(vec3(-4.5, 12.0, 0.0), couche), &court));
 
-    // Monté sur son épine : bardage et poutre à la même échelle et au même
-    // endroit, sans quoi on ne juge que le bardage seul.
-    let long = 16.0;
+    // Monté sur son épine : bardage et poutre au même endroit et au même
+    // gabarit, sans quoi on ne juge que le bardage seul — et ce qui compte est
+    // qu'il **épouse** l'évasement au lieu de flotter dessus.
+    let long = THERMIQUE_FIN_Y - THERMIQUE_DEBUT_Y;
     let epine = Composant::CharpenteHexa {
-        grand: Profil::P1,
+        grand: Profil::P3,
         petit: Profil::P1,
-        longueur: long + 4.0,
+        longueur: long * 1.6,
         courbure: 2.6,
         pied: PiedHexa::Aucun,
     };
-    asm.ajouter(cuire(Repere::new(vec3(-2.0, -3.0, 0.0), couche), &epine));
-    let manchon = Composant::BouclierThermique {
-        rayon: THERMIQUE_RAYON,
-        longueur: long,
-        rangs: 13,
-    };
-    asm.ajouter(cuire(Repere::new(vec3(-8.0, -3.0, 0.0), couche), &manchon));
+    asm.ajouter(cuire(Repere::new(vec3(0.0, -6.0, 0.0), couche), &epine));
+    asm.ajouter(cuire(
+        Repere::new(vec3(-long * 0.8, -6.0, 0.0), couche),
+        &bouclier_thermique(),
+    ));
 
     asm.terminer()
 }
@@ -3276,6 +3380,184 @@ mod tests {
         );
     }
 
+    // **Le panache ne doit pas lécher le vaisseau.** C'est la raison d'être du
+    // braquage de 5° des tuyères, décidé bien avant qu'il y ait un panache à
+    // regarder : l'ISV est un tracteur, il remorque sa charge utile **dans l'axe
+    // de ses propres jets**, et sans ce braquage il la baignerait dans un plasma
+    // de pions. Un panache trop ouvert annule le braquage et ramène le problème.
+    //
+    // Rien de tout ça ne se voit sur le composant seul : c'est un rapport entre
+    // trois choses — l'angle des tuyères, l'évasement du jet, et le gabarit de
+    // ce qui est remorqué derrière.
+    #[test]
+    fn le_panache_ne_leche_pas_la_charge_utile() {
+        let EtatStation::Prete(s) = preset_isv_fixe(Epine::Hexagonale, 1.0) else {
+            panic!("l'ISV doit être prête");
+        };
+        // Axe du jet de chaque tuyère, dans le repère du vaisseau fini.
+        let jets: Vec<(Vec3, Vec3)> = s
+            .pieces()
+            .iter()
+            .filter(|p| matches!(p.composant, Composant::Panache { .. }))
+            .map(|p| {
+                (
+                    p.transforme.transform_point3(Vec3::ZERO),
+                    p.transforme.transform_vector3(Vec3::Z).normalize(),
+                )
+            })
+            .collect();
+        assert_eq!(jets.len(), 2, "un panache par tuyère");
+
+        // Tout ce qui est **remorqué** : la charge utile et la tête, c'est-à-dire
+        // ce qui se trouve en aval des moteurs. L'ossature de propulsion est
+        // exclue — le jet en sort, il la frôle forcément.
+        let remorque: Vec<(Vec3, f32)> = s
+            .pieces()
+            .iter()
+            .filter(|p| {
+                matches!(
+                    p.composant,
+                    Composant::RatelierCargo { .. }
+                        | Composant::ModuleHabitat { .. }
+                        | Composant::ModuleEquipage { .. }
+                        | Composant::BouclierPetit { .. }
+                        | Composant::BouclierGrand { .. }
+                )
+            })
+            .map(|p| (p.centre(), p.composant.rayon_local()))
+            .collect();
+        assert!(remorque.len() >= 8, "{} pièces remorquées : trop peu", remorque.len());
+
+        let mut pire = f32::MAX;
+        let mut coupable = Vec3::ZERO;
+        for (origine, axe) in &jets {
+            for (centre, rayon) in &remorque {
+                // Distance de la pièce à l'axe du jet, moins le rayon du jet à
+                // cette distance-là : c'est le jeu réel entre les deux volumes.
+                let le_long = (*centre - *origine).dot(*axe);
+                if le_long <= 0.0 {
+                    continue; // en amont de la tuyère : le jet ne va pas par là
+                }
+                let ecart = (*centre - *origine - *axe * le_long).length();
+                let t = le_long / (PANACHE_LONGUEUR);
+                let demi_jet = crate::vaisseau::composant::rayon_panache(
+                    Profil::P1.rayon() / 0.40 * PANACHE_COL,
+                    PANACHE_BOUT,
+                    t,
+                );
+                let jeu = ecart - demi_jet - rayon;
+                if jeu < pire {
+                    pire = jeu;
+                    coupable = *centre;
+                }
+            }
+        }
+        assert!(
+            pire > 1.0,
+            "le panache passe à {pire:.1} d'une pièce remorquée (centre {coupable:?}) : \
+             il la baigne au lieu de la contourner"
+        );
+    }
+
+    // Le bardage se monte **au droit des moteurs**, donc sur la portion où
+    // l'épine s'ouvre vers son pied — de 2,81 à 1,28 de rayon sur les treize
+    // unités couvertes. Il doit donc l'**épouser**, et il n'y a que deux façons
+    // de rater ça, opposées et toutes deux voyantes : trop serré, l'épine
+    // ressort au travers ; trop lâche, le bardage flotte autour comme une gaine.
+    //
+    // ⚠️ La comparaison qui compte est **la surface la plus rentrante du bardage
+    // contre la plus saillante de l'épine**, et non leurs deux circonradius. Les
+    // deux hexagones ne sont calés sur aucune orientation commune : au pire ils
+    // sont décalés d'un demi-pas, et c'est alors le **milieu de facette** du
+    // bardage (rayon inscrit = 0,866 × circonradius) qui passe au droit d'un
+    // **longeron** de l'épine. Le premier jet de ce test comparait les maxima
+    // des deux pièces, trouvait un jeu positif partout — et le pincement se
+    // voyait quand même à l'écran.
+    #[test]
+    fn le_bardage_thermique_epouse_lepine() {
+        let EtatStation::Prete(s) = preset_isv_fixe(Epine::Hexagonale, 0.0) else {
+            panic!("l'ISV doit être prête");
+        };
+        // Sommets d'une famille, casés par tranche de 0,5 le long de l'axe. Le
+        // maillage cuit n'a de sommets qu'aux bords de ses facettes : une
+        // tranche plus fine tomberait dans le vide et ne mesurerait rien.
+        let par_tranche = |f: &dyn Fn(&Composant) -> bool| -> Vec<(f32, f32, f32)> {
+            let mut v: Vec<(f32, f32, f32)> = Vec::new();
+            for p in s.pieces().iter().filter(|p| f(&p.composant)) {
+                let mut b = crate::vaisseau::maillage::Batisseur::new();
+                b.poser_transforme(p.transforme);
+                p.composant.dessiner(&mut b);
+                for lot in b.terminer() {
+                    for vt in &lot.vertices {
+                        let w = vec3(vt.position[0], vt.position[1], vt.position[2]);
+                        let case = (w.x / 0.5).floor() * 0.5;
+                        let r = w.yz().length();
+                        match v.iter_mut().find(|(c, _, _)| (*c - case).abs() < 1e-3) {
+                            Some(e) => {
+                                e.1 = e.1.min(r);
+                                e.2 = e.2.max(r);
+                            }
+                            None => v.push((case, r, r)),
+                        }
+                    }
+                }
+            }
+            v
+        };
+        let epine = par_tranche(&|c| matches!(c, Composant::CharpenteHexa { .. }));
+
+        // Le bardage est pris par sa **section de calcul** et non par ses
+        // sommets. C'est la surface qui vient se plaquer sur la poutre ; ses
+        // lèvres, relevées par construction, ne touchent rien et fausseraient la
+        // mesure — une tranche qui ne contient qu'une lèvre lit un rayon bien
+        // trop grand et fait croire à un bardage qui flotte.
+        let long = THERMIQUE_FIN_Y - THERMIQUE_DEBUT_Y;
+        // Rayon **inscrit** : le bardage ne peut pas s'approcher de l'axe plus
+        // près que ça, quel que soit le calage angulaire des deux hexagones.
+        let inscrit = 3.0_f32.sqrt() * 0.5;
+
+        let (mut jeu_max, mut jeu_min) = (f32::MIN, f32::MAX);
+        let (mut pire_x, mut pire) = (0.0f32, 0.0f32);
+        let mut mesures = 0;
+        for (x, _, _) in epine.iter() {
+            if !(THERMIQUE_DEBUT_Y..=THERMIQUE_FIN_Y).contains(x) {
+                continue;
+            }
+            // Rayon de l'épine pris sur une **fenêtre** d'une baie et non sur la
+            // seule tranche : certaines tranches ne coupent que des diagonales et
+            // lisent un rayon anormalement bas, ce qui ferait croire à un
+            // bardage qui flotte là où il est simplement en face d'un vide.
+            let epine_max = epine
+                .iter()
+                .filter(|(c, _, _)| (c - x).abs() <= 1.5)
+                .fold(0.0f32, |m, (_, _, r)| m.max(*r));
+            let t = (x - THERMIQUE_DEBUT_Y) / long;
+            let bardage = crate::vaisseau::composant::section_bardage(
+                THERMIQUE_RAYON_PIED,
+                THERMIQUE_RAYON_BOUT,
+                THERMIQUE_COURBURE,
+                t,
+            );
+            let jeu = bardage * inscrit - epine_max;
+            if jeu > jeu_max {
+                (pire_x, pire) = (*x, jeu);
+            }
+            jeu_max = jeu_max.max(jeu);
+            jeu_min = jeu_min.min(jeu);
+            mesures += 1;
+        }
+        assert!(mesures >= 6, "{mesures} tranches mesurées : trop peu pour conclure");
+        assert!(
+            jeu_min > 0.05,
+            "pincement de {:.2} : le bardage mord sur l'épine",
+            -jeu_min
+        );
+        assert!(
+            jeu_max < 0.40,
+            "le bardage flotte de {pire:.2} au-dessus de l'épine vers X = {pire_x:.0}"
+        );
+    }
+
     // **Proportions d'ensemble.** Ce qui fait qu'un ISV lit comme un ISV et non
     // comme une fusée quelconque tient à trois rapports, et à rien d'autre : un
     // très long tronçon d'épine **nu**, une charge utile dominée par son fret, et
@@ -3287,7 +3569,7 @@ mod tests {
     // elles interdisent de la perdre.
     #[test]
     fn les_proportions_densemble_de_lisv_tiennent() {
-        let EtatStation::Prete(s) = preset_isv_fixe(Epine::Hexagonale) else {
+        let EtatStation::Prete(s) = preset_isv_fixe(Epine::Hexagonale, 0.0) else {
             panic!("l'ISV doit être prête");
         };
         // Étendue axiale et rayon d'une famille de pièces, mesurés sur la
@@ -3380,7 +3662,7 @@ mod tests {
     // déduit d'aucune autre et qu'un déplacement de rangée pourrait la brouiller.
     #[test]
     fn la_tete_de_bouclier_coiffe_le_bout_oppose_aux_moteurs() {
-        let EtatStation::Prete(s) = preset_isv_fixe(Epine::Hexagonale) else {
+        let EtatStation::Prete(s) = preset_isv_fixe(Epine::Hexagonale, 0.0) else {
             panic!("l'ISV doit être prête");
         };
         let x = |f: &dyn Fn(&Composant) -> bool| -> Vec<f32> {
@@ -3677,6 +3959,9 @@ mod tests {
         }
     }
 }
+
+
+
 
 
 

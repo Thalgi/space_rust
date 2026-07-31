@@ -21,8 +21,14 @@
 //! Monté à l'envers, chaque joint offrirait une arête au rayonnement — le même
 //! raisonnement qu'un toit posé dans le sens de la pluie.
 //!
-//! Repère local : axe **+Z**, base côté moteurs à l'origine, section hexagonale
-//! comme l'épine qu'il habille.
+//! **Le bardage est évasé, parce que l'épine l'est.** Il se monte là où la
+//! chaleur est — au droit des moteurs — et c'est précisément la portion où la
+//! poutre s'ouvre vers son pied. Un manchon droit y flotterait de plusieurs
+//! unités à un bout et serait traversé à l'autre. La section suit donc la même
+//! loi en puissance que le treillis : `bout + (pied − bout)·(1 − t)^courbure`.
+//!
+//! Repère local : axe **+Z**, base côté moteurs à l'origine (le **gros** bout),
+//! section hexagonale comme l'épine qu'il habille.
 
 use crate::vaisseau::peintre::Peintre;
 use crate::vaisseau::pieces;
@@ -37,7 +43,11 @@ const ECAILLE: Color = Color { r: 0.33, g: 0.29, b: 0.26, a: 1.0 };
 /// l'imbrication, et sans contraste le bardage redevient un tube lisse.
 const LEVRE: Color = Color { r: 0.20, g: 0.17, b: 0.16, a: 1.0 };
 
-/// Saillie de la lèvre, en fraction du rayon. **Volontairement faible** : le
+/// Saillie de la lèvre, en fraction du rayon **local**. Prise sur le rayon
+/// courant et non sur celui du pied : une écaille du bout, quatre fois plus
+/// petite, n'a pas de raison d'avoir la même saillie qu'une écaille de la base.
+///
+/// **Volontairement faible** : le
 /// bardage doit épaissir l'épine d'un cheveu, pas la doubler. Au-delà de ~0,2 les
 /// écailles cessent d'être un revêtement et deviennent des ailettes.
 const SAILLIE: f32 = 0.13;
@@ -112,10 +122,26 @@ fn pas(longueur: f32, rangs: usize) -> f32 {
     longueur / (rangs.max(1) as f32 + RECOUVREMENT)
 }
 
-pub(super) fn dessiner<P: Peintre>(p: &mut P, rayon: f32, longueur: f32, rangs: usize) {
+/// Rayon de la **section suivie**, à la fraction `t` de la longueur.
+///
+/// Même loi en puissance que le treillis conique : le bardage doit épouser la
+/// poutre, pas la croiser. `courbure` élevée concentre l'évasement près du pied,
+/// exactement comme sur l'épine.
+pub fn section(rayon_pied: f32, rayon_bout: f32, courbure: f32, t: f32) -> f32 {
+    rayon_bout + (rayon_pied - rayon_bout) * (1.0 - t.clamp(0.0, 1.0)).powf(courbure.max(0.1))
+}
+
+pub(super) fn dessiner<P: Peintre>(
+    p: &mut P,
+    rayon_pied: f32,
+    rayon_bout: f32,
+    courbure: f32,
+    longueur: f32,
+    rangs: usize,
+) {
     let n = rangs.max(1);
     let pas = pas(longueur, n);
-    let saillie = rayon * SAILLIE;
+    let rayon = |z: f32| section(rayon_pied, rayon_bout, courbure, z / longueur.max(1e-4));
 
     let mut face = [Lot::new(ECAILLE), Lot::new(assombrir(ECAILLE, RANGS_TONS[1]))];
     let mut levre = [Lot::new(LEVRE), Lot::new(assombrir(LEVRE, RANGS_TONS[1]))];
@@ -125,8 +151,12 @@ pub(super) fn dessiner<P: Peintre>(p: &mut P, rayon: f32, longueur: f32, rangs: 
         let z1 = z0 + pas * (1.0 + RECOUVREMENT);
         // Bord **plaqué** contre l'épine à z0, bord **libre et relevé** à z1 :
         // c'est ce décalage radial qui fait passer l'écaille suivante dessous.
-        let bas = pieces::hexa_section(Vec3::Z * z0, Vec3::X, Vec3::Y, rayon);
-        let haut = pieces::hexa_section(Vec3::Z * z1, Vec3::X, Vec3::Y, rayon + saillie);
+        // Le bord libre est relevé par rapport à la section **de sa propre
+        // cote**, sinon l'évasement suffirait à le faire paraître relevé là où
+        // il ne l'est pas.
+        let bas = pieces::hexa_section(Vec3::Z * z0, Vec3::X, Vec3::Y, rayon(z0));
+        let haut =
+            pieces::hexa_section(Vec3::Z * z1, Vec3::X, Vec3::Y, rayon(z1) * (1.0 + SAILLIE));
         let t = j % 2;
 
         for i in 0..6 {
@@ -151,12 +181,13 @@ pub(super) fn cout() -> f32 {
     6.0
 }
 
-/// Le bardage se déploie **d'un seul côté** de son origine, le long de +Z.
-pub(super) fn rayon_local(rayon: f32, longueur: f32) -> f32 {
-    longueur.hypot(rayon * (1.0 + SAILLIE))
+/// Le bardage se déploie **d'un seul côté** de son origine, le long de +Z. Le
+/// rayon qui majore est celui du **pied**, le gros bout.
+pub(super) fn rayon_local(rayon_pied: f32, rayon_bout: f32, longueur: f32) -> f32 {
+    longueur.hypot(rayon_pied.max(rayon_bout) * (1.0 + SAILLIE))
 }
 
-pub(super) fn englobant(rayon: f32, longueur: f32) -> (Vec3, f32) {
+pub(super) fn englobant(rayon_pied: f32, rayon_bout: f32, longueur: f32) -> (Vec3, f32) {
     let demi = longueur * 0.5;
-    (Vec3::Z * demi, demi.hypot(rayon * (1.0 + SAILLIE)))
+    (Vec3::Z * demi, demi.hypot(rayon_pied.max(rayon_bout) * (1.0 + SAILLIE)))
 }

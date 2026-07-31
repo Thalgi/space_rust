@@ -19,6 +19,7 @@ mod symetrie;
 mod unites;
 
 pub use assemblage::{Assembleur, Budget, EtatStation, Piece, Station};
+pub(crate) use composant::{rayon_panache, teinte_panache};
 pub use composant::{
     Composant, DonneesSousEnsemble, FamillePropulsion, PiedHexa, Sorties, StyleTreillis, VarianteAntenne,
     BOUCLIER_ELANCEMENT,

@@ -32,7 +32,18 @@ pub use antenne::VarianteAntenne;
 mod caisson;
 pub use caisson::{VarianteCaisson, VarianteCharge};
 mod bouclier;
+mod panache;
+/// Rayon du jet à la fraction `t` de sa longueur, exposé pour que l'assemblage
+/// puisse vérifier que le panache **contourne** la charge utile remorquée.
+#[allow(unused_imports)]
+pub(crate) use panache::{rayon as rayon_panache, teinte as teinte_panache};
 mod thermique;
+/// Section du bardage thermique, exposée pour que l'assemblage puisse vérifier
+/// qu'il **épouse** l'épine. C'est la surface qui se plaque sur la poutre — la
+/// mesurer sur les sommets cuits attraperait les lèvres, relevées par
+/// construction, et ferait croire à un bardage qui flotte.
+#[allow(unused_imports)]
+pub(crate) use thermique::section as section_bardage;
 pub use bouclier::ELANCEMENT as BOUCLIER_ELANCEMENT;
 mod cargo;
 mod reservoir;
@@ -109,7 +120,12 @@ pub enum Composant {
     /// `ailettes` panneaux plats de chaque côté), à l'échelle du vaisseau/km, pas
     /// des petits radiateurs de station. Se monte par un port `Surface`.
     /// Première brique de la famille « méga » (ISV, puis O'Neill, Elysium).
-    RadiateurMega { profil: Profil, longueur: f32, largeur: f32, ailettes: usize },
+    /// `chaleur` va de 0 (froid, gris) à 1 (pleine chauffe, orange). Seules les
+    /// parties **grises** — panneau, tubes calorifiques, rails de bord — la
+    /// suivent ; la colonne vertébrale et le réservoir restent noirs. Et elle
+    /// **décroît vers la pointe** : un radiateur se refroidit sur sa longueur,
+    /// c'est même toute sa fonction.
+    RadiateurMega { profil: Profil, longueur: f32, largeur: f32, ailettes: usize, chaleur: f32 },
     /// **Nacelle moteur de l'ISV** : nœud d'attache + hub + 4 sphères d'hydrogène
     /// + **deux moteurs jumeaux inclinés de ±1,5°** (corps magnétique, anneaux de
     /// confinement, tuyère évasée, boucliers anti-radiation, radiateurs).
@@ -233,7 +249,25 @@ pub enum Composant {
     /// À distinguer de [`Composant::BouclierPetit`] / [`Composant::
     /// BouclierGrand`], qui parent la poussière interstellaire à l'autre bout du
     /// vaisseau. Pièce de surface, posée à la main : pas de port.
-    BouclierThermique { rayon: f32, longueur: f32, rangs: usize },
+    /// `rayon_pied` est le **gros** bout (côté moteurs, à l'origine) et
+    /// `rayon_bout` le petit : le bardage se monte au droit des tuyères, là où
+    /// l'épine s'ouvre vers son pied, et il doit l'épouser. `courbure` est la
+    /// même que celle du treillis qu'il habille.
+    BouclierThermique {
+        rayon_pied: f32,
+        rayon_bout: f32,
+        courbure: f32,
+        longueur: f32,
+        rangs: usize,
+    },
+    /// **Panache d'antimatière** : le jet qui sort d'une tuyère, le long de +Z
+    /// depuis l'origine. `intensite` va de 0 (moteur coupé, rien n'est dessiné)
+    /// à 1 (pleine poussée).
+    ///
+    /// C'est un **effet**, pas une pièce : coût nul, encombrement nul, aucun
+    /// port. Le compter dans l'englobant ferait reculer la caméra de deux
+    /// longueurs de vaisseau à l'allumage.
+    Panache { longueur: f32, rayon_col: f32, rayon_bout: f32, intensite: f32 },
     /// **Collier de rotation** de la section d'équipage : tambour **creux** qui
     /// ceinture l'épine et porte les bras. `alesage` est le rayon intérieur
     /// libre — il doit dégager l'épine, sinon la section ne pourrait pas
@@ -384,6 +418,8 @@ impl Composant {
             // du moyeu — c'est la même logique que le collier rotatif.
             Composant::BouclierPetit { profil, rayon } => bouclier::ports(*profil, *rayon),
             Composant::BouclierGrand { profil, rayon, .. } => bouclier::ports(*profil, *rayon),
+            // Effet posé à la main sur la tuyère : pas de port.
+            Composant::Panache { .. } => vec![],
             // Bardage de surface enfilé sur l'épine, posé à la main : pas de port.
             Composant::BouclierThermique { .. } => vec![],
             Composant::CollierRotatif { profil, longueur, .. } => equipage::collier_ports(*profil, *longueur),
@@ -414,7 +450,7 @@ impl Composant {
             Composant::Propulseur { variante, taille, .. } => propulsion::dessiner(p, *variante, *taille),
             Composant::Charpente { grand, petit, longueur, courbure, aiguille } => treillis::charpente_dessiner(p, *grand, *petit, *longueur, *courbure, *aiguille),
             Composant::CharpenteHexa { grand, petit, longueur, courbure, pied } => treillis::charpente_hexa_dessiner(p, *grand, *petit, *longueur, *courbure, *pied),
-            Composant::RadiateurMega { longueur, largeur, ailettes, .. } => radiateur::mega_dessiner(p, *longueur, *largeur, *ailettes),
+            Composant::RadiateurMega { longueur, largeur, ailettes, chaleur, .. } => radiateur::mega_dessiner(p, *longueur, *largeur, *ailettes, *chaleur),
             Composant::Motrice { echelle, .. } => propulsion::motrice_dessiner(p, *echelle),
             Composant::BlocMoteur { largeur, .. } => propulsion::bloc_dessiner(p, *largeur),
             Composant::Reservoir { longueur, cage, .. } => reservoir::dessiner(p, *longueur, *cage),
@@ -427,7 +463,11 @@ impl Composant {
             Composant::ModuleEquipage { profil, longueur, hublots } => equipage::dessiner(p, *profil, *longueur, *hublots),
             Composant::BouclierPetit { rayon, .. } => bouclier::petit_dessiner(p, *rayon),
             Composant::BouclierGrand { rayon, elancement, .. } => bouclier::grand_dessiner(p, *rayon, *elancement),
-            Composant::BouclierThermique { rayon, longueur, rangs } => thermique::dessiner(p, *rayon, *longueur, *rangs),
+            // Rendu à part, en additif : voir `panache::dessiner`.
+            Composant::Panache { .. } => panache::dessiner(p),
+            Composant::BouclierThermique { rayon_pied, rayon_bout, courbure, longueur, rangs } => {
+                thermique::dessiner(p, *rayon_pied, *rayon_bout, *courbure, *longueur, *rangs)
+            }
             Composant::CollierRotatif { rayon, alesage, longueur, .. } => equipage::collier_dessiner(p, *rayon, *alesage, *longueur),
             Composant::Charniere { taille, repli } => equipage::charniere_dessiner(p, *taille, *repli),
             Composant::RatelierCargo { longueur, rayon, nacelles, nacelle, .. } => cargo::ratelier_dessiner(p, *longueur, *rayon, *nacelles, *nacelle),
@@ -489,6 +529,7 @@ impl Composant {
             Composant::ModuleEquipage { .. } => equipage::cout(),
             Composant::BouclierPetit { .. } => bouclier::petit_cout(),
             Composant::BouclierGrand { .. } => bouclier::grand_cout(),
+            Composant::Panache { .. } => panache::cout(),
             Composant::BouclierThermique { .. } => thermique::cout(),
             Composant::CollierRotatif { .. } => equipage::collier_cout(),
             Composant::Charniere { .. } => equipage::charniere_cout(),
@@ -564,7 +605,8 @@ impl Composant {
             Composant::ModuleEquipage { profil, longueur, .. } => equipage::rayon_local(*profil, *longueur),
             Composant::BouclierPetit { rayon, .. } => bouclier::petit_rayon_local(*rayon),
             Composant::BouclierGrand { rayon, elancement, .. } => bouclier::grand_rayon_local(*rayon, *elancement),
-            Composant::BouclierThermique { rayon, longueur, .. } => thermique::rayon_local(*rayon, *longueur),
+            Composant::Panache { .. } => panache::rayon_local(),
+            Composant::BouclierThermique { rayon_pied, rayon_bout, longueur, .. } => thermique::rayon_local(*rayon_pied, *rayon_bout, *longueur),
             Composant::CollierRotatif { rayon, longueur, .. } => equipage::collier_rayon_local(*rayon, *longueur),
             Composant::Charniere { taille, .. } => equipage::charniere_rayon_local(*taille),
             // Nacelle : appendice déployé le long de +Z, la longueur domine.
@@ -617,7 +659,8 @@ impl Composant {
             Composant::ModuleEquipage { profil, longueur, .. } => equipage::englobant(*profil, *longueur),
             Composant::BouclierPetit { rayon, .. } => bouclier::petit_englobant(*rayon),
             Composant::BouclierGrand { rayon, elancement, .. } => bouclier::grand_englobant(*rayon, *elancement),
-            Composant::BouclierThermique { rayon, longueur, .. } => thermique::englobant(*rayon, *longueur),
+            Composant::Panache { .. } => panache::englobant(),
+            Composant::BouclierThermique { rayon_pied, rayon_bout, longueur, .. } => thermique::englobant(*rayon_pied, *rayon_bout, *longueur),
             // Râtelier et module d'habitat : structurels, centrés sur leur axe.
             Composant::RatelierCargo { .. } | Composant::ModuleHabitat { .. } => {
                 (Vec3::ZERO, self.rayon_local())
@@ -1578,7 +1621,15 @@ mod tests {
     #[test]
     fn les_ecailles_du_bardage_se_recouvrent() {
         let (rayon, rangs) = (1.25_f32, 13usize);
-        let n = niveaux_du_bardage(&Composant::BouclierThermique { rayon, longueur: 16.0, rangs });
+        // Cas **cylindrique** (pied = bout) : l'imbrication se mesure sur le
+        // rayon, et un évasement la masquerait derrière sa propre pente.
+        let n = niveaux_du_bardage(&Composant::BouclierThermique {
+            rayon_pied: rayon,
+            rayon_bout: rayon,
+            courbure: 1.0,
+            longueur: 16.0,
+            rangs,
+        });
 
         let retombees = n.windows(2).filter(|w| w[1].1 < w[0].1 - 1e-4).count();
         assert!(
@@ -1614,7 +1665,13 @@ mod tests {
     #[test]
     fn le_bardage_thermique_reste_mince() {
         let rayon = 1.25_f32;
-        let n = niveaux_du_bardage(&Composant::BouclierThermique { rayon, longueur: 16.0, rangs: 13 });
+        let n = niveaux_du_bardage(&Composant::BouclierThermique {
+            rayon_pied: rayon,
+            rayon_bout: rayon,
+            courbure: 1.0,
+            longueur: 16.0,
+            rangs: 13,
+        });
         let maxi = n.iter().fold(0.0f32, |m, (_, r)| m.max(*r));
         let epaisseur = (maxi - rayon) / rayon;
         assert!(
@@ -1633,7 +1690,13 @@ mod tests {
     #[test]
     fn le_bardage_thermique_tient_dans_sa_longueur() {
         for (longueur, rangs) in [(16.0_f32, 13usize), (9.0, 5), (36.0, 30)] {
-            let n = niveaux_du_bardage(&Composant::BouclierThermique { rayon: 1.25, longueur, rangs });
+            let n = niveaux_du_bardage(&Composant::BouclierThermique {
+                rayon_pied: 1.25,
+                rayon_bout: 1.25,
+                courbure: 1.0,
+                longueur,
+                rangs,
+            });
             let (bas, haut) = (n[0].0, n[n.len() - 1].0);
             assert!(
                 (-1e-3..=1e-3).contains(&bas),
@@ -2254,9 +2317,107 @@ mod tests {
         assert!(!b.terminer().is_empty());
     }
 
+    /// Sommets d'une aile, avec leur teinte, rangés par distance à la racine.
+    fn aile_chauffee(chaleur: f32) -> Vec<(f32, [u8; 4])> {
+        let c = Composant::RadiateurMega {
+            profil: Profil::P0,
+            longueur: 10.0,
+            largeur: 5.5,
+            ailettes: 34,
+            chaleur,
+        };
+        let mut b = Batisseur::new();
+        c.dessiner(&mut b);
+        let mut v: Vec<(f32, [u8; 4])> = Vec::new();
+        for lot in b.terminer() {
+            for s in &lot.vertices {
+                v.push((s.position[2], s.color));
+            }
+        }
+        v
+    }
+
+    /// Une teinte est-elle **chaude** — franchement plus rouge que verte ? Le
+    /// gris de base a ses trois canaux à quelques pourcents l'un de l'autre ;
+    /// tout ce qui chauffe s'en écarte massivement.
+    fn est_chaude(c: [u8; 4]) -> bool {
+        c[0] as i32 - c[1] as i32 > 40
+    }
+
+    // Le radiateur chauffe **seulement sur ses parties grises** : panneau, tubes
+    // calorifiques et rails. La colonne vertébrale et le réservoir sont noirs et
+    // doivent le rester — ce sont des organes internes, pas de la surface
+    // radiante, et les voir rougir ferait mentir la pièce.
+    #[test]
+    fn seules_les_parties_grises_du_radiateur_chauffent() {
+        let froid = aile_chauffee(0.0);
+        let chaud = aile_chauffee(1.0);
+        assert_eq!(froid.len(), chaud.len(), "la chauffe ne doit rien changer à la géométrie");
+
+        // À froid, rien n'est chaud. C'est la moitié du test qui compte : sans
+        // elle, une pièce rouge en permanence passerait.
+        assert!(
+            !froid.iter().any(|(_, c)| est_chaude(*c)),
+            "des teintes chaudes à chaleur nulle"
+        );
+
+        // Les **noirs** sont repérés à froid puis suivis un par un : la chauffe
+        // ne déplace aucun sommet, donc le sommet `i` est le même dans les deux
+        // versions. Compter une proportion ne dirait rien — les tubes pèsent à
+        // eux seuls 98 % des sommets, et la colonne noire disparaîtrait dans
+        // l'arrondi.
+        let noir = |c: [u8; 4]| c[0] < 60 && c[1] < 60 && c[2] < 60;
+        let (mut noirs, mut chauffes) = (0, 0);
+        for (i, (_, froide)) in froid.iter().enumerate() {
+            let chaude = chaud[i].1;
+            if noir(*froide) {
+                noirs += 1;
+                assert!(
+                    noir(chaude),
+                    "sommet {i} : la colonne vertébrale a rougi ({chaude:?}) —                      ce n'est pas de la surface radiante"
+                );
+            } else if est_chaude(chaude) {
+                chauffes += 1;
+            }
+        }
+        assert!(noirs > 20, "{noirs} sommets noirs repérés : le test ne surveille rien");
+        let gris = froid.len() - noirs;
+        assert!(
+            chauffes > gris * 9 / 10,
+            "{chauffes} sommets chauds sur {gris} gris : la chauffe n'atteint pas tout le panneau"
+        );
+    }
+
+    // Un radiateur se **refroidit sur sa longueur** — c'est sa fonction même. La
+    // racine doit donc être plus chaude que la pointe, sans quoi l'aile lit
+    // comme une plaque peinte plutôt que comme un organe qui évacue.
+    #[test]
+    fn le_radiateur_est_plus_chaud_a_sa_racine_qu_a_sa_pointe() {
+        let mut v = aile_chauffee(1.0);
+        v.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        let (z0, z1) = (v[0].0, v[v.len() - 1].0);
+        let rouge = |bande: (f32, f32)| -> f32 {
+            let pris: Vec<f32> = v
+                .iter()
+                .filter(|(z, c)| (bande.0..=bande.1).contains(z) && est_chaude(*c))
+                .map(|(_, c)| c[0] as f32 - c[2] as f32)
+                .collect();
+            assert!(!pris.is_empty(), "aucune teinte chaude dans la bande {bande:?}");
+            pris.iter().sum::<f32>() / pris.len() as f32
+        };
+        let tiers = (z1 - z0) / 3.0;
+        let racine = rouge((z0, z0 + tiers));
+        let pointe = rouge((z1 - tiers, z1));
+        assert!(
+            racine > pointe * 1.15,
+            "racine {racine:.0} contre pointe {pointe:.0} : l'aile chauffe uniformément, \
+             elle ne lit pas comme un radiateur"
+        );
+    }
+
     #[test]
     fn radiateur_mega_un_port_surface() {
-        let c = Composant::RadiateurMega { profil: Profil::P0, longueur: 10.0, largeur: 5.5, ailettes: 34 };
+        let c = Composant::RadiateurMega { profil: Profil::P0, longueur: 10.0, largeur: 5.5, ailettes: 34, chaleur: 0.0 };
         let ports = c.ports();
         assert_eq!(ports.len(), 1);
         assert_eq!(ports[0].genre, GenrePort::Surface);

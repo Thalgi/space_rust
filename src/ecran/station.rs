@@ -1,4 +1,5 @@
 use super::pixel::FiltrePixel;
+use super::panache::RenduPanache;
 use crate::camera::Camera;
 use crate::fond::Fond;
 use crate::vaisseau::eclairage;
@@ -34,6 +35,10 @@ pub enum Categorie {
 /// vaisseau).
 const BRIQUE_EQUIPAGE: usize = 20;
 
+/// Item de la vue Briques qui montre le **radiateur méga** seul : c'est là qu'on
+/// juge le dégradé de chauffe de près, l'aile étant présentée en grand.
+const BRIQUE_RADIATEUR: usize = 6;
+
 /// Index des **ISV complets** dans les mégastructures : les deux seuls items où
 /// la section d'équipage est montée sur un vaisseau (épine carrée, puis
 /// hexagonale). Ce sont eux qui activent les boutons de rotation et de repli.
@@ -43,6 +48,13 @@ const MEGA_ISV: [usize; 1] = [1];
 /// Choisie pour la lecture — un tour en ~13 s — et non pour la fidélité :
 /// l'ISV réel tourne bien plus lentement.
 const VITESSE_ROTATION: f32 = 0.48;
+
+/// Durée de la montée (ou de la descente) en régime, en secondes. Plus lente que
+/// le repli : une masse chauffe et refroidit lentement, et c'est ce que la durée
+/// doit dire. C'est aussi ce qui laisse voir le passage par le rouge sombre des
+/// radiateurs et la poussée progressive du panache — sautés l'un et l'autre sur
+/// une transition brusque.
+const DUREE_ALLUMAGE: f32 = 3.5;
 
 /// Durée du repli (ou du déploiement) complet, en secondes. Assez lent pour
 /// qu'on voie la charnière travailler.
@@ -114,6 +126,19 @@ pub struct VueStation {
     /// État **visé** de la section. C'est lui qui porte le sens (en transit /
     /// en orbite) ; `repli` n'est que sa valeur animée.
     equipage: EtatEquipage,
+    /// **Régime moteur** courant : 0 à l'arrêt, 1 à pleine poussée. Valeur
+    /// animée, comme `repli`.
+    ///
+    /// Un seul nombre pilote **deux** manifestations — les ailes qui rougissent
+    /// et le panache qui pousse — parce qu'elles ont une seule et même cause.
+    /// Deux réglages séparés auraient permis un vaisseau qui pousse sans
+    /// évacuer sa chaleur, ce qui n'existe pas.
+    regime: f32,
+    /// Régime **visé**. Le bouton le bascule, `regime` le rejoint.
+    allume: bool,
+    /// Rendu des panaches : un material et ses tampons, gardés d'une frame à
+    /// l'autre plutôt que rechargés.
+    panaches: RenduPanache,
 }
 
 impl VueStation {
@@ -139,14 +164,31 @@ impl VueStation {
             tourne: false,
             angle: 0.0,
             repli: 0.0,
+            regime: 0.0,
+            allume: false,
+            panaches: RenduPanache::new(),
             equipage: EtatEquipage::Deploye,
         };
         vue.charger();
         vue
     }
 
-    /// (Re)construit l'item courant de la catégorie et son titre.
+    /// (Re)construit l'item courant, son titre et son maillage, **puis recadre**
+    /// la caméra dessus.
     fn charger(&mut self) {
+        self.rebatir();
+        self.cadrer();
+    }
+
+    /// (Re)construit l'item courant de la catégorie et son titre — **sans
+    /// toucher à la caméra**.
+    ///
+    /// La séparation d'avec [`Self::charger`] n'est pas cosmétique : la montée
+    /// en température refait la géométrie à chaque frame, et recadrer à chaque
+    /// fois annulerait le zoom de l'utilisateur en continu pendant toute
+    /// l'animation. On ne recadre qu'au **changement d'item**, qui est le seul
+    /// moment où le gabarit change vraiment.
+    fn rebatir(&mut self) {
         let i = self.idx % self.categorie.nb();
         // Dissocié par défaut : seul l'ISV complet le renseigne.
         self.tournant = None;
@@ -192,7 +234,7 @@ impl VueStation {
                     let maillage = section.doit_dessiner().map(MaillageStation::cuire);
                     self.tournant = Some((section, maillage));
                     (
-                        preset_isv_fixe(epine),
+                        preset_isv_fixe(epine, self.regime),
                         format!("ISV COMPLET — {} (FRET + HABITAT + EQUIPAGE)", epine.nom()),
                     )
                 }
@@ -205,7 +247,7 @@ impl VueStation {
                 3 => (EtatStation::Prete(demo_station()), "NOEUDS 4 / 6 / T / TETRA".into()),
                 4 => (EtatStation::Prete(demo_panneaux()), "PANNEAUX : 5 VARIANTES".into()),
                 5 => (EtatStation::Prete(demo_radiateurs()), "RADIATEURS : 8 VARIANTES".into()),
-                6 => (demo_radiateur_mega(), "RADIATEUR MEGA".into()),
+                6 => (demo_radiateur_mega(self.regime), "RADIATEUR MEGA".into()),
                 7 => (EtatStation::Prete(demo_antennes()), "ANTENNES : 6 VARIANTES".into()),
                 8 => (EtatStation::Prete(demo_caissons()), "CAISSONS + CHARGES UTILES".into()),
                 9 => (EtatStation::Prete(demo_propulsion(FamillePropulsion::Chimique)), "PROPULSION CHIMIQUE".into()),
@@ -232,7 +274,6 @@ impl VueStation {
         self.titre = format!("[{}]  {}", self.categorie.nom(), titre);
         // Cuisson une fois par item chargé (plus de régénération par frame).
         self.maillage = self.etat.doit_dessiner().map(MaillageStation::cuire);
-        self.cadrer();
     }
 
     /// Recuit ce que le **repli** vient de déformer, et rien de plus.
@@ -290,6 +331,31 @@ impl VueStation {
             Categorie::Megastructures => MEGA_ISV.contains(&i),
             _ => false,
         }
+    }
+
+    /// L'item affiché a-t-il une propulsion à allumer ? Deux vues : la brique
+    /// du radiateur méga (qui n'en montre que la chauffe, faute de tuyère) et
+    /// l'ISV complet.
+    fn allumage_possible(&self) -> bool {
+        let i = self.idx % self.categorie.nb();
+        match self.categorie {
+            Categorie::Briques => i == BRIQUE_RADIATEUR,
+            Categorie::Megastructures => MEGA_ISV.contains(&i),
+            _ => false,
+        }
+    }
+
+    /// Recuit ce que le **régime moteur** vient de changer.
+    ///
+    /// Contrairement à la rotation, qui n'est qu'une matrice, la chaleur est
+    /// dans les **couleurs des sommets**, et le panache est de la géométrie qui
+    /// n'existe même pas moteur coupé : il faut donc repasser par la cuisson.
+    /// Et contrairement au repli, elle porte sur la moitié **fixe** du vaisseau
+    /// (les ailes sont sur l'ossature, elles ne tournent pas) — c'est donc
+    /// `charger` qu'il faut refaire. Coût borné : la montée dure deux secondes
+    /// et s'arrête, là où une rotation recuite tournerait indéfiniment.
+    fn recuire_regime(&mut self) {
+        self.rebatir();
     }
 
     /// Axe de rotation de la section, **dans le repère de l'item affiché**.
@@ -360,6 +426,20 @@ impl VueStation {
                 EtatEquipage::Deploye => EtatEquipage::Replie,
                 EtatEquipage::Replie => EtatEquipage::Deploye,
             };
+        }
+
+        // Chauffe des ailes radiateur. Bouton à part, et actif sur d'autres vues
+        // que les deux précédents : la brique du radiateur méga n'a pas de
+        // section d'équipage, mais c'est là qu'on juge le dégradé de près.
+        let feu = self.allumage_possible();
+        let rad = Rect::new(x, bas - h - 76.0, w, h);
+        let label_rad = match (feu, self.allume) {
+            (false, _) => "PROPULSION (N/A)",
+            (true, true) => "PROPULSION: ALLUMEE",
+            (true, false) => "PROPULSION: ETEINTE",
+        };
+        if Self::bouton(rad, label_rad, feu, souris, clic) {
+            self.allume = !self.allume;
         }
     }
 
@@ -439,6 +519,19 @@ impl VueStation {
             self.recuire_repli();
         }
 
+        // Montée (ou descente) en régime, même mécanique que le repli : on
+        // avance vers la cible et on recuit. Ailes et panache vivent tous deux
+        // dans le maillage fixe — d'où un recuit complet.
+        let cible_r = if self.allume { 1.0 } else { 0.0 };
+        if self.allumage_possible() && (self.regime - cible_r).abs() > 1e-4 {
+            let pas = get_frame_time() / DUREE_ALLUMAGE;
+            self.regime += (cible_r - self.regime).clamp(-pas, pas);
+            if (self.regime - cible_r).abs() < 1e-4 {
+                self.regime = cible_r;
+            }
+            self.recuire_regime();
+        }
+
         self.cam.input_orbite(false);
 
         let aspect = screen_width() / screen_height();
@@ -491,6 +584,17 @@ impl VueStation {
             }
             None => dessiner(&self.etat, self.maillage.as_ref(), true),
         }
+
+        // **Panaches**, en dernier et à part : ce sont des rubans en additif, pas
+        // de la géométrie cuite. Après la coque, parce qu'ils n'écrivent pas la
+        // profondeur et doivent donc se poser par-dessus ce qui est déjà là ;
+        // à l'intérieur de la passe pixelisée, pour que le filtre les prenne
+        // comme le reste et qu'ils ne flottent pas en net sur un vaisseau
+        // pixelisé.
+        if let Some(station) = self.etat.doit_dessiner() {
+            self.panaches.dessiner(station, &cam_info, get_time() as f32);
+        }
+
         set_default_camera();
         self.pixel.presenter();
 

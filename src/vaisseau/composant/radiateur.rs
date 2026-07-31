@@ -184,6 +184,51 @@ pub(super) fn dessiner<P: Peintre>(p: &mut P, variante: VarianteRadiateur, longu
 
 // --- Radiateur méga (échelle vaisseau) -------------------------------------
 
+/// Teinte de la matière **portée au rouge sombre** : le premier stade visible
+/// d'un métal qui chauffe (point de Draper, ~525 °C). On ne passe pas du gris à
+/// l'orange directement — un métal qui chauffe rougit d'abord, et sauter cette
+/// étape donne un radiateur peint plutôt que chaud.
+const ROUGE: Color = Color { r: 0.46, g: 0.09, b: 0.04, a: 1.0 };
+/// Teinte à pleine chauffe : orange franc, tirant sur le jaune.
+const ORANGE: Color = Color { r: 1.00, g: 0.52, b: 0.14, a: 1.0 };
+
+/// Part de la chaleur **perdue au bout de l'aile**.
+///
+/// Un radiateur est exactement l'objet qui se refroidit sur sa longueur : le
+/// fluide entre chaud à la racine et ressort tiède à la pointe. Une aile qui
+/// rougirait uniformément ne dirait donc pas qu'elle radie — elle dirait qu'elle
+/// est peinte. Le dégradé n'est pas un effet, c'est la fonction de la pièce.
+const REFROIDISSEMENT: f32 = 0.55;
+
+/// Nombre de bandes du panneau. Il est dessiné d'une seule couleur par bande, et
+/// il en faut assez pour que le dégradé ne se lise pas comme un escalier.
+const BANDES: usize = 7;
+
+/// Teinte d'un élément porté à la chaleur `h` (0 = froid, 1 = pleine chauffe).
+///
+/// Deux segments plutôt qu'une interpolation directe vers l'orange : gris →
+/// rouge sombre sur la première moitié, rouge → orange sur la seconde. C'est la
+/// séquence d'un métal qu'on chauffe, et c'est aussi ce qui rend le début de la
+/// montée lisible — un mélange direct vers l'orange éclaircit tout de suite et
+/// on ne voit plus le seuil.
+fn chauffer(base: Color, h: f32) -> Color {
+    let melange = |a: Color, b: Color, t: f32| Color {
+        r: a.r + (b.r - a.r) * t,
+        g: a.g + (b.g - a.g) * t,
+        b: a.b + (b.b - a.b) * t,
+        a: 1.0,
+    };
+    match h.clamp(0.0, 1.0) {
+        h if h <= 0.5 => melange(base, ROUGE, h * 2.0),
+        h => melange(ROUGE, ORANGE, (h - 0.5) * 2.0),
+    }
+}
+
+/// Chaleur **locale** à la fraction `t` de l'aile (0 à la racine, 1 à la pointe).
+pub(super) fn chaleur_locale(chaleur: f32, t: f32) -> f32 {
+    chaleur.clamp(0.0, 1.0) * (1.0 - t.clamp(0.0, 1.0) * REFROIDISSEMENT)
+}
+
 /// Un port `Surface`, comme les autres appendices : avant vers l'hôte (−Z),
 /// l'aile se déploie de l'autre côté (+Z).
 pub(super) fn mega_ports(profil: Profil) -> Vec<Port> {
@@ -194,7 +239,13 @@ pub(super) fn mega_ports(profil: Profil) -> Vec<Port> {
     )]
 }
 
-pub(super) fn mega_dessiner<P: Peintre>(p: &mut P, longueur: f32, largeur: f32, ailettes: usize) {
+pub(super) fn mega_dessiner<P: Peintre>(
+    p: &mut P,
+    longueur: f32,
+    largeur: f32,
+    ailettes: usize,
+    chaleur: f32,
+) {
         // Radiateur d'échelle vaisseau. Trois parties :
         //  1. un **gros parallélépipède fin** (le collecteur), avec au
         //     centre un **module de connexion** (stub où s'accroche le
@@ -217,16 +268,34 @@ pub(super) fn mega_dessiner<P: Peintre>(p: &mut P, longueur: f32, largeur: f32, 
         let z0 = bd * 0.5;
         let long = (longueur - z0).max(1.0);
         let panneau_col = Color::new(0.71, 0.71, 0.74, 1.0);
-        let coins = [
-            d * z0 - w * demi0,
-            d * z0 + w * demi0,
-            d * (z0 + long) + w * pointe,
-            d * (z0 + long) - w * pointe,
-        ];
-        p.triangles(&coins, &[0, 1, 2, 0, 2, 3, 0, 2, 1, 0, 3, 2], panneau_col);
-        // Rails de bord (bords droits du trapèze).
+        // Panneau découpé en **bandes** le long de l'aile : c'est le seul moyen
+        // de porter un dégradé, un quadrilatère n'ayant qu'une couleur. À froid
+        // les bandes sont toutes de la même teinte et rien ne se voit.
+        let bord = |t: f32| {
+            let hw = demi0 + (pointe - demi0) * t;
+            (d * (z0 + long * t) - w * hw, d * (z0 + long * t) + w * hw)
+        };
+        for k in 0..BANDES {
+            let (t0, t1) = (k as f32 / BANDES as f32, (k + 1) as f32 / BANDES as f32);
+            let (a, b) = bord(t0);
+            let (c, e) = bord(t1);
+            let coins = [a, b, e, c];
+            let teinte = chauffer(panneau_col, chaleur_locale(chaleur, (t0 + t1) * 0.5));
+            p.triangles(&coins, &[0, 1, 2, 0, 2, 3, 0, 2, 1, 0, 3, 2], teinte);
+        }
+        // Rails de bord (bords droits du trapèze), segmentés comme le panneau
+        // pour suivre le même dégradé.
         for cote in [-1.0_f32, 1.0] {
-            p.cylindre(d * z0 + w * (cote * demi0), d * (z0 + long) + w * (cote * pointe), demi0 * 0.03, tige);
+            for k in 0..BANDES {
+                let (t0, t1) = (k as f32 / BANDES as f32, (k + 1) as f32 / BANDES as f32);
+                let hw = |t: f32| demi0 + (pointe - demi0) * t;
+                p.cylindre(
+                    d * (z0 + long * t0) + w * (cote * hw(t0)),
+                    d * (z0 + long * t1) + w * (cote * hw(t1)),
+                    demi0 * 0.03,
+                    chauffer(tige, chaleur_locale(chaleur, (t0 + t1) * 0.5)),
+                );
+            }
         }
         // 3. Boudins (tubes calorifiques) **transverses** (en travers de
         //    l'aile), **espacés** entre eux, sur **chaque face** du panneau.
@@ -239,7 +308,12 @@ pub(super) fn mega_dessiner<P: Peintre>(p: &mut P, longueur: f32, largeur: f32, 
                 let t = (k as f32 + 0.5) / m as f32;
                 let z = z0 + long * t;
                 let hwid = demi0 + (pointe - demi0) * t; // largeur locale du trapèze
-                p.cylindre(d * z - w * hwid + yo, d * z + w * hwid + yo, tuber, tube);
+                p.cylindre(
+                    d * z - w * hwid + yo,
+                    d * z + w * hwid + yo,
+                    tuber,
+                    chauffer(tube, chaleur_locale(chaleur, t)),
+                );
             }
         }
 
