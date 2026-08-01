@@ -23,6 +23,7 @@
 //! est fait en additif par `ecran::panache`. Voir [`dessiner`].
 
 use crate::vaisseau::peintre::Peintre;
+use crate::vaisseau::Enveloppe;
 use macroquad::prelude::*;
 
 /// Étapes de la rampe de couleur, du col vers le bout.
@@ -89,6 +90,6 @@ pub(super) fn rayon_local() -> f32 {
     0.0
 }
 
-pub(super) fn englobant() -> (Vec3, f32) {
-    (Vec3::ZERO, 0.0)
+pub(super) fn englobant() -> Enveloppe {
+    Enveloppe::sphere(Vec3::ZERO, 0.0)
 }

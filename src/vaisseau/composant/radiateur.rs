@@ -10,7 +10,7 @@ use super::commun::*;
 
 /// Variantes de radiateur thermique, d'après les technologies existantes (plus
 /// une exotique). Toutes montées par un port `Surface`.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum VarianteRadiateur {
     /// Panneau plat rainuré (body-mounted classique).
     PanneauSimple,

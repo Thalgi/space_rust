@@ -17,7 +17,7 @@ pub const U: f32 = 1.0;
 /// - `P1` : module habitat standard (référence).
 /// - `P2` : gros module / nœud d'amarrage.
 /// - `P3` : cœur / épine dorsale.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum Profil {
     P0,
     P1,

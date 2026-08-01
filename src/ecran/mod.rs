@@ -3,6 +3,9 @@
 //! travailler le rendu d'un seul corps). `main` se contente d'alterner entre eux.
 
 mod accueil;
+mod catalogue;
+mod enveloppes;
+mod fils;
 mod galerie;
 mod galerie_disques;
 mod galerie_etoiles;

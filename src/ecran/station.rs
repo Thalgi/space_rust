@@ -1,18 +1,14 @@
+use super::catalogue::{self, Item, Reglages};
+use super::enveloppes;
+use super::fils;
 use super::pixel::FiltrePixel;
 use super::panache::RenduPanache;
 use crate::camera::Camera;
 use crate::fond::Fond;
 use crate::vaisseau::eclairage;
 use crate::vaisseau::{
-    demo_anneaux, demo_antennes, demo_caissons, demo_chantier, demo_charpente, demo_coiffes,
-    demo_bouclier_grand, demo_bouclier_petit, demo_bouclier_thermique, demo_cargo, demo_charpente_hexa, demo_epine_pavillon, demo_equipage,
-    demo_habitat_isv, demo_habitats,
-    demo_moteur_antimatiere, demo_moteur_antimatiere_principal, demo_panneaux, demo_poutres,
-    demo_propulsion, demo_radiateur_mega,
-    demo_radiateurs, demo_reservoir, demo_station, demo_treillis, generer, preset_anneau, preset_comsat,
-    preset_iss, preset_isv_equipage, preset_isv_fixe, preset_isv_moteur, preset_mir,
-    preset_sonde, preset_tiangong, Epine, EtatStation, FamillePropulsion, MaillageStation, Ossature,
-    EtatEquipage, ParamsStation, Style, ISV_AXE,
+    generer, preset_isv_equipage, Epine, EtatStation, MaillageStation, Ossature, EtatEquipage,
+    ParamsStation, Style, ISV_AXE,
 };
 use macroquad::prelude::*;
 
@@ -29,20 +25,6 @@ pub enum Categorie {
     /// Grandes stations & mégastructures.
     Megastructures,
 }
-
-/// Index de la brique « équipage rotatif » dans la catégorie Briques : la
-/// seule vue où la rotation ait un sens (c'est la seule pièce tournante du
-/// vaisseau).
-const BRIQUE_EQUIPAGE: usize = 20;
-
-/// Item de la vue Briques qui montre le **radiateur méga** seul : c'est là qu'on
-/// juge le dégradé de chauffe de près, l'aile étant présentée en grand.
-const BRIQUE_RADIATEUR: usize = 6;
-
-/// Index des **ISV complets** dans les mégastructures : les deux seuls items où
-/// la section d'équipage est montée sur un vaisseau (épine carrée, puis
-/// hexagonale). Ce sont eux qui activent les boutons de rotation et de repli.
-const MEGA_ISV: [usize; 1] = [1];
 
 /// Vitesse de rotation de la section d'équipage, en radians par seconde.
 /// Choisie pour la lecture — un tour en ~13 s — et non pour la fidélité :
@@ -70,14 +52,30 @@ const BOUSSOLE_RAYON: f32 = 34.0;
 const BOUSSOLE_BOITE: f32 = BOUSSOLE_RAYON * 2.0 + 44.0;
 
 impl Categorie {
-    fn nb(self) -> usize {
+    /// Table de la catégorie. **Vide pour le générateur**, qui n'est pas
+    /// énuméré : son unique item est paramétrique (graine, style, complexité,
+    /// ossature) et se rebâtit à chaque touche.
+    fn items(self) -> &'static [Item] {
         match self {
-            Categorie::Briques => 27,
-            Categorie::PetitesStations => 5,
-            Categorie::Generateur => 1,
-            Categorie::Megastructures => 3,
+            Categorie::Briques => catalogue::BRIQUES,
+            Categorie::PetitesStations => catalogue::PETITES_STATIONS,
+            Categorie::Megastructures => catalogue::MEGASTRUCTURES,
+            Categorie::Generateur => &[],
         }
     }
+
+    /// Nombre d'items à cycler. Dérivé de la table — il n'y a plus de compte
+    /// écrit à la main à tenir d'accord avec elle. Le `max(1)` ne sert qu'au
+    /// générateur, dont l'unique item n'est pas dans une table.
+    fn nb(self) -> usize {
+        self.items().len().max(1)
+    }
+
+    /// Item courant de la catégorie, ou `None` pour le générateur.
+    fn item(self, idx: usize) -> Option<&'static Item> {
+        self.items().get(idx % self.nb())
+    }
+
     fn nom(self) -> &'static str {
         match self {
             Categorie::Briques => "BRIQUES",
@@ -100,6 +98,20 @@ pub struct VueStation {
     cam: Camera,
     fond: Fond,
     ports: bool,
+    /// Overlay des **enveloppes de collision** (touche E).
+    ///
+    /// Distinct de `ports` : les ports disent où l'on peut clipser, les
+    /// enveloppes disent ce qui **s'oppose** à la pose. Les deux se regardent
+    /// souvent ensemble, mais ils répondent à deux questions différentes et
+    /// tout afficher d'un coup rend la vue illisible
+    /// (`docs/conception/assembleur.md` §8.5).
+    enveloppes: bool,
+    /// Numérotation des **fils** de charpente (touche F).
+    ///
+    /// Distincte de `numeros`, qui numérote les *pièces* de l'assemblage : ici
+    /// on descend d'un cran, dans la géométrie d'une pièce, pour pouvoir
+    /// désigner une barre précise (`conception/assembleur.md` §8.5).
+    fils: bool,
     numeros: bool,
     pixel: FiltrePixel,
     /// Géométrie cuite de la station courante (refaite à chaque `charger`).
@@ -156,6 +168,8 @@ impl VueStation {
             cam,
             fond: Fond::new(400),
             ports: false,
+            enveloppes: false,
+            fils: false,
             numeros: false,
             pixel: FiltrePixel::new(),
             maillage: None,
@@ -189,11 +203,21 @@ impl VueStation {
     /// l'animation. On ne recadre qu'au **changement d'item**, qui est le seul
     /// moment où le gabarit change vraiment.
     fn rebatir(&mut self) {
-        let i = self.idx % self.categorie.nb();
-        // Dissocié par défaut : seul l'ISV complet le renseigne.
+        // Dissocié par défaut : seul l'ISV complet renseigne une moitié
+        // tournante, et c'est sa `Fabrique` qui le décide, pas un indice.
         self.tournant = None;
-        let (etat, titre) = match self.categorie {
-            Categorie::Generateur => (
+        let (etat, titre) = match self.categorie.item(self.idx) {
+            Some(item) => {
+                let bati = item.batir(self.reglages());
+                self.tournant = bati.tournant.map(|section| {
+                    let maillage = section.doit_dessiner().map(MaillageStation::cuire);
+                    (section, maillage)
+                });
+                (bati.etat, item.titre())
+            }
+            // Générateur : le seul item non énuméré, parce qu'il est
+            // paramétrique et non catalogué.
+            None => (
                 generer(&self.params),
                 format!(
                     "{} — {} — cplx {} — graine {}",
@@ -207,73 +231,16 @@ impl VueStation {
                     self.params.graine
                 ),
             ),
-            Categorie::PetitesStations => match i {
-                0 => (preset_iss(), "ISS (CONFIGURATION FINALE)".into()),
-                1 => (preset_mir(), "MIR (CONFIGURATION FINALE)".into()),
-                2 => (preset_tiangong(), "TIANGONG (CONFIGURATION EN T)".into()),
-                3 => (preset_comsat(), "SATELLITE DE COMMUNICATION".into()),
-                _ => (preset_sonde(), "SONDE INTERPLANETAIRE".into()),
-            },
-            Categorie::Megastructures => match i {
-                0 => (preset_anneau(), "STATION A ANNEAU (ROUE)".into()),
-                // **L'ISV complet**, épine hexagonale. Le vaisseau est chargé en
-                // **deux morceaux** — la coque fixe d'un côté, la section
-                // d'équipage de l'autre — pour que les boutons de rotation et de
-                // repli agissent sur elle seule. Assemblés, les deux redonnent le
-                // preset entier.
-                //
-                // La variante à **épine carrée** n'est plus exposée : elle a servi
-                // à valider l'hexagonale par comparaison (vue Briques n° 23), et
-                // c'est l'hexagonale qui est retenue. [`Epine::Carree`] et tout ce
-                // qu'elle entraîne restent en place — `preset_isv()` la construit
-                // encore et des tests s'en servent — seule la vitrine disparaît.
-                1 => {
-                    // Une seule source pour la correspondance item → épine.
-                    let epine = self.epine_courante().unwrap_or_default();
-                    let section = preset_isv_equipage(epine, self.repli);
-                    let maillage = section.doit_dessiner().map(MaillageStation::cuire);
-                    self.tournant = Some((section, maillage));
-                    (
-                        preset_isv_fixe(epine, self.regime),
-                        format!("ISV COMPLET — {} (FRET + HABITAT + EQUIPAGE)", epine.nom()),
-                    )
-                }
-                _ => (preset_isv_moteur(), "ISV — RADIATEUR + BLOC MOTEUR".into()),
-            },
-            Categorie::Briques => match i {
-                0 => (EtatStation::Prete(demo_poutres()), "POUTRES (2 STYLES x 6 GABARITS)".into()),
-                1 => (EtatStation::Prete(demo_treillis()), "OSSATURE : POUTRE + APPENDICES".into()),
-                2 => (EtatStation::Prete(demo_habitats()), "HABITATS : 10 VARIANTES".into()),
-                3 => (EtatStation::Prete(demo_station()), "NOEUDS 4 / 6 / T / TETRA".into()),
-                4 => (EtatStation::Prete(demo_panneaux()), "PANNEAUX : 5 VARIANTES".into()),
-                5 => (EtatStation::Prete(demo_radiateurs()), "RADIATEURS : 8 VARIANTES".into()),
-                6 => (demo_radiateur_mega(self.regime), "RADIATEUR MEGA".into()),
-                7 => (EtatStation::Prete(demo_antennes()), "ANTENNES : 6 VARIANTES".into()),
-                8 => (EtatStation::Prete(demo_caissons()), "CAISSONS + CHARGES UTILES".into()),
-                9 => (EtatStation::Prete(demo_propulsion(FamillePropulsion::Chimique)), "PROPULSION CHIMIQUE".into()),
-                10 => (EtatStation::Prete(demo_propulsion(FamillePropulsion::Electrique)), "PROPULSION ELECTRIQUE".into()),
-                11 => (EtatStation::Prete(demo_propulsion(FamillePropulsion::Nucleaire)), "PROPULSION NUCLEAIRE".into()),
-                12 => (demo_anneaux(), "ANNEAUX : 4 STYLES".into()),
-                13 => (demo_moteur_antimatiere(), "BLOC MOTEUR : CAISSE COLLECTEUR + MODULE".into()),
-                14 => (demo_charpente(), "CHARPENTE ISV (+ HEXAGONE EN BAS)".into()),
-                15 => (demo_reservoir(), "RESERVOIR CARBURANT (SPHERE)".into()),
-                16 => (demo_moteur_antimatiere_principal(), "MOTEUR ANTIMATIERE : TUYERE + REACTEUR".into()),
-                17 => (EtatStation::Prete(demo_coiffes()), "COIFFES DE MODULES (3 FORMES)".into()),
-                18 => (demo_cargo(), "FRET ISV : NACELLE + TRIFORCE + COURONNE 6".into()),
-                19 => (demo_habitat_isv(), "HABITAT PRINCIPAL ISV : MODULE + GRAPPE DE 3".into()),
-                20 => (demo_equipage(self.repli), "EQUIPAGE ROTATIF ISV : MODULE + TRAVERSE".into()),
-                21 => (demo_bouclier_petit(), "PETIT BOUCLIER ISV : FACE AVANT STRIEE / FACE ARRIERE NERVUREE".into()),
-                22 => (demo_bouclier_grand(), "GRAND BOUCLIER ISV : PLAQUE MIROIR ELANCEE + PILE DE 3".into()),
-                23 => (demo_bouclier_thermique(), "BOUCLIER THERMIQUE D'EPINE : BARDAGE D'ECAILLES".into()),
-                24 => (demo_charpente_hexa(), "EPINE : CARREE (ACTUELLE) vs HEXAGONALE (CANDIDATE)".into()),
-                25 => (demo_epine_pavillon(), "EPINE HEXA : PIED TOUR vs PIED PAVILLON (COROLLE)".into()),
-                _ => (EtatStation::Prete(demo_chantier()), "CONSTRUCTEUR PAR PORTS LIBRES".into()),
-            },
         };
         self.etat = etat;
         self.titre = format!("[{}]  {}", self.categorie.nom(), titre);
         // Cuisson une fois par item chargé (plus de régénération par frame).
         self.maillage = self.etat.doit_dessiner().map(MaillageStation::cuire);
+    }
+
+    /// Les réglages d'animation courants, tels que le catalogue les lit.
+    fn reglages(&self) -> Reglages {
+        Reglages { repli: self.repli, regime: self.regime }
     }
 
     /// Recuit ce que le **repli** vient de déformer, et rien de plus.
@@ -301,13 +268,7 @@ impl VueStation {
     /// avec l'autre variante le décalerait de 3,2 % — assez pour que le collier
     /// morde dans la flèche ou s'en détache.
     fn epine_courante(&self) -> Option<Epine> {
-        if self.categorie != Categorie::Megastructures {
-            return None;
-        }
-        match self.idx % self.categorie.nb() {
-            1 => Some(Epine::Hexagonale),
-            _ => None,
-        }
+        self.categorie.item(self.idx).and_then(Item::epine)
     }
 
     fn cadrer(&mut self) {
@@ -325,24 +286,14 @@ impl VueStation {
     /// replier ? Deux vues sont concernées : la brique de démonstration, et l'ISV
     /// complet où la section est montée sur le vaisseau.
     fn rotation_possible(&self) -> bool {
-        let i = self.idx % self.categorie.nb();
-        match self.categorie {
-            Categorie::Briques => i == BRIQUE_EQUIPAGE,
-            Categorie::Megastructures => MEGA_ISV.contains(&i),
-            _ => false,
-        }
+        self.categorie.item(self.idx).is_some_and(Item::rotation)
     }
 
     /// L'item affiché a-t-il une propulsion à allumer ? Deux vues : la brique
     /// du radiateur méga (qui n'en montre que la chauffe, faute de tuyère) et
     /// l'ISV complet.
     fn allumage_possible(&self) -> bool {
-        let i = self.idx % self.categorie.nb();
-        match self.categorie {
-            Categorie::Briques => i == BRIQUE_RADIATEUR,
-            Categorie::Megastructures => MEGA_ISV.contains(&i),
-            _ => false,
-        }
+        self.categorie.item(self.idx).is_some_and(Item::allumage)
     }
 
     /// Recuit ce que le **régime moteur** vient de changer.
@@ -450,6 +401,12 @@ impl VueStation {
         }
         if is_key_pressed(KeyCode::P) {
             self.ports = !self.ports;
+        }
+        if is_key_pressed(KeyCode::E) {
+            self.enveloppes = !self.enveloppes;
+        }
+        if is_key_pressed(KeyCode::F) {
+            self.fils = !self.fils;
         }
         if is_key_pressed(KeyCode::N) {
             self.numeros = !self.numeros;
@@ -576,6 +533,9 @@ impl VueStation {
             if self.ports {
                 station.dessiner_ports();
             }
+            if self.enveloppes {
+                enveloppes::station(station, enveloppes::CALME);
+            }
         };
         match &self.tournant {
             Some((section, m_section)) => {
@@ -605,6 +565,15 @@ impl VueStation {
         // depuis les positions cuites, qui ignorent la rotation appliquée au
         // rendu — sur la section tournante ils dériveraient de leur pièce. La
         // brique de démonstration reste le bon endroit pour les numéroter.
+        // Numérotation des fils : en 2D, après projection, pour que la coupure
+        // du trait garde une largeur en pixels (cf. `fils::COUPURE_PX`).
+        if self.fils {
+            if let Some(station) = self.etat.doit_dessiner() {
+                let vp = macroquad::camera::Camera::matrix(&cam3d);
+                fils::station(station, vp, None);
+            }
+        }
+
         if self.numeros {
             if let Some(station) = self.etat.doit_dessiner() {
                 // Chemin complet : le trait `Camera` de macroquad porte le même
@@ -673,6 +642,8 @@ impl VueStation {
         self.boutons_equipage(m, clic);
 
         let etat_ports = if self.ports { "ON" } else { "OFF" };
+        let etat_env = if self.enveloppes { "ON" } else { "OFF" };
+        let etat_fils = if self.fils { "ON" } else { "OFF" };
         let etat_num = if self.numeros { "ON" } else { "OFF" };
         let etat_pix = if self.pixel.actif { "ON" } else { "OFF" };
         // Les réglages du générateur ne sont rappelés que dans sa catégorie.
@@ -682,12 +653,72 @@ impl VueStation {
             ""
         };
         crate::police::texte(
-            &format!("{gen}D: suivant   P: ports ({etat_ports})   N: numeros ({etat_num})   X: pixel ({etat_pix})   M: rendu ({mode})   Echap: menu"),
+            &format!("{gen}D: suivant   P: ports ({etat_ports})   E: enveloppes ({etat_env})   F: fils ({etat_fils})   N: numeros ({etat_num})   X: pixel ({etat_pix})   M: rendu ({mode})   Echap: menu"),
             12.0,
             24.0,
             17.0,
             WHITE,
         );
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Les quatre catégories, pour les balayer toutes.
+    const CATEGORIES: [Categorie; 4] = [
+        Categorie::Briques,
+        Categorie::PetitesStations,
+        Categorie::Generateur,
+        Categorie::Megastructures,
+    ];
+
+    // Le cyclage (touche **D**) incrémente `idx` sans borne et retombe sur la
+    // table par un modulo. Il doit donc **visiter chaque item exactement une
+    // fois** par tour : un décalage d'un cran rendrait une brique inatteignable
+    // et en montrerait une autre deux fois — précisément ce que l'attrape-tout
+    // `_ =>` faisait avant, et qui ne se voyait qu'à l'écran.
+    #[test]
+    fn un_tour_de_cyclage_visite_chaque_item_une_fois() {
+        for cat in CATEGORIES {
+            let vus: Vec<&str> = (0..cat.nb())
+                .map(|idx| cat.item(idx).map_or("<generateur>", |it| it.libelle))
+                .collect();
+            assert_eq!(vus.len(), cat.nb(), "{}", cat.nom());
+            for (i, a) in vus.iter().enumerate() {
+                for b in vus.iter().skip(i + 1) {
+                    assert_ne!(a, b, "{} : item vu deux fois en un tour", cat.nom());
+                }
+            }
+            // Et le tour suivant redonne le premier : le cyclage boucle.
+            assert_eq!(
+                cat.item(cat.nb()).map(|it| it.libelle),
+                cat.item(0).map(|it| it.libelle),
+                "{} : le cyclage ne reboucle pas",
+                cat.nom()
+            );
+        }
+    }
+
+    // **Le générateur n'est pas catalogué**, et c'est ce qui fait tenir le
+    // `max(1)` de `nb()` : son unique item est paramétrique (graine, style,
+    // complexité, ossature) et se rebâtit à chaque touche, donc aucune table ne
+    // peut le décrire. `rebatir` s'en remet à `item(idx) == None` pour prendre
+    // cette branche — lui donner une table le ferait basculer silencieusement
+    // sur un item figé, et les touches G/S/1-4/O n'auraient plus d'effet.
+    #[test]
+    fn seul_le_generateur_nest_pas_catalogue() {
+        for cat in CATEGORIES {
+            let catalogue = cat.item(0).is_some();
+            assert_eq!(
+                catalogue,
+                cat != Categorie::Generateur,
+                "{} : catalogué et paramétrique ne se cumulent pas",
+                cat.nom()
+            );
+            assert!(cat.nb() >= 1, "{} : au moins un item à afficher", cat.nom());
+        }
     }
 }

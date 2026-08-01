@@ -3,6 +3,7 @@
 //! (buse + cage de confinement, jet de plasma) en aval.
 
 use crate::vaisseau::peintre::Peintre;
+use crate::vaisseau::Enveloppe;
 use crate::vaisseau::{GenrePort, Port, Profil, Repere};
 use macroquad::prelude::*;
 use std::f32::consts::{PI, TAU};
@@ -80,8 +81,8 @@ pub(super) fn moteur_rayon_local(taille: f32) -> f32 {
 
 /// Masse déployée vers l'arrière (−Z), comme un propulseur axial : la sphère
 /// est décalée à mi-corps, sinon elle mordrait sur les voisins.
-pub(super) fn moteur_englobant(taille: f32) -> (Vec3, f32) {
-    (Vec3::NEG_Z * (taille * 0.7), taille * 1.05)
+pub(super) fn moteur_englobant(taille: f32) -> Enveloppe {
+    Enveloppe::sphere(Vec3::NEG_Z * (taille * 0.7), taille * 1.05)
 }
 
 // --- Réacteur --------------------------------------------------------------
@@ -156,6 +157,6 @@ pub(super) fn reacteur_rayon_local(taille: f32) -> f32 {
 }
 
 /// Masse déployée vers +Z : sphère à mi-corps.
-pub(super) fn reacteur_englobant(taille: f32) -> (Vec3, f32) {
-    (Vec3::Z * (taille * 0.5), taille * 0.75)
+pub(super) fn reacteur_englobant(taille: f32) -> Enveloppe {
+    Enveloppe::sphere(Vec3::Z * (taille * 0.5), taille * 0.75)
 }

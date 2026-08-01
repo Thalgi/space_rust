@@ -97,3 +97,8 @@ pub(super) fn rayon_local(profil: Profil, longueur: f32, attache: f32) -> f32 {
         .max(pieces::onigiri_inscrit(profil.rayon()) + attache)
         .max(profil.rayon() * 1.05)
 }
+
+/// Demi-section transversale du fût, ferrures comprises.
+pub(super) fn demi_section(profil: Profil, attache: f32) -> f32 {
+    (pieces::onigiri_inscrit(profil.rayon()) + attache).max(profil.rayon() * 1.05)
+}

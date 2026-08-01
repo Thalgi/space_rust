@@ -3,6 +3,7 @@
 //! module.
 
 use crate::vaisseau::peintre::Peintre;
+use crate::vaisseau::Enveloppe;
 use crate::vaisseau::{GenrePort, Port, Profil, Repere};
 use macroquad::prelude::*;
 use std::f32::consts::{PI, TAU};
@@ -10,7 +11,7 @@ use std::f32::consts::{PI, TAU};
 use super::commun::*;
 
 /// Formes de [`Composant::Coiffe`].
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum VarianteCoiffe {
     /// Demi-dôme lisse (calotte surbaissée fermée), rien ne dépasse sous la base.
     Bombee,
@@ -204,7 +205,7 @@ pub(super) fn coiffe_rayon_local(profil: Profil) -> f32 {
 }
 
 /// Nez déployé vers +Z : sphère décalée à mi-hauteur.
-pub(super) fn coiffe_englobant(profil: Profil) -> (Vec3, f32) {
+pub(super) fn coiffe_englobant(profil: Profil) -> Enveloppe {
     let r = profil.rayon();
-    (Vec3::Z * (r * 0.6), r * 0.95)
+    Enveloppe::sphere(Vec3::Z * (r * 0.6), r * 0.95)
 }

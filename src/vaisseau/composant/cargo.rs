@@ -2,6 +2,7 @@
 //! râtelier qui en porte une couronne autour de l'épine.
 
 use crate::vaisseau::peintre::Peintre;
+use crate::vaisseau::Enveloppe;
 use crate::vaisseau::pieces;
 use crate::vaisseau::{GenrePort, Port, Profil, Repere};
 use macroquad::prelude::*;
@@ -83,10 +84,15 @@ pub(super) fn nacelle_rayon_local(profil: Profil, longueur: f32) -> f32 {
     longueur.max(profil.rayon())
 }
 
-/// Déployée d'un seul côté (+Z), sphère décalée à mi-corps — sinon, centrée sur
-/// le montage, elle mordrait sur les voisines.
-pub(super) fn nacelle_englobant(profil: Profil, longueur: f32) -> (Vec3, f32) {
-    (Vec3::Z * (longueur * 0.5), (longueur * 0.5).hypot(profil.rayon()))
+/// Déployée d'un seul côté (+Z) : **capsule** couchée le long de la nacelle.
+///
+/// C'est la pièce où le gain se voit le plus, parce qu'elles se posent **par
+/// trois en triforce**, jointives : la sphère réservait `hypot(demi, rayon)`
+/// dans toutes les directions et faisait donc se recouvrir trois nacelles qui,
+/// en vérité, se frôlent sans se toucher (§C.6).
+pub(super) fn nacelle_englobant(profil: Profil, longueur: f32) -> Enveloppe {
+    let demi = longueur * 0.5;
+    Enveloppe::axe(Vec3::Z * demi, Vec3::Z, demi, profil.rayon())
 }
 
 // --- Râtelier --------------------------------------------------------------

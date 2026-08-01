@@ -13,7 +13,7 @@ use std::f32::consts::PI;
 /// Repère orthonormé orienté : position + rotation. Conventions :
 /// **avant** = `rot * Z` (sens d'accouplement sortant), **haut** = `rot * Y`,
 /// **droite** = `rot * X`.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Repere {
     pub pos: Vec3,
     pub rot: Quat,
@@ -59,7 +59,7 @@ impl Repere {
 }
 
 /// Genre de connexion — détermine quels ports peuvent s'apparier (§3.3).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum GenrePort {
     /// Écoutille en bout de module (accouplement axial).
     ModuleAxial,
@@ -89,7 +89,7 @@ impl GenrePort {
 }
 
 /// Un point d'accroche d'un composant : repère local orienté + genre + profil.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Port {
     pub repere: Repere,
     pub genre: GenrePort,

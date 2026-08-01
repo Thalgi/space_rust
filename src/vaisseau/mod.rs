@@ -9,8 +9,11 @@ mod assemblage;
 mod chantier;
 mod composant;
 pub mod eclairage;
+mod enveloppe;
 mod generateur;
-mod maillage;
+mod inventaire;
+mod mesure;
+pub(crate) mod maillage;
 mod montage;
 mod peintre;
 mod pieces;
@@ -19,6 +22,10 @@ mod symetrie;
 mod unites;
 
 pub use assemblage::{Assembleur, Budget, EtatStation, Piece, Station};
+pub use enveloppe::{distance_point_rectangle, distance_point_segment, Enveloppe, Noyau};
+pub use inventaire::{fils, Fil, GenreFil};
+pub use mesure::{mesurer, silhouette, a_des_mailles, Mesure};
+pub(crate) use chantier::FACTEUR_COLLISION;
 pub(crate) use composant::{rayon_panache, teinte_panache};
 pub use composant::{
     Composant, DonneesSousEnsemble, FamillePropulsion, PiedHexa, Sorties, StyleTreillis, VarianteAntenne,

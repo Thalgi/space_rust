@@ -9,7 +9,7 @@ use std::f32::consts::{FRAC_PI_2, PI};
 use super::commun::*;
 
 /// Style structurel d'un [`Composant::Treillis`].
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum StyleTreillis {
     /// Section carrée (4 longerons) — treillis ajouré classique.
     Carre,
@@ -83,6 +83,28 @@ pub(super) fn charpente_ports(grand: Profil, petit: Profil, longueur: f32) -> Ve
         Port::new(Repere::new(vec3(0.0, 0.0, demi), Quat::IDENTITY), GenrePort::ModuleAxial, petit),
         Port::new(Repere::new(vec3(0.0, 0.0, -demi), Quat::from_rotation_y(PI)), GenrePort::ModuleAxial, grand),
     ]
+}
+
+/// Débord de l'**aiguille** sous la base : `(axial, radial)`, mesurés depuis le
+/// bout `−Z` du cône.
+///
+/// ⚠️ Ces cotes sont celles qu'utilise [`charpente_dessiner`] juste en dessous.
+/// Elles sont ici pour que `rayon_local` les lise **à la même source** que le
+/// dessin : l'anneau hexagonal pend sous la base, et une charpente qui déclare
+/// sa seule demi-longueur sous-estime son hors-tout de 70 % dès que
+/// `aiguille` est vrai. C'est le défaut que [`charpente_hexa_pied`] corrige
+/// déjà pour la variante hexagonale — la carrée avait été oubliée.
+pub(super) fn charpente_pied(grand: Profil, aiguille: bool) -> (f32, f32) {
+    if !aiguille {
+        return (0.0, 0.0);
+    }
+    let sg = grand.rayon() * TREILLIS_SECTION;
+    let cote = 2.0 * sg; // côté hexa = largeur de bout du cône
+    let sec = sg * 0.5; // demi-épaisseur radiale des membrures
+    let ap = cote * 3.0_f32.sqrt() * 0.5; // apothème
+    // L'anneau est **descendu** de `ap + sec` (sa face haute affleure la base),
+    // et il descend lui-même de `ap + sec` de plus jusqu'à son arête basse.
+    (2.0 * (ap + sec), cote + sec)
 }
 
 pub(super) fn charpente_dessiner<P: Peintre>(p: &mut P, grand: Profil, petit: Profil, longueur: f32, courbure: f32, aiguille: bool) {
@@ -160,7 +182,7 @@ pub(super) fn charpente_cout(longueur: f32) -> f32 { 3.0 + longueur }
 ///
 /// Les deux formes coexistent le temps de trancher à l'écran — voir
 /// `docs/suivi/stations.md` §C.11.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum PiedHexa {
     /// Rien : la charpente s'arrête sur sa base.
     Aucun,
@@ -395,3 +417,14 @@ pub(super) fn hexagone_dessiner<P: Peintre>(p: &mut P, profil: Profil, liaison: 
 }
 
 pub(super) fn hexagone_cout() -> f32 { 12.0 }
+
+/// Demi-section transversale d'une poutre à section **carrée** : le
+/// circonradius du carré, plus la saillie des longerons.
+pub(super) fn demi_section(profil: Profil) -> f32 {
+    profil.rayon() * TREILLIS_SECTION * std::f32::consts::SQRT_2 * 1.15
+}
+
+/// Idem pour une flèche **hexagonale**.
+pub(super) fn demi_section_hexa(grand: Profil) -> f32 {
+    hexa_rayons(grand, grand).0 * 1.15
+}

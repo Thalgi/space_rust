@@ -189,21 +189,23 @@ pub fn demo_chantier() -> Station {
     let mut ch = Chantier::new();
     ch.racine(Composant::Treillis { profil: Profil::P1, longueur: 9.0, style: StyleTreillis::Carre });
     // Un module coiffe un bout axial (une seule fois pour ne pas enchaîner).
-    if let Some(i) = ch.libres().iter().position(|p| p.genre == GenrePort::ModuleAxial) {
-        ch.poser(i, module, 1);
+    if let Some(id) = ch.libres().iter().find(|p| p.genre == GenrePort::ModuleAxial).map(|p| p.id) {
+        ch.poser(id, module, 1);
     }
     // Snapshot des ports Surface (fixe : les appendices n'en ajoutent pas). On
     // itère cette liste : une pose rejetée (collision) est simplement ignorée,
     // sans jamais reboucler sur le même port.
     let cibles: Vec<Vec3> = ch.libres().iter().filter(|p| p.genre == GenrePort::Surface).map(|p| p.repere.pos).collect();
     for (k, pos) in cibles.iter().enumerate() {
-        if let Some(i) = ch.libres().iter().position(|p| p.genre == GenrePort::Surface && p.repere.pos.distance(*pos) < 1e-3) {
+        if let Some(id) =
+            ch.libres().iter().find(|p| p.genre == GenrePort::Surface && p.repere.pos.distance(*pos) < 1e-3).map(|p| p.id)
+        {
             let app = match k % 3 {
                 0 => panneau.clone(),
                 1 => radiateur.clone(),
                 _ => antenne.clone(),
             };
-            ch.poser(i, app, 0); // peut échouer (collision) → on passe
+            ch.poser(id, app, 0); // peut échouer (collision) → on passe
         }
     }
     match ch.terminer() {

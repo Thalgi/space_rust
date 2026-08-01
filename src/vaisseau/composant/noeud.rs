@@ -8,7 +8,7 @@ use std::f32::consts::{FRAC_PI_2, PI};
 use super::commun::*;
 
 /// Disposition des ports d'un [`Composant::Noeud`].
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum Sorties {
     /// 4 ports : 2 axiaux (±Z) + 2 radiaux (±X) — croix plane.
     Quatre,

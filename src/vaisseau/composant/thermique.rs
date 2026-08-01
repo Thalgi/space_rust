@@ -31,6 +31,7 @@
 //! section hexagonale comme l'épine qu'il habille.
 
 use crate::vaisseau::peintre::Peintre;
+use crate::vaisseau::Enveloppe;
 use crate::vaisseau::pieces;
 use macroquad::prelude::*;
 
@@ -187,7 +188,10 @@ pub(super) fn rayon_local(rayon_pied: f32, rayon_bout: f32, longueur: f32) -> f3
     longueur.hypot(rayon_pied.max(rayon_bout) * (1.0 + SAILLIE))
 }
 
-pub(super) fn englobant(rayon_pied: f32, rayon_bout: f32, longueur: f32) -> (Vec3, f32) {
+/// **Capsule** le long de l'épine : le bardage est un manchon, pas une boule.
+/// Il fait ici 13 de long pour 3,5 de rayon — la sphère qui le contenait en
+/// réservait 7,4 tout autour, soit plus du double de sa section réelle.
+pub(super) fn englobant(rayon_pied: f32, rayon_bout: f32, longueur: f32) -> Enveloppe {
     let demi = longueur * 0.5;
-    (Vec3::Z * demi, demi.hypot(rayon_pied.max(rayon_bout) * (1.0 + SAILLIE)))
+    Enveloppe::axe(Vec3::Z * demi, Vec3::Z, demi, rayon_pied.max(rayon_bout) * (1.0 + SAILLIE))
 }

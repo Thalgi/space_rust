@@ -19,7 +19,7 @@ pub(super) fn caisson_haut(largeur: f32) -> f32 {
 /// pressurisé, seule géométrie anguleuse du jeu de composants (tout le reste est
 /// de révolution). Il expose des ports hôtes sur ses faces : c'est lui qui
 /// reçoit les charges utiles.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum VarianteCaisson {
     /// Cadre ouvert à longerons apparents (type ExPRESS Logistics Carrier).
     Ossature,
@@ -157,7 +157,7 @@ impl VarianteCaisson {
 /// Variantes de [`Composant::ChargeUtile`] — ce qui se **pose sur** une
 /// structure ou sur un caisson technique : plateformes d'expériences,
 /// réservoirs, instruments. Un seul port de montage, comme tout appendice.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum VarianteCharge {
     /// Plateau plat portant une grappe d'expériences (type JEM-EF).
     Palette,

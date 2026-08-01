@@ -2,6 +2,7 @@
 //! électrique, nucléaire), la nacelle motrice et la brique de bloc moteur.
 
 use crate::vaisseau::peintre::Peintre;
+use crate::vaisseau::Enveloppe;
 use crate::vaisseau::{GenrePort, Port, Profil, Repere};
 use macroquad::prelude::*;
 use std::f32::consts::{PI, TAU};
@@ -39,7 +40,7 @@ impl FamillePropulsion {
 /// appartient et **comment elle se monte** : un moteur principal se boulonne en
 /// bout de corps (écoutille axiale), une grappe de contrôle se pose sur un flanc
 /// (port `Surface`, comme les appendices).
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum VariantePropulseur {
     /// Moteur à ergols liquides : chambre, col, divergent à tubes.
     TuyereCloche,
@@ -469,7 +470,7 @@ pub(super) fn bloc_rayon_local(largeur: f32) -> f32 {
 
 /// S'étend d'un seul côté de son montage, comme les appendices — mais vers
 /// l'arrière quand il est axial.
-pub(super) fn englobant(variante: VariantePropulseur, taille: f32) -> (Vec3, f32) {
+pub(super) fn englobant(variante: VariantePropulseur, taille: f32) -> Enveloppe {
     let sens = if variante.axial() { -1.0 } else { 1.0 };
-    (Vec3::Z * (sens * taille * 0.6), taille * 0.95)
+    Enveloppe::sphere(Vec3::Z * (sens * taille * 0.6), taille * 0.95)
 }

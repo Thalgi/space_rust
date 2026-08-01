@@ -466,8 +466,9 @@ fait de mieux sur l'ISV :
 
 ## 7. Ordre de travail proposé
 
-Deux lots. Le premier ne dépend pas de l'assembleur et vaut d'être fait quoi
-qu'il arrive ; le second est l'assembleur lui-même.
+Deux lots au départ. Le premier ne dépend pas de l'assembleur et vaut d'être
+fait quoi qu'il arrive ; le second est l'assembleur lui-même. Les deux sont
+clos ; la suite (lots 3 à 5, l'écran) est arrêtée en **§7.1**.
 
 **Lot 1 — combler ce qui manque au code actuel** (§5, ~une demi-journée)
 
@@ -495,6 +496,279 @@ Les points 1 à 3 sont du **modèle** (`chantier.rs`), testables entièrement
 sans vue. Le point 4 touche la vue ; le point 5 est indépendant. Aucun ne
 demande de toucher aux 31 variantes de composants — c'était l'objet du
 découpage §E.2, et il tient.
+
+### 7.1 La suite, arrêtée après la clôture du Lot 2 (2026-08-01)
+
+Les deux lots ci-dessus sont clos. §8 décrit l'écran en entier mais n'avait
+jamais été rattaché à un lot — le voici découpé, après une relecture du
+modèle livré **contre** ce que §8 exige réellement.
+
+**Lot 3 — compléter le modèle pour l'écran.** Trois manques relevés en
+confrontant §8 au `Chantier` livré. Aucun n'était prévisible depuis §7, qui
+listait ce qui se voyait dans l'abstrait ; ceux-ci ne se voient qu'en lisant
+la spec de l'écran ligne à ligne. Tous trois sont **additifs et en lecture
+seule** — donc sans le risque de rétrofit qui avait imposé L2.1 en tête — et
+tous trois sont **testables sans vue**, donc red-checkables comme le Lot 2.
+
+1. **`pose_prevue(hote_id, comp, montage)`** (§8.3). Le fantôme doit être à la
+   pose **exacte** qu'aurait la pièce au clic ; `poser` calcule aujourd'hui
+   cette transformée en interne et ne la publie pas. Sans cette méthode, la
+   vue la recalcule — la deuxième source que §8.3 interdit nommément, et
+   exactement le doublon que le Lot 1 a passé son temps à supprimer.
+2. **`sous_arbre(id)`** (§8.3, état « pièce sélectionnée »). `retirer` le
+   calcule déjà en une passe, sans l'exposer. À extraire, pas à réécrire côté
+   vue.
+3. **Désignation** : le port libre et la pièce sous le curseur. Rien
+   n'existe — `Camera::pick` ne sait viser que les astres d'un `Systeme`. Deux
+   problèmes distincts : le port se traite en espace écran (projeter
+   `PortLibre::repere.pos`, qui est déjà en monde, et prendre le plus proche
+   sous un rayon), la pièce est une question de géométrie (rayon contre
+   `Enveloppe`) qui a sa place dans `enveloppe.rs`, à côté des fonctions de
+   distance, et se contrôle en force brute comme elles.
+
+**Lot 4 — l'écran d'assemblage** (§8.2 à §8.4) : entrée au menu, colonne
+palette, les trois états d'interaction, les trois couleurs, le bandeau bas.
+**Découpage à arrêter à la fin du Lot 3**, une fois le modèle réellement
+complet — c'est le choix rendu par l'utilisateur le 2026-08-01, contre un
+découpage figé d'avance.
+
+⚠️ **C'est le premier lot majoritairement non testé, et c'est voulu** (§6.6 :
+pas de test de rendu). La discipline change donc de forme : plutôt que
+« red-checker chaque test », il s'agit de **pousser hors du code de dessin**
+tout ce qui se décide, vers des requêtes de modèle qui, elles, se
+red-checkent. Ce qui reste non testé doit être seulement *où le rectangle se
+pose*, jamais *ce qu'il signifie*. Le Lot 3 est le premier versement de cette
+règle.
+
+C'est aussi là que se solde une dette ouverte depuis L1.6 : `peut_poser` n'a
+toujours aucun test dédié, reporté trois fois faute de consommateur réel
+(L2.4 est passée par `posables`, pas par lui). Son vrai consommateur est le
+code couleur de §8.4.
+
+**Lot 5 — ce que seul l'écran permet.** Regroupe ce qui exige de *voir* :
+
+- l'**overlay** de §8.5 adapté à l'assembleur (le segment de plus courte
+  approche entre le fantôme et ce qui le refuse, avec l'écart chiffré) ;
+- **sauvegarde et chargement sur disque** — `recette`/`depuis_recette` (L2.5)
+  n'ont encore aucun consommateur ;
+- l'**arbitrage de L1.4**, ouvert depuis le Lot 1 : 19 variantes
+  sous-déclarent leur `rayon_local`, et §8.5 dit que la **serre** d'une
+  enveloppe ne se juge qu'à l'œil. Cette dette est parquée depuis le Lot 1
+  précisément parce que personne n'a encore *vu* une seule enveloppe ;
+- les **composites** : un bouton qui fige la sélection en `SousEnsemble`, et
+  la palette qui liste ceux qu'on a créés. Arbitrage rendu le 2026-08-01 —
+  pas dans l'écran de base : c'est en assemblant à la main qu'on verra quels
+  regroupements reviennent, et donc ce qu'il vaut la peine de figer. L2.5 a
+  déjà tranché *comment* ils se sérialisent (pièces cuites) ; il manquait le
+  moyen d'en créer un depuis l'écran.
+
+---
+
+## 8. L'écran d'assemblage
+
+> Conception arrêtée le **2026-08-01**. Deux choix ont été tranchés par
+> l'utilisateur avant d'écrire quoi que ce soit, parce qu'ils décident de la
+> disposition et non d'un détail :
+>
+> - **pièce d'abord** (façon KSP) : on choisit dans une palette toujours
+>   visible, puis les ports compatibles s'allument sur le vaisseau ;
+> - **bac à sable libre** : aucun plafond de coût. Le coût reste affiché, à
+>   titre indicatif.
+
+### 8.1 Pourquoi « pièce d'abord » change la disposition
+
+Les deux modèles ne demandent pas le même écran. « Port d'abord » n'a besoin
+que d'un menu contextuel, apparaissant au clic et disparaissant ensuite — la
+vue 3D occupe tout. « Pièce d'abord » demande une **palette permanente**, donc
+une colonne réservée, et transforme la 3D en zone de dépôt.
+
+C'est aussi le modèle qui **passe à l'échelle** : la palette grossira (« il
+faudra ajouter de nouveaux composants pour meubler l'assemblage »), et une
+liste catégorisée que l'on parcourt à froid supporte trente entrées, là où un
+menu contextuel qui en propose trente au clic est illisible.
+
+### 8.2 Zones
+
+```
+┌──────────┬──────────────────────────────────────────────┐
+│ PALETTE  │                                              │
+│ ▸ STRUCT │            ○ ports compatibles               │
+│ ▸ HABITAT│          ╔═══╗                               │
+│ ▸ PROPUL │       ○──╢   ╟──○                            │
+│ ▸ ENERGIE│          ╚═══╝                               │
+│ ▸ THERMIQ│            ○         ▒ fantôme sous curseur  │
+│          │                                              │
+│ ┌──────┐ │                                              │
+│ │TREILL│ │                                              │
+│ │ P1   │ │                                              │
+│ └──────┘ │                                              │
+│ SELECTION│                                    ⊕ boussole│
+├──────────┴──────────────────────────────────────────────┤
+│ 45 pieces · cout 128 · 110k sommets   [UNDO] [REDO]  E P│
+└─────────────────────────────────────────────────────────┘
+```
+
+- **Colonne palette** (gauche, largeur fixe) : catégories repliables, puis les
+  pièces. Réutilise `ui::minitel_panel` / `ui::minitel_ligne` — l'assembleur
+  n'invente pas une esthétique, il reprend celle des autres vues.
+- **Vue 3D** : le vaisseau, les ports, le fantôme. Caméra orbitale comme
+  `VueStation`.
+- **Bandeau bas** : compteurs, undo/redo, et les bascules de débogage.
+- **Boussole** : coin bas-droit, comme partout ailleurs (`ui::boussole_axes`).
+
+### 8.3 Les trois états de l'interaction
+
+Tout tient en trois états, et c'est volontairement peu :
+
+| État | Ce qu'on voit | Ce qui fait sortir |
+|---|---|---|
+| **Repos** | le vaisseau seul | choisir une pièce dans la palette |
+| **Pièce en main** | les ports **compatibles** allumés, un fantôme sur le port survolé | clic sur un port → pose ; Échap → repos |
+| **Pièce sélectionnée** | la pièce et son sous-arbre surlignés | Suppr → retrait ; clic ailleurs → repos |
+
+**Le fantôme est la pièce maîtresse de la lisibilité.** Il est dessiné à la
+pose **exacte** qu'aurait la pièce si on cliquait — pas une approximation. Il
+n'y a qu'une façon de le garantir : demander la pose au même code que la pose
+réelle (`accoupler(port_hôte, port_montage)`), pas la recalculer côté vue. Une
+deuxième source ici donnerait un fantôme qui ment, et c'est exactement le
+genre de doublon que le Lot 1 a passé son temps à supprimer.
+
+### 8.4 Trois couleurs, trois sens
+
+Un port compatible n'est pas forcément **posable** : le profil peut convenir et
+l'anti-collision refuser. La distinction doit se voir sans cliquer, sinon
+l'utilisateur essaie et ne comprend pas.
+
+| Couleur | Sens | Source |
+|---|---|---|
+| vert | posable | `Chantier::peut_poser` → `true` |
+| rouge | compatible mais **encombré** | compatible, mais `peut_poser` → `false` |
+| éteint | profil ou genre incompatible | pas dans `compatibles` |
+
+`peut_poser` existe déjà (ajouté en L1.6) : c'est précisément ce contrôle sans
+effet de bord qui rend cet affichage possible.
+
+### 8.5 L'overlay de débogage : expliquer le refus, pas décorer
+
+L'overlay n'est pas « dessiner les sphères pour voir ». Il répond à **une**
+question, celle qui rendra l'assembleur incompréhensible si elle reste sans
+réponse : *pourquoi ce port est-il rouge ?*
+
+Ce qu'il dessine, par bascule (touche **E**) :
+
+1. **L'enveloppe de chaque pièce** — la capsule en fil de fer : un anneau à
+   chaque bout, quatre génératrices, les calottes. En cyan sombre, pour rester
+   derrière la géométrie.
+2. **L'enveloppe du fantôme**, en blanc — celle qu'on est en train de proposer.
+3. **Le segment de plus courte approche** entre le fantôme et la pièce qui le
+   refuse, tracé en rouge, avec l'écart chiffré.
+
+Le troisième point est le seul qui compte vraiment. Un refus devient alors une
+phrase : *« ce radiateur est à 1,2 de cette poutre, il en faut 1,8 »* — au lieu
+d'un port rouge sans explication. `Enveloppe::ecart` rend déjà ce nombre.
+
+**Un deuxième usage, immédiat celui-là** : l'overlay est la seule façon de voir
+les enveloppes trop lâches. Le relevé de L1.4 dit que 19 variantes
+sous-déclarent leur rayon, et L1.6 a converti les allongées en capsules — mais
+personne n'a encore *vu* une seule de ces enveloppes. L'overlay les met à
+l'épreuve du regard, ce qu'aucun test ne fait.
+
+⚠️ **Il ne remplace pas les tests.** La contenance se mesure
+(`les_rayons_declares_contiennent_la_piece`) ; l'overlay sert à juger la
+**serre** — une enveloppe peut contenir la pièce et rester ridiculement large,
+et ça, seul l'œil le dit.
+
+### 8.6 Ce que l'écran demande au modèle, et qui manque encore
+
+Rien de cette section ne se code sans les étapes du Lot 2, et c'est le point de
+l'avoir écrite d'abord — elle dit **pourquoi** chacune est nécessaire :
+
+| Il faut | Pour | Étape |
+|---|---|---|
+| un identifiant **stable** de port libre | tenir le port survolé d'une image à l'autre ; `swap_remove` le fait migrer | L2.1 |
+| `retirer` | l'état « pièce sélectionnée » et la touche Suppr | L2.2 |
+| undo/redo | le bandeau bas | L2.3 |
+| énumérer les pièces posables | remplir la palette et la griser | L2.4 |
+
+**L'overlay, lui, ne dépend d'aucune.** Il ne lit que des enveloppes et des
+poses, qui existent déjà. C'est donc ce qu'on peut construire **maintenant**,
+et ce qui servira à valider tout le reste ensuite.
+
+---
+
+## 9. Le « boudin » : l'enveloppe qui manque aux plaques
+
+> Idée de l'utilisateur, **2026-08-01**. Elle résout le point resté ouvert en
+> L1.8 : une plaque plate n'est pas une capsule, et aucun couple (axe, rayon) ne
+> la borne sans gaspiller.
+
+### 9.1 Le problème
+
+Une capsule autour d'une plaque de bouclier (12 de rayon, 1,8 d'épaisseur) a un
+rayon de 12 **dans toutes les directions**, y compris les deux où la pièce est
+mince. C'est la même faute que la sphère autour d'un radiateur (§L1.6), d'un cran
+plus loin : la capsule règle **une** dimension, la plaque en a **deux** de fines.
+
+### 9.2 La forme : aplatir la capsule là où il n'y a rien
+
+La capsule doit **s'aplatir** dans la direction où la matière s'arrête, et garder
+son arrondi ailleurs — un **boudin**, pas un cylindre. Concrètement : la surface
+médiane de la plaque, gonflée d'un petit rayon.
+
+```
+        capsule                        boudin
+     (rayon 12 partout)        (aplati sur l'épaisseur)
+
+      ╭───────────╮                ╭─────────────╮
+     │             │              ╰───────────────╯
+     │    ▬▬▬▬▬    │  ← la plaque      ▬▬▬▬▬▬▬
+     │             │              ╭───────────────╮
+      ╰───────────╯                ╰─────────────╯
+      énorme volume vide           colle à la pièce
+```
+
+Le rayon du boudin est la **demi-épaisseur plus un petit jeu** : l'enveloppe se
+tient ainsi légèrement au-dessus de la plaque, sans jamais la traverser, et garde
+son arrondi sur les bords — c'est ce qui la distingue d'une boîte, dont les
+arêtes vives rendraient la distance coûteuse à calculer.
+
+### 9.3 La généralisation qui tient les trois formes
+
+Plutôt qu'un troisième cas particulier, une seule idée les couvre toutes :
+
+> **Une enveloppe est un noyau convexe, gonflé d'un rayon.**
+
+| Noyau | Enveloppe obtenue | Pour |
+|---|---|---|
+| un **point** | sphère | pièces ramassées |
+| un **segment** | capsule | pièces allongées |
+| un **rectangle** | boudin | plaques |
+
+C'est une somme de Minkowski, et elle a la propriété qui compte ici : la distance
+entre deux enveloppes vaut **la distance entre leurs noyaux, moins la somme des
+rayons**. Exactement la formule déjà employée par `Enveloppe::ecart` — la sphère
+et la capsule en deviennent les cas dégénérés (segment de longueur nulle,
+rectangle de largeur nulle), et `Chantier::collision` ne change pas d'un iota.
+
+Ce qu'il faut écrire en plus : **distance rectangle↔rectangle** et
+**rectangle↔segment**. Rien de plus, et rien qui touche le reste.
+
+### 9.4 Ce que ça règle, au-delà des plaques
+
+- **Les boucliers** : `BouclierPetit` et `BouclierGrand` sont des disques, et
+  leur sphère actuelle réserve leur rayon entier en épaisseur. Ce sont les deux
+  pièces que l'ISV empile à quatre exemplaires sur un mât — donc précisément là
+  où un englobant trop épais interdirait l'empilement à un humain.
+- **Les voiles** (panneaux solaires, radiateurs) : leur capsule règle la
+  longueur, pas la largeur.
+- **Le mesureur** : le relevé de L1.8 pourra alors être exact sur ces familles,
+  au lieu de rendre une borne qu'on doit vérifier à la main.
+
+### 9.5 Ordre
+
+À faire **avant** L2.1 si l'on veut que l'assembleur naisse avec une collision
+honnête sur les plaques ; après, si l'on préfère voir l'éditeur tourner d'abord.
+Le travail ne dépend d'aucune étape du Lot 2 et n'en bloque aucune.
 
 ---
 

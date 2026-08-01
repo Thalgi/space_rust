@@ -7,7 +7,8 @@
 //! variante. Les styles/palettes viendront à l'Étape 5. Composants existants :
 //! `ModuleAxial` (cylindre) et `Noeud` (hub sphérique 4 ou 6 sorties).
 
-use super::{Piece, Port, Profil};
+use super::{Enveloppe, GenrePort, Piece, Port, Profil};
+use super::chantier::Chantier;
 use macroquad::prelude::*;
 use super::peintre::Peintre;
 
@@ -62,7 +63,7 @@ use std::rc::Rc;
 /// aussi bon marché à cloner qu'à copier (champs `f32`/enums `Copy`) ; seul
 /// `SousEnsemble` fait un clone réel — un `Rc::clone`, donc un compteur de
 /// référence, pas une copie du sous-arbre.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum Composant {
     /// Module pressurisé cylindrique, aligné sur Z, avec une **écoutille axiale
     /// à chaque bout** (avant sortant : +Z et −Z). `profil` fixe le rayon.
@@ -302,7 +303,7 @@ pub enum Composant {
 /// `Composant::SousEnsemble::profil`), et le coût/rayon précalculés (sommés
 /// une fois, à la construction, plutôt que reparcourus à chaque appel de
 /// `Chantier::poser`).
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct DonneesSousEnsemble {
     pub pieces: Vec<Piece>,
     pub ports_exposes: Vec<Port>,
@@ -383,6 +384,17 @@ fn grappe_cargo(rayon: f32, nacelles: usize, nacelle: f32) -> (f32, Vec<(Vec3, f
 
 
 
+
+/// Enveloppe d'un **appendice en aile** : long et mince, déployé vers `+Z`
+/// depuis son montage à l'origine.
+///
+/// `portee` est ce que la famille déclare comme extension (son `rayon_local`),
+/// `demi_epaisseur` sa demi-largeur en travers. L'axe part du montage et va
+/// jusqu'au bout : c'est la seule façon de couvrir le coin extérieur de l'aile
+/// sans gonfler le rayon (cf. [`Enveloppe::axe`]).
+fn enveloppe_aile(portee: f32, demi_epaisseur: f32) -> Enveloppe {
+    Enveloppe::capsule(Vec3::ZERO, Vec3::Z * portee, demi_epaisseur)
+}
 
 impl Composant {
     /// Ports dans le repère **local** du composant (montage + hôtes libres,
@@ -569,9 +581,15 @@ impl Composant {
             Composant::ChargeUtile { longueur, largeur, .. } => caisson::charge_rayon_local(*longueur, *largeur),
             // Propulseur : le plus long (NERVA, VASIMR) atteint ~1,35 × taille.
             Composant::Propulseur { taille, .. } => propulsion::rayon_local(*taille),
-            // Charpente : demi-longueur ou demi-largeur de la base évasée.
-            Composant::Charpente { grand, longueur, .. } => {
-                (longueur * 0.5).max(grand.rayon() * TREILLIS_SECTION * 1.5)
+            // Charpente : demi-longueur ou demi-largeur de la base évasée —
+            // **aiguille comprise**. Elle pend sous la base, exactement comme la
+            // tour du pied de la variante hexagonale juste en dessous ; l'ignorer
+            // faisait déclarer 10,0 à une pièce qui s'étend à 17,0 (×1,70), donc
+            // une caméra qui la coupe et une sphère de collision qui ment.
+            Composant::Charpente { grand, longueur, aiguille, .. } => {
+                let (bas, large) = treillis::charpente_pied(*grand, *aiguille);
+                let plat = (grand.rayon() * TREILLIS_SECTION * 1.5).max(large);
+                (longueur * 0.5 + bas).hypot(large).max(plat)
             }
             // Idem, au circonradius hexagonal (√2 fois la demi-largeur carrée),
             // **tour du pied comprise** : elle pend sous la base, donc c'est elle
@@ -627,19 +645,65 @@ impl Composant {
     /// composants structurels sont centrés sur l'origine ; les appendices se
     /// déploient le long de +Z, donc leur sphère est décalée à mi-déploiement
     /// (sinon, centrée sur le montage, elle recouvrirait à tort les voisins).
-    pub fn englobant_local(&self) -> (Vec3, f32) {
+    /// **Enveloppe de collision**, en repère local : une capsule
+    /// ([`Enveloppe`]), dont la sphère est le cas dégénéré.
+    ///
+    /// À ne pas confondre avec [`Self::rayon_local`], qui sert au **cadrage
+    /// caméra** et reste un scalaire depuis l'origine locale. Les deux mesurent
+    /// l'encombrement, mais pour deux usages qui n'ont pas les mêmes exigences :
+    /// la caméra veut une sphère (elle recule dans toutes les directions), la
+    /// collision veut coller à la forme.
+    pub fn enveloppe_locale(&self) -> Enveloppe {
+        // Sphère centrée sur l'origine locale : la pièce est ramassée autour de
+        // son point de montage.
+        let centree = || Enveloppe::sphere(Vec3::ZERO, self.rayon_local());
         match self {
-            Composant::ModuleAxial { .. }
-            | Composant::CollierRotatif { .. }
+            // Pièces **ramassées** : leur plus grande dimension n'excède pas
+            // franchement leur section, la sphère est le bon compromis et la
+            // capsule n'apporterait rien.
+            Composant::CollierRotatif { .. }
             | Composant::Charniere { .. }
             | Composant::Noeud { .. }
-            | Composant::Treillis { .. }
             | Composant::Adaptateur { .. }
-            | Composant::Charpente { .. }
-            | Composant::CharpenteHexa { .. }
             | Composant::Motrice { .. }
             | Composant::BlocMoteur { .. }
-            | Composant::Reservoir { .. } => (Vec3::ZERO, self.rayon_local()),
+            | Composant::Reservoir { .. } => centree(),
+
+            // --- Pièces **allongées** : capsule couchée sur leur axe ---------
+            //
+            // Toutes suivent le même patron : l'axe couvre la longueur utile, le
+            // rayon vaut la demi-section. La sphère équivalente réservait
+            // `hypot(demi_longueur, section)` **dans toutes les directions**,
+            // c'est-à-dire 4 à 6 fois la section réelle sur les flancs — là
+            // précisément où l'on vient poser les voisins.
+            Composant::ModuleAxial { profil, variante, longueur } => {
+                let demi = module_axial::rayon_local(*profil, *variante, *longueur);
+                Enveloppe::axe(Vec3::ZERO, Vec3::Z, demi, module_axial::demi_section(*profil, *variante))
+            }
+            Composant::Treillis { profil, longueur, .. } => {
+                Enveloppe::axe(Vec3::ZERO, Vec3::Z, longueur * 0.5, treillis::demi_section(*profil))
+            }
+            // Charpente : cône couché, plus l'aiguille qui pend sous la base.
+            // L'axe va donc du bout `+Z` jusque **sous** l'anneau.
+            Composant::Charpente { grand, longueur, aiguille, .. } => {
+                let (bas, large) = treillis::charpente_pied(*grand, *aiguille);
+                let demi = longueur * 0.5;
+                Enveloppe::capsule(
+                    Vec3::Z * demi,
+                    Vec3::NEG_Z * (demi + bas),
+                    treillis::demi_section(*grand).max(large),
+                )
+            }
+            Composant::CharpenteHexa { grand, longueur, pied, .. } => {
+                let bas = treillis::charpente_hexa_pied(*grand, *pied);
+                let large = treillis::charpente_hexa_pied_rayon(*grand, *pied);
+                let demi = longueur * 0.5;
+                Enveloppe::capsule(
+                    Vec3::Z * demi,
+                    Vec3::NEG_Z * (demi + bas),
+                    treillis::demi_section_hexa(*grand).max(large),
+                )
+            }
             // Un propulseur s'étend d'un seul côté de son montage, comme les
             // appendices — mais vers l'arrière quand il est axial.
             Composant::Propulseur { variante, taille, .. } => propulsion::englobant(*variante, *taille),
@@ -651,7 +715,9 @@ impl Composant {
             // Réacteur antimatière : masse déployée vers +Z, sphère à mi-corps.
             Composant::ReacteurAntimatiere { taille, .. } => antimatiere::reacteur_englobant(*taille),
             // Anneau hexagonal (+ montants) : englobant centré, borné par la liaison.
-            Composant::TreillisHexagone { profil, liaison } => (Vec3::ZERO, (profil.rayon() * 1.1).max(*liaison)),
+            Composant::TreillisHexagone { profil, liaison } => {
+                Enveloppe::sphere(Vec3::ZERO, (profil.rayon() * 1.1).max(*liaison))
+            }
             // Nacelle : déployée d'un seul côté (+Z), sphère décalée à mi-corps
             // — sinon, centrée sur le montage, elle mordrait sur les voisines.
             Composant::NacelleCargo { profil, longueur, .. } => cargo::nacelle_englobant(*profil, *longueur),
@@ -661,23 +727,239 @@ impl Composant {
             Composant::BouclierGrand { rayon, elancement, .. } => bouclier::grand_englobant(*rayon, *elancement),
             Composant::Panache { .. } => panache::englobant(),
             Composant::BouclierThermique { rayon_pied, rayon_bout, longueur, .. } => thermique::englobant(*rayon_pied, *rayon_bout, *longueur),
-            // Râtelier et module d'habitat : structurels, centrés sur leur axe.
-            Composant::RatelierCargo { .. } | Composant::ModuleHabitat { .. } => {
-                (Vec3::ZERO, self.rayon_local())
-            }
+            // Râtelier : trois nacelles en triforce autour de l'axe — aussi
+            // large que long, la sphère est juste.
+            Composant::RatelierCargo { .. } => centree(),
+            // Module d'habitat : fût couché sur son axe.
+            Composant::ModuleHabitat { profil, longueur, attache, .. } => Enveloppe::axe(
+                Vec3::ZERO,
+                Vec3::Z,
+                longueur * 0.5,
+                habitat::demi_section(*profil, *attache),
+            ),
             // Sous-ensemble : centré sur l'origine du sous-ensemble, comme une Station.
-            Composant::SousEnsemble { donnees, .. } => (Vec3::ZERO, donnees.rayon),
-            Composant::PanneauSolaire { .. }
-            | Composant::Radiateur { .. }
-            | Composant::Antenne { .. }
-            | Composant::Caisson { .. }
-            | Composant::ChargeUtile { .. }
-            | Composant::RadiateurMega { .. } => {
+            Composant::SousEnsemble { donnees, .. } => Enveloppe::sphere(Vec3::ZERO, donnees.rayon),
+            // Appendices **compacts** déployés d'un seul côté (+Z) : sphère
+            // décalée à mi-corps. Une antenne ou une charge utile sont aussi
+            // larges que longues, la capsule n'y gagnerait rien.
+            Composant::Antenne { .. } | Composant::ChargeUtile { .. } => {
                 let r = self.rayon_local();
-                (Vec3::Z * (r * 0.5), r * 0.55)
+                Enveloppe::sphere(Vec3::Z * (r * 0.5), r * 0.55)
+            }
+            // Appendices **en aile** : longs et minces, déployés vers +Z depuis
+            // leur montage. C'est la famille où la sphère coûtait le plus cher —
+            // un radiateur de 3,5 de long sur 0,5 d'épaisseur s'y voyait
+            // réserver 2,3 de rayon, soit près de cinq fois sa demi-section.
+            Composant::PanneauSolaire { longueur, largeur, .. } => {
+                enveloppe_aile(panneau_solaire::rayon_local(*longueur, *largeur), *largeur * 0.5)
+            }
+            Composant::Radiateur { longueur, largeur, .. } => {
+                enveloppe_aile((MAST_PANNEAU + longueur * 1.25).hypot(largeur * 0.8), *largeur * 0.8)
+            }
+            Composant::Caisson { longueur, largeur, .. } => {
+                enveloppe_aile(caisson::rayon_local(*longueur, *largeur), *largeur * 0.8)
+            }
+            Composant::RadiateurMega { longueur, largeur, .. } => {
+                enveloppe_aile(radiateur::mega_rayon_local(*longueur, *largeur), *largeur * 0.55)
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Échantillons : une chaîne, pas une liste (`docs/conception/assembleur.md` §5.5)
+// ---------------------------------------------------------------------------
+
+/// Échantillon **suivant** dans une chaîne qui passe par les 31 variantes,
+/// une fois chacune.
+///
+/// ⚠️ **Pourquoi une chaîne et pas une simple liste.** Le `match` ci-dessous
+/// est *exhaustif* : ajouter une variante à `Composant` **casse la
+/// compilation ici**, et la seule façon de réparer est de lui donner un
+/// échantillon et de l'insérer dans la chaîne. Une `Vec` d'échantillons, au
+/// contraire, se compilerait très bien en oubliant une variante — et les
+/// tests de balayage passeraient au vert **en la ratant**, ce qui est
+/// exactement le mode de défaillance que ce lot cherche à supprimer
+/// (`suivi/stations.md` §C.29 : un test qui mesure autre chose que ce qu'il
+/// annonce).
+///
+/// Les cotes sont celles des tests unitaires de chaque famille : rien de
+/// dégénéré, rien d'extrême — on vérifie ici la **santé** de la sortie, pas
+/// une dimension.
+fn suivante(c: &Composant) -> Option<Composant> {
+    let s = match c {
+        Composant::ModuleAxial { .. } => Composant::Noeud { profil: Profil::P1, sorties: Sorties::Six },
+        Composant::Noeud { .. } => Composant::PanneauSolaire { profil: Profil::P0, variante: VariantePanneau::RigideUS, longueur: 3.0, largeur: 1.2 },
+        Composant::PanneauSolaire { .. } => Composant::Treillis { profil: Profil::P1, longueur: 8.0, style: StyleTreillis::Carre },
+        Composant::Treillis { .. } => Composant::Radiateur { profil: Profil::P0, variante: VarianteRadiateur::Caloducs, longueur: 3.0, largeur: 1.0 },
+        Composant::Radiateur { .. } => Composant::Antenne { profil: Profil::P0, variante: VarianteAntenne::ParaboleGG, taille: 1.0 },
+        Composant::Antenne { .. } => Composant::Adaptateur { grand: Profil::P2, petit: Profil::P1, longueur: 2.0 },
+        Composant::Adaptateur { .. } => Composant::Caisson { profil: Profil::P0, variante: VarianteCaisson::Ossature, longueur: 2.0, largeur: 1.0 },
+        Composant::Caisson { .. } => Composant::ChargeUtile { profil: Profil::P0, variante: VarianteCharge::TOUS[0], longueur: 1.6, largeur: 0.9 },
+        Composant::ChargeUtile { .. } => Composant::Propulseur { profil: Profil::P1, variante: VariantePropulseur::TuyereCloche, taille: 1.5 },
+        Composant::Propulseur { .. } => Composant::Charpente { grand: Profil::P3, petit: Profil::P1, longueur: 20.0, courbure: 2.0, aiguille: true },
+        Composant::Charpente { .. } => Composant::CharpenteHexa { grand: Profil::P3, petit: Profil::P1, longueur: 20.0, courbure: 2.0, pied: PiedHexa::Pavillon },
+        Composant::CharpenteHexa { .. } => Composant::RadiateurMega { profil: Profil::P1, longueur: 30.0, largeur: 8.0, ailettes: 6, chaleur: 1.0 },
+        Composant::RadiateurMega { .. } => Composant::Motrice { profil: Profil::P1, echelle: 2.0 },
+        Composant::Motrice { .. } => Composant::BlocMoteur { profil: Profil::P1, largeur: 4.0 },
+        Composant::BlocMoteur { .. } => Composant::Reservoir { profil: Profil::P2, longueur: 6.0, cage: true },
+        Composant::Reservoir { .. } => Composant::MoteurAntimatiere { profil: Profil::P1, taille: 6.0 },
+        Composant::MoteurAntimatiere { .. } => Composant::Coiffe { profil: Profil::P1, variante: VarianteCoiffe::TOUS[0] },
+        Composant::Coiffe { .. } => Composant::ReacteurAntimatiere { profil: Profil::P1, taille: 6.0 },
+        Composant::ReacteurAntimatiere { .. } => Composant::TreillisHexagone { profil: Profil::P1, liaison: 0.0 },
+        Composant::TreillisHexagone { .. } => Composant::NacelleCargo { profil: Profil::P1, longueur: 8.0, spin: 0.0 },
+        Composant::NacelleCargo { .. } => Composant::RatelierCargo { profil: Profil::P1, longueur: 8.0, rayon: 3.0, nacelles: 3, nacelle: 1.0 },
+        Composant::RatelierCargo { .. } => Composant::ModuleHabitat { profil: Profil::P1, longueur: 8.0, spin: 0.0, attache: 3.0 },
+        Composant::ModuleHabitat { .. } => Composant::ModuleEquipage { profil: Profil::P1, longueur: 4.0, hublots: 5 },
+        Composant::ModuleEquipage { .. } => Composant::BouclierPetit { profil: Profil::P0, rayon: 5.5 },
+        Composant::BouclierPetit { .. } => Composant::BouclierGrand { profil: Profil::P0, rayon: 10.0, elancement: BOUCLIER_ELANCEMENT },
+        Composant::BouclierGrand { .. } => Composant::BouclierThermique { rayon_pied: 3.5, rayon_bout: 1.7, courbure: 1.5, longueur: 13.0, rangs: 10 },
+        Composant::BouclierThermique { .. } => Composant::Panache { longueur: 336.0, rayon_col: 0.15, rayon_bout: 11.0, intensite: 1.0 },
+        Composant::Panache { .. } => Composant::CollierRotatif { profil: Profil::P1, rayon: 3.0, alesage: 2.0, longueur: 3.0 },
+        Composant::CollierRotatif { .. } => Composant::Charniere { taille: 1.0, repli: 0.5 },
+        Composant::Charniere { .. } => sous_ensemble_echantillon(),
+        // Fin de chaîne. C'est la seule variante sans successeur.
+        Composant::SousEnsemble { .. } => return None,
+    };
+    Some(s)
+}
+
+/// Un composite non trivial : deux modules bout à bout, figés.
+fn sous_ensemble_echantillon() -> Composant {
+    let mut ch = Chantier::new();
+    let m = || Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 2.0 };
+    ch.racine(m());
+    let axial = ch.libres().iter().find(|p| p.genre == GenrePort::ModuleAxial).unwrap().id;
+    assert!(ch.poser(axial, m(), 1));
+    ch.figer(Profil::P1).expect("un composite de deux modules")
+}
+
+/// La chaîne déroulée, du premier au dernier : **31 échantillons**, un par
+/// variante. Sert au balayage de couverture (§5.5, tests) et, depuis L2.4, à
+/// la palette (ci-dessous) : les mêmes valeurs, pas une seconde liste à tenir
+/// à jour en double.
+pub fn echantillons() -> Vec<Composant> {
+    let depart =
+        Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 3.0 };
+    let mut v = vec![depart];
+    while let Some(s) = suivante(v.last().unwrap()) {
+        v.push(s);
+        assert!(v.len() < 200, "la chaîne d'échantillons boucle");
+    }
+    v
+}
+
+// ---------------------------------------------------------------------------
+// Palette : la duale de `Chantier::compatibles` (`docs/conception/assembleur.md` §6.5)
+// ---------------------------------------------------------------------------
+
+/// Regroupement d'une variante pour la palette de l'éditeur (façon KSP : une
+/// palette permanente organisée par catégories — `STATE.md`, « Décisions
+/// prises »). Pure organisation de menu : ne change rien à ce qui se pose où,
+/// seul [`Composant::ports`] en décide.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Categorie {
+    Structure,
+    Habitat,
+    Energie,
+    Communication,
+    Cargo,
+    Propulsion,
+    Bouclier,
+    Composite,
+    /// Se pose à la main, hors du système de ports : aucune de ces variantes
+    /// n'a de port de montage (`ports()` rend `[]`), donc [`posables`] ne les
+    /// proposera jamais, quel que soit le port visé.
+    PoseeAMain,
+    /// Un effet visuel, pas une pièce (coût nul, aucun port).
+    Effet,
+}
+
+impl Categorie {
+    pub const TOUTES: [Categorie; 10] = [
+        Categorie::Structure,
+        Categorie::Habitat,
+        Categorie::Energie,
+        Categorie::Communication,
+        Categorie::Cargo,
+        Categorie::Propulsion,
+        Categorie::Bouclier,
+        Categorie::Composite,
+        Categorie::PoseeAMain,
+        Categorie::Effet,
+    ];
+
+    pub fn nom(self) -> &'static str {
+        match self {
+            Categorie::Structure => "STRUCTURE",
+            Categorie::Habitat => "HABITAT",
+            Categorie::Energie => "ENERGIE",
+            Categorie::Communication => "COMMUNICATION",
+            Categorie::Cargo => "CARGO",
+            Categorie::Propulsion => "PROPULSION",
+            Categorie::Bouclier => "BOUCLIER",
+            Categorie::Composite => "COMPOSITE",
+            Categorie::PoseeAMain => "POSEE A LA MAIN",
+            Categorie::Effet => "EFFET",
+        }
+    }
+}
+
+/// Catégorie de palette d'une variante. Exhaustif à dessein, comme la chaîne
+/// d'échantillons ci-dessus : ajouter une variante à `Composant` casse la
+/// compilation ici — la couverture de la palette est une propriété du
+/// compilateur, pas une discipline à se rappeler.
+pub fn categorie(c: &Composant) -> Categorie {
+    match c {
+        Composant::ModuleAxial { .. }
+        | Composant::Noeud { .. }
+        | Composant::Treillis { .. }
+        | Composant::Charpente { .. }
+        | Composant::CharpenteHexa { .. }
+        | Composant::Adaptateur { .. }
+        | Composant::Coiffe { .. }
+        | Composant::BlocMoteur { .. } => Categorie::Structure,
+        Composant::ModuleHabitat { .. } | Composant::ModuleEquipage { .. } | Composant::CollierRotatif { .. } => {
+            Categorie::Habitat
+        }
+        Composant::PanneauSolaire { .. } | Composant::Radiateur { .. } | Composant::RadiateurMega { .. } => {
+            Categorie::Energie
+        }
+        Composant::Antenne { .. } => Categorie::Communication,
+        Composant::Caisson { .. }
+        | Composant::ChargeUtile { .. }
+        | Composant::NacelleCargo { .. }
+        | Composant::RatelierCargo { .. } => Categorie::Cargo,
+        Composant::Propulseur { .. }
+        | Composant::Motrice { .. }
+        | Composant::MoteurAntimatiere { .. }
+        | Composant::ReacteurAntimatiere { .. }
+        | Composant::Reservoir { .. } => Categorie::Propulsion,
+        Composant::BouclierPetit { .. } | Composant::BouclierGrand { .. } => Categorie::Bouclier,
+        Composant::SousEnsemble { .. } => Categorie::Composite,
+        Composant::TreillisHexagone { .. } | Composant::BouclierThermique { .. } | Composant::Charniere { .. } => {
+            Categorie::PoseeAMain
+        }
+        Composant::Panache { .. } => Categorie::Effet,
+    }
+}
+
+/// Composants posables sur un port libre de ce genre et ce profil — la
+/// **duale** de `Chantier::compatibles`, qui part d'un composant et rend les
+/// ports qui l'accepteraient. Ici on part du port et on rend les composants
+/// (§6.5 : « il manque énumérer tous les composants posables sur CE port
+/// libre »).
+///
+/// Chaque entrée est un échantillon représentatif ([`echantillons`]) et
+/// l'indice de son port de montage — le premier compatible, s'il y en a un.
+pub fn posables(genre: GenrePort, profil: Profil) -> Vec<(Composant, usize)> {
+    echantillons()
+        .into_iter()
+        .filter_map(|comp| {
+            let idx = comp.ports().iter().position(|p| p.genre.compatible(genre) && p.profil.compatible(profil))?;
+            Some((comp, idx))
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -1112,7 +1394,7 @@ mod tests {
         let sous = ch.figer(Profil::P1).unwrap();
         assert_eq!(sous.cout(), cout_attendu);
         assert_eq!(sous.rayon_local(), rayon_attendu);
-        assert_eq!(sous.englobant_local(), (Vec3::ZERO, rayon_attendu));
+        assert_eq!(sous.enveloppe_locale(), Enveloppe::sphere(Vec3::ZERO, rayon_attendu));
     }
 
     #[test]
@@ -1122,7 +1404,8 @@ mod tests {
         // recherchée (assembler plusieurs composants, dont des composites).
         let mut interne = Chantier::new();
         interne.racine(Composant::Noeud { profil: Profil::P1, sorties: Sorties::Six });
-        assert!(interne.poser(0, Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 2.0 }, 1));
+        let id = interne.libres()[0].id;
+        assert!(interne.poser(id, Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 2.0 }, 1));
         let brique = interne.figer(Profil::P1).unwrap();
 
         let mut externe = Chantier::new();
@@ -1130,8 +1413,9 @@ mod tests {
         let port_axial = externe
             .libres()
             .iter()
-            .position(|p| p.genre == GenrePort::ModuleAxial)
-            .expect("le treillis a des bouts axiaux");
+            .find(|p| p.genre == GenrePort::ModuleAxial)
+            .expect("le treillis a des bouts axiaux")
+            .id;
         assert!(externe.poser(port_axial, brique, 0), "le composite se pose comme un composant normal");
         assert_eq!(externe.nb_pieces(), 2);
     }
@@ -1148,7 +1432,7 @@ mod tests {
         // `poser_transforme` réutilisé tel quel pour chaque enfant).
         let mut ch = Chantier::new();
         ch.racine(Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 1.0 });
-        let axial = ch.libres().iter().position(|p| p.genre == GenrePort::ModuleAxial).unwrap();
+        let axial = ch.libres().iter().find(|p| p.genre == GenrePort::ModuleAxial).unwrap().id;
         assert!(ch.poser(axial, Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 1.0 }, 1));
         let sous = ch.figer(Profil::P1).unwrap();
 
@@ -1738,15 +2022,22 @@ mod tests {
 
     // Une plaque est **symétrique de part et d'autre de son plan** — c'est ce
     // qui la distingue de toutes les autres pièces, montées par un bout. Son
-    // englobant est donc centré sur l'origine, et sa géométrie doit rester mince
-    // en Z : une plaque qui s'épaissirait ne serait plus une plaque.
+    // englobant est donc centré sur l'origine, un **boudin** (noyau rectangle,
+    // `conception/assembleur.md` §9) et non plus une sphère — c'est tout le
+    // point du chantier — et sa géométrie doit rester mince en Z : une plaque
+    // qui s'épaissirait ne serait plus une plaque.
     #[test]
     fn une_plaque_de_bouclier_reste_mince_et_centree() {
         for (c, rayon) in [
             (Composant::BouclierPetit { profil: Profil::P1, rayon: 3.0 }, 3.0_f32),
             (Composant::BouclierGrand { profil: Profil::P1, rayon: 4.2, elancement: 1.75 }, 4.2),
         ] {
-            let (centre, r) = c.englobant_local();
+            let env = c.enveloppe_locale();
+            let centre = env.centre();
+            assert!(
+                matches!(env.noyau, crate::vaisseau::Noyau::Rectangle { .. }),
+                "{c:?} : une plaque veut un boudin (noyau rectangle), pas une capsule"
+            );
             assert_eq!(centre, Vec3::ZERO, "{c:?} : englobant décentré");
             let mut b = Batisseur::new();
             c.dessiner(&mut b);
@@ -1754,10 +2045,7 @@ mod tests {
             for lot in b.terminer() {
                 for v in &lot.vertices {
                     let p = vec3(v.position[0], v.position[1], v.position[2]);
-                    assert!(
-                        (p - centre).length() <= r + 1e-3,
-                        "sommet {p:?} hors de l'englobant (rayon {r})"
-                    );
+                    assert!(env.contient(p), "sommet {p:?} hors de l'englobant (profondeur {:.3})", env.profondeur(p));
                     epaisseur = epaisseur.max(p.z.abs());
                 }
             }
@@ -2519,5 +2807,477 @@ mod tests {
         let mut b = Batisseur::new();
         c.dessiner(&mut b);
         assert!(!b.terminer().is_empty());
+    }
+
+    // ================================================================
+    // Balayage de **toutes** les variantes
+    // (assembleur, Lot 1 — `docs/conception/assembleur.md` §5.5)
+    //
+    // `suivante`/`sous_ensemble_echantillon`/`echantillons` ont déménagé hors
+    // de ce module de tests en L2.4 : la chaîne sert désormais aussi à la
+    // palette (`posables`, en dehors des tests) — une seule source, comme
+    // partout ailleurs dans ce lot.
+    // ================================================================
+
+    /// Nom de variante, pour des messages d'échec lisibles. Dérivé du `Debug`
+    /// du composant — il n'y a donc pas une seconde liste de noms à tenir à
+    /// jour à côté de l'enum.
+    fn nom(c: &Composant) -> String {
+        format!("{c:?}").split([' ', '{', '(']).next().unwrap_or("?").to_string()
+    }
+
+    /// Fiche Markdown d'un composant : ses fils, numérotés comme à l'écran.
+    fn fiche(c: &Composant) -> String {
+        use crate::vaisseau::{fils, GenreFil};
+        let mut t = format!("
+## {}
+
+", nom(c));
+        t.push_str(&format!("`{c:?}`
+
+"));
+        let f: Vec<_> = fils(c).into_iter().filter(|x| x.genre != GenreFil::Maille).collect();
+        let env = c.enveloppe_locale();
+        let forme = match env.noyau {
+            _ if env.est_sphere() => "sphere".to_string(),
+            crate::vaisseau::Noyau::Segment { a, b } => format!("capsule long {:.2}", a.distance(b)),
+            crate::vaisseau::Noyau::Rectangle { hu, hv, .. } => format!("boudin {:.2}x{:.2}", hu, hv),
+        };
+        t.push_str(&format!("- **{} fils** numérotables
+", f.len()));
+        t.push_str(&format!("- cout {:.0} · rayon_local {:.2}
+", c.cout(), c.rayon_local()));
+        t.push_str(&format!("- enveloppe : {forme} rayon {:.2}
+", env.rayon));
+        // Relevé automatique (`vaisseau::mesure`) : profil tranché, serrage de
+        // l'enveloppe, élancement. Aucun jugement humain là-dedans — c'est ce
+        // qui permet qu'un composant *futur* soit mesuré sans qu'on y pense.
+        let m = crate::vaisseau::mesurer(c, 40);
+        if m.rayon_max > 1e-6 {
+            t.push_str(&format!(
+                "- **mesure** : long {:.2} · rayon max {:.2} · elancement x{:.1}
+",
+                m.longueur(),
+                m.rayon_max,
+                m.elancement()
+            ));
+            t.push_str(&format!(
+                "- **serrage {:.2}** ({}) — besoin {:.2} pour {:.2} declare
+",
+                m.serrage(),
+                m.verdict(),
+                m.besoin,
+                m.declare
+            ));
+            t.push_str(&format!("- profil : `{}`
+", crate::vaisseau::silhouette(&m)));
+        }
+        if crate::vaisseau::a_des_mailles(c) {
+            t.push_str(
+                "- ⚠️ contient des **mailles brutes** : le profil les ignore, il est donc partiel
+",
+            );
+        }
+        t.push_str("
+");
+        if f.is_empty() {
+            t.push_str("*(aucun fil : la pièce est faite de mailles brutes, ou ne dessine rien)*
+");
+            return t;
+        }
+        t.push_str("| n° | genre | de | à | long. | rayon a→b |
+|---:|---|---|---|---:|---:|
+");
+        let p = |v: macroquad::prelude::Vec3| format!("{:.2},{:.2},{:.2}", v.x, v.y, v.z);
+        for x in &f {
+            t.push_str(&format!(
+                "| {} | {} | {} | {} | {:.2} | {} |
+",
+                x.numero,
+                x.genre.nom(),
+                p(x.a),
+                p(x.b),
+                x.longueur(),
+                if (x.rayon_a - x.rayon_b).abs() < 1e-3 {
+                    format!("{:.2}", x.rayon_a)
+                } else {
+                    format!("{:.2}→{:.2}", x.rayon_a, x.rayon_b)
+                }
+            ));
+        }
+        t
+    }
+
+    /// Le catalogue complet, tel qu'il doit se trouver sur disque.
+    fn catalogue() -> String {
+        let mut t = String::new();
+        t.push_str("# Référence — Fils des composants
+
+");
+        t.push_str("> **Fichier généré.** Ne pas éditer à la main : il est reconstruit et
+");
+        t.push_str("> comparé par `le_catalogue_des_fils_est_a_jour`
+");
+        t.push_str("> (`src/vaisseau/composant/mod.rs`). Pour le régénérer après avoir
+");
+        t.push_str("> modifié une géométrie :
+>
+");
+        t.push_str("> ```
+> FILS=1 cargo test --release le_catalogue_des_fils
+> ```
+
+");
+        t.push_str("À quoi il sert : désigner une barre par un **numéro** plutôt que par une
+");
+        t.push_str("périphrase. Les mêmes numéros s'affichent à l'écran avec la touche **F**
+");
+        t.push_str("(vue station), posés **dans une coupure du fil** qu'ils désignent.
+
+");
+        t.push_str("Les cotes sont celles de l'**échantillon de référence** de chaque variante
+");
+        t.push_str("(la chaîne `suivante`, même source que les tests de balayage) : les positions
+");
+        t.push_str("bougent avec les paramètres, mais la **numérotation** ne dépend que de
+");
+        t.push_str("l'ordre des appels dans `dessiner`.
+
+");
+        t.push_str("Les **mailles brutes** (coiffes, plaques de bouclier) sont exclues : leur
+");
+        t.push_str("« fil » serait une diagonale d'englobant qui ne longe aucune arête réelle,
+");
+        t.push_str("donc un numéro qui désigne quelque chose d'inexistant.
+
+");
+        t.push_str("## Lire les mesures
+
+");
+        t.push_str("Chaque fiche porte un relevé **automatique** (`vaisseau::mesure`), obtenu en
+");
+        t.push_str("tranchant les fils — jamais le maillage cuit, qui n'a de sommets qu'aux
+");
+        t.push_str("frontières de facettes et rendrait des tranches vides à mi-portée
+");
+        t.push_str("(`suivi/stations.md` §C.13 : l'erreur a été commise trois fois).
+
+");
+        t.push_str("- **serrage** = rayon dont l'enveloppe aurait besoin / rayon qu'elle déclare.
+");
+        t.push_str("  `> 1` elle **ne contient pas** la pièce et la collision ment ; `≈ 1` c'est la
+");
+        t.push_str("  cible ; `< 1` elle réserve du vide et refusera des poses valides.
+");
+        t.push_str("- **elancement** = longueur / diamètre. Au-dessus de ~1,5 la sphère devient un
+");
+        t.push_str("  mauvais englobant et la capsule s'impose (L1.6).
+");
+        t.push_str("- **profil** : une colonne par tranche, de ` ` (vide) à `@` (rayon maximal).
+
+");
+        t.push_str("⚠️ **Le serrage est une borne supérieure, pas une cote.** Un [`Fil`]
+");
+        t.push_str("porte un rayon **à chaque bout** (le cône est donc exact depuis le 2026-08-01),
+");
+        t.push_str("mais le besoin vaut `distance a l'axe de l'enveloppe + rayon`, ce qui suppose le
+");
+        t.push_str("**pire alignement** des que le fil est de biais. Un `DEBORDE` juste au-dessus de 1
+");
+        t.push_str("est donc a verifier avant d'y toucher — c'est peut-etre la majoration, et la
+");
+        t.push_str("mesure exacte reste `les_rayons_declares_contiennent_la_piece`, sur sommets cuits.
+
+");
+        t.push_str("Le signal fiable, lui : le **classement** (qui déborde le plus), les cas
+");
+        t.push_str("`lache` (aucune approximation ne rend une enveloppe trop grande), et les
+");
+        t.push_str("pièces faites de cylindres seuls, où le rayon est exact.
+");
+        for c in echantillons() {
+            t.push_str(&fiche(&c));
+        }
+        t
+    }
+
+    // **Le catalogue des fils ne peut pas se périmer en silence.**
+    //
+    // Il est régénéré à chaque exécution et comparé à ce qui est sur disque. Un
+    // fichier de référence qu'on met à jour à la main dérive dès la première
+    // retouche de géométrie — et un numéro qui désigne la mauvaise barre est
+    // pire qu'aucun numéro, puisqu'on agit dessus.
+    #[test]
+    fn le_catalogue_des_fils_est_a_jour() {
+        let chemin = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/reference/fils.md");
+        let attendu = catalogue();
+        if std::env::var("FILS").is_ok() {
+            std::fs::create_dir_all(std::path::Path::new(chemin).parent().unwrap()).unwrap();
+            std::fs::write(chemin, &attendu).unwrap();
+            return;
+        }
+        let sur_disque = std::fs::read_to_string(chemin).unwrap_or_default();
+        // ⚠️ Comparaison **ligne à ligne, lignes vides ignorées**. Ce qui doit
+        // rester d'aplomb, c'est la donnée — les en-têtes et les lignes de
+        // tableau, donc les numéros et les cotes. Les lignes vides sont de la
+        // mise en forme, et elles ne survivent pas identiquement à l'aller-retour
+        // disque sous Windows ; comparer les octets bruts ferait rougir le test
+        // pour une raison qui n'apprend rien.
+        let utiles = |t: &str| -> Vec<String> {
+            t.lines().map(|l| l.trim_end().to_string()).filter(|l| !l.is_empty()).collect()
+        };
+        let (a, b) = (utiles(&sur_disque), utiles(&attendu));
+        if let Some((n, (x, y))) = a.iter().zip(&b).enumerate().find(|(_, (x, y))| x != y) {
+            panic!(
+                "docs/reference/fils.md est périmé (ligne {n}) — régénérer avec
+                 `FILS=1 cargo test --release le_catalogue_des_fils`
+                 disque : {x}
+  code : {y}"
+            );
+        }
+        assert_eq!(
+            a.len(),
+            b.len(),
+            "docs/reference/fils.md n'a pas le bon nombre de lignes — régénérer avec              `FILS=1 cargo test --release le_catalogue_des_fils`"
+        );
+    }
+
+    // La chaîne doit passer par **chaque** variante, une fois et une seule.
+    // L'exhaustivité du `match` garantit qu'aucune n'est oubliée ; ce test
+    // garantit qu'aucune n'est visitée deux fois — une chaîne mal recousue
+    // (deux bras pointant vers le même successeur) sauterait tout un segment
+    // sans que rien ne le signale.
+    #[test]
+    fn la_chaine_dechantillons_visite_chaque_variante_une_fois() {
+        let ech = echantillons();
+        let mut vus: Vec<std::mem::Discriminant<Composant>> = Vec::new();
+        for c in &ech {
+            let d = std::mem::discriminant(c);
+            assert!(!vus.contains(&d), "variante visitée deux fois : {}", nom(c));
+            vus.push(d);
+        }
+        // ⚠️ **Le seul verrou de valeur assumé de ce lot**, et il a une raison
+        // permanente : le compilateur garantit que chaque variante a un *bras*,
+        // pas qu'elle est *atteinte*. Un bras qui pointe par-dessus son voisin
+        // (`Antenne => Caisson`, sautant `Adaptateur`) compile sans broncher et
+        // rend une variante invisible au balayage — les deux tests suivants
+        // passeraient au vert en ne la voyant jamais. Rien d'autre que le compte
+        // ne le dit.
+        //
+        // Il rougit donc à l'ajout d'une variante : c'est **voulu**. Le
+        // développeur est alors déjà dans ce fichier (le `match` de `suivante`
+        // ne compile plus sans lui), et bumper ce nombre est la confirmation
+        // qu'il a bien recousu la chaîne au lieu de la court-circuiter.
+        assert_eq!(ech.len(), 31, "la chaîne ne visite pas les 31 variantes");
+    }
+
+    // ================================================================
+    // Palette (L2.4 — `docs/conception/assembleur.md` §6.5)
+    // ================================================================
+
+    // Sur le modèle de `familles_de_propulsion_partitionnent_les_variantes` :
+    // chaque catégorie déclarée est atteinte par au moins un échantillon.
+    // Qu'une variante ne tombe que dans **une** catégorie est garanti par
+    // construction (`categorie` est une fonction totale, à un seul bras par
+    // appel) ; ce qui reste à vérifier — et que le compilateur ne voit pas —
+    // c'est qu'aucune catégorie n'est un compartiment mort.
+    #[test]
+    fn toute_categorie_de_palette_est_atteinte() {
+        let ech = echantillons();
+        for cat in Categorie::TOUTES {
+            assert!(ech.iter().any(|c| categorie(c) == cat), "catégorie vide : {}", cat.nom());
+        }
+    }
+
+    // **Le test qui empêche la palette et le moteur de diverger** (§6.5) :
+    // deux `match` sur le même enum, écrits à deux endroits — exactement la
+    // configuration qui a produit le doublon d'indice de §5.1. Vérifié sur un
+    // vrai `Chantier`, pas en re-dérivant le même prédicat dans le test : pour
+    // chaque pièce hôte, chaque port qu'elle expose, et chaque cible
+    // candidate, le verdict de `posables` doit coïncider avec celui de
+    // `Chantier::compatibles`.
+    #[test]
+    fn palette_et_compatibles_saccordent() {
+        let ech = echantillons();
+        for hote in &ech {
+            let mut ch = Chantier::new();
+            assert!(ch.racine(hote.clone()), "{} : la racine ne devrait jamais échouer (pas de budget)", nom(hote));
+            for port in ch.libres().to_vec() {
+                let attendu = posables(port.genre, port.profil);
+                for cible in &ech {
+                    // Granularité **variante**, pas montage : `posables` promet
+                    // qu'une pièce est posable (avec un indice de montage qui
+                    // marche), pas qu'elle liste tous les montages qui
+                    // marcheraient — une pièce symétrique (`ModuleAxial`, deux
+                    // écoutilles identiques) en a plusieurs, la palette n'en
+                    // retient qu'un. C'est aussi ce que §6.5 demande : « toute
+                    // variante proposée… y est effectivement posable ».
+                    let palette_dit_oui = attendu.iter().any(|(c, _)| c == cible);
+                    let modele_dit_oui =
+                        (0..cible.ports().len()).any(|m| ch.compatibles(cible, m).contains(&port.id));
+                    assert_eq!(
+                        palette_dit_oui,
+                        modele_dit_oui,
+                        "{} (port {:?}/{:?}) vs {} : palette={palette_dit_oui} compatibles={modele_dit_oui}",
+                        nom(hote),
+                        port.genre,
+                        port.profil,
+                        nom(cible)
+                    );
+                }
+            }
+        }
+    }
+
+    // **Santé de la sortie de dessin, pour toutes les variantes.**
+    //
+    // Trois invariants faibles mais universels, qu'aucun test de famille ne
+    // couvrait : un `NaN` glissé dans une cote se propage silencieusement
+    // jusqu'à faire disparaître un lot entier à l'écran (macroquad ne dit rien),
+    // et un indice hors bornes est un plantage GPU, pas une erreur Rust.
+    #[test]
+    fn toute_variante_cuit_une_geometrie_saine() {
+        for c in echantillons() {
+            let mut b = Batisseur::new();
+            c.dessiner(&mut b);
+            for (l, lot) in b.terminer().iter().enumerate() {
+                let n = lot.vertices.len();
+                for (i, v) in lot.vertices.iter().enumerate() {
+                    let p = Vec3::from(v.position);
+                    assert!(
+                        p.is_finite(),
+                        "{} lot {l} sommet {i} : position non finie {p:?}",
+                        nom(&c)
+                    );
+                }
+                for &ix in &lot.indices {
+                    assert!((ix as usize) < n, "{} lot {l} : indice {ix} hors des {n} sommets", nom(&c));
+                }
+                assert_eq!(lot.indices.len() % 3, 0, "{} lot {l} : triangles incomplets", nom(&c));
+            }
+        }
+    }
+
+    /// Marge tolérée entre le rayon **déclaré** d'une pièce et son hors-tout
+    /// **mesuré**.
+    ///
+    /// ⚠️ **C'est une dette, pas une cote de conception.** L'invariant juste est
+    /// 1,0 : `rayon_local` sert au cadrage caméra (`Station::rayon`) et
+    /// `englobant_local` à l'anti-collision de `Chantier::poser` — les deux
+    /// doivent *contenir* la pièce, sans quoi la caméra la coupe et la collision
+    /// ment. Le relevé du 2026-07-31 (`suivi/assembleur.md` L1.4) montre que
+    /// **20 variantes sur 30 débordent**, jusqu'à ×1,37, et pas d'un cheveu :
+    /// 81 % des sommets d'une `ChargeUtile` sortent de sa sphère de collision.
+    ///
+    /// Ces deux fonctions se sont donc écrites comme des **tailles nominales**
+    /// (« le gabarit de la pièce ») et non comme des volumes englobants. Les
+    /// aligner touche la vingtaine de formules concernées et recule la caméra
+    /// partout : c'est un arbitrage rendu à l'utilisateur, pas une retouche.
+    ///
+    /// En attendant, cette borne fait ce qu'elle peut : elle empêche que ça
+    /// **empire**. Une nouvelle pièce qui déclarerait la moitié de sa taille
+    /// serait prise ; les débordements d'aujourd'hui, non.
+    const MARGE_RAYON: f32 = 1.40;
+
+    // Les deux rayons doivent **contenir** la pièce, à `MARGE_RAYON` près.
+    //
+    // Deux mesures distinctes pour deux usages distincts, et c'est le point du
+    // test : `rayon_local` est pris **depuis l'origine locale** (c'est ainsi que
+    // `Station::rayon` le compose : `centre().length() + rayon_local()`), tandis
+    // qu'`englobant_local` est pris depuis **son propre centre**, qui peut être
+    // décalé — un propulseur ou une coiffe se déploient d'un seul côté de leur
+    // montage. Confondre les deux repères rendrait un « débordement » qui
+    // n'existe pas, ou masquerait celui qui existe.
+    #[test]
+    fn les_rayons_declares_contiennent_la_piece() {
+        for c in echantillons() {
+            let mut b = Batisseur::new();
+            c.dessiner(&mut b);
+            let pts: Vec<Vec3> = b
+                .terminer()
+                .iter()
+                .flat_map(|l| l.vertices.iter().map(|v| Vec3::from(v.position)))
+                .collect();
+            // Le panache ne dessine rien : les deux rayons valent 0 et le
+            // contiennent trivialement (cf. `toute_variante_dessine_sauf_le_panache`).
+            if pts.is_empty() {
+                continue;
+            }
+
+            let rl = c.rayon_local();
+            assert!(rl > 0.0, "{} : rayon_local nul alors qu'elle dessine", nom(&c));
+            let loin = pts.iter().fold(0.0_f32, |m, p| m.max(p.length()));
+            assert!(
+                loin <= rl * MARGE_RAYON,
+                "{} : cadrage — hors-tout {loin:.2} pour un rayon_local de {rl:.2} (×{:.2})",
+                nom(&c),
+                loin / rl
+            );
+
+            // Côté collision, la mesure est la **distance à l'axe** de la
+            // capsule, pas à son centre : c'est tout l'intérêt d'être passé de
+            // la sphère à la capsule, et mesurer depuis le centre reviendrait à
+            // juger la capsule sur le critère qu'elle remplace (§C.29, piège
+            // n° 1 : mesurer un corollaire au lieu de la chose).
+            let env = c.enveloppe_locale();
+            assert!(env.rayon > 0.0, "{} : enveloppe nulle alors qu'elle dessine", nom(&c));
+            let deborde = pts.iter().fold(0.0_f32, |m, p| m.max(env.profondeur(*p)));
+            assert!(
+                deborde <= env.rayon * (MARGE_RAYON - 1.0),
+                "{} : collision — déborde de {deborde:.2} hors d'une enveloppe de rayon {:.2}",
+                nom(&c),
+                env.rayon
+            );
+        }
+    }
+
+    // **La charpente carrée tient compte de son aiguille.**
+    //
+    // Sa jumelle hexagonale le fait depuis toujours (`charpente_hexa_pied` :
+    // « la tour pend sous la base, donc c'est elle qui fixe l'extension ») ; la
+    // carrée avait été oubliée, et déclarait 10,0 en s'étendant à 17,0. Ce
+    // n'était pas une marge de détail : 44 % de ses sommets sortaient de la
+    // sphère. Le test compare les deux variantes de la **même** pièce, ce qui
+    // rend la correction indépendante des cotes choisies.
+    #[test]
+    fn laiguille_de_la_charpente_compte_dans_son_rayon() {
+        let ch = |aiguille| Composant::Charpente {
+            grand: Profil::P3,
+            petit: Profil::P1,
+            longueur: 20.0,
+            courbure: 2.0,
+            aiguille,
+        };
+        let (nue, armee) = (ch(false).rayon_local(), ch(true).rayon_local());
+        assert!(armee > nue, "l'aiguille doit agrandir le hors-tout ({armee:.2} vs {nue:.2})");
+        // Et elle l'agrandit d'au moins l'anneau qu'elle ajoute réellement.
+        let (bas, _) = treillis::charpente_pied(Profil::P3, true);
+        assert!(
+            armee >= nue + bas * 0.9,
+            "l'aiguille descend de {bas:.2} mais le rayon ne gagne que {:.2}",
+            armee - nue
+        );
+    }
+
+    // Chaque variante produit de la géométrie — **sauf le panache**, et cette
+    // exception est une décision, pas un oubli : un jet de plasma n'a pas de
+    // silhouette, il est rendu en additif par `ecran::panache` et le composant
+    // ne sert qu'à porter la pose (`suivi/stations.md` §C.28). Lui redonner de
+    // la géométrie le ferait dessiner **deux fois**, en volume opaque par-dessus
+    // le ruban — c'est exactement l'aspect « tube de plastique » qui avait été
+    // rejeté. D'où l'assertion à l'endroit : on **exige** qu'il reste vide.
+    #[test]
+    fn toute_variante_dessine_sauf_le_panache() {
+        for c in echantillons() {
+            let mut b = Batisseur::new();
+            c.dessiner(&mut b);
+            let sommets: usize = b.terminer().iter().map(|l| l.vertices.len()).sum();
+            match c {
+                Composant::Panache { .. } => {
+                    assert_eq!(sommets, 0, "le panache ne doit rien dessiner en géométrie");
+                }
+                _ => assert!(sommets > 0, "{} ne dessine rien", nom(&c)),
+            }
+        }
     }
 }

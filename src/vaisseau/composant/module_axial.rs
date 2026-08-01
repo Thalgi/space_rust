@@ -9,7 +9,7 @@ use std::f32::consts::{PI, TAU};
 use super::commun::*;
 
 /// Variantes d'habitat (module pressurisé) — change couleur et détails de surface.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum VarianteModule {
     /// Blanc simple.
     Standard,
@@ -350,4 +350,11 @@ pub(super) fn rayon_local(profil: Profil, variante: VarianteModule, longueur: f3
     // faut en tenir compte pour le cadrage et l'anti-collision.
     let radial = profil.rayon() * variante.debord_radial();
     (longueur * 0.5 + profil.rayon() * COL_LONG).max(radial)
+}
+
+/// Demi-section transversale : ce que la capsule de collision doit couvrir en
+/// travers du fût. Les variantes bombées débordent du rayon nominal, d'où la
+/// même marge que dans [`rayon_local`].
+pub(super) fn demi_section(profil: Profil, variante: VarianteModule) -> f32 {
+    profil.rayon() * variante.debord_radial().max(1.0) * 1.05
 }

@@ -25,7 +25,7 @@ use macroquad::prelude::*;
 /// **Pas `Copy`** : `Composant` ne l'est plus depuis `SousEnsemble` (Partie
 /// E.3, champ `Rc<..>`). `Clone` reste bon marché pour les 19 autres
 /// variantes (champs `Copy`).
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Piece {
     pub transforme: Mat4,
     pub composant: Composant,
@@ -188,6 +188,14 @@ impl Budget {
         } else {
             false
         }
+    }
+
+    /// L'inverse de [`Self::depenser`] : crédite `cout` (un coût négatif ne
+    /// débite jamais). Sert au remboursement d'un `Chantier::retirer` — la
+    /// propriété d'aller-retour (`conception/assembleur.md` §6.2) exige que
+    /// poser puis retirer laisse le budget **exactement** comme avant.
+    pub fn rembourser(&mut self, cout: f32) {
+        self.restant += cout.max(0.0);
     }
 }
 

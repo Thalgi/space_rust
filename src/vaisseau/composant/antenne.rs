@@ -9,7 +9,7 @@ use std::f32::consts::{PI, TAU};
 use super::commun::*;
 
 /// Variantes d'antenne / parabole, montées par un port `Surface`.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum VarianteAntenne {
     /// Parabole grand gain, face vers +Z.
     ParaboleGG,

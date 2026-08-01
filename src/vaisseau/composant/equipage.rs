@@ -12,6 +12,7 @@
 //! direction, et le port de montage est à l'autre bout, côté traverse.
 
 use crate::vaisseau::peintre::Peintre;
+use crate::vaisseau::Enveloppe;
 use crate::vaisseau::{GenrePort, Port, Profil, Repere};
 use macroquad::prelude::*;
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
@@ -92,13 +93,13 @@ pub(super) fn rayon_local(profil: Profil, longueur: f32) -> f32 {
     longueur.max(profil.rayon() * 1.05)
 }
 
-/// Déployé d'un seul côté (+Z) : sphère décalée à mi-corps, sinon centrée sur
-/// le montage elle mordrait sur la traverse et son voisin.
-pub(super) fn englobant(profil: Profil, longueur: f32) -> (Vec3, f32) {
-    (
-        Vec3::Z * (longueur * 0.5),
-        (longueur * 0.5).hypot(profil.rayon() * 1.05),
-    )
+/// Déployé d'un seul côté (+Z) : **capsule** couchée le long du fût, du montage
+/// jusqu'au bout. C'est une nacelle — longue et fine —, et la sphère qui la
+/// contenait réservait `hypot(demi, rayon)` dans toutes les directions, donc
+/// mordait sur sa voisine de traverse alors que rien ne se touche.
+pub(super) fn englobant(profil: Profil, longueur: f32) -> Enveloppe {
+    let demi = longueur * 0.5;
+    Enveloppe::axe(Vec3::Z * demi, Vec3::Z, demi, profil.rayon() * 1.05)
 }
 
 // --- Collier rotatif -------------------------------------------------------

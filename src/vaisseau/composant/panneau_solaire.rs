@@ -9,7 +9,7 @@ use std::f32::consts::PI;
 
 use super::commun::*;
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum VariantePanneau {
     /// Ambre rigide, deux lés (type ISS SAW).
     RigideUS,

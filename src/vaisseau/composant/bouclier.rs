@@ -30,6 +30,7 @@
 //! rien en travers (voir [`motif_grand`]).
 
 use crate::vaisseau::peintre::Peintre;
+use crate::vaisseau::Enveloppe;
 use crate::vaisseau::pieces;
 use crate::vaisseau::{GenrePort, Port, Profil, Repere};
 use macroquad::prelude::*;
@@ -527,13 +528,47 @@ pub(super) fn grand_rayon_local(rayon: f32, elancement: f32) -> f32 {
     mesure(&contour_grand(rayon, elancement), rayon)
 }
 
-/// **Centrée sur l'origine** : contrairement à toutes les pièces montées par un
-/// bout, une plaque est symétrique de part et d'autre de son plan et son moyeu
-/// est traversant. Décaler la sphère la ferait déborder du mauvais côté.
-pub(super) fn petit_englobant(rayon: f32) -> (Vec3, f32) {
-    (Vec3::ZERO, petit_rayon_local(rayon))
+/// Demi-étendues **X** et **Y** du contour, jante comprise — le pendant en
+/// rectangle de [`mesure`], pour le boudin de collision (`conception/assembleur.md`
+/// §9). Lues sur le **contour déjà construit**, comme `mesure` : une plaque
+/// étirée (grande, `elancement`) a besoin d'un rectangle, pas d'un carré, sans
+/// quoi le boudin gaspille en largeur tout ce qu'il gagne en épaisseur.
+fn mesure_xy(c: &[Vec3], rayon: f32) -> (f32, f32) {
+    let hu = c.iter().fold(0.0f32, |m, v| m.max(v.x.abs()));
+    let hv = c.iter().fold(0.0f32, |m, v| m.max(v.y.abs()));
+    (hu + rayon * JANTE, hv + rayon * JANTE)
 }
 
-pub(super) fn grand_englobant(rayon: f32, elancement: f32) -> (Vec3, f32) {
-    (Vec3::ZERO, grand_rayon_local(rayon, elancement))
+/// Jeu au-dessus de l'étendue analytique, même principe que `SAILLIE` dans
+/// `thermique.rs`.
+const JEU_BOUDIN: f32 = 0.15;
+
+/// Demi-étendue **axiale** (Z) du boudin de la grande plaque : le moyeu
+/// domine, puisque son ossature reste centrée sur le plan (`z_axe = 0` dans
+/// [`motif_grand`]) — contrairement au petit bouclier.
+fn grand_demi_epaisseur_boudin(rayon: f32) -> f32 {
+    rayon * MOYEU_DEMI * (1.0 + JEU_BOUDIN)
+}
+
+/// Demi-étendue **axiale** (Z) du boudin du petit bouclier : son ossature est
+/// décalée en arrière de la peau (`petit_dessiner`), et la racine de sa
+/// nervure principale (rayon `NERVURE`) y dépasse légèrement plus loin que le
+/// moyeu côté arrière. Reprend les mêmes constantes que le dessin — une seule
+/// source, comme `mesure` pour le contour.
+fn petit_demi_epaisseur_boudin(rayon: f32) -> f32 {
+    let debord_nervure = rayon * PEAU + rayon * NERVURE * 0.55 + rayon * NERVURE;
+    (rayon * MOYEU_DEMI).max(debord_nervure) * (1.0 + JEU_BOUDIN)
+}
+
+/// **Centrée sur l'origine** : contrairement à toutes les pièces montées par un
+/// bout, une plaque est symétrique de part et d'autre de son plan et son moyeu
+/// est traversant. Décaler le boudin le ferait déborder du mauvais côté.
+pub(super) fn petit_englobant(rayon: f32) -> Enveloppe {
+    let (hu, hv) = mesure_xy(&contour(rayon * FRAC_PI_3.sin(), rayon, EPAULE_REGULIER, 0.0), rayon);
+    Enveloppe::plaque(Vec3::ZERO, Vec3::X, Vec3::Y, hu, hv, petit_demi_epaisseur_boudin(rayon))
+}
+
+pub(super) fn grand_englobant(rayon: f32, elancement: f32) -> Enveloppe {
+    let (hu, hv) = mesure_xy(&contour_grand(rayon, elancement), rayon);
+    Enveloppe::plaque(Vec3::ZERO, Vec3::X, Vec3::Y, hu, hv, grand_demi_epaisseur_boudin(rayon))
 }
