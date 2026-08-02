@@ -26,9 +26,15 @@ pub use enveloppe::{distance_point_rectangle, distance_point_segment, Enveloppe,
 pub use inventaire::{fils, Fil, GenreFil};
 pub use mesure::{mesurer, silhouette, a_des_mailles, Mesure};
 pub(crate) use chantier::FACTEUR_COLLISION;
+// Réexporté pour la désignation de l'assembleur (`ecran::designation`), qui
+// projette les ports libres à l'écran. `Chantier` lui-même n'est pas encore
+// réexporté : aucune vue n'en tient un avant le Lot 4, et l'exporter à vide
+// ne ferait qu'ajouter un avertissement.
+pub use chantier::PortLibre;
 pub(crate) use composant::{rayon_panache, teinte_panache};
 pub use composant::{
-    Composant, DonneesSousEnsemble, FamillePropulsion, PiedHexa, Sorties, StyleTreillis, VarianteAntenne,
+    hexagone_ceinture,
+    Composant, VariantePanneauMega, DonneesSousEnsemble, FamillePropulsion, PiedHexa, Sorties, StyleTreillis, VarianteAntenne,
     BOUCLIER_ELANCEMENT,
     VarianteCaisson, VarianteCharge, VarianteCoiffe, VarianteModule, VariantePanneau,
     VariantePropulseur, VarianteRadiateur,
@@ -42,9 +48,9 @@ pub use composant::{
 // le second preset recale bien sa charge utile.
 pub use generateur::{
     demo_anneaux, demo_bouclier_grand, demo_bouclier_petit, demo_bouclier_thermique, demo_cargo, demo_charpente, demo_charpente_hexa,
-    demo_epine_pavillon, demo_equipage, demo_habitat_isv, demo_moteur_antimatiere,
+    demo_epine_pavillon, demo_equipage, demo_panneaux_mega, demo_habitat_isv, demo_moteur_antimatiere,
     demo_moteur_antimatiere_principal, demo_radiateur_mega, demo_reservoir,
-    generer, preset_anneau,
+    generer, preset_anneau, preset_elysium, preset_stanford,
     preset_comsat, preset_iss, preset_isv_equipage, preset_isv_fixe, preset_isv_moteur, preset_mir,
     preset_sonde, preset_tiangong, Epine, EtatEquipage, Ossature,
     ParamsStation, Style, ISV_AXE,

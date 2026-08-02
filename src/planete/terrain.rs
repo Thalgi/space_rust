@@ -150,8 +150,27 @@ fn fract3(p: Vec3) -> Vec3 {
     p - p.floor()
 }
 
+/// Multiplicateur de décorrélation du hash. **Ce n'est pas une approximation
+/// de `1/π`**, malgré la ressemblance qui trompe `clippy::approx_constant` :
+/// c'est une constante arbitraire de fonction de hachage, dont la valeur
+/// exacte n'a d'importance que pour une raison — elle doit être **la même**
+/// que dans les shaders.
+///
+/// ⚠️ La remplacer par `f32::consts::FRAC_1_PI`, comme le suggère clippy, la
+/// décalerait d'**exactement 1 ULP** (`3ea2f984` → `3ea2f983`). Anodin
+/// ailleurs ; ici le `fract` final amplifie n'importe quel écart en un bruit
+/// entièrement différent, et la géographie précalculée sur CPU cesserait de
+/// correspondre à ce que le shader dessine sur GPU.
+///
+/// Dette assumée : la même valeur vit dans `shaders/planete.frag.glsl`,
+/// `shaders/panache.frag.glsl` et `shaders/soleil.frag.glsl` (`0.3183099`),
+/// et **rien ne les tient d'accord** — Rust et GLSL ne partagent aucun texte.
+/// Voir `docs/suivi/planetes.md`, « Le hash CPU/GPU ».
+#[allow(clippy::approx_constant)]
+const DECORRELATION_HASH: f32 = 0.318_309_9;
+
 fn hash(p: Vec3) -> f32 {
-    let mut p = fract3(p * 0.318_309_9 + 0.1);
+    let mut p = fract3(p * DECORRELATION_HASH + 0.1);
     p *= 17.0;
     let v = p.x * p.y * p.z * (p.x + p.y + p.z);
     v - v.floor()

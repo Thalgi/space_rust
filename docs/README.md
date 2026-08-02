@@ -23,7 +23,7 @@ suivi dédié ; les étoiles n'ont pas de conception dédiée — leur bucket li
 | Fichier | Sujet |
 |---|---|
 | [`stations.md`](conception/stations.md) | Stations spatiales procédurales : modèle de ports, composants, budget/unités/symétrie, raccordement ports↔assemblage, classes de stations (ISS → O'Neill), **+ Partie E : refonte de `composant.rs` et composite `SousEnsemble`** (vers un futur éditeur façon VAB). Fusion de 4 anciens docs. |
-| [`assembleur.md`](conception/assembleur.md) | Suite de la Partie E.4 ci-dessus : éditeur d'assemblage interactif façon VAB. Audit du parc de tests existant (§1–§4), ce qui manque au code actuel (§5, Lot 1), ce qu'il faut à l'éditeur (§6–§8, Lot 2), et l'enveloppe rectangle des plaques (§9, « le boudin »). |
+| [`assembleur.md`](conception/assembleur.md) | Suite de la Partie E.4 ci-dessus : éditeur d'assemblage interactif façon VAB. Audit du parc de tests existant (§1–§4), ce qui manque au code actuel (§5, Lot 1), ce qu'il faut à l'éditeur (§6–§8, Lot 2), l'enveloppe rectangle des plaques (§9, « le boudin »), et **l'écran en détail + le découpage des lots 3 à 6 (§10)**. |
 | [`planetes.md`](conception/planetes.md) | Planètes telluriques : pipeline de rendu (grille cube-sphere, érosion, hydrologie, biomes) + modèle de variantes/catalogue. Fusion de 2 anciens docs. |
 | [`geantes_gazeuses.md`](conception/geantes_gazeuses.md) | Géantes gazeuses : surface V2 (profil zonal, palette, vortex, pôles) + recherche noises/patterns. Fusion de 2 anciens docs. |
 | [`ceintures.md`](conception/ceintures.md) | Champs de débris unifiés : ceintures d'astéroïdes, anneaux planétaires, disques proto*, nuage de Oort — un seul modèle `Disque` paramétrique. |

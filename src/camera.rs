@@ -21,6 +21,49 @@ pub fn base_orbite(yaw: f32, pitch: f32) -> (Vec3, Vec3, Vec3) {
     (right, up, forward)
 }
 
+/// Demi-angle vertical du tronc de vue, en radians — celui de `Camera3D` par
+/// défaut (45°).
+///
+/// **Une seule source, et elle compte** : la construction du rayon et la
+/// projection sont inverses l'une de l'autre *à condition* de parler du même
+/// tronc. Deux copies de cette valeur qui divergeraient donneraient un curseur
+/// qui désigne à côté de ce qu'il montre, sans que rien ne le signale.
+const DEMI_FOV: f32 = 45.0 * std::f32::consts::PI / 360.0;
+
+/// Direction **unitaire** du rayon partant de l'œil et passant par le point
+/// écran `souris` (en pixels, `ecran` étant la taille de la fenêtre).
+///
+/// Extrait de [`Camera::pick`] pour être partagé avec la désignation de
+/// l'assembleur (`ecran::designation`) — et **testable sans contexte
+/// graphique**, comme [`base_orbite`], puisqu'il ne lit ni la souris ni
+/// l'écran mais les reçoit.
+pub fn rayon_ecran(souris: Vec2, ecran: Vec2, cam: &CameraInfo, aspect: f32) -> Vec3 {
+    let ndc_x = souris.x / ecran.x * 2.0 - 1.0;
+    let ndc_y = 1.0 - souris.y / ecran.y * 2.0;
+    let th = DEMI_FOV.tan();
+    (cam.forward + cam.right * (ndc_x * th * aspect) + cam.up * (ndc_y * th)).normalize()
+}
+
+/// Position **en pixels** du point monde `p`, ou `None` s'il est derrière l'œil.
+///
+/// Le `None` n'est pas une politesse : un point situé **derrière** la caméra se
+/// projette à des coordonnées écran parfaitement plausibles — la division par
+/// une profondeur négative retourne l'image — et un curseur qui accrocherait ce
+/// fantôme désignerait un port dans le dos de l'observateur. C'est le piège
+/// classique de la projection, et il ne se voit pas à l'œil : le port fautif
+/// est simplement celui qu'on n'a pas visé.
+pub fn projeter_ecran(p: Vec3, ecran: Vec2, cam: &CameraInfo, aspect: f32) -> Option<Vec2> {
+    let rel = p - cam.pos;
+    let profondeur = rel.dot(cam.forward);
+    if profondeur <= 1e-6 {
+        return None;
+    }
+    let th = DEMI_FOV.tan();
+    let ndc_x = rel.dot(cam.right) / (profondeur * th * aspect);
+    let ndc_y = rel.dot(cam.up) / (profondeur * th);
+    Some(vec2((ndc_x + 1.0) * 0.5 * ecran.x, (1.0 - ndc_y) * 0.5 * ecran.y))
+}
+
 /// Caméra orbitale : tourne autour d'une cible (origine ou astre focalisé),
 /// gère le glisser/zoom et la sélection au clic.
 pub struct Camera {
@@ -113,11 +156,8 @@ impl Camera {
     /// Sélectionne l'astre cliqué (rayon depuis la souris) comme nouvelle cible.
     pub fn pick(&mut self, sys: &Systeme, cam: &CameraInfo, aspect: f32) {
         let s = mouse_position();
-        let ndc_x = s.0 / screen_width() * 2.0 - 1.0;
-        let ndc_y = 1.0 - s.1 / screen_height() * 2.0;
-        let th = (45.0_f32.to_radians() * 0.5).tan();
         let dir =
-            (cam.forward + cam.right * (ndc_x * th * aspect) + cam.up * (ndc_y * th)).normalize();
+            rayon_ecran(vec2(s.0, s.1), vec2(screen_width(), screen_height()), cam, aspect);
         if let Some(idx) = sys.pick(cam.pos, dir) {
             self.focus = Some(idx);
         }

@@ -182,6 +182,40 @@ impl Enveloppe {
     pub fn contient(&self, p: Vec3) -> bool {
         self.profondeur(p) <= 0.0
     }
+
+    /// La demi-droite `origine + t·direction` (`t ≥ 0`) traverse-t-elle cette
+    /// enveloppe ? Rend alors la **distance de l'origine à la surface** — 0 si
+    /// l'origine est dedans.
+    ///
+    /// Sert à désigner la pièce sous le curseur (`conception/assembleur.md`
+    /// §8.3, état « pièce sélectionnée ») : c'est cette distance qui départage
+    /// deux pièces percées par le même rayon, la plus proche de l'œil étant
+    /// celle qu'on voit. On rend la distance à la **surface**, et non le
+    /// paramètre du point de plus courte approche : ce qui décide de « qui est
+    /// devant » est la distance à la pièce elle-même, pas l'endroit où le rayon
+    /// la frôle au plus près.
+    ///
+    /// Une enveloppe étant un noyau convexe gonflé de `rayon`, la demi-droite
+    /// la touche exactement quand elle passe à moins de `rayon` du noyau. Le
+    /// calcul réutilise donc les distances **segment↔noyau** déjà écrites, en
+    /// bornant la demi-droite à `portee` : ce n'est pas une approximation mais
+    /// une borne **exacte**, aucun point du noyau n'étant plus loin que ça de
+    /// l'origine — le point le plus proche est donc forcément atteint avant.
+    pub fn touche_rayon(&self, origine: Vec3, direction: Vec3) -> Option<f32> {
+        let dir = direction.normalize_or_zero();
+        if dir == Vec3::ZERO {
+            return None;
+        }
+        let portee = (self.centre() - origine).length() + self.rayon_sphere();
+        let bout = origine + dir * portee;
+        let au_rayon = match self.noyau {
+            Noyau::Segment { a, b } => distance_segments(origine, bout, a, b),
+            Noyau::Rectangle { centre, eu, ev, hu, hv } => {
+                distance_segment_rectangle(origine, bout, centre, eu, ev, hu, hv)
+            }
+        };
+        (au_rayon <= self.rayon).then(|| self.profondeur(origine).max(0.0))
+    }
 }
 
 /// Distance d'un point au segment `[a, b]`.
@@ -844,5 +878,68 @@ mod tests {
         assert!((a.ecart(&Enveloppe::sphere(vec3(5.0, 0.0, 0.0), 3.0))).abs() < 1e-5, "contact");
         assert!(a.ecart(&Enveloppe::sphere(vec3(6.0, 0.0, 0.0), 3.0)) > 0.0, "séparées");
         assert!(a.ecart(&Enveloppe::sphere(vec3(4.0, 0.0, 0.0), 3.0)) < 0.0, "imbriquées");
+    }
+
+    // --- L3.3 : le rayon de désignation (§8.3) ---
+
+    /// Les trois formes de noyau, pour balayer `touche_rayon` sur chacune.
+    fn formes() -> [Enveloppe; 3] {
+        [
+            Enveloppe::sphere(vec3(0.0, 1.0, 0.0), 1.5),
+            Enveloppe::capsule(vec3(-3.0, 0.0, 0.0), vec3(3.0, 0.5, 1.0), 0.8),
+            Enveloppe::plaque(vec3(0.0, 0.0, 2.0), Vec3::X, Vec3::Y, 2.5, 1.5, 0.2),
+        ]
+    }
+
+    // Contrôle en force brute, dans le **seul sens où il est concluant** : si un
+    // point échantillonné du rayon est dedans, alors le rayon touche — sans
+    // réserve. L'implication inverse ne tient pas (un rayon peut effleurer
+    // l'enveloppe entre deux échantillons), elle est donc vérifiée séparément,
+    // sur des cas francs, par `un_rayon_qui_passe_loin_ne_touche_rien`.
+    #[test]
+    fn touche_rayon_ne_rate_aucun_point_reellement_traverse() {
+        let oeil = vec3(-12.0, 6.0, -9.0);
+        let mut touches = 0;
+        for env in formes() {
+            for i in 0..12 {
+                for j in 0..12 {
+                    let cible = vec3(i as f32 * 0.6 - 3.5, j as f32 * 0.4 - 2.0, 1.0);
+                    let dir = (cible - oeil).normalize();
+                    let portee = (env.centre() - oeil).length() + env.rayon_sphere();
+                    let dedans = (0..=3000)
+                        .any(|k| env.contient(oeil + dir * (portee * k as f32 / 3000.0)));
+                    if dedans {
+                        assert!(
+                            env.touche_rayon(oeil, dir).is_some(),
+                            "rayon vers {cible:?} traverse {env:?} sans être détecté"
+                        );
+                        touches += 1;
+                    }
+                }
+            }
+        }
+        assert!(touches >= 20, "balayage trop maigre : {touches} traversées réelles");
+    }
+
+    #[test]
+    fn un_rayon_qui_passe_loin_ne_touche_rien() {
+        let env = Enveloppe::capsule(vec3(-2.0, 0.0, 0.0), vec3(2.0, 0.0, 0.0), 0.5);
+        // Parallèle à l'axe, décalé bien au-delà du rayon.
+        assert!(env.touche_rayon(vec3(-10.0, 4.0, 0.0), Vec3::X).is_none());
+        // Vers l'enveloppe, mais **dans le dos** : une demi-droite, pas une droite.
+        assert!(env.touche_rayon(vec3(10.0, 0.0, 0.0), Vec3::X).is_none(), "part à l'opposé");
+        assert!(env.touche_rayon(vec3(10.0, 0.0, 0.0), -Vec3::X).is_some(), "revient dessus");
+    }
+
+    // La valeur rendue est la distance de l'œil à la **surface** : c'est elle
+    // qui départage deux pièces percées par le même rayon.
+    #[test]
+    fn touche_rayon_rend_la_distance_a_la_surface() {
+        let env = Enveloppe::sphere(vec3(10.0, 0.0, 0.0), 2.0);
+        let d = env.touche_rayon(Vec3::ZERO, Vec3::X).unwrap();
+        assert!((d - 8.0).abs() < 1e-4, "8 attendu (10 − 2), obtenu {d}");
+        // Œil à l'intérieur : distance nulle, jamais négative.
+        let dedans = env.touche_rayon(vec3(10.0, 0.0, 0.0), Vec3::X).unwrap();
+        assert_eq!(dedans, 0.0);
     }
 }

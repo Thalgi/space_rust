@@ -528,9 +528,11 @@ tous trois sont **testables sans vue**, donc red-checkables comme le Lot 2.
 
 **Lot 4 — l'écran d'assemblage** (§8.2 à §8.4) : entrée au menu, colonne
 palette, les trois états d'interaction, les trois couleurs, le bandeau bas.
-**Découpage à arrêter à la fin du Lot 3**, une fois le modèle réellement
-complet — c'est le choix rendu par l'utilisateur le 2026-08-01, contre un
-découpage figé d'avance.
+Découpage arrêté à la clôture du Lot 3, une fois le modèle réellement complet
+— c'est le choix rendu par l'utilisateur le 2026-08-01, contre un découpage
+figé d'avance. **Le détail est en §10**, qui tranche aussi ce que §8 laissait
+ouvert (chantier vide, grisage de la palette, cache d'état des ports,
+clic contre glissé, choix du montage).
 
 ⚠️ **C'est le premier lot majoritairement non testé, et c'est voulu** (§6.6 :
 pas de test de rendu). La discipline change donc de forme : plutôt que
@@ -545,22 +547,17 @@ toujours aucun test dédié, reporté trois fois faute de consommateur réel
 (L2.4 est passée par `posables`, pas par lui). Son vrai consommateur est le
 code couleur de §8.4.
 
-**Lot 5 — ce que seul l'écran permet.** Regroupe ce qui exige de *voir* :
+**Lot 5 — l'écran qui garde et qui explique** : sauvegarde/chargement sur
+disque (`recette`/`depuis_recette` de L2.5 n'ont toujours aucun consommateur)
+et l'**overlay** de §8.5 adapté à l'assembleur. Détail en §10.8.
 
-- l'**overlay** de §8.5 adapté à l'assembleur (le segment de plus courte
-  approche entre le fantôme et ce qui le refuse, avec l'écart chiffré) ;
-- **sauvegarde et chargement sur disque** — `recette`/`depuis_recette` (L2.5)
-  n'ont encore aucun consommateur ;
-- l'**arbitrage de L1.4**, ouvert depuis le Lot 1 : 19 variantes
-  sous-déclarent leur `rayon_local`, et §8.5 dit que la **serre** d'une
-  enveloppe ne se juge qu'à l'œil. Cette dette est parquée depuis le Lot 1
-  précisément parce que personne n'a encore *vu* une seule enveloppe ;
-- les **composites** : un bouton qui fige la sélection en `SousEnsemble`, et
-  la palette qui liste ceux qu'on a créés. Arbitrage rendu le 2026-08-01 —
-  pas dans l'écran de base : c'est en assemblant à la main qu'on verra quels
-  regroupements reviennent, et donc ce qu'il vaut la peine de figer. L2.5 a
-  déjà tranché *comment* ils se sérialisent (pièces cuites) ; il manquait le
-  moyen d'en créer un depuis l'écran.
+**Lot 6 — ce que seul l'usage dira**, à ne pas commencer avant d'avoir
+construit quelque chose à la main : l'**arbitrage de L1.4** (19 variantes
+sous-déclarent leur `rayon_local` ; §8.5 dit que la serre d'une enveloppe ne
+se juge qu'à l'œil, et la dette est parquée depuis le Lot 1 faute d'avoir pu
+en *voir* une), les **composites** (`figer`, arbitrage rendu le 2026-08-01 :
+c'est en assemblant qu'on verra quels regroupements reviennent), et le sort
+de `GenrePort::PoutreBout`. Détail en §10.8.
 
 ---
 
@@ -769,6 +766,192 @@ Ce qu'il faut écrire en plus : **distance rectangle↔rectangle** et
 À faire **avant** L2.1 si l'on veut que l'assembleur naisse avec une collision
 honnête sur les plaques ; après, si l'on préfère voir l'éditeur tourner d'abord.
 Le travail ne dépend d'aucune étape du Lot 2 et n'en bloque aucune.
+
+---
+
+## 10. L'écran, en détail : ce que §8 laissait ouvert
+
+> Écrit le **2026-08-01**, à la clôture du Lot 3, quand le modèle a été complet
+> — c'est-à-dire au moment où les questions de l'écran cessent d'être
+> hypothétiques. §8 décrit *ce qu'on voit* ; cette section décide *ce qui se
+> passe*, et c'est là que sont les vrais choix.
+
+### 10.1 Le chantier vide : un quatrième état, ou plutôt un demi
+
+§8.3 donne trois états — repos, pièce en main, pièce sélectionnée — et les
+trois **supposent un vaisseau déjà là**. Or un `Chantier` naît vide, et sa
+première pièce ne se pose pas comme les autres : `racine(comp)` la place à
+l'origine, sans port hôte, parce qu'il n'y en a aucun.
+
+D'où la règle, qui n'ajoute pas d'état mais dédouble le repos :
+
+- **chantier vide** : n'importe quelle pièce de la palette se pose
+  immédiatement au clic, comme racine. Aucun port à viser, donc aucune étape
+  intermédiaire — cliquer une pièce *est* la poser ;
+- **chantier non vide** : le comportement de §8.3, pièce en main puis port.
+
+Ne pas l'écrire aurait donné un écran où le premier clic ne fait rien, sans que
+rien n'explique pourquoi.
+
+### 10.2 « Pièce d'abord » et `posables` : lever une contradiction apparente
+
+§8.1 a tranché **pièce d'abord** : on choisit dans la palette, *puis* les ports
+compatibles s'allument. C'est `Chantier::compatibles(comp, montage)` — du
+composant vers les ports.
+
+Or L2.4 a construit `posables(genre, profil)` — **du port vers les composants**,
+la duale. Dans un écran pièce d'abord, il n'y a pas de port sélectionné au
+moment où l'on remplit la palette. À quoi sert-elle donc ?
+
+**À griser la palette**, et c'est un vrai besoin : une entrée qui ne peut se
+poser **nulle part** sur le vaisseau courant doit se voir, sinon l'utilisateur
+la choisit et découvre un vaisseau sans aucun port allumé — un cul-de-sac muet.
+
+La façon naïve de calculer ce grisage est de balayer, pour chacun des 31
+composants, tous les ports libres. La bonne s'appuie sur `posables` :
+
+1. relever l'ensemble des couples `(genre, profil)` **distincts** parmi les
+   ports libres — il y en a une poignée (quatre genres, quelques profils), pas
+   un par port ;
+2. appeler `posables` une fois par couple, faire l'union.
+
+Le coût passe de « 31 × nombre de ports » à « 31 × nombre de couples
+distincts », c'est-à-dire qu'il **cesse de croître avec la station**. C'est la
+raison d'être de la duale dans un écran pièce d'abord, et ça mérite d'être noté
+ici : sans cette phrase, quelqu'un « corrigera » un jour la palette en bouclant
+sur les ports.
+
+### 10.3 Ce qui se recalcule, et quand — le point de performance
+
+Trois choses de coûts très différents cohabitent dans une frame :
+
+| Quoi | Dépend de | Recalculé |
+|---|---|---|
+| le **maillage cuit** du vaisseau | le chantier | à chaque **mutation**, jamais par frame |
+| l'**état des ports** (vert/rouge/éteint) | chantier + pièce en main + montage | à chaque mutation **ou** changement de sélection |
+| le **fantôme** | tout ça + le port survolé | **chaque frame** (il suit le curseur) |
+
+Le deuxième est le piège. Colorer les ports demande un `peut_poser` par port,
+et chaque `peut_poser` teste la collision contre **toutes** les pièces : sur une
+station de 45 pièces et 60 ports libres, c'est 2 700 distances d'enveloppes par
+frame, pour un résultat qui **ne change pas** tant qu'on ne touche ni au
+vaisseau ni à la pièce en main. Le recalculer à chaque frame serait le gaspiller
+entièrement.
+
+Le fantôme, lui, est le seul qui doive suivre le curseur — et il ne coûte qu'un
+`pose_prevue`, c'est-à-dire un `accoupler`.
+
+**Conséquence sur la structure** : toute mutation du chantier passe par **une
+seule porte** dans la vue (une méthode qui pose/retire/annule/refait *et*
+invalide le maillage et l'état des ports). Deux chemins de mutation, et le jour
+où l'un oublie d'invalider, l'écran affiche un vaisseau périmé — la famille de
+défaut que ce projet traque depuis le Lot 1, transposée à l'affichage.
+
+### 10.4 Clic ou glissé : la discrimination qu'on oublie toujours
+
+`Camera::input_orbite` fait tourner la vue au **glisser gauche**. §8.3 pose au
+**clic gauche**. Le même bouton, donc — et sans discrimination, chaque rotation
+de caméra se terminerait par une pose accidentelle sous le curseur.
+
+Règle : on mémorise la position à l'enfoncement, et le relâchement ne vaut clic
+que s'il a **peu bougé** (quelques pixels). Pas de seuil de durée : un clic long
+mais immobile reste un clic, et c'est le geste de quelqu'un qui vise
+soigneusement — précisément l'utilisateur qu'on ne veut pas punir.
+
+C'est une petite machine à états, sans rien de graphique : **elle se teste**, et
+elle doit l'être. C'est le type même de logique que §7.1 demande de pousser hors
+du code de dessin.
+
+### 10.5 Par quel port la pièce s'accroche-t-elle ?
+
+Une pièce a souvent **plusieurs** ports de montage — un `ModuleAxial` a deux
+écoutilles. §8 n'en dit rien, et `posables` n'en rend qu'un. Or le choix décide
+de l'**orientation** de la pièce posée.
+
+Décision : **le premier montage valide par défaut, et une touche pour cycler**
+parmi les autres. Le cycle n'a de sens qu'accompagné du fantôme — c'est lui qui
+montre ce que le changement fait —, donc les deux vont dans la même étape. Sans
+fantôme, cycler serait un réglage aveugle.
+
+### 10.6 Ce que l'écran ne fera **pas**, et pourquoi
+
+Écrit ici pour que ce soit une décision et non un oubli qu'on redécouvre :
+
+- **pas de roulis libre autour du port.** `accoupler` fixe le roulis (« les
+  hauts restent alignés »). L'ajouter voudrait dire un paramètre de plus à
+  `poser`, donc un champ de plus dans `Etape` — **le format de sauvegarde**
+  (L2.5). Ce n'est pas un réglage d'affichage, c'est une modification du
+  modèle et de la persistance : à décider comme telle, pas en passant ;
+- **pas de symétrie dans l'éditeur.** Arbitrage déjà rendu (L1.6) : « on ne
+  cherche pas la symétrie partout ». La grammaire du générateur s'en sert, la
+  main de l'utilisateur n'en a pas besoin ;
+- **pas d'occlusion des marqueurs de ports** (relevé en L3.3) : un port derrière
+  le vaisseau mais plus près du curseur l'emporte. §8.4 allume les ports
+  compatibles, donc l'utilisateur voit ce qu'il vise ;
+- **pas de confirmation avant de retirer la racine.** `retirer(racine)` vide le
+  vaisseau, et c'est annulable. Le projet n'a de boîte de dialogue nulle part.
+
+### 10.7 Deux points qui demandent un arbitrage
+
+**(a) Le coût affiché.** Le bac à sable n'a pas de budget, donc
+`Chantier::budget_restant()` rend `INFINITY` — inutilisable pour le bandeau.
+Le coût affiché doit être la **somme des coûts des pièces posées**, calculée par
+la vue. Sans conséquence, mais à ne pas confondre.
+
+**(b) Sortir de l'écran perd le vaisseau.** `main.rs` reconstruit un `Accueil`
+et **détruit** la vue : Échap efface le travail en cours. Trois issues, dans
+l'ordre de coût croissant — garder la vue vivante dans `Etat` (une ligne, mais
+le vaisseau survit alors à un aller-retour au menu sans que rien ne le dise),
+demander confirmation (le projet n'en a nulle part), ou **assumer la perte
+jusqu'à la sauvegarde du Lot 5**. À trancher avec l'utilisateur.
+
+### 10.8 Découpage retenu
+
+**Lot 4 — l'écran d'assemblage** (§8.2 à §8.4). Le but est qu'à la fin *on
+puisse construire un vaisseau à la main*, pas qu'il soit confortable.
+
+| # | Étape | Testable ? |
+|---|---|---|
+| L4.1 | Squelette : entrée au menu, zones (§8.2), caméra orbitale, boussole, bandeau. Un chantier vide qu'on regarde tourner. | non (dessin pur) |
+| L4.2 | La palette : catégories repliables, entrées, **grisage** par la voie de §10.2. | le grisage, oui |
+| L4.3 | Le clic : discrimination clic/glissé (§10.4), désignation branchée (L3.3), pose racine (§10.1) et pose sur port. | la discrimination, oui |
+| L4.4 | Fantôme (`pose_prevue`), les trois couleurs (§8.4) avec le **cache** de §10.3, cycle du montage (§10.5). | l'invalidation du cache, oui |
+| L4.5 | Sélection (`piece_sous_rayon`), surlignage du sous-arbre (`sous_arbre`), Suppr, undo/redo au bandeau. | non (branchement) |
+
+Premier geste de L4.1 : réexporter `Chantier` depuis `vaisseau` — laissé de
+côté en L3.3 faute de consommateur.
+
+**Lot 5 — l'écran qui garde et qui explique.** Les deux choses qui font passer
+l'assembleur de démonstration à outil :
+
+| # | Étape |
+|---|---|
+| L5.1 | Sauvegarde / chargement sur disque, sur `recette`/`depuis_recette` (L2.5), qui n'ont toujours aucun consommateur |
+| L5.2 | Overlay §8.5 adapté à l'assembleur : enveloppes, fantôme en blanc, **segment de plus courte approche** et écart chiffré — répondre à « pourquoi ce port est-il rouge ? » |
+
+**Lot 6 — ce que seul l'usage dira.** À ne pas commencer avant d'avoir
+réellement construit quelque chose avec l'écran :
+
+| # | Étape |
+|---|---|
+| L6.1 | **Arbitrage de L1.4** : les 19 variantes qui sous-déclarent leur `rayon_local`, jugées à l'œil grâce à l'overlay de L5.2 — la dette est parquée depuis le Lot 1 faute d'avoir pu *voir* une enveloppe |
+| L6.2 | **Composites** : figer la sélection en `SousEnsemble` (`Chantier::figer`), et la palette qui liste ceux qu'on a créés. C'est en assemblant à la main qu'on verra quels regroupements reviennent — donc ce qu'il vaut la peine de figer |
+| L6.3 | `GenrePort::PoutreBout`, posé sur aucun composant (trouvé en L2.4) : lui donner un usage ou le retirer |
+
+### 10.9 La discipline de test, pour un lot majoritairement non testé
+
+§6.6 interdit les tests de rendu, et le Lot 4 est donc le premier lot dont
+l'essentiel ne sera pas couvert. La règle de conduite, déjà énoncée en §7.1 et
+appliquée une première fois en L3.3 (`ecran::designation` ne dessine rien, et
+se teste entièrement) :
+
+> Tout ce qui **se décide** sort du code de dessin. Ce qui reste dedans ne doit
+> plus être que *où le rectangle se pose*, jamais *ce qu'il signifie*.
+
+Concrètement, sur ce lot, quatre choses sortent et se testent : le grisage de
+la palette (L4.2), la discrimination clic/glissé (L4.3), l'invalidation du cache
+d'état des ports (L4.4), et — déjà fait — la désignation (L3.3). Le reste est
+de la disposition, et se juge à l'œil, comme §6.6 le demande.
 
 ---
 

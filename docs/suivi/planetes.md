@@ -108,6 +108,37 @@ Zéro dépendance ajoutée (threads std, pas de rayon ; RNG maison).
   identique ont la même géographie (voulu pour la galerie, touche G pour
   varier).
 
+#### Le hash CPU/GPU : une constante dupliquée que clippy veut « corriger »
+
+Relevé le **2026-08-02**, en débloquant `cargo clippy` (qui ne compilait plus).
+
+`terrain::hash` est un **port exact** du `hash` des shaders — c'est ce qui fait
+que la géographie précalculée sur CPU correspond à ce que le GPU dessine. Le
+multiplicateur `0.318_309_9` ressemble à `1/π`, et
+`clippy::approx_constant` — **refusé par défaut**, donc erreur dure et non
+avertissement — exigeait de le remplacer par `f32::consts::FRAC_1_PI`.
+
+**Suivre ce conseil aurait introduit un vrai défaut.** Les deux valeurs
+diffèrent d'exactement **1 ULP** (`3ea2f984` contre `3ea2f983`) : anodin
+n'importe où ailleurs, mais `hash` finit par un `fract`, qui amplifie le
+moindre écart en un bruit **entièrement différent**. La géographie CPU aurait
+cessé de correspondre au shader, sans que rien ne le signale — et le symptôme
+(un relief qui ne colle plus à sa texture) n'aurait pas désigné sa cause.
+
+Corrigé en nommant la constante (`DECORRELATION_HASH`) et en portant l'`allow`
+sur elle, avec l'explication : ce n'est pas une approximation de `1/π`, c'est
+une constante arbitraire de hachage dont la seule propriété qui compte est
+d'être **identique à celle des shaders**.
+
+⚠️ **Dette assumée** : la même valeur vit dans quatre fichiers —
+`planete/terrain.rs` et les trois shaders `planete.frag.glsl`,
+`panache.frag.glsl`, `soleil.frag.glsl` (`0.3183099`) — et **rien ne les tient
+d'accord**. C'est « une source par fait » violé, mais Rust et GLSL ne partagent
+aucun texte : il faudrait générer les shaders, ou un test qui compare les deux
+implémentations sur un échantillon (impossible sans contexte GPU en test). En
+attendant, le commentaire du code est le seul garde-fou. **Toucher à cette
+valeur d'un côté oblige à la toucher des trois autres.**
+
 ### 8. Reste à faire / prochains chantiers
 
 1. **Re-bench post-optimisation** (B) et calibrage visuel de `QUALITE`

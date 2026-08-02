@@ -38,12 +38,20 @@ pub enum VarianteModule {
     /// **dessin**, pas de profil : les ports restent au calibre du module, seule
     /// la silhouette change.
     Coeur,
+    /// Le **même corps étagé** que [`VarianteModule::Coeur`], en gris clair au
+    /// lieu du doré russe.
+    ///
+    /// Une variante et non un paramètre de teinte : dans ce parc, la couleur
+    /// fait partie du **vocabulaire** (`Dore`, `Labo`, `Serre`…), pas d'un
+    /// réglage qu'on passerait à la pose. Ajouter un champ `couleur` à
+    /// `ModuleAxial` obligerait tous ses appelants à en choisir une.
+    CoeurGris,
 }
 
 impl VarianteModule {
     // Ordre **identique à la déclaration de l'enum** : ainsi l'index affiché
     // (numéros N dans la vue briques = ordre de cette table) == l'index du code.
-    pub const TOUS: [VarianteModule; 10] = [
+    pub const TOUS: [VarianteModule; 11] = [
         VarianteModule::Standard,
         VarianteModule::Dore,
         VarianteModule::Hublots,
@@ -54,6 +62,7 @@ impl VarianteModule {
         VarianteModule::GrandGonflable,
         VarianteModule::Serre,
         VarianteModule::Coeur,
+        VarianteModule::CoeurGris,
     ];
 
     pub fn nom(self) -> &'static str {
@@ -66,6 +75,7 @@ impl VarianteModule {
             VarianteModule::Coupole => "COUPOLE",
             VarianteModule::Sas => "SAS",
             VarianteModule::Coeur => "COEUR ETAGE (RUSSE)",
+            VarianteModule::CoeurGris => "COEUR ETAGE (GRIS)",
             VarianteModule::GrandGonflable => "GRAND GONFLABLE (B330)",
             VarianteModule::Serre => "SERRE AGRICOLE",
         }
@@ -74,6 +84,7 @@ impl VarianteModule {
     pub(super) fn couleur(self) -> Color {
         match self {
             VarianteModule::Dore | VarianteModule::Coeur => Color::new(0.72, 0.58, 0.28, 1.0),
+            VarianteModule::CoeurGris => Color::new(0.66, 0.67, 0.70, 1.0),
             VarianteModule::Labo => Color::new(0.80, 0.82, 0.85, 1.0),
             VarianteModule::Gonflable | VarianteModule::GrandGonflable => {
                 Color::new(0.84, 0.81, 0.75, 1.0)
@@ -90,7 +101,7 @@ impl VarianteModule {
         match self {
             VarianteModule::GrandGonflable => 1.62,
             VarianteModule::Gonflable => 1.30,
-            VarianteModule::Coeur => 1.16,
+            VarianteModule::Coeur | VarianteModule::CoeurGris => 1.16,
             _ => 1.0,
         }
     }
@@ -101,7 +112,7 @@ impl VarianteModule {
     pub(super) fn habillage<P: Peintre>(self, p: &mut P, rayon: f32, demi: f32) {
         let c = self.couleur();
         match self {
-            VarianteModule::Dore | VarianteModule::Coeur => {
+            VarianteModule::Dore | VarianteModule::Coeur | VarianteModule::CoeurGris => {
                 // Bandes d'isolant multicouche : tuiles de teintes dorées voisines.
                 let n = ((demi * 2.0) / 0.55).round().max(2.0) as usize;
                 for i in 0..n {
@@ -268,7 +279,7 @@ impl VarianteModule {
                     );
                 }
             }
-            VarianteModule::Coeur => {
+            VarianteModule::Coeur | VarianteModule::CoeurGris => {
                 // Tambour arrière plus large, puis transition conique vers le
                 // compartiment de travail. Le col de docking, plus étroit,
                 // continue de dépasser en bout — comme sur Mir ou Zvezda.

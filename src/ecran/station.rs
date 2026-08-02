@@ -8,7 +8,7 @@ use crate::fond::Fond;
 use crate::vaisseau::eclairage;
 use crate::vaisseau::{
     generer, preset_isv_equipage, Epine, EtatStation, MaillageStation, Ossature, EtatEquipage,
-    ParamsStation, Style, ISV_AXE,
+    ParamsStation, Style,
 };
 use macroquad::prelude::*;
 
@@ -315,11 +315,12 @@ impl VueStation {
     /// de +Y, tandis que le modèle de l'ISV est couché, son épine sur
     /// [`ISV_AXE`]. Se tromper d'axe fait tourner la section de travers — c'est
     /// exactement l'erreur qu'on avait au premier essai.
+    /// Axe de rotation de l'item courant — **demandé à l'item**, pas déduit de
+    /// sa catégorie. Deux mégastructures peuvent tourner autour d'axes
+    /// différents (l'ISV est couché, un anneau tourne à plat) ; la catégorie ne
+    /// pouvait pas le savoir.
     fn axe_rotation(&self) -> Vec3 {
-        match self.categorie {
-            Categorie::Megastructures => ISV_AXE,
-            _ => Vec3::Y,
-        }
+        self.categorie.item(self.idx).map_or(Vec3::Y, |i| i.axe_rotation())
     }
 
     /// Un bouton de la vue : rendu normal s'il est actif, **grisé et inerte**

@@ -858,3 +858,68 @@ pub(crate) fn tube<P: Peintre>(
     }
     p.triangles(&s, &ix, couleur);
 }
+
+/// Une **tuile hexagonale à épaisseur**, posée à plat sur une surface.
+///
+/// Écrite pour le bardage du tore d'habitat, et **pas** dérivée de
+/// `BouclierThermique` : celui-ci est taillé pour l'ISV — des rangs de plaques
+/// enfilés le long d'un axe, imbriqués dans le sens du flux thermique d'une
+/// tuyère. Rien de tout ça ne transpose sur une surface à double courbure, et
+/// forcer la ressemblance aurait donné une pièce qui ment sur sa raison d'être.
+///
+/// La tuile est un **prisme hexagonal** : face supérieure pleine, six flancs,
+/// pas de fond (il est plaqué contre la coque et jamais vu). `normale` porte
+/// l'épaisseur, `tangente` oriente l'hexagone dans le plan de la surface —
+/// c'est elle qui permet d'aligner les rangs plutôt que de les laisser tourner
+/// avec la courbure.
+///
+/// **À plat**, pas en écaille : sur une surface courbe fermée, une lèvre
+/// relevée n'a pas de « sens du flux » à suivre. Le relief vient de
+/// l'épaisseur et du contraste dessus/flanc, pas d'un recouvrement.
+///
+/// Les sommets sont **accumulés** dans `dessus` et `flancs` plutôt qu'émis :
+/// un bardage compte plus d'un millier de tuiles, et une paire d'appels par
+/// tuile ferait autant de lots que de tuiles.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tuile_hexagonale(
+    centre: Vec3,
+    normale: Vec3,
+    tangente: Vec3,
+    rayon: f32,
+    epaisseur: f32,
+    dessus: &mut (Vec<Vec3>, Vec<u16>),
+    flancs: &mut (Vec<Vec3>, Vec<u16>),
+) {
+    let n = normale.normalize_or_zero();
+    let t = (tangente - n * n.dot(tangente)).normalize_or_zero();
+    if n == Vec3::ZERO || t == Vec3::ZERO {
+        return;
+    }
+    let b = n.cross(t);
+    let haut = centre + n * epaisseur;
+
+    // --- face supérieure : éventail depuis son centre ---
+    let base = dessus.0.len() as u16;
+    dessus.0.push(haut);
+    for k in 0..6 {
+        let a = FRAC_PI_3 * k as f32;
+        dessus.0.push(haut + (t * a.cos() + b * a.sin()) * rayon);
+    }
+    for k in 0..6u16 {
+        dessus.1.extend_from_slice(&[base, base + 1 + k, base + 1 + (k + 1) % 6]);
+    }
+
+    // --- flancs : six quads entre le contour haut et le contour bas ---
+    let base = flancs.0.len() as u16;
+    for k in 0..6 {
+        let a = FRAC_PI_3 * k as f32;
+        let radial = (t * a.cos() + b * a.sin()) * rayon;
+        flancs.0.push(haut + radial);
+        flancs.0.push(centre + radial);
+    }
+    for k in 0..6u16 {
+        let (h0, b0) = (base + 2 * k, base + 2 * k + 1);
+        let (h1, b1) = (base + 2 * ((k + 1) % 6), base + 2 * ((k + 1) % 6) + 1);
+        flancs.1.extend_from_slice(&[h0, b0, b1, h0, b1, h1]);
+    }
+}

@@ -50,14 +50,24 @@ Additifs, en lecture seule, testables sans vue.
 | # | Étape | État |
 |---|---|---|
 | L3.1 | `pose_prevue` — la source unique du fantôme (§8.3) | ✅ |
-| L3.2 | `sous_arbre` public — surlignage de la sélection (§8.3) | — |
-| L3.3 | Désignation : port et pièce sous le curseur | — |
+| L3.2 | `sous_arbre` public — surlignage de la sélection (§8.3) | ✅ |
+| L3.3 | Désignation : port et pièce sous le curseur | ✅ |
 
-**Lot 4 — l'écran** (§8.2–8.4) : découpage à arrêter **à la fin du Lot 3**,
-une fois le modèle réellement complet. **Lot 5 — ce que seul l'écran
-permet** : overlay §8.5, sauvegarde disque, arbitrage L1.4, composites
-(`figer`). Détail et justification du découpage : `conception/assembleur.md`
-§7.1.
+**Lot 4 — l'écran d'assemblage** (§8.2–8.4). Découpage arrêté à la clôture du
+Lot 3, une fois le modèle complet. Le détail — et les décisions que §8
+laissait ouvertes — sont en **`conception/assembleur.md` §10**.
+
+| # | Étape | État |
+|---|---|---|
+| L4.1 | Squelette : entrée au menu, zones, caméra, boussole, bandeau | — |
+| L4.2 | Palette : catégories, entrées, grisage (§10.2) | — |
+| L4.3 | Clic : discrimination clic/glissé (§10.4), désignation, pose | — |
+| L4.4 | Fantôme, trois couleurs + cache (§10.3), cycle du montage (§10.5) | — |
+| L4.5 | Sélection, surlignage, Suppr, undo/redo au bandeau | — |
+
+**Lot 5 — l'écran qui garde et qui explique** : sauvegarde/chargement disque
+(L5.1), overlay §8.5 (L5.2). **Lot 6 — ce que seul l'usage dira** : arbitrage
+L1.4 (L6.1), composites `figer` (L6.2), `PoutreBout` (L6.3). Détail en §10.8.
 
 **État de départ** (commit `32300e9`, 2026-07-31) : 186 tests verts en 0,07 s
 (`cargo test --release`), 37 avertissements `dead_code` sur le binaire, arbre
@@ -1357,3 +1367,154 @@ prise »), sous une forme neuve : il faut savoir *quel* mode de défaillance
 chaque test garde, sous peine d'en croire un capable de ce qu'il ne fait pas.
 
 **Mesures** : 252 → **255 tests**, ~0,9 s. 54 avertissements, inchangé.
+
+### L3.2 `sous_arbre` : ce que le surlignage doit montrer (2026-08-01)
+
+§8.3, état « pièce sélectionnée » : la pièce **et son sous-arbre** surlignés,
+Suppr les emporte. `retirer` calculait déjà cet ensemble, en une passe, sans
+l'exposer. Étape courte — extraire, publier, et `retirer` l'appelle.
+
+Le contrat sur l'`id` inconnu mérite d'être noté : `sous_arbre` rend un
+ensemble **vide**, jamais `{id}`. Sans ambiguïté, puisqu'un résultat valide
+contient toujours au moins la pièce elle-même — et c'est ce dont la vue a
+besoin, une sélection devenue périmée (la pièce a disparu sous un `annuler`)
+ne surligne alors rien plutôt qu'un fantôme.
+
+#### Deux tests, et la raison d'être du second était connue d'avance
+
+La leçon de L3.1 a servi **avant** le red-check cette fois, au lieu d'être
+découverte pendant. `retirer` appelant désormais `sous_arbre`, une propriété
+d'accord entre les deux (« le surlignage est exactement ce que Suppr
+emporte », qui est littéralement l'exigence de §8.3) ne peut pas garder la
+**forme** de l'arbre : une version dégénérée rendant `{id}` seul mettrait les
+deux d'accord, sur un arbre faux. D'où un second test qui pinne la forme
+contre un arbre de test à trois niveaux, sans passer par `retirer`.
+
+| Test | Ce qu'il garde |
+|---|---|
+| `le_sous_arbre_liste_toute_la_descendance` | la **forme** : racine → tout, branche → elle et ses deux enfants, feuille → elle seule, `id` inconnu → vide |
+| `le_sous_arbre_est_exactement_ce_que_retirer_emporte` | l'**accord** §8.3, balayé sur chaque pièce de l'arbre |
+
+#### Red-check : 3 sabotages, 3 rougissements
+
+| Sabotage | Rougit |
+|---|---|
+| `sous_arbre` sans descendance (rend `{id}`) | la forme, + les deux tests de `retirer` — **pas** l'accord, exactement comme prévu ci-dessus |
+| `retirer` n'emporte que la pièce nommée, `sous_arbre` reste juste | l'**accord**, + les deux tests de `retirer` |
+| garde d'existence retirée (un `id` inconnu rend `{id}`) | la forme **seule** — `retirer` a sa propre garde en amont, donc rien d'autre ne voit passer un `id` mort |
+
+Les deux premiers sabotages sont la démonstration croisée que les deux tests
+ne se recouvrent pas : chacun prend ce que l'autre ne peut structurellement
+pas voir. Le premier confirme empiriquement la prédiction écrite dans le
+commentaire du test — c'est la première fois de ce chantier que la parade est
+posée **avant** que le red-check ne trouve le trou, et non après.
+
+**Mesures** : 255 → **257 tests**, ~1,4 s. 54 avertissements, inchangé.
+
+### L3.3 Désignation : deux moitiés, deux méthodes (2026-08-01)
+
+Dernier manque du Lot 3, et le seul avec un vrai algorithme neuf : *sur quoi le
+curseur pointe-t-il ?* Rien n'existait — `Camera::pick` ne sait viser que les
+astres d'un `Systeme`.
+
+#### Un port et une pièce ne se visent pas de la même façon
+
+C'est le point de conception de l'étape, et il commande tout le reste :
+
+- un **port** est un point **sans épaisseur**. Le viser en 3D obligerait à lui
+  inventer un volume d'accroche — donc une deuxième cote, à tenir d'accord avec
+  le marqueur dessiné, et qui divergerait à la première retouche. Il se vise
+  donc **en espace écran**, à une distance en **pixels** : « ce que je vois est
+  ce que je clique », et la tolérance s'exprime dans la seule unité où
+  l'utilisateur la perçoit ;
+- une **pièce** a un volume, et il est déjà décrit — son enveloppe de collision.
+  Elle se vise donc par un **rayon** contre ces mêmes enveloppes. Désigner une
+  pièce et refuser d'en traverser une doivent parler du même volume, sans quoi
+  l'éditeur laisserait cliquer là où il ne laisse pas construire.
+
+#### `Enveloppe::touche_rayon`, sans une ligne de géométrie nouvelle
+
+Une enveloppe est un noyau convexe gonflé de `rayon` : la demi-droite la touche
+exactement quand elle passe à moins de `rayon` du noyau. Le calcul réutilise
+donc les distances **segment↔noyau** de §9, en bornant la demi-droite à
+`portee = |centre − origine| + rayon_sphere()`. Ce n'est pas une approximation
+mais une borne **exacte** — aucun point du noyau n'est plus loin que ça, le
+plus proche est donc atteint avant. Zéro fonction de distance en plus, zéro
+constante magique de « rayon assez long ».
+
+La valeur rendue est la distance de l'œil à la **surface**, pas le paramètre du
+point de plus courte approche : ce qui décide de « qui est devant » est la
+distance à la pièce, pas l'endroit où le rayon la frôle au plus près.
+
+#### Le tronc de vue, une source pour deux calculs inverses
+
+`rayon_ecran` (écran → rayon) existait, inline dans `Camera::pick` ; il a été
+extrait, et `projeter_ecran` (monde → écran) écrit en face. Les deux ne sont
+inverses l'une de l'autre **qu'à condition de parler du même tronc de vue** :
+d'où une constante `DEMI_FOV` unique, et un test d'aller-retour qui le vérifie.
+Deux copies divergentes donneraient un curseur qui désigne à côté de ce qu'il
+montre, sans que rien ne le signale — le mode de défaillance silencieux que ce
+projet traque depuis le Lot 1.
+
+⚠️ `projeter_ecran` rend `None` derrière l'œil, et ce n'est pas une politesse :
+un point situé **derrière** la caméra se projette à des pixels parfaitement
+plausibles (la division par une profondeur négative retourne l'image). Un
+curseur qui accrocherait ce fantôme désignerait un port dans le dos de
+l'observateur — invisible à l'œil, puisque le port fautif est simplement celui
+qu'on n'a pas visé.
+
+#### Où vit ce code, et pourquoi il est testé
+
+`ecran::designation` est dans la couche vue (il lui faut la caméra) mais **ne
+dessine rien** : il ne fait que du calcul, et se teste donc entièrement. §6.6
+n'interdit que les tests de **rendu** — couleurs, disposition, position d'un
+panneau —, pas les calculs qui ont une bonne réponse. C'est le premier
+versement de la règle posée en §7.1 pour le Lot 4 : pousser hors du dessin tout
+ce qui se décide.
+
+#### Red-check : 5 sabotages, 5 rougissements
+
+| Sabotage | Rougit |
+|---|---|
+| garde « derrière la caméra » levée (`profondeur.abs()`) | les deux tests d'arrière : la projection **et** la désignation |
+| `projeter_ecran` sur un tronc à 50° quand le rayon reste à 45° | l'aller-retour projection↔rayon **seul** |
+| le port désigné est le premier dans le rayon d'accroche, pas le plus proche | `le_port_designe_est_le_plus_proche_du_curseur` |
+| `piece_sous_rayon` garde la pièce la plus **lointaine** | `piece_sous_rayon_prend_la_plus_proche_de_loeil` |
+| demi-droite traitée comme une **droite** (l'origine reculée d'autant) | 3 tests : les deux « part à l'opposé » et la distance à la surface |
+
+Les deux tests de désignation sont écrits pour viser **dans les deux sens** —
+curseur sur chaque port à son tour, station vue de chaque bout — précisément
+pour qu'un tri cassé ne puisse pas coïncider avec la bonne réponse par hasard.
+C'est la parade de L2.1/L2.5 appliquée d'emblée, comme en L3.2.
+
+**Mesures** : 257 → **267 tests**, ~0,8 s. 54 → **57 avertissements** :
+`touche_rayon`, `projeter_ecran`, `port_sous_curseur` et `ACCROCHE_PIXELS`
+attendent l'écran du Lot 4. `Chantier` n'a **pas** été réexporté depuis
+`vaisseau` — aucune vue n'en tient un avant le Lot 4, et l'exporter à vide
+n'aurait ajouté qu'un avertissement de plus.
+
+---
+
+## Bilan du Lot 3 (2026-08-01)
+
+Le modèle répond maintenant aux quatre questions que §8 lui pose : *où se
+poserait la pièce* (`pose_prevue`), *que va emporter Suppr* (`sous_arbre`),
+*quel port est sous le curseur* (`port_sous_curseur`), *quelle pièce est sous
+le curseur* (`piece_sous_rayon`). Aucune n'existait à la clôture du Lot 2 —
+§7 avait listé ce qui se voyait dans l'abstrait, ces quatre-là ne se voient
+qu'en lisant la spec de l'écran ligne à ligne.
+
+| | avant | après |
+|---|---:|---:|
+| Tests | 252 | **267** |
+| Avertissements | 54 | 57 |
+
+**12 sabotages (3 + 3 + 5, plus un réverti sans suite), tous rougis.** Le fil
+de l'étape est le **single-sourcing** : `corps_prevu` partagé par trois
+méthodes, `sous_arbre` appelé par `retirer`, `DEMI_FOV` partagé par la
+projection et son inverse, `touche_rayon` bâti sur les distances de §9. À
+chaque fois, la contrepartie est la même et mérite d'être retenue : **une
+propriété d'accord entre deux appelants d'un même calcul ne garde pas ce
+calcul, elle garde son unicité.** D'où, deux fois (L3.2, L3.3), un second test
+qui pinne la valeur elle-même — écrit *avant* le red-check, pour la première
+fois de ce chantier.

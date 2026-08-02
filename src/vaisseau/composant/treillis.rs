@@ -389,16 +389,56 @@ pub(super) fn charpente_hexa_cout(longueur: f32) -> f32 { 3.5 + longueur }
 
 // --- Hexagone --------------------------------------------------------------
 
+/// Cotes de l'anneau hexagonal : `(côté, demi-section, demi-épaisseur)`.
+///
+/// **Une seule source** (L1.4) : le dessin, le rayon déclaré et l'enveloppe
+/// lisent tous les trois d'ici. L'anneau est tracé dans le plan **X‑Z**, sa
+/// normale — donc l'axe d'un éventuel prisme — est **Y**.
+pub(super) fn hexagone_cotes(profil: Profil) -> (f32, f32, f32) {
+    let sg = profil.rayon() * TREILLIS_SECTION;
+    (2.0 * sg, sg * 0.5, sg)
+}
+
+/// Étendue **radiale** de l'anneau : le circonradius (= le côté) plus la
+/// demi-section des barres, qui déborde vers l'extérieur des sommets.
+pub(super) fn hexagone_rayon(profil: Profil) -> f32 {
+    let (cote, sec, _) = hexagone_cotes(profil);
+    cote + sec
+}
+
+/// Distance de l'axe au bord **extérieur** d'une barre, dans la direction d'un
+/// **milieu de face** — la plus courte des six directions, donc celle qui
+/// décide si une pièce logée dans l'hexagone reste ceinturée ou le traverse.
+///
+/// À ne pas confondre avec [`hexagone_rayon`], qui mesure jusqu'aux **sommets**
+/// et vaut 15 % de plus : comparer une pièce à celui-là la déclarerait contenue
+/// alors qu'elle ressort déjà au milieu de chaque face.
+pub fn hexagone_ceinture(profil: Profil) -> f32 {
+    let (cote, sec, _) = hexagone_cotes(profil);
+    cote * 3.0_f32.sqrt() * 0.5 + sec
+}
+
+/// Étendue le long de la **normale** (+Y local) : la demi-épaisseur de
+/// l'anneau, ou le prisme entier s'il y a des montants.
+pub(super) fn hexagone_hauteur(profil: Profil, liaison: f32) -> f32 {
+    let (_, _, prof) = hexagone_cotes(profil);
+    prof.max(liaison)
+}
+
 pub(super) fn hexagone_dessiner<P: Peintre>(p: &mut P, profil: Profil, liaison: f32) {
     // Même anneau que le pied de la charpente (mêmes proportions).
-    let sg = profil.rayon() * TREILLIS_SECTION;
-    let cote = 2.0 * sg;
-    let sec = sg * 0.5;
-    let prof = sg;
+    let (cote, sec, prof) = hexagone_cotes(profil);
     crate::vaisseau::pieces::treillis_hexagone(p, Vec3::ZERO, cote, sec, prof, COULEUR, SOMBRE);
     if liaison > 0.0 {
-        // 6 montants depuis chaque sommet le long de +Z local, jusqu'à
-        // l'hexagone jumeau situé `liaison` plus loin → prisme reliant.
+        // 6 montants depuis chaque sommet, **le long de la normale** (+Y local),
+        // jusqu'à l'hexagone jumeau situé `liaison` plus loin → prisme reliant.
+        //
+        // ⚠️ Ils partaient le long de **+Z**, qui est *dans* le plan de
+        // l'hexagone (celui-ci est tracé en X‑Z, sa normale est Y) : les six
+        // barres filaient donc à plat sur un côté, en peigne, au lieu de lever
+        // un prisme. Défaut jamais vu parce que jamais exercé — le seul appelant
+        // du jeu passe `liaison = 0`, l'ISV ayant espacé ses deux hexagones pour
+        // qu'ils se touchent bord à bord plutôt que d'avoir à les relier.
         let r = cote;
         let ap = cote * 3.0_f32.sqrt() * 0.5;
         let demi = cote * 0.5;
@@ -411,7 +451,7 @@ pub(super) fn hexagone_dessiner<P: Peintre>(p: &mut P, profil: Profil, liaison: 
             vec3(-r, 0.0, 0.0),
         ];
         for s in sommets {
-            p.cylindre(s, s + Vec3::Z * liaison, sec * 0.30, COULEUR);
+            p.cylindre(s, s + Vec3::Y * liaison, sec * 0.30, COULEUR);
         }
     }
 }

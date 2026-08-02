@@ -9,7 +9,7 @@ use super::{
     Assembleur, Composant, EtatStation, GenrePort, PiedHexa, Profil, Repere, Sorties, StyleTreillis,
     BOUCLIER_ELANCEMENT,
     VarianteAntenne, VarianteCaisson, VarianteCharge, VarianteCoiffe, VarianteModule,
-    VariantePanneau, VariantePropulseur, VarianteRadiateur,
+    VariantePanneau, VariantePanneauMega, VariantePropulseur, VarianteRadiateur,
 };
 use macroquad::prelude::*;
 use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2, PI, TAU};
@@ -1096,6 +1096,272 @@ pub fn demo_anneaux() -> EtatStation {
         }
         poser_anneau(&mut asm, Vec3::new(x, 0.0, 0.0), Vec3::Z, n, r, *style);
         prev_r = r;
+    }
+    asm.terminer()
+}
+
+// --- Elysium ---------------------------------------------------------------
+
+/// Longueur d'un bras d'Elysium : **la moitié de l'épine de l'ISV**.
+///
+/// Dérivée, jamais recopiée : le jour où l'épine du vaisseau bouge, les bras
+/// suivent. C'est la leçon d'`Epine::hors_tout` (§C.5), où une cote recopiée à
+/// la main avait planté la charge utile dans la structure.
+const ELYSIUM_BRAS: f32 = EPINE_LONGUEUR * 0.5;
+
+/// Bras du **tore de Stanford** : la moitié de ceux d'Elysium, donc le quart
+/// de l'épine de l'ISV.
+///
+/// Les deux longueurs coexistent le temps de trancher à l'écran — même
+/// dispositif que les deux `Epine` de l'ISV (§C.9), et pour la même raison :
+/// une proportion d'ensemble ne se juge pas sur un nombre, elle se regarde.
+const STANFORD_BRAS: f32 = ELYSIUM_BRAS * 0.5;
+
+/// Longueur d'un module de tunnel. Le **nombre** s'en déduit de la longueur du
+/// bras, si bien qu'un bras deux fois plus long porte deux fois plus de modules
+/// au lieu de modules deux fois plus longs.
+const TUNNEL_MODULE: f32 = 3.0;
+
+/// Longueur d'**un** des deux habitats du complexe Elysium ; accouplés, ils
+/// font le double. Plus long que la hauteur du prisme (le côté de l'hexagone) :
+/// l'ensemble dépasse de part et d'autre, sans quoi on ne le verrait pas.
+const ELYSIUM_HABITAT: f32 = 13.5;
+
+/// Gabarit d'essai des panneaux d'échelle mégastructure : 16 × 6 U, soit
+/// ~36 × 13,5 m — la taille d'un vrai SAW de l'ISS, et non celle du
+/// `PanneauSolaire` du parc, qui en fait moins de la moitié.
+const PANNEAU_MEGA_LONGUEUR: f32 = 16.0;
+const PANNEAU_MEGA_LARGEUR: f32 = 6.0;
+
+/// Réduction de l'habitat du **tore de Stanford** : un tiers de moins
+/// qu'Elysium, **dans toutes ses dimensions**.
+///
+/// Appliquée **géométriquement**, en composant une mise à l'échelle dans les
+/// transformées cuites, et non en raccourcissant la cote : le diamètre d'un
+/// module vient de `Profil`, une grille discrète (P1 = 1, P2 = 2) où rien ne
+/// vaut 0,67 × P2. Ne réduire que `longueur` aurait allongé la silhouette au
+/// lieu de la rapetisser — c'est le même constat qui a fait mettre l'ossature
+/// de l'ISV à l'échelle plutôt que de multiplier ses cotes (`ISV_ECHELLE`).
+const STANFORD_ECHELLE: f32 = 2.0 / 3.0;
+
+/// Profil des habitats du moyeu.
+///
+/// **P2 et non P3**, alors que P3 serait le triplement littéral de l'ancien P1.
+/// `Profil` est une grille discrète, et le cran du dessus ne passe pas : le
+/// tambour d'un `Coeur` vaut `rayon × 1,16`, soit **3,48** en P3 — au-delà du
+/// bord extérieur des barres du moyeu (**3,35**). L'habitat avalerait
+/// l'hexagone au lieu d'être ceinturé par lui. En P2 le tambour vaut 2,32 et se
+/// loge entre les barres (1,85 → 3,35).
+///
+/// C'est le cas de figure de §C.8 : une cote qui se règle **contre une autre
+/// pièce** ne tombe pas sur la grille. Ici on a préféré rester sur la grille et
+/// s'arrêter au cran qui tient, plutôt que sortir le rayon de `Profil`.
+const HABITAT_PROFIL: Profil = Profil::P2;
+
+/// Profil du moyeu **et** de la base des bras. Les deux doivent être le même :
+/// c'est ce qui fait que la base carrée d'une `Charpente` (2·sg) tombe
+/// **exactement** sur la face d'un `TreillisHexagone` (côté = 2·sg).
+const ELYSIUM_PROFIL: Profil = Profil::P3;
+
+/// **Complexe Elysium** : ossature à bras longs — un moyeu en prisme hexagonal,
+/// trois bras d'épine à 120° dans son plan.
+///
+/// Trois choix, tous mesurés plutôt que supposés :
+///
+/// 1. **Le moyeu est un prisme**, pas un anneau plat : deux `TreillisHexagone`
+///    parés d'un jeu de montants (`liaison`). Sa hauteur vaut le **côté** de
+///    l'hexagone, ce qui rend ses six faces latérales **carrées** — d'où des
+///    faces sur lesquelles une base de bras se pose sans rattrapage.
+/// 2. **Bras en `Charpente` carrée**, pas `CharpenteHexa`. Ce n'est pas un
+///    repli : la base carrée mesure `2·sg`, soit **exactement** le côté de
+///    l'hexagone (`charpente_dessiner` le dit : « une extrémité du cône fait
+///    exactement la taille d'une face extérieure de l'hexagone »). La variante
+///    hexagonale reprend le circonradius du carré (×√2) pour garder la même
+///    silhouette, ce qui la rend **22,5 % trop large entre plats** (3,67 contre
+///    3,00) : elle déborderait la face au lieu de s'y asseoir.
+/// 3. **Sur les faces, pas sur les sommets.** Un hexagone a six faces ; trois
+///    bras à 120° en prennent une sur deux, et une face est un appui plan
+///    quand un sommet est une arête.
+///
+/// ⚠️ Les bras ne sont pas encore **reliés entre eux** : la conception prévoit
+/// des membrures courbes joignant les longerons d'un bras à l'autre autour du
+/// moyeu, et aucune primitive du projet ne trace une poutre à **axe courbe**
+/// (`treillis_conique` courbe sa *section*, pas son axe). C'est une brique à
+/// écrire, donc une étape à part.
+pub fn preset_elysium() -> EtatStation {
+    let mut asm = Assembleur::new();
+    moyeu_hexagonal(&mut asm);
+    bras_et_tunnels(&mut asm, ELYSIUM_BRAS);
+    habitats_accouples(&mut asm, ELYSIUM_HABITAT);
+    asm.terminer()
+}
+
+/// **Tore de Stanford** : bras courts, ceinturés d'un tore cylindrique.
+///
+/// Son centre est bâti **séparément** de celui d'Elysium, et non plus par une
+/// ossature commune paramétrée. Les deux mégastructures partagent aujourd'hui
+/// leur moyeu et leurs bras, mais elles ne sont pas destinées à se ressembler :
+/// factoriser un centre unique aurait rendu chaque divergence à venir plus
+/// coûteuse que la duplication qu'elle évite. Ce qui reste partagé
+/// (`moyeu_hexagonal`, `bras_et_tunnels`) l'est parce que c'est **encore**
+/// identique, pas parce que ça doit le rester.
+pub fn preset_stanford() -> EtatStation {
+    let mut asm = Assembleur::new();
+    moyeu_hexagonal(&mut asm);
+    bras_et_tunnels(&mut asm, STANFORD_BRAS);
+    // Habitats bâtis à part, puis reversés **réduits** : la mise à l'échelle
+    // porte sur la géométrie, donc sur le diamètre autant que sur la longueur.
+    let mut hab = Assembleur::new();
+    habitats_accouples(&mut hab, ELYSIUM_HABITAT);
+    verser_a_echelle(&mut asm, hab.terminer(), STANFORD_ECHELLE);
+
+    // Le tore boucle **au bout** des bras : son rayon majeur est la distance de
+    // l'axe à leur pointe. Sa section vaut la hauteur du moyeu (donc son
+    // diamètre, pas son rayon) — le prisme et le tube se lisent alors au même
+    // gabarit.
+    let tore = Composant::Tore {
+        rayon_majeur: stanford_rayon_tore(),
+        rayon_mineur: hauteur_moyeu() * 0.5,
+        segments: 96,
+        anneaux: 16,
+        // Trois jonctions, **calées sur les bras** : mêmes angles, une seule
+        // source. Un décalage entre les deux mettrait le vitrage là où arrive
+        // l'effort — exactement ce qu'on cherche à éviter.
+        jonctions: 3,
+        phase: PI / 6.0,
+    };
+    asm.ajouter(cuire(Repere::IDENTITE, &tore));
+    asm.terminer()
+}
+
+/// Hauteur du moyeu, **et** côté de son hexagone : les faces latérales sont
+/// carrées. Lue par le tore, qui accorde son diamètre dessus.
+fn hauteur_moyeu() -> f32 {
+    2.0 * (ELYSIUM_PROFIL.rayon() * 0.5)
+}
+
+/// Distance de l'axe à la **pointe** d'un bras court — le rayon majeur du tore.
+fn stanford_rayon_tore() -> f32 {
+    pied_de_bras() + STANFORD_BRAS
+}
+
+/// Distance de l'axe à la **base** d'un bras : apothème du moyeu plus la
+/// demi-épaisseur de ses membrures.
+fn pied_de_bras() -> f32 {
+    let sg = ELYSIUM_PROFIL.rayon() * 0.5;
+    let cote = 2.0 * sg;
+    cote * 3.0_f32.sqrt() * 0.5 + sg * 0.5
+}
+
+/// **Moyeu hexagonal** : deux hexagones dans le plan X‑Z, écartés le long de la
+/// normale (+Y) par les montants du premier. Centré sur l'origine, donc l'axe
+/// de rotation de la station est Y.
+fn moyeu_hexagonal(asm: &mut Assembleur) {
+    let haut = hauteur_moyeu();
+    let bas_c = Composant::TreillisHexagone { profil: ELYSIUM_PROFIL, liaison: haut };
+    let haut_c = Composant::TreillisHexagone { profil: ELYSIUM_PROFIL, liaison: 0.0 };
+    asm.ajouter(cuire(Repere::new(vec3(0.0, -haut * 0.5, 0.0), Quat::IDENTITY), &bas_c));
+    asm.ajouter(cuire(Repere::new(vec3(0.0, haut * 0.5, 0.0), Quat::IDENTITY), &haut_c));
+}
+
+/// **Trois bras** sur une face du moyeu sur deux, chacun garni de son tunnel.
+///
+/// Les sommets de l'hexagone sont à 0°, 60°… ; les **milieux de face** sont
+/// donc à 30°, 90°, 150°…, et on en prend une sur deux : 30°, 150°, 270°.
+fn bras_et_tunnels(asm: &mut Assembleur, bras: f32) {
+    let poutre = Composant::Charpente {
+        grand: ELYSIUM_PROFIL,
+        petit: Profil::P1,
+        longueur: bras,
+        courbure: 2.6,
+        aiguille: false, // le moyeu remplace le pied : pas de second hexagone
+    };
+    // Tunnel de circulation : une file de modules **dans** le bras, du moyeu
+    // vers la jante. C'est par là qu'on passe de l'anneau au centre — un bras
+    // en treillis nu ne mène nulle part.
+    //
+    // Profil P0 : le bras s'affine jusqu'à `petit` (P1, demi-section 0,5), donc
+    // 1 unité de large au bout. Un module P0 fait exactement ce diamètre — il
+    // s'y loge sans dépasser, ce qu'aucun profil plus gros ne ferait.
+    let tunnel = Composant::ModuleAxial {
+        profil: Profil::P0,
+        variante: VarianteModule::Standard,
+        longueur: TUNNEL_MODULE,
+    };
+    let n_tunnel = (bras / TUNNEL_MODULE).floor().max(1.0) as usize;
+    let pied = pied_de_bras();
+
+    for k in 0..3 {
+        let a = PI / 6.0 + TAU * k as f32 / 3.0;
+        let radial = vec3(a.cos(), 0.0, a.sin());
+        let rot = Quat::from_rotation_arc(Vec3::Z, radial);
+        asm.ajouter(cuire(Repere::new(radial * (pied + bras * 0.5), rot), &poutre));
+        for m in 0..n_tunnel {
+            let d = pied + (m as f32 + 0.5) * TUNNEL_MODULE;
+            asm.ajouter(cuire(Repere::new(radial * d, rot), &tunnel));
+        }
+    }
+}
+
+/// **Deux habitats accouplés tambour contre tambour** sur l'axe Y.
+///
+/// Le `Coeur` est une pièce **dissymétrique** : tambour large en −Z, col de
+/// docking étroit en +Z. Les joindre par leur grande face donne un corps renflé
+/// au milieu et effilé aux deux bouts, dont les **petites** faces regardent
+/// l'extérieur du plan de l'anneau. C'est l'accouplement que l'ISV fait déjà
+/// entre ses Cœurs 1 et 2 (« tambour contre tambour »).
+fn habitats_accouples(asm: &mut Assembleur, longueur: f32) {
+    let habitat = Composant::ModuleAxial {
+        profil: HABITAT_PROFIL,
+        variante: VarianteModule::CoeurGris,
+        longueur,
+    };
+    // Chacun s'éloigne du plan médian : son +Z local (le col) pointe dehors,
+    // son −Z (le tambour) vers le centre, où les deux se touchent.
+    for sens in [Vec3::Y, Vec3::NEG_Y] {
+        let centre = sens * (longueur * 0.5);
+        asm.ajouter(cuire(Repere::new(centre, Quat::from_rotation_arc(Vec3::Z, sens)), &habitat));
+    }
+}
+
+/// **Vitrine des quatre panneaux d'échelle mégastructure**, alignés pour être
+/// comparés, et tous orientés par le **même** couple d'angles.
+///
+/// `suivi` va de 0 à 1 et balaie le débattement des deux joints : c'est ce qui
+/// permet de juger l'articulation autant que la silhouette. Les quatre suivent
+/// ensemble — les comparer à des angles différents ne dirait rien de leur
+/// différence de forme.
+///
+/// L'écart entre deux panneaux est pris sur leur **encombrement en rotation**
+/// (`rayon_local`) et non sur leur largeur : une aile qui pivote balaie un
+/// disque, et deux voisines calées sur leur largeur se traverseraient dès le
+/// premier quart de tour.
+pub fn demo_panneaux_mega(suivi: f32) -> EtatStation {
+    let mut asm = Assembleur::new();
+    let (long, larg) = (PANNEAU_MEGA_LONGUEUR, PANNEAU_MEGA_LARGEUR);
+    let azimut = suivi * PI;
+    let inclinaison = (suivi - 0.5) * 2.0 * 40.0_f32.to_radians();
+
+    let gabarit = |v: VariantePanneauMega, a: f32, i: f32| Composant::PanneauMega {
+        profil: Profil::P0,
+        variante: v,
+        longueur: long,
+        largeur: larg,
+        azimut: a,
+        inclinaison: i,
+    };
+    // Pas pris sur l encombrement **en rotation** et non sur la largeur : une
+    // aile qui pivote balaie un disque, et deux voisines calees sur leur
+    // largeur se traverseraient des le premier quart de tour.
+    let pas = gabarit(VariantePanneauMega::FermeModulaire, 0.0, 0.0).rayon_local() * 1.25;
+    for (i, variante) in VariantePanneauMega::TOUTES.into_iter().enumerate() {
+        // 2x2 plutot qu une rangee : a cette echelle, quatre de front tiennent
+        // dans le cadre mais chacun trop petit pour se juger.
+        let (cx, cy) = ((i % 2) as f32 - 0.5, 0.5 - (i / 2) as f32);
+        asm.ajouter(cuire(
+            Repere::new(vec3(cx * pas * 2.0, cy * pas * 1.35, 0.0), Quat::IDENTITY),
+            &gabarit(variante, azimut, inclinaison),
+        ));
     }
     asm.terminer()
 }
@@ -4092,6 +4358,301 @@ mod tests {
             }
         }
     }
+    // --- Elysium ---------------------------------------------------------
+
+    // Ce qui fait tenir l'ossature : la base d'un bras doit tomber **exactement**
+    // sur une face du moyeu. C'est la raison du choix de la `Charpente` carrée
+    // contre `CharpenteHexa`, et ça se mesure au lieu de se supposer.
+    #[test]
+    fn la_base_dun_bras_delysium_tombe_pile_sur_une_face_du_moyeu() {
+        let sg = ELYSIUM_PROFIL.rayon() * 0.5;
+        let face = 2.0 * sg; // côté de l'hexagone du moyeu
+        let base_carree = 2.0 * sg; // largeur de base d'une Charpente
+        assert!((base_carree - face).abs() < 1e-5, "carrée : {base_carree} vs face {face}");
+
+        // La variante hexagonale, elle, déborderait — d'où son rejet.
+        let rg = ELYSIUM_PROFIL.rayon() * 0.5 * std::f32::consts::SQRT_2;
+        let entre_plats = 2.0 * rg * (PI / 6.0).cos();
+        assert!(entre_plats > face * 1.2, "hexa devrait déborder : {entre_plats} vs {face}");
+    }
+
+    // Trois bras, à 120°, dans le plan du moyeu — et pas quatre ni coplanaires
+    // par accident. Sondé sur la géométrie cuite, pas sur les constantes, et
+    // sur les **deux** variantes : le moyeu ne doit pas dépendre du bras.
+    #[test]
+    fn elysium_porte_trois_bras_a_120_degres_dans_le_plan_du_moyeu() {
+        for (nom, etat) in [("stanford", preset_stanford()), ("elysium", preset_elysium())] {
+            let EtatStation::Prete(st) = etat else { panic!("{nom} : station vide") };
+            let charpentes: Vec<&crate::vaisseau::Piece> = st
+                .pieces()
+                .iter()
+                .filter(|p| matches!(p.composant, Composant::Charpente { .. }))
+                .collect();
+            assert_eq!(charpentes.len(), 3, "{nom} : trois bras");
+
+            let mut angles: Vec<f32> = charpentes
+                .iter()
+                .map(|p| {
+                    let c = p.transforme.w_axis.truncate();
+                    assert!(c.y.abs() < 1e-4, "{nom} : bras hors du plan, y = {}", c.y);
+                    c.z.atan2(c.x).rem_euclid(TAU).to_degrees()
+                })
+                .collect();
+            angles.sort_by(f32::total_cmp);
+            for (i, a) in angles.iter().enumerate() {
+                let attendu = 30.0 + 120.0 * i as f32;
+                assert!((a - attendu).abs() < 0.5, "{nom} : bras {i} à {a:.1}°, attendu {attendu}°");
+            }
+        }
+    }
+
+    // Les deux mégastructures ont désormais des centres **distincts** : c'est
+    // la raison d'être de la séparation, et ce test la garde.
+    //
+    // Mesuré sur la géométrie **cuite** et non sur le champ `longueur` : la
+    // réduction de Stanford est une mise à l'échelle, elle vit dans la
+    // transformée. Les deux pièces déclarent donc la même longueur tout en
+    // n'ayant pas la même taille — lire la cote annoncée ne verrait rien.
+    #[test]
+    fn les_deux_megastructures_nont_pas_le_meme_centre() {
+        // Écart entre les deux tambours accouplés = la taille réellement dessinée.
+        let taille = |e: EtatStation| -> f32 {
+            let EtatStation::Prete(st) = e else { panic!() };
+            let centres: Vec<Vec3> = st
+                .pieces()
+                .iter()
+                .filter(|p| {
+                    matches!(
+                        p.composant,
+                        Composant::ModuleAxial { variante: VarianteModule::CoeurGris, .. }
+                    )
+                })
+                .map(|p| p.transforme.w_axis.truncate())
+                .collect();
+            assert_eq!(centres.len(), 2, "deux habitats");
+            centres[0].distance(centres[1])
+        };
+        let (s, e) = (taille(preset_stanford()), taille(preset_elysium()));
+        assert!(s < e, "Stanford {s:.2} devrait être plus petit qu'Elysium {e:.2}");
+        assert!((s / e - STANFORD_ECHELLE).abs() < 1e-4, "rapport {:.4}", s / e);
+    }
+
+    // La réduction porte sur **toutes** les dimensions, diamètre compris — et
+    // pas seulement sur la longueur, ce qui aurait allongé la silhouette.
+    #[test]
+    fn lhabitat_de_stanford_est_reduit_en_diametre_aussi() {
+        let rayon = |e: EtatStation| -> f32 {
+            let EtatStation::Prete(st) = e else { panic!() };
+            let p = st
+                .pieces()
+                .iter()
+                .find(|p| {
+                    matches!(
+                        p.composant,
+                        Composant::ModuleAxial { variante: VarianteModule::CoeurGris, .. }
+                    )
+                })
+                .expect("un habitat");
+            // Une transformée rigide garde les longueurs ; ici l'échelle les
+            // multiplie, et c'est exactement ce qu'on veut lire.
+            p.transforme.x_axis.truncate().length() * p.composant.rayon_local()
+        };
+        let (s, e) = (rayon(preset_stanford()), rayon(preset_elysium()));
+        assert!(
+            (s / e - STANFORD_ECHELLE).abs() < 1e-4,
+            "diamètre non réduit : {s:.3} contre {e:.3} (rapport {:.4})",
+            s / e
+        );
+    }
+
+    // Le tunnel **remplit** le bras : deux fois plus long, deux fois plus de
+    // modules — et non des modules deux fois plus longs.
+    #[test]
+    fn le_tunnel_suit_la_longueur_du_bras() {
+        let modules = |bras: f32| -> usize {
+            let mut asm = Assembleur::new();
+            bras_et_tunnels(&mut asm, bras);
+            let EtatStation::Prete(st) = asm.terminer() else { panic!() };
+            st.pieces()
+                .iter()
+                .filter(|p| {
+                    matches!(
+                        p.composant,
+                        Composant::ModuleAxial { variante: VarianteModule::Standard, .. }
+                    )
+                })
+                .count()
+        };
+        let (court, long) = (modules(STANFORD_BRAS), modules(ELYSIUM_BRAS));
+        assert!(court > 0, "aucun module de tunnel");
+        assert_eq!(long, 2 * court, "{court} → {long} modules pour un bras doublé");
+    }
+
+    // L'habitat du moyeu doit rester **ceinturé** par l'hexagone, pas l'avaler.
+    //
+    // Mesuré sur les fils des deux pièces réelles, en lisant `HABITAT_PROFIL`
+    // et `ELYSIUM_PROFIL` : une version qui recopiait « P2 » et « P3 » dans le
+    // test ne rougissait pas quand on poussait le profil au cran du dessus —
+    // elle récitait le choix au lieu de le garder.
+    #[test]
+    fn lhabitat_du_moyeu_reste_ceinture_par_lhexagone() {
+        // Rayon hors-tout de l'habitat, autour de son axe (local Z).
+        let hab = Composant::ModuleAxial {
+            profil: HABITAT_PROFIL,
+            variante: VarianteModule::CoeurGris,
+            longueur: ELYSIUM_HABITAT,
+        };
+        // ⚠️ Les bouts d'un `Fil` sont sur son **axe** : sans ajouter son rayon,
+        // on mesurerait la ligne moyenne d'un cylindre et pas sa peau — c'est ce
+        // qui faisait passer le sabotage à travers une première version.
+        let r_hab = crate::vaisseau::fils(&hab)
+            .iter()
+            .flat_map(|f| [(f.a, f.rayon_a), (f.b, f.rayon_b)])
+            .fold(0.0_f32, |m, (p, r)| m.max(p.truncate().length() + r));
+
+        // Ceinture du moyeu : le bord extérieur d'une barre **au milieu d'une
+        // face**, la direction la plus courte. Prendre l'étendue maximale (les
+        // sommets, 15 % plus loin) déclarerait contenue une pièce qui ressort
+        // déjà au travers de chaque face — c'est ce qui laissait passer le
+        // sabotage.
+        let r_hex = crate::vaisseau::hexagone_ceinture(ELYSIUM_PROFIL);
+
+        assert!(
+            r_hab < r_hex,
+            "habitat {r_hab:.3} déborde le moyeu {r_hex:.3} — il l'avalerait au lieu d'y être ceinturé"
+        );
+    }
+
+    // Les deux habitats du moyeu sont **parallèles à Y** — l'axe de rotation —
+    // donc leurs écoutilles regardent hors du plan de l'anneau.
+    #[test]
+    fn les_habitats_du_moyeu_sont_paralleles_a_laxe() {
+        let EtatStation::Prete(st) = preset_stanford() else { panic!() };
+        let habitats: Vec<&crate::vaisseau::Piece> = st
+            .pieces()
+            .iter()
+            .filter(|p| {
+                matches!(
+                    p.composant,
+                    Composant::ModuleAxial { variante: VarianteModule::CoeurGris, .. }
+                )
+            })
+            .collect();
+        assert_eq!(habitats.len(), 2, "deux habitats");
+        let mut tambours = Vec::new();
+        for h in habitats {
+            // L'axe local du module est +Z ; sa transformée doit l'amener sur Y.
+            let axe = h.transforme.transform_vector3(Vec3::Z).normalize();
+            assert!(axe.dot(Vec3::Y).abs() > 0.999, "habitat non parallèle à Y : {axe:?}");
+            // Le **tambour** est le bout −Z : c'est par lui qu'ils s'accouplent.
+            let centre = h.transforme.w_axis.truncate();
+            // L'échelle vit dans la transformée : la lire là plutôt que de
+            // supposer que la pièce est à sa taille nominale.
+            let k = h.transforme.x_axis.truncate().length();
+            tambours.push(centre - axe * (ELYSIUM_HABITAT * 0.5 * k));
+        }
+        // Les deux tambours se rejoignent au centre : accouplés par leur grande
+        // face, cols vers l'extérieur — et non empilés bout à bout, ce qui
+        // mettrait un col contre un tambour.
+        assert!(
+            tambours[0].distance(tambours[1]) < 1e-3,
+            "tambours disjoints : {:?} et {:?}",
+            tambours[0],
+            tambours[1]
+        );
+        assert!(tambours[0].length() < 1e-3, "l'accouplement n'est pas au centre");
+    }
+
+    // Le tore doit **boucler au bout des bras**, et sa section valoir la hauteur
+    // du moyeu. Les deux cotes se déduisent l'une de l'autre dans le preset ;
+    // ce test les mesure sur la géométrie publiée, pas sur les constantes.
+    #[test]
+    fn le_tore_de_stanford_ceinture_le_bout_des_bras() {
+        let EtatStation::Prete(st) = preset_stanford() else { panic!("station vide") };
+        let tore = st
+            .pieces()
+            .iter()
+            .find_map(|p| match p.composant {
+                Composant::Tore { rayon_majeur, rayon_mineur, .. } => Some((rayon_majeur, rayon_mineur)),
+                _ => None,
+            })
+            .expect("le tore de Stanford");
+
+        // Bout d'un bras = centre du bras + demi-longueur, mesuré sur la pièce.
+        let bout = st
+            .pieces()
+            .iter()
+            .filter_map(|p| match p.composant {
+                Composant::Charpente { longueur, .. } => {
+                    Some(p.transforme.w_axis.truncate().length() + longueur * 0.5)
+                }
+                _ => None,
+            })
+            .fold(0.0_f32, f32::max);
+        assert!((tore.0 - bout).abs() < 1e-3, "rayon majeur {} vs bout de bras {bout}", tore.0);
+
+        // Diamètre de la section = hauteur du moyeu (= côté de son hexagone).
+        assert!(
+            (2.0 * tore.1 - hauteur_moyeu()).abs() < 1e-4,
+            "section {} pour une hauteur de moyeu {}",
+            2.0 * tore.1,
+            hauteur_moyeu()
+        );
+    }
+
+    // Les jonctions du vitrage doivent tomber **sur les bras**. Un décalage
+    // mettrait du verre là où passe l'effort, et ne se verrait qu'à l'œil, de
+    // trois quarts, sur un anneau de 150 unités de tour.
+    #[test]
+    fn les_jonctions_du_tore_tombent_sur_les_bras() {
+        let EtatStation::Prete(st) = preset_stanford() else { panic!() };
+        let (jonctions, phase) = st
+            .pieces()
+            .iter()
+            .find_map(|p| match p.composant {
+                Composant::Tore { jonctions, phase, .. } => Some((jonctions, phase)),
+                _ => None,
+            })
+            .expect("le tore");
+
+        let mut bras: Vec<f32> = st
+            .pieces()
+            .iter()
+            .filter(|p| matches!(p.composant, Composant::Charpente { .. }))
+            .map(|p| {
+                let c = p.transforme.w_axis.truncate();
+                c.z.atan2(c.x).rem_euclid(TAU)
+            })
+            .collect();
+        bras.sort_by(f32::total_cmp);
+        assert_eq!(jonctions, bras.len(), "une jonction par bras");
+
+        let mut vues: Vec<f32> =
+            (0..jonctions).map(|k| (phase + TAU * k as f32 / jonctions as f32).rem_euclid(TAU)).collect();
+        vues.sort_by(f32::total_cmp);
+        for (j, b) in vues.iter().zip(&bras) {
+            let d = (j - b + PI).rem_euclid(TAU) - PI;
+            assert!(d.abs() < 1e-3, "jonction à {:.1}° pour un bras à {:.1}°", j.to_degrees(), b.to_degrees());
+        }
+    }
+
+    // Le complexe Elysium n'a **pas** d'anneau : c'est ce qui distingue les deux
+    // mégastructures au-delà de la longueur des bras.
+    #[test]
+    fn le_complexe_elysium_na_pas_de_tore() {
+        let EtatStation::Prete(st) = preset_elysium() else { panic!() };
+        assert!(!st.pieces().iter().any(|p| matches!(p.composant, Composant::Tore { .. })));
+    }
+
+    // La longueur des bras **dérive** de l'épine de l'ISV. Si quelqu'un rallonge
+    // l'épine sans y penser, ce test dit que les bras ont suivi — c'est le
+    // contraire d'un verrou de valeur.
+    #[test]
+    fn un_bras_delysium_vaut_la_moitie_de_lepine_de_lisv() {
+        assert!((ELYSIUM_BRAS * 2.0 - EPINE_LONGUEUR).abs() < 1e-5);
+        assert!((STANFORD_BRAS * 4.0 - EPINE_LONGUEUR).abs() < 1e-5);
+    }
+
 }
 
 

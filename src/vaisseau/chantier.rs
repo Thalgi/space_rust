@@ -15,6 +15,7 @@ use super::{
     accoupler, cuire, Budget, Composant, DonneesSousEnsemble, EtatStation, GenrePort, Piece, Port,
     Enveloppe, Profil, Repere, Station,
 };
+use macroquad::prelude::Vec3;
 use std::collections::HashSet;
 use std::rc::Rc;
 
@@ -365,17 +366,7 @@ impl Chantier {
             return false;
         };
         let avant = self.avant_mutation();
-
-        // Le sous-arbre : une pièce en fait partie si sa pièce hôte en fait
-        // partie. Une seule passe avant suffit — `self.pieces` reste dans
-        // l'ordre de pose (`retain` ne réordonne jamais), et l'hôte d'une
-        // pièce y figure donc toujours **avant** elle.
-        let mut a_retirer: HashSet<u64> = HashSet::from([id]);
-        for e in &self.pieces {
-            if e.hote.is_some_and(|(h, _)| a_retirer.contains(&h.origine)) {
-                a_retirer.insert(e.id);
-            }
-        }
+        let a_retirer = self.sous_arbre(id);
 
         let cout: f32 =
             self.pieces.iter().filter(|e| a_retirer.contains(&e.id)).map(|e| e.piece.composant.cout()).sum();
@@ -393,6 +384,59 @@ impl Chantier {
         }
         self.enregistrer(avant);
         true
+    }
+
+    /// La pièce `id` **et toute sa descendance** — l'ensemble exact que
+    /// [`Self::retirer`] ferait disparaître.
+    ///
+    /// Publiée pour l'état « pièce sélectionnée » de l'éditeur
+    /// (`docs/conception/assembleur.md` §8.3) : ce qui s'affiche en
+    /// surbrillance doit être ce que la touche Suppr emportera, à la pièce
+    /// près. Le calcul est **le même** que celui de `retirer` — c'est lui,
+    /// littéralement, `retirer` appelle cette méthode — plutôt qu'un parcours
+    /// refait côté vue qui pourrait en diverger.
+    ///
+    /// Vide si `id` ne désigne aucune pièce vivante. Sans ambiguïté : un
+    /// résultat valide contient toujours au moins `id` lui-même.
+    pub fn sous_arbre(&self, id: u64) -> HashSet<u64> {
+        if !self.pieces.iter().any(|e| e.id == id) {
+            return HashSet::new();
+        }
+        // Une pièce en fait partie si sa pièce hôte en fait partie. Une seule
+        // passe avant suffit — `self.pieces` reste dans l'ordre de pose
+        // (`retain` ne réordonne jamais), et l'hôte d'une pièce y figure donc
+        // toujours **avant** elle.
+        let mut dedans = HashSet::from([id]);
+        for e in &self.pieces {
+            if e.hote.is_some_and(|(h, _)| dedans.contains(&h.origine)) {
+                dedans.insert(e.id);
+            }
+        }
+        dedans
+    }
+
+    /// La pièce que la demi-droite `origine + t·direction` rencontre **en
+    /// premier**, ou `None` si elle n'en touche aucune.
+    ///
+    /// C'est la moitié « pièce » de la désignation (`conception/assembleur.md`
+    /// §8.3) : le clic de l'éditeur devient un rayon, et cette méthode dit sur
+    /// quoi il tombe. Le départage se fait sur la distance de l'origine à la
+    /// surface de chaque enveloppe touchée — la pièce la plus proche de l'œil
+    /// est celle qu'on voit.
+    ///
+    /// Passe par les **mêmes enveloppes** que l'anti-collision
+    /// (`Composant::enveloppe_locale` transformée par la pose) : désigner une
+    /// pièce et refuser de poser dedans doivent parler du même volume, sans
+    /// quoi l'éditeur laisserait cliquer là où il ne laisse pas construire.
+    pub fn piece_sous_rayon(&self, origine: Vec3, direction: Vec3) -> Option<u64> {
+        self.pieces
+            .iter()
+            .filter_map(|e| {
+                let env = e.piece.composant.enveloppe_locale().transformee(e.piece.transforme);
+                env.touche_rayon(origine, direction).map(|d| (e.id, d))
+            })
+            .min_by(|(_, d1), (_, d2)| d1.total_cmp(d2))
+            .map(|(id, _)| id)
     }
 
     /// Défait la dernière opération réussie (`racine`/`poser`/`retirer`).
@@ -465,11 +509,11 @@ impl Chantier {
                 None => ch.racine(etape.composant.clone()),
                 Some((piece_idx, port_idx)) => {
                     let hote_id = *ids.get(piece_idx)?;
-                    let Some(port_id) =
-                        ch.libres().iter().find(|p| p.origine == hote_id && p.indice == port_idx).map(|p| p.id)
-                    else {
-                        return None;
-                    };
+                    let port_id = ch
+                        .libres()
+                        .iter()
+                        .find(|p| p.origine == hote_id && p.indice == port_idx)
+                        .map(|p| p.id)?;
                     ch.poser(port_id, etape.composant.clone(), etape.montage)
                 }
             };
@@ -599,7 +643,7 @@ mod tests {
     use super::super::generateur::Rng;
     use super::super::{Sorties, StyleTreillis, VarianteModule, VariantePanneau};
     use super::*;
-    use macroquad::prelude::Vec3;
+    use macroquad::prelude::{vec3, Vec3};
 
     fn module() -> Composant {
         Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 2.0 }
@@ -1214,6 +1258,111 @@ mod tests {
         // refusée reste géométriquement définie, sur le port visé.
         let pos = fantome.unwrap().transforme.w_axis.truncate();
         assert!(pos.y > 0.9, "fantôme posé ailleurs que sur le port visé : {pos:?}");
+    }
+
+    // ---- L3.2 `sous_arbre` : ce que le surlignage doit montrer (§8.3) ----
+
+    /// Arbre de test à trois niveaux, reconstruit à l'identique à chaque appel
+    /// (les `id` sortent d'un compteur qui repart de zéro avec le chantier) :
+    ///
+    /// ```text
+    ///   a ─┬─ b ─┬─ c   (chaîne axiale de modules)
+    ///      │     └─ d   (panneau)
+    ///      └─ e         (panneau)
+    /// ```
+    fn arbre() -> (Chantier, [u64; 5]) {
+        let mut ch = Chantier::new();
+        assert!(ch.racine(module()));
+        let a = ch.derniere_piece().unwrap();
+
+        let greffe = |ch: &mut Chantier, sur: u64, genre: GenrePort, comp: Composant, m: usize| {
+            let p = ch.libres().iter().find(|p| p.origine == sur && p.genre == genre).unwrap().id;
+            assert!(ch.poser(p, comp, m), "pose de montage refusée dans le montage de test");
+            ch.derniere_piece().unwrap()
+        };
+
+        let b = greffe(&mut ch, a, GenrePort::ModuleAxial, module(), 1);
+        let c = greffe(&mut ch, b, GenrePort::ModuleAxial, module(), 1);
+        let d = greffe(&mut ch, b, GenrePort::Surface, panneau(), 0);
+        let e = greffe(&mut ch, a, GenrePort::Surface, panneau(), 0);
+
+        (ch, [a, b, c, d, e])
+    }
+
+    // La **forme** de l'arbre, pinnée indépendamment de `retirer`.
+    //
+    // Le test d'accord ci-dessous ne peut pas la garder : `retirer` appelle
+    // désormais `sous_arbre`, donc une version dégénérée qui rendrait `{id}`
+    // seul les mettrait d'accord tous les deux — sur un arbre faux. C'est
+    // exactement le constat de L3.1 (sabotage 1), tiré à l'avance cette fois.
+    #[test]
+    fn le_sous_arbre_liste_toute_la_descendance() {
+        let (ch, [a, b, c, d, e]) = arbre();
+        assert_eq!(ch.sous_arbre(a), HashSet::from([a, b, c, d, e]), "la racine emporte tout");
+        assert_eq!(ch.sous_arbre(b), HashSet::from([b, c, d]), "une branche et ses deux enfants");
+        assert_eq!(ch.sous_arbre(c), HashSet::from([c]), "feuille en bout de chaîne");
+        assert_eq!(ch.sous_arbre(e), HashSet::from([e]), "feuille d'une autre branche");
+        assert!(ch.sous_arbre(u64::MAX).is_empty(), "id jamais distribué");
+    }
+
+    // §8.3 : ce qu'on surligne doit être exactement ce que la touche Suppr
+    // emporte. Balayé sur chaque pièce de l'arbre, pas sur un cas choisi.
+    #[test]
+    fn le_sous_arbre_est_exactement_ce_que_retirer_emporte() {
+        let (reference, ids) = arbre();
+        let toutes: HashSet<u64> = reference.pieces().map(|(id, _)| id).collect();
+        for cible in ids {
+            let (mut ch, _) = arbre();
+            let annonce = ch.sous_arbre(cible);
+            assert!(ch.retirer(cible));
+            let restantes: HashSet<u64> = ch.pieces().map(|(id, _)| id).collect();
+            let emportees: HashSet<u64> = toutes.difference(&restantes).copied().collect();
+            assert_eq!(annonce, emportees, "pièce {cible} : surlignage ≠ ce que Suppr emporte");
+        }
+    }
+
+    // ---- L3.3 `piece_sous_rayon` : la moitié « pièce » de la désignation ----
+
+    // Deux modules alignés sur Z, visés **par les deux bouts** : la pièce
+    // désignée doit changer avec le point de vue. Viser d'un seul côté ne
+    // distinguerait pas un tri correct d'un `find` qui rendrait toujours la
+    // première pièce de la liste — le défaut trouvé en L2.1 puis en L2.5.
+    #[test]
+    fn piece_sous_rayon_prend_la_plus_proche_de_loeil() {
+        let mut ch = Chantier::new();
+        assert!(ch.racine(module()));
+        let a = ch.derniere_piece().unwrap();
+        let port = ch.libres().iter().find(|p| p.genre == GenrePort::ModuleAxial).unwrap().id;
+        assert!(ch.poser(port, module(), 1));
+        let b = ch.derniere_piece().unwrap();
+
+        let za = ch.piece(a).unwrap().transforme.w_axis.z;
+        let zb = ch.piece(b).unwrap().transforme.w_axis.z;
+        assert!((za - zb).abs() > 1.0, "les deux modules doivent être franchement séparés");
+
+        // De très loin, dans l'axe, en regardant vers l'autre : on voit d'abord
+        // celui de son côté.
+        let loin = 100.0;
+        let (proche_de_a, proche_de_b) = if za < zb { (-loin, loin) } else { (loin, -loin) };
+        assert_eq!(
+            ch.piece_sous_rayon(vec3(0.0, 0.0, proche_de_a), Vec3::Z * (zb - za).signum()),
+            Some(a),
+            "vu du côté de A"
+        );
+        assert_eq!(
+            ch.piece_sous_rayon(vec3(0.0, 0.0, proche_de_b), Vec3::Z * (za - zb).signum()),
+            Some(b),
+            "vu du côté de B"
+        );
+    }
+
+    #[test]
+    fn un_rayon_qui_manque_la_station_ne_designe_rien() {
+        let mut ch = Chantier::new();
+        assert!(ch.racine(module()));
+        assert_eq!(ch.piece_sous_rayon(vec3(0.0, 50.0, -100.0), Vec3::Z), None, "passe au-dessus");
+        assert_eq!(ch.piece_sous_rayon(vec3(0.0, 0.0, -100.0), -Vec3::Z), None, "part à l'opposé");
+        assert!(ch.piece_sous_rayon(vec3(0.0, 0.0, -100.0), Vec3::Z).is_some(), "droit dessus");
     }
 
     #[test]

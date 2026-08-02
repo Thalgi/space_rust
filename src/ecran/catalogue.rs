@@ -29,13 +29,14 @@
 use crate::vaisseau::{
     demo_anneaux, demo_antennes, demo_bouclier_grand, demo_bouclier_petit, demo_bouclier_thermique,
     demo_caissons, demo_cargo, demo_chantier, demo_charpente, demo_charpente_hexa, demo_coiffes,
-    demo_epine_pavillon, demo_equipage, demo_habitat_isv, demo_habitats, demo_moteur_antimatiere,
+    demo_epine_pavillon, demo_equipage, demo_panneaux_mega, demo_habitat_isv, demo_habitats, demo_moteur_antimatiere,
     demo_moteur_antimatiere_principal, demo_panneaux, demo_poutres, demo_propulsion,
     demo_radiateur_mega, demo_radiateurs, demo_reservoir, demo_station, demo_treillis,
-    preset_anneau, preset_comsat, preset_iss, preset_isv_equipage, preset_isv_fixe,
+    preset_anneau, preset_elysium, preset_stanford, preset_comsat, preset_iss, preset_isv_equipage, preset_isv_fixe,
     preset_isv_moteur, preset_mir, preset_sonde, preset_tiangong, Epine, EtatStation,
-    FamillePropulsion, Station,
+    FamillePropulsion, Station, ISV_AXE,
 };
+use macroquad::prelude::Vec3;
 
 /// Réglages d'animation que **certains** items lisent au moment d'être bâtis.
 ///
@@ -87,13 +88,18 @@ pub enum Fabrique {
     /// **ISV complet** : le seul item en deux moitiés (coque fixe + section
     /// d'équipage), et le seul à porter une épine. Il lit les deux réglages.
     Isv(Epine),
+    /// Habitat **tournant d'un seul tenant** : un anneau qui tourne autour de
+    /// son axe pour faire de la gravité. Rien à replier ni à allumer — il n'a
+    /// qu'un degré de liberté, et il s'applique à la station **entière**, pas à
+    /// une moitié comme sur l'ISV.
+    Rotatif(fn() -> EtatStation),
 }
 
 impl Fabrique {
     fn batir(&self, r: Reglages) -> Bati {
         match self {
             Fabrique::Brique(f) => Bati::seul(EtatStation::Prete(f())),
-            Fabrique::Etat(f) => Bati::seul(f()),
+            Fabrique::Etat(f) | Fabrique::Rotatif(f) => Bati::seul(f()),
             Fabrique::Propulsion(famille) => {
                 Bati::seul(EtatStation::Prete(demo_propulsion(*famille)))
             }
@@ -144,7 +150,31 @@ impl Item {
 
     /// L'item montre-t-il une section d'équipage à faire tourner ou à replier ?
     pub fn rotation(&self) -> bool {
+        matches!(self.fabrique, Fabrique::Repli(_) | Fabrique::Isv(_) | Fabrique::Rotatif(_))
+    }
+
+    /// L'item lit-il le **repli** ? À distinguer de [`Self::rotation`] : jusqu'à
+    /// l'arrivée des anneaux, tout ce qui tournait se repliait aussi (la section
+    /// d'équipage de l'ISV), et les deux capacités étaient confondues par
+    /// coïncidence. Un anneau tourne **sans rien replier** — sa rotation est une
+    /// matrice de vue, elle ne recuit aucune géométrie.
+    pub fn repli(&self) -> bool {
         matches!(self.fabrique, Fabrique::Repli(_) | Fabrique::Isv(_))
+    }
+
+    /// **Axe** autour duquel l'item tourne, quand il tourne.
+    ///
+    /// Déduit de la fabrique, comme les autres capacités (§5.1). Il vivait
+    /// auparavant dans la vue, choisi sur la **catégorie de menu** — une
+    /// seconde source, et fausse dès que deux items d'une même catégorie
+    /// tournent autour d'axes différents. C'est exactement ce qui est arrivé :
+    /// l'ISV est couché sur `ISV_AXE`, un anneau tourne sur `Y`, et les deux
+    /// sont des mégastructures.
+    pub fn axe_rotation(&self) -> Vec3 {
+        match self.fabrique {
+            Fabrique::Isv(_) => ISV_AXE,
+            _ => Vec3::Y,
+        }
     }
 
     /// L'item a-t-il une propulsion à allumer ? Deux cas : la brique du
@@ -171,6 +201,7 @@ pub const BRIQUES: &[Item] = &[
     Item::new("HABITATS : 10 VARIANTES", Fabrique::Brique(demo_habitats)),
     Item::new("NOEUDS 4 / 6 / T / TETRA", Fabrique::Brique(demo_station)),
     Item::new("PANNEAUX : 5 VARIANTES", Fabrique::Brique(demo_panneaux)),
+    Item::new("PANNEAUX MEGASTRUCTURE : 4 FAMILLES", Fabrique::Repli(demo_panneaux_mega)),
     Item::new("RADIATEURS : 8 VARIANTES", Fabrique::Brique(demo_radiateurs)),
     Item::new("RADIATEUR MEGA", Fabrique::Regime(demo_radiateur_mega)),
     Item::new("ANTENNES : 6 VARIANTES", Fabrique::Brique(demo_antennes)),
@@ -228,6 +259,8 @@ pub const PETITES_STATIONS: &[Item] = &[
 /// encore et des tests s'en servent — seule la vitrine disparaît.
 pub const MEGASTRUCTURES: &[Item] = &[
     Item::new("STATION A ANNEAU (ROUE)", Fabrique::Etat(preset_anneau)),
+    Item::new("TORE DE STANFORD", Fabrique::Rotatif(preset_stanford)),
+    Item::new("COMPLEXE ELYSIUM", Fabrique::Etat(preset_elysium)),
     Item::new("ISV COMPLET (FRET + HABITAT + EQUIPAGE)", Fabrique::Isv(Epine::Hexagonale)),
     Item::new("ISV — RADIATEUR + BLOC MOTEUR", Fabrique::Etat(preset_isv_moteur)),
 ];
@@ -305,18 +338,31 @@ mod tests {
 
         // Une seule brique tourne : la section d'équipage. C'est la seule pièce
         // tournante du vaisseau, donc la seule où le bouton ait un sens.
+        // Deux briques bougent, pour deux raisons distinctes : la section
+        // d equipage se replie **et** tourne ; les panneaux megastructure, eux,
+        // ne se replient pas - leurs deux joints suivent le soleil.
         assert_eq!(
             porte(BRIQUES, Item::rotation),
-            ["EQUIPAGE ROTATIF ISV : MODULE + TRAVERSE"]
+            ["PANNEAUX MEGASTRUCTURE : 4 FAMILLES", "EQUIPAGE ROTATIF ISV : MODULE + TRAVERSE"]
         );
         // Une seule brique s'allume : le radiateur méga, qui n'en montre que la
         // chauffe (il n'a pas de tuyère, donc pas de panache).
         assert_eq!(porte(BRIQUES, Item::allumage), ["RADIATEUR MEGA"]);
 
-        // Côté mégastructures, l'ISV complet — et lui seul — fait les deux.
+        // Côté mégastructures, deux items tournent — mais pour des raisons
+        // différentes, et c'est tout l'intérêt de les distinguer : le tore
+        // tourne **d'un seul tenant** (gravité par rotation), l'ISV ne fait
+        // tourner qu'une **moitié**, celle qui se replie aussi.
         let isv = "ISV COMPLET (FRET + HABITAT + EQUIPAGE)";
-        assert_eq!(porte(MEGASTRUCTURES, Item::rotation), [isv]);
+        assert_eq!(porte(MEGASTRUCTURES, Item::rotation), ["TORE DE STANFORD", isv]);
+        assert_eq!(porte(MEGASTRUCTURES, Item::repli), [isv]);
         assert_eq!(porte(MEGASTRUCTURES, Item::allumage), [isv]);
+        // Et leurs axes diffèrent : c'est ce que la catégorie ne pouvait pas dire.
+        let axe = |libelle: &str| {
+            MEGASTRUCTURES.iter().find(|i| i.libelle == libelle).unwrap().axe_rotation()
+        };
+        assert_eq!(axe("TORE DE STANFORD"), Vec3::Y);
+        assert_ne!(axe(isv), Vec3::Y);
 
         // Les petites stations sont toutes inertes.
         assert!(porte(PETITES_STATIONS, Item::rotation).is_empty());
@@ -337,7 +383,7 @@ mod tests {
         for (cat, table) in TOUTES {
             for item in table {
                 let base = item.batir(repos);
-                if item.rotation() {
+                if item.repli() {
                     let plie = item.batir(Reglages { repli: 1.0, ..repos });
                     assert!(
                         difference(&base, &plie),

@@ -4,6 +4,7 @@
 
 mod accueil;
 mod catalogue;
+mod designation;
 mod enveloppes;
 mod fils;
 mod galerie;

@@ -16,6 +16,25 @@ pub(super) const TRAIT_FIN: f32 = 0.02;
 // Palette provisoire (les styles arriveront à l'Étape 5).
 pub(super) const COULEUR: Color = Color { r: 0.85, g: 0.85, b: 0.88, a: 1.0 };
 pub(super) const SOMBRE: Color = Color { r: 0.25, g: 0.25, b: 0.28, a: 1.0 };
+/// Dessus d'une tuile de bardage : un gris clair, proche de la coque mais pas
+/// identique — le bardage doit se lire comme un revêtement, pas comme la peau.
+pub(super) const TUILE_DESSUS: Color = Color { r: 0.72, g: 0.73, b: 0.78, a: 1.0 };
+/// Flanc d'une tuile. C'est **lui** qui donne le relief : sans contraste entre
+/// le dessus et la tranche, un bardage à épaisseur relit comme un aplat.
+pub(super) const TUILE_FLANC: Color = Color { r: 0.40, g: 0.41, b: 0.45, a: 1.0 };
+
+/// Coque **pleine** aux jonctions du tore : là où un bras arrive, il n'y a pas
+/// de vitrage — on veut lire une reprise d'effort, donc du blanc franc, plus
+/// clair que la coque courante qui, elle, n'est qu'un flanc.
+pub(super) const COQUE_JONCTION: Color = Color { r: 0.93, g: 0.94, b: 0.95, a: 1.0 };
+/// Meneaux et lèvres du vitrage : la menuiserie. Sombre pour découper les
+/// panneaux — un cadre clair sur un vitrage clair ne se voit pas.
+pub(super) const MENEAU: Color = Color { r: 0.38, g: 0.40, b: 0.44, a: 1.0 };
+
+/// Face **interne** d'un tore d'habitat : le pont, celui qui regarde l'axe.
+/// Teinte à part pour qu'il se distingue de la coque — et point d'entrée de la
+/// translucidité à venir (le vitrage d'un tore de Stanford).
+pub(super) const PONT: Color = Color { r: 0.30, g: 0.55, b: 0.85, a: 1.0 };
 /// Alu clair des bagues d'accostage (bout des collerettes).
 pub(super) const BAGUE: Color = Color { r: 0.62, g: 0.64, b: 0.68, a: 1.0 };
 /// Teinte des conteneurs de fret : un gris **plus chaud et plus sourd** que la

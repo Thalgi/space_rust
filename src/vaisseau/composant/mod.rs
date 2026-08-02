@@ -34,11 +34,13 @@ mod caisson;
 pub use caisson::{VarianteCaisson, VarianteCharge};
 mod bouclier;
 mod panache;
+mod panneau_mega;
 /// Rayon du jet à la fraction `t` de sa longueur, exposé pour que l'assemblage
 /// puisse vérifier que le panache **contourne** la charge utile remorquée.
 #[allow(unused_imports)]
 pub(crate) use panache::{rayon as rayon_panache, teinte as teinte_panache};
 mod thermique;
+mod tore;
 /// Section du bardage thermique, exposée pour que l'assemblage puisse vérifier
 /// qu'il **épouse** l'épine. C'est la surface qui se plaque sur la poutre — la
 /// mesurer sur les sommets cuits attraperait les lèvres, relevées par
@@ -49,7 +51,8 @@ pub use bouclier::ELANCEMENT as BOUCLIER_ELANCEMENT;
 mod cargo;
 mod reservoir;
 mod treillis;
-pub use treillis::{PiedHexa, StyleTreillis};
+pub use panneau_mega::VariantePanneauMega;
+pub use treillis::{hexagone_ceinture, PiedHexa, StyleTreillis};
 use commun::*;
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 use std::rc::Rc;
@@ -269,6 +272,37 @@ pub enum Composant {
     /// port. Le compter dans l'englobant ferait reculer la caméra de deux
     /// longueurs de vaisseau à l'allumage.
     Panache { longueur: f32, rayon_col: f32, rayon_bout: f32, intensite: f32 },
+    /// **Tore** d'habitat : une coque de révolution, pas un assemblage de
+    /// briques. Première primitive **paramétrique** du parc (voir `tore.rs`
+    /// pour le pourquoi, et `stations.md` §6 qui l'avait prévue).
+    ///
+    /// Tracé dans le plan **X‑Z**, axe **Y** — le même que le moyeu hexagonal.
+    /// `segments` facette le grand cercle, `anneaux` la section. Aucun port :
+    /// il se pose à la main, comme `TreillisHexagone`.
+    /// `jonctions` / `phase` disent **où des bras arrivent** sur l'anneau : le
+    /// vitrage y est interrompu au profit d'une coque pleine nervurée. Le tore
+    /// doit le savoir lui-même — c'est sa propre géométrie qui change, pas
+    /// quelque chose qu'on poserait par-dessus après coup.
+    /// **Panneau solaire d'échelle mégastructure**, avec suivi solaire à deux
+    /// axes (`azimut` autour du mât, `inclinaison` autour de l'axe de l'aile).
+    /// Voir `panneau_mega.rs` : ce n'est pas un `PanneauSolaire` agrandi mais
+    /// une autre famille de structures.
+    PanneauMega {
+        profil: Profil,
+        variante: VariantePanneauMega,
+        longueur: f32,
+        largeur: f32,
+        azimut: f32,
+        inclinaison: f32,
+    },
+    Tore {
+        rayon_majeur: f32,
+        rayon_mineur: f32,
+        segments: usize,
+        anneaux: usize,
+        jonctions: usize,
+        phase: f32,
+    },
     /// **Collier de rotation** de la section d'équipage : tambour **creux** qui
     /// ceinture l'épine et porte les bras. `alesage` est le rayon intérieur
     /// libre — il doit dégager l'épine, sinon la section ne pourrait pas
@@ -432,6 +466,8 @@ impl Composant {
             Composant::BouclierGrand { profil, rayon, .. } => bouclier::ports(*profil, *rayon),
             // Effet posé à la main sur la tuyère : pas de port.
             Composant::Panache { .. } => vec![],
+            Composant::PanneauMega { profil, .. } => panneau_mega::ports(*profil),
+            Composant::Tore { .. } => vec![],
             // Bardage de surface enfilé sur l'épine, posé à la main : pas de port.
             Composant::BouclierThermique { .. } => vec![],
             Composant::CollierRotatif { profil, longueur, .. } => equipage::collier_ports(*profil, *longueur),
@@ -477,6 +513,12 @@ impl Composant {
             Composant::BouclierGrand { rayon, elancement, .. } => bouclier::grand_dessiner(p, *rayon, *elancement),
             // Rendu à part, en additif : voir `panache::dessiner`.
             Composant::Panache { .. } => panache::dessiner(p),
+            Composant::PanneauMega { variante, longueur, largeur, azimut, inclinaison, .. } => {
+                panneau_mega::dessiner(p, *variante, *longueur, *largeur, *azimut, *inclinaison)
+            }
+            Composant::Tore { rayon_majeur, rayon_mineur, segments, anneaux, jonctions, phase } => {
+                tore::dessiner(p, *rayon_majeur, *rayon_mineur, *segments, *anneaux, *jonctions, *phase)
+            }
             Composant::BouclierThermique { rayon_pied, rayon_bout, courbure, longueur, rangs } => {
                 thermique::dessiner(p, *rayon_pied, *rayon_bout, *courbure, *longueur, *rangs)
             }
@@ -542,6 +584,8 @@ impl Composant {
             Composant::BouclierPetit { .. } => bouclier::petit_cout(),
             Composant::BouclierGrand { .. } => bouclier::grand_cout(),
             Composant::Panache { .. } => panache::cout(),
+            Composant::PanneauMega { longueur, largeur, .. } => panneau_mega::cout(*longueur, *largeur),
+            Composant::Tore { rayon_majeur, .. } => tore::cout(*rayon_majeur),
             Composant::BouclierThermique { .. } => thermique::cout(),
             Composant::CollierRotatif { .. } => equipage::collier_cout(),
             Composant::Charniere { .. } => equipage::charniere_cout(),
@@ -617,13 +661,18 @@ impl Composant {
             // Réacteur antimatière : corps + tête déployés jusqu'à ~1,2 × taille.
             Composant::ReacteurAntimatiere { taille, .. } => antimatiere::reacteur_rayon_local(*taille),
             // Anneau hexagonal (+ montants de liaison le long de +Z).
-            Composant::TreillisHexagone { profil, liaison } => (profil.rayon() * 1.1).max(*liaison),
+            // Point le plus loin de l'origine : un sommet de l'hexagone jumeau,
+            // donc l'hypoténuse du rayon et de la hauteur du prisme.
+            Composant::TreillisHexagone { profil, liaison } => treillis::hexagone_rayon(*profil)
+                .hypot(treillis::hexagone_hauteur(*profil, *liaison)),
             // Module d'habitat : demi-longueur, ou la ferrure si elle porte loin.
             Composant::ModuleHabitat { profil, longueur, attache, .. } => habitat::rayon_local(*profil, *longueur, *attache),
             Composant::ModuleEquipage { profil, longueur, .. } => equipage::rayon_local(*profil, *longueur),
             Composant::BouclierPetit { rayon, .. } => bouclier::petit_rayon_local(*rayon),
             Composant::BouclierGrand { rayon, elancement, .. } => bouclier::grand_rayon_local(*rayon, *elancement),
             Composant::Panache { .. } => panache::rayon_local(),
+            Composant::PanneauMega { longueur, largeur, .. } => panneau_mega::rayon_local(*longueur, *largeur),
+            Composant::Tore { rayon_majeur, rayon_mineur, .. } => tore::rayon_local(*rayon_majeur, *rayon_mineur),
             Composant::BouclierThermique { rayon_pied, rayon_bout, longueur, .. } => thermique::rayon_local(*rayon_pied, *rayon_bout, *longueur),
             Composant::CollierRotatif { rayon, longueur, .. } => equipage::collier_rayon_local(*rayon, *longueur),
             Composant::Charniere { taille, .. } => equipage::charniere_rayon_local(*taille),
@@ -715,8 +764,17 @@ impl Composant {
             // Réacteur antimatière : masse déployée vers +Z, sphère à mi-corps.
             Composant::ReacteurAntimatiere { taille, .. } => antimatiere::reacteur_englobant(*taille),
             // Anneau hexagonal (+ montants) : englobant centré, borné par la liaison.
+            // Capsule le long de la **normale** (+Y local) : l'anneau seul est
+            // un disque plat, le prisme (`liaison > 0`) une galette étirée. Une
+            // sphère centrée réservait le rayon dans toutes les directions et
+            // sous-déclarait dès que les montants dépassaient (§9, L1.6).
             Composant::TreillisHexagone { profil, liaison } => {
-                Enveloppe::sphere(Vec3::ZERO, (profil.rayon() * 1.1).max(*liaison))
+                let (_, _, prof) = treillis::hexagone_cotes(*profil);
+                Enveloppe::capsule(
+                    Vec3::new(0.0, -prof, 0.0),
+                    Vec3::new(0.0, treillis::hexagone_hauteur(*profil, *liaison), 0.0),
+                    treillis::hexagone_rayon(*profil),
+                )
             }
             // Nacelle : déployée d'un seul côté (+Z), sphère décalée à mi-corps
             // — sinon, centrée sur le montage, elle mordrait sur les voisines.
@@ -726,6 +784,15 @@ impl Composant {
             Composant::BouclierPetit { rayon, .. } => bouclier::petit_englobant(*rayon),
             Composant::BouclierGrand { rayon, elancement, .. } => bouclier::grand_englobant(*rayon, *elancement),
             Composant::Panache { .. } => panache::englobant(),
+            // ⚠️ Un tore est **creux** : aucune des trois formes de `Noyau`
+            // (point, segment, rectangle) ne l'épouse. La sphère englobante est
+            // donc large — elle réserve tout le disque central, où il n'y a
+            // rien. Sans conséquence tant que le tore est posé à la main et
+            // seul à ce rayon ; à revoir le jour où l'anti-collision devra
+            // laisser passer quelque chose **dans** l'anneau.
+            // L'aile pivote : la sphère couvre toutes ses orientations.
+            Composant::PanneauMega { .. } => centree(),
+            Composant::Tore { .. } => centree(),
             Composant::BouclierThermique { rayon_pied, rayon_bout, longueur, .. } => thermique::englobant(*rayon_pied, *rayon_bout, *longueur),
             // Râtelier : trois nacelles en triforce autour de l'axe — aussi
             // large que long, la sphère est juste.
@@ -806,7 +873,7 @@ fn suivante(c: &Composant) -> Option<Composant> {
         Composant::Reservoir { .. } => Composant::MoteurAntimatiere { profil: Profil::P1, taille: 6.0 },
         Composant::MoteurAntimatiere { .. } => Composant::Coiffe { profil: Profil::P1, variante: VarianteCoiffe::TOUS[0] },
         Composant::Coiffe { .. } => Composant::ReacteurAntimatiere { profil: Profil::P1, taille: 6.0 },
-        Composant::ReacteurAntimatiere { .. } => Composant::TreillisHexagone { profil: Profil::P1, liaison: 0.0 },
+        Composant::ReacteurAntimatiere { .. } => Composant::TreillisHexagone { profil: Profil::P1, liaison: 3.0 },
         Composant::TreillisHexagone { .. } => Composant::NacelleCargo { profil: Profil::P1, longueur: 8.0, spin: 0.0 },
         Composant::NacelleCargo { .. } => Composant::RatelierCargo { profil: Profil::P1, longueur: 8.0, rayon: 3.0, nacelles: 3, nacelle: 1.0 },
         Composant::RatelierCargo { .. } => Composant::ModuleHabitat { profil: Profil::P1, longueur: 8.0, spin: 0.0, attache: 3.0 },
@@ -815,7 +882,16 @@ fn suivante(c: &Composant) -> Option<Composant> {
         Composant::BouclierPetit { .. } => Composant::BouclierGrand { profil: Profil::P0, rayon: 10.0, elancement: BOUCLIER_ELANCEMENT },
         Composant::BouclierGrand { .. } => Composant::BouclierThermique { rayon_pied: 3.5, rayon_bout: 1.7, courbure: 1.5, longueur: 13.0, rangs: 10 },
         Composant::BouclierThermique { .. } => Composant::Panache { longueur: 336.0, rayon_col: 0.15, rayon_bout: 11.0, intensite: 1.0 },
-        Composant::Panache { .. } => Composant::CollierRotatif { profil: Profil::P1, rayon: 3.0, alesage: 2.0, longueur: 3.0 },
+        Composant::Panache { .. } => Composant::PanneauMega {
+            profil: Profil::P0,
+            variante: VariantePanneauMega::FermeModulaire,
+            longueur: panneau_mega::LONGUEUR_TYPE,
+            largeur: panneau_mega::LARGEUR_TYPE,
+            azimut: 0.4,
+            inclinaison: 0.3,
+        },
+        Composant::PanneauMega { .. } => Composant::Tore { rayon_majeur: 12.0, rayon_mineur: 1.5, segments: 48, anneaux: 12, jonctions: 3, phase: 0.5 },
+        Composant::Tore { .. } => Composant::CollierRotatif { profil: Profil::P1, rayon: 3.0, alesage: 2.0, longueur: 3.0 },
         Composant::CollierRotatif { .. } => Composant::Charniere { taille: 1.0, repli: 0.5 },
         Composant::Charniere { .. } => sous_ensemble_echantillon(),
         // Fin de chaîne. C'est la seule variante sans successeur.
@@ -922,7 +998,10 @@ pub fn categorie(c: &Composant) -> Categorie {
         Composant::ModuleHabitat { .. } | Composant::ModuleEquipage { .. } | Composant::CollierRotatif { .. } => {
             Categorie::Habitat
         }
-        Composant::PanneauSolaire { .. } | Composant::Radiateur { .. } | Composant::RadiateurMega { .. } => {
+        Composant::PanneauSolaire { .. }
+        | Composant::PanneauMega { .. }
+        | Composant::Radiateur { .. }
+        | Composant::RadiateurMega { .. } => {
             Categorie::Energie
         }
         Composant::Antenne { .. } => Categorie::Communication,
@@ -937,9 +1016,13 @@ pub fn categorie(c: &Composant) -> Categorie {
         | Composant::Reservoir { .. } => Categorie::Propulsion,
         Composant::BouclierPetit { .. } | Composant::BouclierGrand { .. } => Categorie::Bouclier,
         Composant::SousEnsemble { .. } => Categorie::Composite,
-        Composant::TreillisHexagone { .. } | Composant::BouclierThermique { .. } | Composant::Charniere { .. } => {
-            Categorie::PoseeAMain
-        }
+        // Le tore rejoint les pièces **posées à la main** : comme
+        // `TreillisHexagone`, il n'expose aucun port, donc `posables` ne peut
+        // structurellement jamais le proposer (L2.4).
+        Composant::TreillisHexagone { .. }
+        | Composant::BouclierThermique { .. }
+        | Composant::Charniere { .. }
+        | Composant::Tore { .. } => Categorie::PoseeAMain,
         Composant::Panache { .. } => Categorie::Effet,
     }
 }
@@ -2803,10 +2886,189 @@ mod tests {
         let c = Composant::TreillisHexagone { profil: Profil::P1, liaison: 0.0 };
         assert!(c.ports().is_empty());
         assert_eq!(c.cout(), 12.0);
-        assert!((c.rayon_local() - 1.1).abs() < 1e-4); // (P1.rayon() * 1.1).max(liaison)
         let mut b = Batisseur::new();
         c.dessiner(&mut b);
         assert!(!b.terminer().is_empty());
+    }
+
+    // Les montants de `liaison` lèvent un prisme **le long de la normale** de
+    // l'anneau (+Y local), pas dans son plan.
+    //
+    // Mesuré sur les fils, jamais sur la formule : l'assertion précédente à cet
+    // endroit recopiait `(rayon * 1.1).max(liaison)` — elle aurait suivi
+    // n'importe quel changement de la formule sans rien garder. Les montants
+    // partaient en fait le long de **+Z**, donc à plat dans le plan de
+    // l'hexagone, en peigne au lieu d'un prisme ; personne ne l'avait vu parce
+    // qu'aucun appelant du jeu n'a jamais passé `liaison > 0`.
+    // L'enveloppe doit **contenir** le prisme, sans la marge de tolérance de
+    // `les_rayons_declares_contiennent_la_piece`.
+    //
+    // Ce test existe parce que ce balayage-là ne mord pas ici : sa marge
+    // (`MARGE_RAYON = 1,40`, la dette de L1.4) absorbe largement le
+    // sous-dimensionnement de l'ancienne sphère centrée (×1,08 sur le prisme,
+    // ×1,22 sur l'anneau nu). Une dette qui masque un vrai défaut est une
+    // raison d'écrire le test serré, pas de s'en remettre au balayage.
+    #[test]
+    fn lenveloppe_de_lhexagone_contient_ses_montants() {
+        for liaison in [0.0_f32, 3.0, 9.0] {
+            let c = Composant::TreillisHexagone { profil: Profil::P3, liaison };
+            let env = c.enveloppe_locale();
+            for f in crate::vaisseau::fils(&c) {
+                for p in [f.a, f.b] {
+                    assert!(
+                        env.contient(p),
+                        "liaison {liaison} : {p:?} hors de l'enveloppe (profondeur {:.3})",
+                        env.profondeur(p)
+                    );
+                }
+            }
+        }
+    }
+
+    // Les trois bandes du tore couvrent la section **entière**, sans trou ni
+    // recouvrement : tuiles 180°, deux épaulements, fenêtre 80°. Mesuré sur les
+    // bornes elles-mêmes plutôt que sur des degrés recopiés.
+    #[test]
+    fn les_bandes_du_tore_pavent_toute_la_section() {
+        use std::f32::consts::{PI, TAU};
+        let tuiles = 2.0 * tore::V_TUILES;
+        let fenetre = 2.0 * tore::V_FENETRE;
+        let epaulement = (PI - tore::V_FENETRE) - tore::V_TUILES;
+        assert!(epaulement > 0.0, "les tuiles mordent sur la fenêtre");
+        assert!(
+            (tuiles + fenetre + 2.0 * epaulement - TAU).abs() < 1e-5,
+            "somme des bandes = {} au lieu de {TAU}",
+            tuiles + fenetre + 2.0 * epaulement
+        );
+        // Et les valeurs demandées : 180° de tuiles, 80° de fenêtre.
+        assert!((tuiles.to_degrees() - 180.0).abs() < 1e-3);
+        assert!((fenetre.to_degrees() - 80.0).abs() < 1e-3);
+    }
+
+    // Le bardage suit la **taille** de tuile, pas le rayon : doubler l'anneau
+    // doit doubler le nombre de tuiles, pas les agrandir. C'est ce qui permet
+    // au même tore de servir à toutes les échelles.
+    //
+    // Mesuré sur la grille elle-même, et non sur le nombre de sommets du tore :
+    // cette version-là marchait tant que les tuiles pesaient l'essentiel du
+    // maillage, et a cessé de mordre dès qu'on les a agrandies (les bandes
+    // lisses et la menuiserie, à compte fixe, diluaient le rapport à 1,58).
+    // Un proxy qui ne tient que dans un régime n'est pas une mesure.
+    #[test]
+    fn le_bardage_garde_la_taille_de_tuile_quand_lanneau_grandit() {
+        let (r1, c1) = tore::grille_tuiles(12.0, 1.5);
+        let (r2, c2) = tore::grille_tuiles(24.0, 1.5);
+        assert_eq!(r1, r2, "la section n'a pas changé : même nombre de rangs");
+        assert!(
+            (c2 as f32 / c1 as f32 - 2.0).abs() < 0.05,
+            "{c1} → {c2} colonnes pour un rayon doublé"
+        );
+        // Et la tuile elle-même garde sa cote, quel que soit l'anneau.
+        assert!(tore::cote_tuile() > 0.0);
+    }
+
+    // --- Panneaux mégastructure : le suivi solaire ---
+
+    /// Fils d'un panneau, à un couple d'angles donné.
+    fn panneau_mega(azimut: f32, inclinaison: f32) -> Vec<crate::vaisseau::Fil> {
+        crate::vaisseau::fils(&Composant::PanneauMega {
+            profil: Profil::P0,
+            variante: VariantePanneauMega::FermeModulaire,
+            longueur: 16.0,
+            largeur: 6.0,
+            azimut,
+            inclinaison,
+        })
+    }
+
+    // La contrainte de l'étape : l'aile s'oriente. Les deux joints doivent
+    // **chacun** bouger la géométrie — un axe câblé mais inerte donnerait un
+    // panneau qui promet de suivre le soleil sans le faire.
+    #[test]
+    fn les_deux_joints_du_panneau_mega_orientent_laile() {
+        let repos = panneau_mega(0.0, 0.0);
+        let bouge = |a: f32, i: f32| {
+            let autre = panneau_mega(a, i);
+            repos
+                .iter()
+                .zip(&autre)
+                .map(|(x, y)| x.a.distance(y.a).max(x.b.distance(y.b)))
+                .fold(0.0_f32, f32::max)
+        };
+        assert!(bouge(0.7, 0.0) > 1.0, "l'azimut ne fait rien bouger");
+        assert!(bouge(0.0, 0.5) > 1.0, "l'inclinaison ne fait rien bouger");
+    }
+
+    // ...mais le **berceau** ne bouge pas : il reste boulonné à la structure.
+    // C'est ce qui distingue un panneau qui suit le soleil d'un panneau monté
+    // de travers, et c'est pourquoi les angles sont dans le composant et non
+    // dans la `Repere` de pose.
+    #[test]
+    fn le_berceau_du_panneau_mega_ne_suit_pas_laile() {
+        let repos = panneau_mega(0.0, 0.0);
+        let tourne = panneau_mega(1.2, 0.6);
+        // Le bras d'attache est le seul fil à passer par le port de montage
+        // (z < 0) : il ne doit pas broncher.
+        let socle = |f: &[crate::vaisseau::Fil]| -> Vec<Vec3> {
+            f.iter().flat_map(|x| [x.a, x.b]).filter(|p| p.z < -1e-3).collect()
+        };
+        let (a, b) = (socle(&repos), socle(&tourne));
+        assert!(!a.is_empty(), "aucun fil côté hôte : le scénario ne prouve rien");
+        assert_eq!(a.len(), b.len());
+        for (p, q) in a.iter().zip(&b) {
+            assert!(p.distance(*q) < 1e-4, "le berceau a tourné avec l'aile : {p:?} → {q:?}");
+        }
+    }
+
+    // Le rayon déclaré doit couvrir **toutes** les orientations : une aile qui
+    // pivote balaie un disque, et un rayon calé sur sa pose au repos ferait
+    // rentrer la caméra dedans dès le premier quart de tour.
+    #[test]
+    fn le_rayon_du_panneau_mega_couvre_toutes_ses_orientations() {
+        for variante in VariantePanneauMega::TOUTES {
+            let c = |a: f32, i: f32| Composant::PanneauMega {
+                profil: Profil::P0,
+                variante,
+                longueur: 16.0,
+                largeur: 6.0,
+                azimut: a,
+                inclinaison: i,
+            };
+            let r = c(0.0, 0.0).rayon_local();
+            for k in 0..12 {
+                let a = std::f32::consts::TAU * k as f32 / 12.0;
+                for i in [-0.7_f32, 0.0, 0.7] {
+                    let loin = crate::vaisseau::fils(&c(a, i))
+                        .iter()
+                        .flat_map(|f| [(f.a, f.rayon_a), (f.b, f.rayon_b)])
+                        .fold(0.0_f32, |m, (p, rr)| m.max(p.length() + rr));
+                    assert!(loin <= r, "{variante:?} : déborde à {loin:.2} pour un rayon {r:.2}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn les_montants_de_lhexagone_levent_un_prisme_sur_sa_normale() {
+        let etendue_hexa = |liaison: f32| {
+            let c = Composant::TreillisHexagone { profil: Profil::P3, liaison };
+            let (mut y, mut z) = (0.0f32, 0.0f32);
+            for f in crate::vaisseau::fils(&c) {
+                for p in [f.a, f.b] {
+                    y = y.max(p.y);
+                    z = z.max(p.z);
+                }
+            }
+            (y, z)
+        };
+        let (y0, z0) = etendue_hexa(0.0);
+        let (y1, z1) = etendue_hexa(6.0);
+        // Sans montants l'anneau est plat : il ne monte que de sa demi-épaisseur.
+        assert!(y0 < 2.0, "anneau nu trop épais sur sa normale : {y0:.2}");
+        // Avec, il monte **exactement** de `liaison` — les montants partent du
+        // plan médian des sommets, pas de la face supérieure.
+        assert!((y1 - 6.0).abs() < 1e-3, "le prisme doit monter de `liaison` : {y1:.2}");
+        assert!((z1 - z0).abs() < 1e-3, "et ne rien ajouter dans le plan : {z0:.2} → {z1:.2}");
     }
 
     // ================================================================
@@ -3068,7 +3330,7 @@ mod tests {
         // développeur est alors déjà dans ce fichier (le `match` de `suivante`
         // ne compile plus sans lui), et bumper ce nombre est la confirmation
         // qu'il a bien recousu la chaîne au lieu de la court-circuiter.
-        assert_eq!(ech.len(), 31, "la chaîne ne visite pas les 31 variantes");
+        assert_eq!(ech.len(), 33, "la chaîne ne visite pas les 33 variantes");
     }
 
     // ================================================================
