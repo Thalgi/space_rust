@@ -20,7 +20,7 @@ sur un fichier contenant du travail non commité. Pour annuler ses propres
 modifications : ré-éditer les lignes, ou sauvegarder le fichier dans le
 scratchpad **avant** de le toucher (red-checks compris).
 
-État vérifié : **339 tests verts** (`cargo test --release`, ~0,8 s),
+État vérifié : **344 tests verts** (`cargo test --release`, ~0,9 s),
 **`cargo clippy` compile** (0 erreur).
 
 ## Chantier courant : l'interface de jeu
@@ -145,11 +145,14 @@ Consigne de l'utilisateur (2026-08-04) : **poser un bouche-trou** pour ce qui
 n'est pas encore fait, et **inscrire ici** ce qu'il reste à faire. Un
 bouche-trou non listé est un mensonge à l'écran — il a l'air fini.
 
+**Quatre sur cinq sont soldés.** Il ne reste que D-INT-2, l'économie, qui est un
+chantier de conception à part entière.
+
 | # | Bouche-trou | Où | Ce qu'il faut à la place |
 |---|---|---|---|
-| **D-INT-1** | **Pastille de couleur unie** au lieu d'une vignette d'astre. La teinte ne dit que la catégorie (étoile / planète / lune) : deux planètes se ressemblent. | `ecran/selecteur.rs::teinte` | Une miniature rendue de l'astre — le schéma en montre une. Suppose un rendu hors-écran vers une texture, et un cache (une par astre, pas une par frame). |
+| **D-INT-1** | ~~Pastille de catégorie~~ — **soldée** : la pastille prend la **teinte réelle** du corps (`Astre::teinte`, tirée de l'apparence), relevée pour rester visible sur fond nuit. Une retouche d'apparence se voit aussitôt dans la colonne. Reste un disque, et c'est voulu : à 6–14 px de diamètre, un rendu de planète serait de la bouillie. | — | — |
 | **D-INT-2** | **`Tresorerie` figée** : les quatorze quantités sont écrites à la main, rien ne les fait bouger. | à venir, étape I.4 | L'économie : production, consommation, coûts, recherche. C'est un chantier de conception à part entière, et la barre a été écrite pour pouvoir l'attendre (`conception/interface.md` §2.2b). |
-| **D-INT-3** | **Vignette du panneau** : disque uni, comme la pastille de la colonne. Le panneau lui-même est fait (nom, type, distance, rayon, habitabilité déduite). | `ecran/skymap.rs::fiche_dessiner` | Même besoin que D-INT-1 : un rendu miniature de l'astre. Les deux se règlent ensemble. |
+| **D-INT-3** | ~~Vignette du panneau~~ — **soldée** : l'astre est **réellement rendu** (`ecran/vignette.rs`) dans une cible 192×192 avec son propre tampon de profondeur, sous l'éclairage du système, caméra placée du côté éclairé et reculée pour laisser tenir un anneau. | — | — |
 | **D-INT-4** | ~~Nom du système~~ — **soldée** : dérivé de l'étoile hôte (`Systeme::nom_systeme`). Repli sur le libellé de génération pour un système engendré, dont les étoiles n'ont pas de nom propre. | — | — |
 | **D-INT-5** | ~~Noms de presets non gardés~~ — **soldée** : `ajouter_planete`/`ajouter_planete_autour` exigent un `Option<&'static str>`, comme `ajouter_lune_preset`. Chaque appelant doit dire `Some("Terre")` ou `None`. Deux tests lisent la **source** pour interdire le retour du `sys.nommer` après coup — seul moyen, faute de pouvoir bâtir un système en test. | — | — |
 

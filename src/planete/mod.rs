@@ -225,6 +225,31 @@ impl Astre for Planete {
     fn foyer(&self) -> Option<Foyer> {
         Some(self.foyer)
     }
+    /// Teinte d'ensemble, tirée de l'**apparence réelle** de la planète.
+    ///
+    /// Pour une tellurique, la couleur vue de loin est un mélange de ses terres
+    /// et de son océan, pondéré par la part d'eau : une planète-océan lit bleu,
+    /// un désert lit ocre. Pour une gazeuse, ses deux bandes principales se
+    /// moyennent — c'est ce que l'œil retient d'un disque rayé.
+    fn etendue_visuelle(&self) -> f32 {
+        if self.a_un_anneau() {
+            self.rayon_anneau().max(1.0)
+        } else {
+            1.0
+        }
+    }
+    fn teinte(&self) -> Option<Vec3> {
+        let a = &self.app;
+        Some(match a.type_p {
+            TypePlanete::Tellurique => {
+                let terre = (a.couleur + a.couleur2) * 0.5;
+                terre.lerp(a.couleur3, a.eau.clamp(0.0, 1.0))
+            }
+            TypePlanete::Gazeuse => (a.couleur + a.couleur2) * 0.5,
+            // Glacée : ses deux tons sont déjà clairs, la moyenne suffit.
+            TypePlanete::Glacee => (a.couleur + a.couleur2) * 0.5,
+        })
+    }
     fn corps(&self) -> &CorpsBase {
         &self.base
     }

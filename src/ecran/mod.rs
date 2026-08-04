@@ -20,6 +20,7 @@ mod selecteur;
 mod skymap;
 mod starmap;
 mod station;
+mod vignette;
 
 pub use accueil::{Accueil, Cible};
 pub use galerie::Galerie;

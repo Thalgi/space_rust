@@ -103,6 +103,24 @@ pub trait Astre {
         None
     }
 
+    /// **Teinte d'ensemble** de l'astre, telle qu'on la résumerait en un point :
+    /// la couleur de sa pastille dans le sélecteur.
+    ///
+    /// Tirée de l'apparence réelle du corps, jamais d'une table posée à côté —
+    /// sinon deux planètes bleues et rouges auraient la même pastille, et une
+    /// retouche d'apparence ne s'y verrait pas. `None` pour ce qui n'a pas de
+    /// couleur propre (ceintures), et l'appelant retombe alors sur la catégorie.
+    fn teinte(&self) -> Option<Vec3> {
+        None
+    }
+
+    /// Étendue visuelle, **en rayons du corps** : 1 pour une boule nue, plus
+    /// pour ce qui déborde (l'anneau d'une géante). Sert au cadrage d'un
+    /// portrait, où un anneau doit tenir dans la case.
+    fn etendue_visuelle(&self) -> f32 {
+        1.0
+    }
+
     /// Bornes (interne, externe) de la zone habitable, si l'astre est une étoile.
     fn zone_viable(&self) -> Option<(f32, f32)> {
         None

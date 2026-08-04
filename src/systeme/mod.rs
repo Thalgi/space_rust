@@ -1,7 +1,7 @@
 mod gravite;
 mod rendu;
 
-use crate::astre::{Astre, Categorie, Foyer};
+use crate::astre::{Astre, CameraInfo, Categorie, Foyer};
 use crate::stellaire::ArbreStellaire;
 use macroquad::prelude::*;
 
@@ -152,6 +152,38 @@ impl Systeme {
             .iter()
             .find(|a| a.categorie() == Categorie::Etoile && a.nom().is_some())
             .and_then(|a| a.nom())
+    }
+
+    /// Rayon **visuel** : anneau compris s'il y en a un. Sert au cadrage de la
+    /// vignette, où un corps à anneau doit être vu de plus loin.
+    pub fn rayon_visuel_de(&self, idx: usize) -> Option<f32> {
+        self.astres.get(idx).map(|a| a.corps().rayon * a.etendue_visuelle())
+    }
+
+    /// Position de la lumière principale — l'étoile hôte. La vignette s'en sert
+    /// pour se placer du **côté éclairé** : de face contre la lumière on ne
+    /// verrait qu'un croissant, et à contre-jour un disque noir.
+    pub fn position_lumiere(&self) -> Vec3 {
+        self.lumiere_principale().0
+    }
+
+    /// Dessine **un seul** astre, avec l'éclairage complet du système.
+    ///
+    /// Réutilise le calcul d'éclairage de `draw_corps` plutôt que d'en refaire
+    /// un : la vignette doit montrer le corps sous la même lumière que la vue,
+    /// sinon le portrait ne ressemble pas à ce qu'on voit.
+    pub fn dessiner_astre(&mut self, idx: usize, cam: &CameraInfo) {
+        if idx >= self.astres.len() {
+            return;
+        }
+        let c = self.eclairage(*cam);
+        self.astres[idx].draw(&c);
+    }
+
+    /// Teinte propre de l'astre `idx`, tirée de son apparence. `None` s'il n'en
+    /// a pas (ceinture) ou si l'index est invalide.
+    pub fn teinte_de(&self, idx: usize) -> Option<Vec3> {
+        self.astres.get(idx).and_then(|a| a.teinte())
     }
 
     /// Rayon de l'astre `idx`, `None` si l'index est invalide.

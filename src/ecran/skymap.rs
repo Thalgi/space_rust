@@ -51,6 +51,8 @@ pub struct Skymap {
     /// d'economie dans ce depot (dette D-INT-2). La barre a ete ecrite pour
     /// pouvoir l'attendre : elle affiche une `Tresorerie`, d'ou qu'elle vienne.
     tresorerie: bandeau::Tresorerie,
+    /// Cible de rendu du portrait d'astre (panneau de droite).
+    vignette: super::vignette::Vignette,
     /// Astre dont le panneau de droite est ouvert.
     ///
     /// Distinct du **focus camera** : la camera suit un astre, le panneau en
@@ -79,6 +81,7 @@ impl Skymap {
             pause: false,
             selecteur_replie: false,
             tresorerie: bandeau::Tresorerie::demo(),
+            vignette: super::vignette::Vignette::new(),
             fiche_ouverte: None,
         }
     }
@@ -301,22 +304,21 @@ impl Skymap {
     }
 
     /// Panneau de droite. **Passe interface uniquement**, comme la colonne.
-    fn fiche_dessiner(&self, ecran: Vec2) {
+    fn fiche_dessiner(&mut self, ecran: Vec2) {
         let Some(idx) = self.fiche_ouverte else { return };
         let Some(f) = fiche::fiche(&self.sys, idx) else { return };
         let r = fiche::rectangle(ecran);
         crate::ui::minitel_panel(r, &f.designation);
 
-        // Vignette : bouche-trou, un disque uni de la teinte de la categorie.
-        // Le schema montre un rendu de l'astre (dette D-INT-1).
+        // Vignette : l'astre **reellement rendu**, dans sa propre cible de
+        // profondeur (voir `ecran/vignette.rs`).
         let cyan = Color::new(0.55, 1.0, 0.75, 1.0);
-        let rayon = (r.w * 0.18).min(r.h * 0.18);
-        let cx = r.x + r.w * 0.5;
-        let cy = r.y + 34.0 + rayon;
-        draw_circle(cx, cy, rayon, super::selecteur::teinte(f.categorie));
-        draw_circle_lines(cx, cy, rayon, 1.0, Color::new(0.0, 0.5, 0.5, 0.9));
+        let cote = (r.w * 0.42).min(r.h * 0.36);
+        let zone = Rect::new(r.x + (r.w - cote) * 0.5, r.y + 32.0, cote, cote);
+        self.vignette.dessiner(&mut self.sys, idx, zone);
+        draw_rectangle_lines(zone.x, zone.y, zone.w, zone.h, 1.0, Color::new(0.0, 0.5, 0.5, 0.9));
 
-        let mut y = cy + rayon + 24.0;
+        let mut y = zone.y + zone.h + 22.0;
         let mut ligne = |t: String, c: Color, y: &mut f32| {
             crate::police::texte(&t, r.x + 12.0, *y, 17.0, c);
             *y += 22.0;
@@ -371,7 +373,7 @@ impl Skymap {
                 let retrait = 4.0 + e.profondeur as f32 * 8.0;
                 let rayon = (h * 0.26).clamp(3.0, 7.0);
                 let cx = r.x + retrait + rayon;
-                draw_circle(cx, r.y + r.h * 0.5, rayon, selecteur::teinte(e.categorie));
+                draw_circle(cx, r.y + r.h * 0.5, rayon, selecteur::teinte_astre(&self.sys, e.idx, e.categorie));
 
                 let tx = cx + rayon + 4.0;
                 let dispo = r.x + r.w - tx - 3.0;

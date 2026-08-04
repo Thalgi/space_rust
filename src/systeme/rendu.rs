@@ -5,7 +5,7 @@ use macroquad::prelude::*;
 impl Systeme {
     /// Lumière principale du système : étoile hôte, sinon lumière de secours
     /// (planète isolée). Renvoie (position, couleur).
-    fn lumiere_principale(&self) -> (Vec3, Vec3) {
+    pub(crate) fn lumiere_principale(&self) -> (Vec3, Vec3) {
         let etoile = self
             .astres
             .iter()
@@ -97,6 +97,42 @@ impl Systeme {
 
     /// Corps célestes (étoiles, planètes, lunes…) avec éclairage multi-source.
     /// C'est la seule couche pixelisée quand le filtre rétro est actif.
+    /// Repère caméra **complété de l'éclairage** du système : étoile primaire
+    /// plus jusqu'à quatre sources.
+    ///
+    /// Sorti de `draw_corps` pour que la vignette du panneau d'astre s'en serve
+    /// aussi. Une seconde version du calcul montrerait le portrait sous une
+    /// autre lumière que la vue, ce qui est précisément ce qu'un portrait ne
+    /// doit pas faire.
+    pub(crate) fn eclairage(&self, cam: CameraInfo) -> CameraInfo {
+        let (light, light_color) = self.lumiere_principale();
+        let mut lights_pos = [Vec3::ZERO; 4];
+        let mut lights_color = [Vec3::ZERO; 4];
+        let mut nb = 0usize;
+        for a in self.astres.iter() {
+            if nb >= 4 {
+                break;
+            }
+            if a.categorie() == Categorie::Etoile {
+                if let Some(col) = a.lumiere() {
+                    lights_pos[nb] = a.corps().position;
+                    lights_color[nb] = col;
+                    nb += 1;
+                }
+            }
+        }
+        if nb == 0 {
+            lights_pos[0] = light;
+            lights_color[0] = light_color;
+        }
+        let mut c = cam;
+        c.light_pos = light;
+        c.light_color = light_color;
+        c.lights_pos = lights_pos;
+        c.lights_color = lights_color;
+        c
+    }
+
     pub fn draw_corps(&mut self, cam: &CameraInfo) {
         let (light, light_color) = self.lumiere_principale();
 

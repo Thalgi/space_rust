@@ -149,6 +149,11 @@ impl Astre for Soleil {
     fn luminosite(&self) -> Option<f32> {
         Some(self.luminosite)
     }
+    /// Une étoile se résume à sa couleur de corps noir : c'est déjà ce qui la
+    /// distingue à l'œil (une naine rouge d'une géante bleue).
+    fn teinte(&self) -> Option<Vec3> {
+        Some(self.couleur)
+    }
     fn zone_viable(&self) -> Option<(f32, f32)> {
         if !self.zone_hab {
             return None; // rémanent : pas de zone habitable à tracer
