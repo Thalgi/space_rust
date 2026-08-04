@@ -3,9 +3,11 @@
 //! travailler le rendu d'un seul corps). `main` se contente d'alterner entre eux.
 
 mod accueil;
+mod bandeau;
 mod catalogue;
 mod designation;
 mod enveloppes;
+mod fiche;
 mod fils;
 mod liste;
 mod galerie;
@@ -14,6 +16,7 @@ mod galerie_etoiles;
 mod objet;
 mod panache;
 mod pixel;
+mod selecteur;
 mod skymap;
 mod starmap;
 mod station;

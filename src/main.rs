@@ -15,6 +15,7 @@ mod stabilite;
 mod starmap;
 mod stellaire;
 mod soleil;
+mod sprites;
 mod systeme;
 mod ui;
 mod vaisseau;
@@ -49,6 +50,7 @@ enum Etat {
 #[macroquad::main(window_conf)]
 async fn main() {
     police::charger().await;
+    sprites::charger().await;
 
     let mut etat = Etat::Accueil(Accueil::new());
 

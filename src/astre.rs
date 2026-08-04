@@ -29,6 +29,16 @@ pub struct CorpsBase {
     pub vitesse: Vec3,
     pub masse: f32,
     pub rayon: f32,
+    /// **Nom propre**, s'il en a un. Seuls les presets écrits à la main en
+    /// portent : les systèmes engendrés retombent sur la numérotation orbitale
+    /// (`Systeme::designation`), plutôt que sur des noms inventés — un mauvais
+    /// nom procédural se remarque bien plus qu'un chiffre
+    /// (`docs/conception/interface.md` §2.2a).
+    ///
+    /// Ici et non dans une table parallèle à `Systeme::astres` : deux vecteurs
+    /// à tenir alignés, c'est un désaccord qui attend, et `ajouter` devrait
+    /// alors pousser dans les deux.
+    pub nom: Option<&'static str>,
 }
 
 impl CorpsBase {
@@ -38,6 +48,7 @@ impl CorpsBase {
             vitesse: Vec3::ZERO,
             masse,
             rayon,
+            nom: None,
         }
     }
 }
@@ -106,6 +117,11 @@ pub trait Astre {
     /// intégrée par la gravité N-corps : elle orbite analytiquement son parent.
     fn parent(&self) -> Option<usize> {
         None
+    }
+
+    /// Nom propre de l'astre, s'il en a un. Lu du corps : une seule source.
+    fn nom(&self) -> Option<&'static str> {
+        self.corps().nom
     }
     /// Place la lune autour de `centre` (position du parent) et avance son orbite.
     fn orbiter_autour(&mut self, _centre: Vec3, _dt: f32) {}

@@ -113,7 +113,7 @@ Forme : `nom: Option<&'static str>` sur `CorpsBase` (ou un champ parallèle dans
 
 #### b) Il n'existe aucune économie
 
-Le dépôt ne connaît ni monnaie, ni minerai, ni métal, ni métal rare, ni
+Le dépôt ne connaît ni énergie, ni minerai, ni métal, ni métal rare, ni
 hydrogène, ni nourriture, ni recherche. La barre ⓐ n'affiche pas un état
 existant : **l'état n'existe pas**.
 
@@ -123,7 +123,7 @@ ses icônes et sa mise en page ; les quantités viennent d'une structure
 restent à concevoir plus tard.
 
 C'est délibérément le petit bout : la question ouverte de ⓐ n'est pas
-« combien de minerai ai-je ? » mais « **est-ce lisible ?** » — sept compteurs
+« combien de minerai ai-je ? » mais « **est-ce lisible ?** » — quatorze compteurs
 dans un bandeau, à toutes les largeurs d'écran, sans que ça déborde ni que ça
 ressemble à un tableur. Cette question-là se juge à l'écran, et se juge sans
 économie derrière. L'économie viendra remplir une structure dont la forme aura
@@ -156,10 +156,15 @@ vocabulaire, pas son inventaire.
 | `population_number.png` | groupe de silhouettes turquoise | abstraite | — |
 | `robot.png` | tête de robot à antennes | abstraite | — |
 
-**La monnaie n'a pas de sprite.** Le schéma la note `$`, et c'est le seul
-compteur de la barre sans icône disponible. Trois issues : un glyphe `$` en
-police Minitel (cohérent avec le texte, incohérent avec les autres icônes), une
-15ᵉ icône à produire, ou détourner `energy`/`research`. **À trancher (§5.1).**
+**Décision (2026-08-04) : il n'y a pas de monnaie.** Le schéma notait un
+compteur `$`, seul de la barre à n'avoir aucun sprite. La réponse n'était pas
+d'en dessiner un quinzième : **l'énergie tient le rôle de la monnaie** dans ce
+jeu. C'est le genre de décision qui vaut bien plus qu'une icône — elle dit que
+rien ne s'achète avec un nombre abstrait ; tout se paie en quelque chose qui se
+produit, se stocke et se dépense pour de bon.
+
+Conséquence directe : les quatorze sprites **sont** le vocabulaire complet, sans
+reste. Aucun asset à produire, et pas de compteur sans icône.
 
 La symétrie brut → raffiné est nette et porte du sens : `raw_ore` → `metal`,
 `raw_rare_ore` → `rare_metal`, `raw_food` → `processed_food`. Trois chaînes de
@@ -202,13 +207,31 @@ obligatoire, et il doit passer par **une seule fonction** : deux compteurs qui
 formatent chacun de leur côté finiront par afficher la même quantité de deux
 façons. C'est testable de bout en bout, et ce sera le premier test de I.4.
 
-### 3.4 Combien de compteurs dans la barre ?
+### 3.4 La barre : quatorze compteurs sur deux lignes
 
-Quatorze ne tiennent pas dans un bandeau, surtout à faible largeur. Le schéma
-en montre cinq. La question — **quelles ressources méritent d'être toujours
-visibles** — n'est pas une question d'affichage mais de jeu, et elle se tranche
-mieux devant l'écran. La barre sera donc écrite pour afficher **une liste
-donnée**, pas les quatorze, et on règlera la liste à l'œil.
+**Décision (2026-08-04) : les quatorze, sur deux lignes.** Le schéma n'en
+montrait que cinq ; tout est affiché en permanence.
+
+Deux lignes ne sont pas qu'un moyen de faire tenir quatorze compteurs — elles
+donnent une **grille de sept colonnes**, et une grille permet d'aligner
+verticalement ce qui va ensemble. La disposition proposée s'en sert pour poser
+chaque produit **sous** sa matière première :
+
+| | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| **haut** | minerai | minerai rare | nourriture brute | hydrogène | antimatière | énergie | recherche |
+| **bas** | métal | métal rare | nourriture transf. | mat. de construction | superstructure | population | robots |
+
+- **Colonnes 1 à 3** : les trois chaînes de raffinage, exactement alignées.
+  Lire une colonne de haut en bas, c'est lire la chaîne.
+- **Colonnes 4 et 5** : intrants au-dessus, choses bâties en dessous.
+  L'alignement y est plus lâche et l'assume.
+- **Colonnes 6 et 7** : les flux au-dessus (énergie — donc la monnaie —,
+  recherche), la main-d'œuvre en dessous (population, robots).
+
+Cette disposition est une **proposition à juger à l'écran**, pas un acquis. Ce
+qui est acquis, c'est que la barre affiche une liste **ordonnée et groupée**
+qu'on peut réarranger sans toucher au code de dessin.
 
 ---
 
@@ -225,10 +248,16 @@ deux planètes sans déplacer la vue. Si cela gêne à l'usage, la séparation d
 deux gestes est un changement local (le panneau garde son index, la caméra ne
 le suit plus) — mais on ne le fait pas par anticipation.
 
-Reste à trancher : **comment on referme le panneau**. Trois candidats — clic
-dans le vide, croix sur le panneau, Échap. Échap est déjà « retour à l'accueil »
-sur cet écran, donc le lui confier créerait un état caché (« Échap fait deux
-choses selon qu'un panneau est ouvert »). À décider en §5.4.
+**Décision (2026-08-04) : le clic dans le vide referme.** Ni croix, ni Échap.
+Échap est déjà « retour à l'accueil » sur cet écran, et lui confier un second
+rôle selon qu'un panneau est ouvert créerait un état caché : la même touche
+ferait deux choses sans que rien ne le dise. Le clic dans le vide, lui, est déjà
+le geste qui désélectionne — `Systeme::pick` rend `None`, et le panneau suit.
+
+⚠️ **Le panneau garde un index, pas un astre.** `G`, `R` ou le chargement d'un
+preset reconstruisent le système : un index périmé désignerait alors un autre
+corps, ou sortirait du tableau. Le panneau se referme donc dès que son index
+dépasse le nombre d'astres.
 
 ### 4.2 L'interface mange les clics
 
@@ -262,10 +291,14 @@ qu'une pause à n'importe quel palier laisse un écran cohérent.
 | # | Étape | Contenu | Testable ? |
 |---|---|---|---|
 | **I.0** | **Chargement des sprites** | Module d'atlas sur le modèle de `police.rs` : chargement unique, `FilterMode::Nearest`, repli si absent | ✅ le repli |
-| **I.1** | **Noms d'astres** | `nom` sur les presets, numérotation orbitale en repli | ✅ entièrement |
-| **I.2** | **Sélecteur ⓒ** | Colonne réutilisant `ecran::liste`, vignettes, repli `«`/`»`, clic → sélection | ✅ le calcul ; ❌ le dessin |
-| **I.3** | **Panneau ⓔ** | Encart droit au clic : nom, type, rayon, habitabilité **déduite**, fermeture | ✅ l'habitabilité et le placement |
+| **I.1** | **Noms d'astres** | `nom` sur les presets, numérotation orbitale en repli | ✅ la numérotation ; ❌ les noms de presets (voir ci-dessous) |
+| **I.2** | **Sélecteur ⓒ** | Colonne réutilisant `ecran::liste`, pastilles, repli `«`/`»`, clic → sélection | ✅ le calcul ; ❌ le dessin |
+| **I.3** | **Panneau ⓔ** | Encart droit au clic : nom, type, distance, rayon, habitabilité **déduite**, fermeture | ✅ l'habitabilité et le placement |
 | **I.4** | **Barre ⓐ + nom du système ⓑ** | `Tresorerie` figée, format abrégé unique, sprites 16×16 au plus proche voisin, mise en page bornée | ✅ le format et la mise en page |
+
+**Toutes faites au 2026-08-04.** Le décalage du haut (hauteur du bandeau) est
+**transmis** à la colonne par `bandeau::hauteur_occupee`, jamais recopié : deux
+constantes à tenir d'accord se seraient recouvertes en silence.
 | **I.5** | **Agrégation `sur_ui`** | Une seule porte pour toutes les zones | ✅ entièrement |
 
 I.5 est listé en dernier parce qu'il se **vérifie** en dernier, mais chaque
@@ -274,18 +307,34 @@ déclarée entre deux étapes.
 
 ### 5.1 Questions ouvertes à trancher avant de coder
 
-1. **Où vit le nom** : champ sur `CorpsBase` (simple, mais alourdit une structure
-   que l'intégrateur gravitationnel manipule à chaque pas) ou table parallèle
-   dans `Systeme` (plus propre, une indirection de plus).
-2. **L'icône des crédits**, qui n'a pas de sprite (§3.1).
-3. **Quelles ressources dans la barre**, parmi les quatorze (§3.4).
-4. **Fermeture du panneau** (§4.1).
-5. **Que devient le menu existant** (`src/menu/`) une fois cette interface en
+1. ~~Où vit le nom~~ — **tranché** : champ `nom: Option<&'static str>` sur
+   `CorpsBase`. Une table parallèle à `Systeme::astres` serait deux vecteurs à
+   tenir alignés, donc un désaccord qui attend, et `ajouter` devrait pousser
+   dans les deux.
+2. **Que devient le menu existant** (`src/menu/`) une fois cette interface en
    place ? Il est aujourd'hui l'unique interface de la Skymap et relève de
    l'outillage de développement (graine, presets, shaders). Il peut cohabiter,
    mais la question de sa place se posera.
-6. **Les lunes dans le sélecteur** : listées sous leur planète, ou absentes ?
-   `Systeme::nb_lunes(parent)` existe déjà, donc les deux sont faisables.
+3. ~~Les lunes dans le sélecteur~~ — **tranché** : listées, **en retrait** sous
+   leur planète. Les exclure cacherait 16 des 26 corps du preset solaire ; les
+   mettre à plat ferait perdre à quelle planète elles appartiennent.
+
+### 5.1 bis Une limite de test à connaître
+
+**Aucun test ne peut construire un système.** `genese` tire ses nombres
+aléatoires par `macroquad::rand`, qui exige le contexte graphique
+(`THREAD_ID.is_some()`) : hors boucle de rendu, tout appel à
+`construire_systeme` ou `construire_preset_*` panique. Aucun test du dépôt n'en
+bâtit, et ce n'est pas un oubli.
+
+Conséquence pour I.1 : la **numérotation** se teste de bout en bout, contre un
+corps d'essai posé à la main. Mais le fait que le preset solaire porte bien
+« Mercure », « Titan », « Triton » ne se vérifie **qu'à l'écran**. C'est la même
+limite que §6.6 sur le rendu — ce qui ne se teste pas doit au moins être dit.
+
+Ce qui protège quand même : `ajouter_lune_preset` **exige** un nom dans sa
+signature, donc une lune de preset ne peut pas être ajoutée sans. Les planètes,
+elles, restent nommées par un appel séparé et pourraient être oubliées.
 
 ### 5.2 Ce qui n'est **pas** dans ce chantier
 

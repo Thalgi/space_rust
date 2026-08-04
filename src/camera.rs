@@ -97,6 +97,11 @@ impl Camera {
     pub fn focus_actif(&self) -> bool {
         self.focus.is_some()
     }
+    /// L'astre suivi, s'il y en a un. Le sélecteur s'en sert pour surligner la
+    /// ligne courante : sans ça, la colonne ne dirait pas ce qui est cadré.
+    pub fn focus(&self) -> Option<usize> {
+        self.focus
+    }
     pub fn set_dist(&mut self, d: f32) {
         self.dist = d;
         self.dist_ref = d;
@@ -153,13 +158,20 @@ impl Camera {
         (info, cam3d)
     }
 
-    /// Sélectionne l'astre cliqué (rayon depuis la souris) comme nouvelle cible.
-    pub fn pick(&mut self, sys: &Systeme, cam: &CameraInfo, aspect: f32) {
+    /// Sélectionne l'astre cliqué (rayon depuis la souris) comme nouvelle cible,
+    /// et **rend son index** : l'écran en a besoin pour ouvrir sa fiche.
+    ///
+    /// Rendre l'index plutôt que de laisser l'appelant relancer un `sys.pick`
+    /// de son côté : le rayon serait alors calculé deux fois, donc deux sources
+    /// pour la même désignation, qui divergeraient au premier réglage de marge.
+    pub fn pick(&mut self, sys: &Systeme, cam: &CameraInfo, aspect: f32) -> Option<usize> {
         let s = mouse_position();
         let dir =
             rayon_ecran(vec2(s.0, s.1), vec2(screen_width(), screen_height()), cam, aspect);
-        if let Some(idx) = sys.pick(cam.pos, dir) {
+        let touche = sys.pick(cam.pos, dir);
+        if let Some(idx) = touche {
             self.focus = Some(idx);
         }
+        touche
     }
 }

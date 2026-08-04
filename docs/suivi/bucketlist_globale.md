@@ -48,7 +48,7 @@ exactement le même système (reproductible, partageable).
 - [x] **Fond étoilé** : champ d'étoiles lointaines autour de la caméra (effet infini).
 - [x] **Contrôle du temps** : Espace = pause, Haut/Bas = accélérer/ralentir (×0.125–×16).
 - [x] **Zone habitable** affichée (anneaux verts) + style des telluriques par température d'équilibre.
-- [ ] **Systèmes binaires** (deux étoiles) — joli mais complique les orbites.
+- [x] **Systèmes binaires** (deux étoiles) — joli mais complique les orbites.
 
 ## 5 bis. Réalisé en plus (hors liste initiale)
 

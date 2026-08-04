@@ -19,53 +19,68 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
     let deg = std::f32::consts::PI / 180.0;
 
     let mut sys = Systeme::new();
-    sys.ajouter(Box::new(Soleil::new(
+    let soleil = sys.ajouter(Box::new(Soleil::new(
         vec3(0.0, 0.0, 0.0),
         2.0,
         etoile::couleur_corps_noir(5800.0),
         1.0,
     )));
+    sys.nommer(soleil, "Soleil");
 
-    // Apparences tirées des catalogues (source unique avec la galerie) ; on conserve
-    // les distances (UA réelles), excentricités, inclinaisons, rayons et masses.
-    ajouter_planete(&mut sys, 0.39, 0.205, 7.0 * deg, 0.32, 0.3,
+    // Apparences tirees des catalogues (source unique avec la galerie) ; on conserve
+    // les distances (UA reelles), excentricites, inclinaisons, rayons et masses.
+    //
+    // ATTENTION : les noms passes a `preset_*` sont ceux d'une **apparence**,
+    // pas d'un astre -- "Lune" sert a la fois a notre Lune et a Ganymede. Le nom
+    // propre se pose a part, par `nommer` : il vivait jusqu'ici en commentaire,
+    // donc nulle part pour le programme (`conception/interface.md` 2.2a).
+    let mercure = ajouter_planete(&mut sys, 0.39, 0.205, 7.0 * deg, 0.32, 0.3,
         preset_tellurique("Fer (Mercure)"));
-    ajouter_planete(&mut sys, 0.72, 0.007, 3.4 * deg, 0.52, 1.0,
+    sys.nommer(mercure, "Mercure");
+    let venus = ajouter_planete(&mut sys, 0.72, 0.007, 3.4 * deg, 0.52, 1.0,
         preset_tellurique("Venus (etuve)"));
+    sys.nommer(venus, "Venus");
     let terre = ajouter_planete(&mut sys, 1.0, 0.017, 0.0, 0.55, 1.0,
         preset_tellurique("Terre"));
-    ajouter_lune_preset(&mut sys, terre, 0.55, 0.24, preset_tellurique("Lune")); // la Lune
+    sys.nommer(terre, "Terre");
+    ajouter_lune_preset(&mut sys, terre, 0.55, 0.24, preset_tellurique("Lune"), "Lune");
     let mars = ajouter_planete(&mut sys, 1.52, 0.093, 1.85 * deg, 0.42, 0.4,
         preset_tellurique("Badlands")); // analogue de Mars (rouille, canyons)
-    // Phobos + Déimos : deux petits corps sombres capturés.
-    ajouter_lune_preset(&mut sys, mars, 0.42, 0.05, preset_tellurique("Carbone")); // Phobos
-    ajouter_lune_preset(&mut sys, mars, 0.42, 0.05, preset_tellurique("Carbone")); // Déimos
+    sys.nommer(mars, "Mars");
+    // Phobos + Deimos : deux petits corps sombres captures.
+    ajouter_lune_preset(&mut sys, mars, 0.42, 0.05, preset_tellurique("Carbone"), "Phobos");
+    ajouter_lune_preset(&mut sys, mars, 0.42, 0.05, preset_tellurique("Carbone"), "Deimos");
     let jupiter = ajouter_planete(&mut sys, 5.2, 0.049, 1.3 * deg, 1.7, 20.0,
         preset_gazeuse("Jupiter"));
-    // 4 lunes galiléennes (interne → externe), aspects distincts.
-    ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.10, preset_tellurique("Io (soufre)")); // Io
-    ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.09, preset_tellurique("Subglaciaire")); // Europe
-    ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.13, preset_tellurique("Lune")); // Ganymède
-    ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.12, preset_tellurique("Carbone")); // Callisto
+    sys.nommer(jupiter, "Jupiter");
+    // 4 lunes galileennes (interne -> externe), aspects distincts.
+    ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.10, preset_tellurique("Io (soufre)"), "Io");
+    ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.09, preset_tellurique("Subglaciaire"), "Europe");
+    ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.13, preset_tellurique("Lune"), "Ganymede");
+    ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.12, preset_tellurique("Carbone"), "Callisto");
     let saturne = ajouter_planete(&mut sys, 9.58, 0.056, 2.49 * deg, 1.45, 12.0,
         preset_gazeuse("Saturne"));
-    // Encelade, Rhéa, Titan (le plus gros), Japet (interne → externe).
-    ajouter_lune_preset(&mut sys, saturne, 1.45, 0.06, preset_tellurique("Pics de glace")); // Encelade
-    ajouter_lune_preset(&mut sys, saturne, 1.45, 0.07, preset_tellurique("Boule de neige")); // Rhéa
-    ajouter_lune_preset(&mut sys, saturne, 1.45, 0.13, preset_tellurique("Titan")); // Titan
-    ajouter_lune_preset(&mut sys, saturne, 1.45, 0.07, preset_tellurique("Carbone")); // Japet
+    sys.nommer(saturne, "Saturne");
+    // Encelade, Rhea, Titan (le plus gros), Japet (interne -> externe).
+    ajouter_lune_preset(&mut sys, saturne, 1.45, 0.06, preset_tellurique("Pics de glace"), "Encelade");
+    ajouter_lune_preset(&mut sys, saturne, 1.45, 0.07, preset_tellurique("Boule de neige"), "Rhea");
+    ajouter_lune_preset(&mut sys, saturne, 1.45, 0.13, preset_tellurique("Titan"), "Titan");
+    ajouter_lune_preset(&mut sys, saturne, 1.45, 0.07, preset_tellurique("Carbone"), "Japet");
     let uranus = ajouter_planete(&mut sys, 19.2, 0.046, 0.77 * deg, 1.0, 6.0,
         preset_gazeuse("Uranus"));
-    // Ariel, Umbriel, Titania, Obéron (interne → externe).
-    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.07, preset_tellurique("Boule de neige")); // Ariel
-    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.07, preset_tellurique("Carbone")); // Umbriel
-    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.09, preset_tellurique("Subglaciaire")); // Titania
-    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.08, preset_tellurique("Lune")); // Obéron
+    sys.nommer(uranus, "Uranus");
+    // Ariel, Umbriel, Titania, Oberon (interne -> externe).
+    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.07, preset_tellurique("Boule de neige"), "Ariel");
+    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.07, preset_tellurique("Carbone"), "Umbriel");
+    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.09, preset_tellurique("Subglaciaire"), "Titania");
+    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.08, preset_tellurique("Lune"), "Oberon");
     let neptune = ajouter_planete(&mut sys, 30.05, 0.010, 1.77 * deg, 1.0, 6.0,
         preset_gazeuse("Neptune"));
-    ajouter_lune_preset(&mut sys, neptune, 1.0, 0.11, preset_tellurique("Cryovolcan")); // Triton
-    ajouter_planete(&mut sys, 39.5, 0.249, 17.1 * deg, 0.3, 0.1,
-        preset_tellurique("Boule de neige")); // analogue de Pluton (nain glacé)
+    sys.nommer(neptune, "Neptune");
+    ajouter_lune_preset(&mut sys, neptune, 1.0, 0.11, preset_tellurique("Cryovolcan"), "Triton");
+    let pluton = ajouter_planete(&mut sys, 39.5, 0.249, 17.1 * deg, 0.3, 0.1,
+        preset_tellurique("Boule de neige")); // nain glace
+    sys.nommer(pluton, "Pluton");
 
     sys.ajouter(Box::new(Disque::new(DisqueConfig::asteroides(
         900, 2.2 * etoile::UA, 3.3 * etoile::UA, MASSE_ETOILE,

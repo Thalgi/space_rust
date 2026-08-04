@@ -2185,3 +2185,303 @@ faisait pas — sans quoi le découplage n'aurait pas lieu d'être.
 - [ISV Venture Star — Grokipedia](https://grokipedia.com/page/ISV_Venture_Star)
 - [Interstellar voyages with the Venture Star — State of Flux](https://kimbody1535.wordpress.com/2013/04/10/interstellar-voyages-with-the-venture-star-a-look-at-the-best-part-of-avatar/)
 - [ISV Venture Star — NamuWiki](https://en.namu.wiki/w/ISV%20%EB%B2%A4%EC%B2%98%20%EC%8A%A4%ED%83%80)
+
+---
+
+## Partie F — Mégastructures et vaisseaux (journal, 2026-08-03 → 2026-08-04)
+
+> Suite de la Partie C, qui s'arrêtait à la clôture de l'ISV (§C.29). Cette
+> partie couvre les deux mégastructures (tore de Stanford, complexe Elysium),
+> les panneaux solaires d'échelle mégastructure, la séparation
+> vaisseaux/stations au menu, et le début du Starship.
+> Conception : [`conception/stations.md`](../conception/stations.md) Partie D et
+> **Partie D bis**.
+
+### F.1 Deux mégastructures, un moyeu commun (2026-08-03)
+
+Bâties en recyclant l'épine de l'ISV, comme demandé. Le moyeu est un **prisme
+hexagonal** — deux `TreillisHexagone` reliés par des montants — et trois bras à
+120° dans son plan.
+
+**Trois choix mesurés, pas supposés :**
+
+1. **Le prisme plutôt que l'anneau plat.** Sa hauteur vaut le **côté** de
+   l'hexagone, ce qui rend ses six faces latérales carrées : une base de bras
+   s'y pose sans rattrapage.
+2. **Bras en `Charpente` carrée, pas `CharpenteHexa`.** Ce n'est pas un repli.
+   La base carrée mesure `2·sg`, soit exactement le côté de l'hexagone. La
+   variante hexagonale reprend le circonradius du carré (×√2), ce qui la rend
+   **22,5 % trop large entre plats** (3,67 contre 3,00) : elle déborderait la
+   face au lieu de s'y asseoir.
+3. **Sur les faces, pas sur les sommets.** Un hexagone a six faces ; trois bras
+   à 120° en prennent une sur deux, et une face est un appui plan quand un
+   sommet est une arête.
+
+Longueurs, **dérivées et jamais recopiées** — le jour où l'épine du vaisseau
+bouge, les bras suivent (leçon de `Epine::hors_tout`, §C.5) :
+
+| | formule | valeur |
+|---|---|---|
+| `EPINE_LONGUEUR` | — | 84,0 |
+| `ELYSIUM_BRAS` | `EPINE_LONGUEUR × 0,5` | 42,0 |
+| `STANFORD_BRAS` | `ELYSIUM_BRAS × 0,5` | 21,0 |
+
+**Un défaut latent trouvé au passage** : `TreillisHexagone::liaison` extrudait
+ses montants le long de **+Z**, c'est-à-dire *dans* le plan de l'hexagone, au
+lieu de +Y qui en est la normale. Le commentaire disait « prisme reliant », le
+code faisait un peigne plat. Jamais vu parce qu'aucun appelant n'avait jamais
+passé `liaison > 0`. Corrigé, et l'échantillon de la chaîne L1.2 passé à
+`liaison: 3.0` pour que le chemin soit désormais **exercé**.
+
+⚠️ Les bras ne sont pas reliés entre eux. La conception prévoit des membrures
+courbes joignant les longerons d'un bras à l'autre, et **aucune primitive du
+projet ne trace une poutre à axe courbe** (`treillis_conique` courbe sa
+*section*, pas son axe). C'est une brique à écrire, donc une étape à part.
+
+### F.2 Le tore de Stanford, première primitive paramétrique (2026-08-03)
+
+Le tore boucle au bout des bras courts. Son rayon majeur est la distance de
+l'axe à leur pointe (**24,35**) ; sa section vaut la **hauteur du moyeu**
+(3,0), donc un rayon mineur de 1,5 — le prisme et le tube se lisent au même
+gabarit.
+
+C'est le premier composant du projet dont la surface est **paramétrique** et
+non assemblée de primitives. Sa section se découpe en trois bandes, et le
+découpage est **une seule source** que le dessin et les tests lisent :
+
+| bande | étendue | contenu |
+|---|---|---|
+| tuiles | ±90° autour de l'extérieur | bardage d'écailles hexagonales |
+| épaulements | 2 × 50° | coque lisse |
+| fenêtre | ±40° autour du moyeu | vitrage |
+
+Un test vérifie que les trois bandes **pavent la section entière** — somme
+égale à 2π, sans trou ni recouvrement.
+
+**Le bardage suit la taille de tuile, pas le rayon.** Un anneau deux fois plus
+grand porte deux fois plus de tuiles de la même taille, jamais les mêmes tuiles
+deux fois plus grandes. Au gabarit actuel : **4 rangs × 123 colonnes = 492
+tuiles**.
+
+⚠️ **Un test qui ne tenait que dans un régime.** La première version mesurait
+le nombre de **sommets du tore entier** pour vérifier ce rapport. Elle marchait
+tant que les tuiles pesaient l'essentiel du maillage, et a cessé de mordre dès
+qu'on les a agrandies : les bandes lisses et la menuiserie, à compte fixe,
+diluaient le rapport à 1,58 au lieu de 2. Un proxy qui ne tient que dans un
+régime n'est pas une mesure — le test interroge désormais la grille elle-même.
+
+**Épaisseur et joint des tuiles sont absolus, pas des fractions du pas.** Ils
+l'étaient, et c'était un piège : doubler le pas doublait la saillie, alors
+qu'un panneau plus large n'est pas un panneau plus épais. Exprimés en dur, ils
+ne bougent plus quand on retaille le bardage — et il n'y a plus rien à
+« re-régler en conséquence » quand l'utilisateur demande de doubler la taille
+des tuiles, ce qui fut exactement la demande suivante.
+
+Le vitrage porte des **meneaux** (un vitrage courbe de 150 unités ne se
+fabrique pas d'un tenant, et leur pas donne son échelle apparente à tout
+l'anneau), des **lèvres** aux deux bords (la discontinuité la plus sollicitée
+de la section : coque pleine d'un côté, verre de l'autre), et **pas de fenêtre
+aux trois jonctions**, où les bras reprennent l'effort. Les jonctions sont
+calées sur les mêmes angles que les bras — une seule source, sinon le vitrage
+se retrouverait là où arrive la charge.
+
+### F.3 Ce que coûte une mégastructure (mesuré, 2026-08-04)
+
+| | pièces | coût | sommets | lots | triangles | étendue (U) | rayon |
+|---|---|---|---|---|---|---|---|
+| Tore de Stanford | 29 | 230 | 104 658 | 154 | 114 152 | 52,0 × 18,7 × 52,0 | 25,8 |
+| Complexe Elysium | 49 | 379 | 52 248 | 125 | 99 520 | 79,3 × 28,0 × 68,8 | 45,5 |
+| *(rappel ISV)* | *45* | *725* | *110 008* | *204* | — | *168,2 de long* | *12,6* |
+
+Le fait à retenir : **Elysium a 69 % de pièces en plus que Stanford et deux
+fois moins de sommets**. Le tore, à lui seul, pèse plus que les 28 autres
+pièces réunies. Une surface paramétrique et un assemblage de primitives ne se
+comparent pas au nombre de pièces — et le budget d'une mégastructure se juge en
+sommets, pas en briques.
+
+Cela confirme le mur d'échelle relevé en conception : ~2,85 pièces et
+~2 850 sommets par unité de rayon d'anneau. L'Elysium « vrai » du document
+(1,8 km d'anneau) pèserait ~1 140 pièces contre 45 pour l'ISV. Les
+mégastructures à taille réelle demanderont autre chose que l'assemblage pièce à
+pièce.
+
+### F.4 Le moyeu, et deux fois la grille discrète de `Profil` (2026-08-04)
+
+Chaque bras porte un tunnel de modules vers le centre ; le centre porte deux
+habitats `Coeur` gris, accouplés **par leur plus grande face**, parallèles à Y.
+Le tore tourne autour de Y, au bouton.
+
+**`Profil` est une grille discrète, et elle a bloqué deux fois :**
+
+1. **Habitats en P2, pas P3**, alors que P3 serait le triplement littéral du P1
+   d'origine. Le tambour d'un `Coeur` vaut `rayon × 1,16`, soit **3,48** en P3 —
+   au-delà du bord extérieur des barres du moyeu (**3,35**). L'habitat avalerait
+   l'hexagone au lieu d'être ceinturé par lui. En P2 le tambour vaut 2,32 et se
+   loge entre les barres (1,85 → 3,35). C'est le cas de figure de §C.8 : une
+   cote qui se règle **contre une autre pièce** ne tombe pas sur la grille — ici
+   on a préféré rester sur la grille et s'arrêter au cran qui tient.
+2. **Réduction de 33 % de l'habitat de Stanford**, demandée par l'utilisateur.
+   Premier essai : ne raccourcir que `longueur`. Retour de l'utilisateur —
+   « je ne sais pas ce qui a été modifié mais ce n'était peut-être pas la bonne
+   chose ». Il avait raison : le diamètre vient de `Profil`, où rien ne vaut
+   0,67 × P2, si bien que réduire la seule longueur **allongeait** la silhouette
+   au lieu de la rapetisser. Corrigé en composant une mise à l'échelle
+   géométrique (`verser_a_echelle`) dans les transformées cuites — la même
+   réponse que `ISV_ECHELLE` sur l'ossature.
+
+**Les deux centres ont été séparés** à la demande de l'utilisateur : Stanford
+et Elysium ne sont pas destinés à se ressembler, et factoriser un centre unique
+paramétré aurait rendu chaque divergence à venir plus coûteuse que la
+duplication qu'elle évite. Ce qui reste partagé (`moyeu_hexagonal`,
+`bras_et_tunnels`) l'est parce que c'est **encore** identique, pas parce que ça
+doit le rester.
+
+**Un test qui confondait deux choses** : `une_capacite_annoncee_change_vraiment_la_geometrie`
+prétendait tester `rotation()` en déplaçant `repli` — or un anneau tourne sans
+se replier. Les deux capacités ont été séparées. Et `axe_rotation()`, qui était
+indexé sur la **catégorie de menu** (`Megastructures => ISV_AXE`), a été déplacé
+sur l'item : une seconde source, fausse dès que deux mégastructures tournent
+autour d'axes différents — ce qui venait précisément d'arriver.
+
+### F.5 Panneaux solaires d'échelle mégastructure (2026-08-04)
+
+Quatre familles, avec suivi solaire à deux axes (azimut autour du mât,
+inclinaison autour de l'axe de l'aile) : ferme modulaire à cassettes,
+concentrateur symétrique, rubans tendus (héliogyre), nappe plissée déployable.
+
+Gabarit d'essai : **16 × 6 U ≈ 36 × 13,5 m**, la taille d'un vrai SAW de l'ISS
+— et non celle du `PanneauSolaire` du parc, qui en fait moins de la moitié.
+
+**Le premier jet a été jeté en entier.** Retour de l'utilisateur : « on dirait
+un copier-coller des panneaux solaires déjà existants ». Il avait raison, et la
+cause était de méthode : les quatre variantes avaient été dessinées en partant
+de **formes**. La reprise est partie des **contraintes d'ingénierie** — comment
+on tend une nappe de 36 m, comment on la replie, comment on concentre la
+lumière, ce qui casse en premier — et les formes en ont découlé.
+
+Le berceau se dessine **hors** du cardan : c'est la partie qui ne suit pas le
+soleil, et l'inclure dans la transformée l'aurait fait tourner avec l'aile.
+
+### F.6 Vaisseaux séparés des stations, et le Starship (2026-08-04)
+
+Nouvelle vue au menu, « vaisseaux & supervaisseaux », qui accueille l'ISV et
+les deux cibles à venir : l'**Endurance** (Interstellar) et le **Starship**
+(SpaceX). Anatomies et ordre de travail en `conception/stations.md` Partie D bis.
+
+**Le Starship tombe pile sur la grille** — 9 m de diamètre = 4,0 U = P2 — ce
+qui en fait la bonne première cible. Cotes réelles converties à 1 U ≈ 2,25 m :
+
+| | réel | en U |
+|---|---|---|
+| Hauteur hors-tout | 50 m | 22,22 |
+| Flèche de l'ogive | 11 m | 4,89 |
+| Fût | 39 m | 17,33 |
+| Diamètre | 9 m | 4,0 (P2) |
+
+Mesuré sur le maillage cuit : **4,1 × 4,1 × 22,2 U**, soit 9,2 × 50 m. La coque
+est **une seule pièce** de 28 440 sommets en 59 lots.
+
+**L'ogive est tangente**, et le choix est géométrique et non stylistique :
+`ρ = (R²+L²)/2R`, `y(x) = √(ρ²−(L−x)²) + R − ρ`. C'est le seul profil qui
+raccorde un cylindre avec une **dérivée nulle**, donc sans arête visible à la
+jonction. Le test le mesure sur la **pente** et non sur un rayon : le rayon de
+raccord vaut R pour toutes les formes de nez du monde, donc l'y comparer ne
+distingue pas une ogive d'un cône. La pente, elle, les sépare — un cône garde
+`R/L = 0,4` jusqu'au bout.
+
+Le Raptor a été bâti **en vitrine avant d'être posé**, à la demande de
+l'utilisateur — leçon 1 de §C.29. Deux déclinaisons, dont les cotes viennent du
+rapport de détente (`r_col = r_e/√ε`, ε = 40 et 90) :
+
+| | sortie | hauteur | col/sortie |
+|---|---|---|---|
+| RSL (atmosphérique) | 1,30 m | 3,10 m | 0,158 |
+| RVac (vide) | 2,40 m | 4,60 m | 0,105 |
+
+Le profil de cloche va en `t^0,55` : ouverture rapide au col puis
+aplatissement, ce qui **est** la forme d'une tuyère de détente — un cône, lui,
+s'ouvre linéairement. Le test le mesure à mi-hauteur.
+
+**Deux débordements de la même famille**, trouvés par le balayage
+d'enveloppes : les cordons de soudure de la coque (×1,004 + section) et les
+cannelures du Raptor (×1,012) sont **posés sur** la paroi, donc ils dépassent
+du rayon nominal. Une capsule calée sur `profil.rayon()` laissait des sommets
+dehors. Réglé par un `rayon_hors_tout()` dans chaque module, source unique du
+dessin **et** de l'enveloppe.
+
+⚠️ **Et une capsule ne ferme pas à plat.** Caler le demi-axe à
+`demi_hauteur − rayon` laisse la **couronne du culot** dehors, là où le fût
+s'arrête net : mesuré, **0,85 hors d'une enveloppe de 2,03**. Le demi-axe doit
+valoir `hypot(demi_hauteur, rayon)` — ce que `rayon_local` calcule déjà, et
+c'est l'idiome de `ModuleAxial`.
+
+### F.7 La colonne d'items, déduite de l'enum (2026-08-04)
+
+La vue composants ne changeait d'item qu'en **cyclant** : pour atteindre le
+27ᵉ des 28, vingt-sept pressions, et aucun moyen de savoir ce qui existe sans
+faire le tour. Une colonne à gauche, **bornée à un dixième de la largeur**,
+rend le catalogue visible et chaque entrée atteignable en un clic.
+
+La demande de l'utilisateur était explicite : « ne pas avoir à ajouter une
+nouvelle entrée à la liste des boutons à chaque fois ». Les boutons se
+**déduisent** donc de `Composant::nom()`, un `match` exhaustif : ajouter une
+variante à l'enum casse la compilation tant qu'elle n'a pas son nom, et son
+bouton arrive avec elle. La couverture de la colonne est une propriété du
+**compilateur**, pas une discipline à se rappeler.
+
+Les libellés sont abrégés à ce qui précède le deux-points — « PANNEAUX :
+5 VARIANTES » devient « PANNEAUX ». Pas de moteur d'expressions régulières
+pour ça : `split_once(':')` **est** la règle, en une ligne et sans dépendance.
+
+**Abréger rapproche**, et c'est le risque propre à l'étape : deux entrées
+distinctes peuvent se réduire au même bouton, ce qui ne se verrait qu'à
+l'écran, sur deux lignes jumelles. Un test l'interdit sur toutes les tables. Il
+a immédiatement servi : le libellé curaté « RADIATEUR MEGA » entrait en
+collision avec le `RadiateurMega` engendré — réglé par un marqueur `· ` sur les
+entrées engendrées, ce qui a demandé de passer `Item.libelle` en `Cow`.
+
+**Deux tests faibles trouvés par red-check** : celui de la largeur se comparait
+à `l × PART_LARGEUR`, c'est-à-dire à **sa propre constante** — réciter la
+formule, et suivre docilement n'importe quelle valeur qu'on lui donne ; il
+compare désormais à `l / 10.0` littéral. Celui de la couverture sondait
+`engendrees()` directement au lieu de la liste effective.
+
+⚠️ **Un défaut que les tests ne pouvaient pas attraper** : la colonne était
+dessinée pendant la phase d'entrée, et le `clear_background(BLACK)` de la passe
+3D l'effaçait aussitôt. Elle était là chaque frame, quelques microsecondes.
+Le dessin est passé dans la passe interface ; seul le calcul d'exclusion caméra
+reste tôt, n'ayant rien à effacer. C'est exactement la classe de défaut que
+§6.6 (pas de test de rendu) laisse remonter à l'écran et non en CI.
+
+### F.8 Incident : du travail non commité détruit (2026-08-04)
+
+Un `git checkout -- src/vaisseau/composant/mod.rs`, lancé pour annuler quatre
+lignes de mesure temporaire, a ramené tout le fichier au dernier commit et
+emporté avec lui le câblage de `CoqueOgive` et `Raptor`, `Composant::nom()`, et
+les entrées correspondantes de la chaîne d'échantillons. Aucun filet : la
+consigne debout est de ne pas commiter, et rien ne l'avait été depuis des
+heures.
+
+Reconstruit à partir des cinq erreurs de compilation, qui pointaient chaque
+manque. Les modules `coque.rs` et `raptor.rs` eux-mêmes n'étaient pas touchés.
+Sept tests de coque et de moteur ont été réécrits et **tous red-checkés**.
+
+Deux choses n'ont pas pu être restituées à l'identique, et le choix est assumé
+plutôt que deviné :
+
+- **`Composant::nom()` rend le nom de famille** (« COQUE OGIVE », « RAPTOR »),
+  pas famille + variante : dans une colonne de 100 px la variante est du bruit,
+  et la vitrine la fait déjà défiler.
+- **La formule d'enveloppe** a été retrouvée par la mesure, pas par mémoire —
+  voir le débordement de 0,85 en §F.6.
+
+**Conséquence de méthode** : l'utilisateur commite désormais aux points signalés.
+Ne jamais employer `git checkout --` / `git restore` / `git reset --hard` sur un
+fichier contenant du travail non commité ; pour annuler ses propres
+modifications, ré-éditer les lignes, ou sauvegarder le fichier dans le
+scratchpad **avant** de le toucher.
+
+### Sources
+- [Stanford torus — Wikipedia](https://en.wikipedia.org/wiki/Stanford_torus)
+- [Starship — SpaceX](https://www.spacex.com/vehicles/starship/)
+- [Raptor (rocket engine) — Wikipedia](https://en.wikipedia.org/wiki/Raptor_(rocket_engine))

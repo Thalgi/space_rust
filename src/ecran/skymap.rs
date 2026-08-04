@@ -6,6 +6,7 @@ use crate::genese::{
     construire_preset_solaire, construire_preset_tau_ceti, construire_preset_trinaire,
     construire_systeme, sauver_presets, PresetSauve,
 };
+use super::{bandeau, fiche, liste, selecteur};
 use crate::menu::{ActionMenu, Menu};
 use crate::rendu::{Rendu, RenduStandard};
 use crate::starmap::Destination;
@@ -40,6 +41,24 @@ pub struct Skymap {
     source: Source,
     vitesse: f32,
     pause: bool,
+    /// Colonne de gauche repliee ? L'etat vit **dans l'ecran** : `liste` et
+    /// `selecteur` restent des calculateurs sans memoire
+    /// (`conception/interface.md` 4.3).
+    selecteur_replie: bool,
+    /// Stocks affiches par le bandeau.
+    ///
+    /// ATTENTION : bouche-trou fige, rien ne le fait bouger — il n'y a pas
+    /// d'economie dans ce depot (dette D-INT-2). La barre a ete ecrite pour
+    /// pouvoir l'attendre : elle affiche une `Tresorerie`, d'ou qu'elle vienne.
+    tresorerie: bandeau::Tresorerie,
+    /// Astre dont le panneau de droite est ouvert.
+    ///
+    /// Distinct du **focus camera** : la camera suit un astre, le panneau en
+    /// decrit un. Ils coincident aujourd'hui (cliquer centre **et** ouvre) mais
+    /// ce sont deux questions differentes, et les confondre interdirait plus
+    /// tard de consulter une planete sans deplacer la vue
+    /// (`conception/interface.md` 4.1).
+    fiche_ouverte: Option<usize>,
 }
 
 impl Skymap {
@@ -58,6 +77,9 @@ impl Skymap {
             source: Source::Graine(seed),
             vitesse: 1.0,
             pause: false,
+            selecteur_replie: false,
+            tresorerie: bandeau::Tresorerie::demo(),
+            fiche_ouverte: None,
         }
     }
 
@@ -137,9 +159,34 @@ impl Skymap {
         self.sys.reglages_etoile(freq, forme, puissance, alea);
 
         // UI -> action éventuelle + zone cliquable (pour bloquer la caméra).
-        let (sur_ui, action) = self.menu.input(m, clic, self.presets.len(), self.cam.focus_actif());
+        let (sur_menu, action) = self.menu.input(m, clic, self.presets.len(), self.cam.focus_actif());
         if let Some(a) = action {
             self.appliquer(a);
+        }
+
+        // **Une seule porte** pour tout ce qui mange la souris : caméra et
+        // picking la consultent tous les deux. Une zone qui oublierait de s'y
+        // déclarer ferait pivoter la vue derrière elle, et rien en test ne le
+        // dirait (`conception/interface.md` 4.2).
+        let ecran = vec2(screen_width(), screen_height());
+        // Le bandeau dit lui-meme la place qu'il prend, et la colonne la lui
+        // demande : deux constantes recopiees finiraient par diverger, et les
+        // deux zones se recouvriraient sans que rien ne le dise.
+        let haut = bandeau::hauteur_occupee(ecran);
+        let sur_ui = sur_menu
+            || bandeau::rectangle(ecran).contains(m)
+            || liste::zone_active(ecran, self.selecteur_replie, haut).contains(m)
+            || (self.fiche_ouverte.is_some() && fiche::rectangle(ecran).contains(m));
+
+        // Le **calcul** de la colonne se fait ici, tôt, parce que la caméra en
+        // dépend. Le **dessin**, lui, attend la passe interface : dessiné
+        // maintenant, il serait effacé par le rendu 3D qui suit — c'est
+        // exactement le défaut qu'a connu la colonne de la vue composants
+        // (`suivi/stations.md` F.7).
+        let choix = self.selecteur_input(ecran, haut, m, clic);
+        if let Some(idx) = choix {
+            self.cam.set_focus(idx);
+            self.fiche_ouverte = Some(idx);
         }
 
         self.cam.input_orbite(sur_ui);
@@ -156,7 +203,16 @@ impl Skymap {
         let target = self.cam.cible(&self.sys);
         let (cam_info, cam3d) = self.cam.construire(target, aspect);
         if clic && !sur_ui {
-            self.cam.pick(&self.sys, &cam_info, aspect);
+            // Cliquer un astre l'ouvre ; cliquer le vide referme. Pas de croix
+            // ni d'Echap : Echap sert deja a quitter l'ecran, et lui confier un
+            // second role selon qu'un panneau est ouvert serait un etat cache
+            // (`conception/interface.md` 4.1).
+            self.fiche_ouverte = self.cam.pick(&self.sys, &cam_info, aspect);
+        }
+        // L'astre a pu disparaitre sous le panneau : changement de systeme par
+        // G, R ou un preset. Un index perime designerait un autre corps.
+        if self.fiche_ouverte.is_some_and(|i| i >= self.sys.nb_astres()) {
+            self.fiche_ouverte = None;
         }
 
         self.rendu
@@ -175,6 +231,9 @@ impl Skymap {
         } else {
             format!("x{:.2}", self.vitesse)
         };
+        // Ligne d'outillage de developpement (graine, FPS, raccourcis). Passee
+        // **en bas** : le haut de l'ecran appartient desormais au bandeau de
+        // ressources, et les deux se recouvraient.
         crate::police::texte(
             &format!(
                 "{}   |   {} FPS   |   zoom x{:.2}   |   vitesse {}   clic: centrer   P: pixel   G: aleatoire   R: shaders   Espace: pause   Haut/Bas: vitesse   Echap: menu",
@@ -184,12 +243,151 @@ impl Skymap {
                 temps
             ),
             12.0,
-            24.0,
-            18.0,
-            WHITE,
+            screen_height() - 10.0,
+            16.0,
+            Color::new(0.55, 0.7, 0.75, 1.0),
         );
+        let ecran_ui = vec2(screen_width(), screen_height());
+        self.bandeau_dessiner(ecran_ui);
+        self.selecteur_dessiner(ecran_ui, bandeau::hauteur_occupee(ecran_ui), m);
+        self.fiche_dessiner(ecran_ui);
         self.menu.dessiner(m, &self.presets, self.cam.focus_actif());
         false
+    }
+
+    /// Entrees et clic de la colonne. Rend l'astre choisi, s'il y en a un.
+    ///
+    /// Ne dessine rien : appele **tot** dans la frame, avant le rendu 3D, parce
+    /// que la camera a besoin de savoir si la souris est prise.
+    fn selecteur_input(&mut self, ecran: Vec2, haut: f32, souris: Vec2, clic: bool) -> Option<usize> {
+        if clic && liste::bouton_repli(ecran).contains(souris) {
+            self.selecteur_replie = !self.selecteur_replie;
+            return None; // le clic a servi au bouton, pas a une selection
+        }
+        if self.selecteur_replie || !clic {
+            return None;
+        }
+        let col = liste::colonne_items_depuis(ecran, haut);
+        let entrees = selecteur::entrees(&self.sys);
+        let i = liste::item_sous_curseur(col, entrees.len(), souris)?;
+        Some(entrees[i].idx)
+    }
+
+    /// Barre de ressources et nom du systeme. **Passe interface uniquement.**
+    fn bandeau_dessiner(&self, ecran: Vec2) {
+        let b = bandeau::rectangle(ecran);
+        draw_rectangle(b.x, b.y, b.w, b.h, Color::new(0.02, 0.03, 0.12, 0.82));
+        draw_rectangle_lines(b.x, b.y, b.w, b.h, 1.0, Color::new(0.0, 0.5, 0.5, 0.85));
+
+        for r in crate::sprites::Ressource::TOUTES {
+            let c = bandeau::case(ecran, r);
+            let cote = crate::sprites::taille_ecran(c.h - 4.0);
+            let y = c.y + (c.h - cote) * 0.5;
+            crate::sprites::dessiner(r, c.x + 3.0, y, cote);
+            let t = bandeau::abreger(self.tresorerie.quantite(r));
+            crate::police::texte(&t, c.x + cote + 6.0, c.y + c.h * 0.72, 15.0, WHITE);
+        }
+
+        // Nom du systeme : celui de l'etoile hote, s'il existe. Sinon le
+        // libelle de generation — un systeme engendre n'a pas de nom propre.
+        let nom = bandeau::ligne_nom(ecran);
+        let titre = match self.sys.nom_systeme() {
+            Some(n) => format!("SYSTEME {}", n.to_uppercase()),
+            None => self.info.to_uppercase(),
+        };
+        let titre = liste::tronquer(&titre, nom.w - 8.0, 19);
+        crate::police::texte(&titre, nom.x + 4.0, nom.y + nom.h * 0.72, 19.0,
+            Color::new(0.0, 0.9, 0.9, 1.0));
+    }
+
+    /// Panneau de droite. **Passe interface uniquement**, comme la colonne.
+    fn fiche_dessiner(&self, ecran: Vec2) {
+        let Some(idx) = self.fiche_ouverte else { return };
+        let Some(f) = fiche::fiche(&self.sys, idx) else { return };
+        let r = fiche::rectangle(ecran);
+        crate::ui::minitel_panel(r, &f.designation);
+
+        // Vignette : bouche-trou, un disque uni de la teinte de la categorie.
+        // Le schema montre un rendu de l'astre (dette D-INT-1).
+        let cyan = Color::new(0.55, 1.0, 0.75, 1.0);
+        let rayon = (r.w * 0.18).min(r.h * 0.18);
+        let cx = r.x + r.w * 0.5;
+        let cy = r.y + 34.0 + rayon;
+        draw_circle(cx, cy, rayon, super::selecteur::teinte(f.categorie));
+        draw_circle_lines(cx, cy, rayon, 1.0, Color::new(0.0, 0.5, 0.5, 0.9));
+
+        let mut y = cy + rayon + 24.0;
+        let mut ligne = |t: String, c: Color, y: &mut f32| {
+            crate::police::texte(&t, r.x + 12.0, *y, 17.0, c);
+            *y += 22.0;
+        };
+        ligne(fiche::nom_categorie(f.categorie).to_string(), cyan, &mut y);
+        if f.categorie != crate::astre::Categorie::Etoile {
+            ligne(format!("Distance : {:.2} UA", f.distance_ua), cyan, &mut y);
+        }
+        ligne(format!("Rayon : {:.2}", f.rayon), cyan, &mut y);
+
+        // L'habitabilite est la seule ligne qui se colore : c'est le
+        // renseignement que le schema met en avant.
+        use crate::ecran::fiche::Habitabilite;
+        let teinte_hab = match f.habitabilite {
+            Habitabilite::Habitable => Color::new(0.4, 1.0, 0.5, 1.0),
+            Habitabilite::TropChaud => Color::new(1.0, 0.55, 0.35, 1.0),
+            Habitabilite::TropFroid => Color::new(0.55, 0.75, 1.0, 1.0),
+            Habitabilite::SansObjet => Color::new(0.5, 0.55, 0.6, 1.0),
+        };
+        if f.habitabilite != Habitabilite::SansObjet {
+            ligne(f.habitabilite.libelle().to_string(), teinte_hab, &mut y);
+        }
+    }
+
+    /// Dessin de la colonne. **Passe interface uniquement.**
+    fn selecteur_dessiner(&self, ecran: Vec2, haut: f32, souris: Vec2) {
+        let cyan = Color::new(0.0, 0.85, 0.85, 1.0);
+        let bouton = liste::bouton_repli(ecran);
+
+        if !self.selecteur_replie {
+            let col = liste::colonne_items_depuis(ecran, haut);
+            let entrees = selecteur::entrees(&self.sys);
+            let n = entrees.len();
+            draw_rectangle(col.x, col.y, col.w, col.h, Color::new(0.02, 0.03, 0.12, 0.85));
+            draw_rectangle_lines(col.x, col.y, col.w, col.h, 1.0, Color::new(0.0, 0.5, 0.5, 0.9));
+
+            let h = liste::hauteur_ligne(col, n);
+            let taille = (h * 0.62).clamp(11.0, 18.0);
+            let focus = self.cam.focus();
+            for (i, e) in entrees.iter().enumerate() {
+                let r = liste::ligne(col, n, i);
+                if r.y + r.h > col.y + col.h {
+                    break; // deborde : on n'ecrit pas sous la colonne
+                }
+                if r.contains(souris) {
+                    draw_rectangle(r.x, r.y, r.w, r.h, Color::new(0.0, 0.45, 0.45, 0.35));
+                }
+                if focus == Some(e.idx) {
+                    draw_rectangle_lines(r.x, r.y, r.w, r.h, 1.0, cyan);
+                }
+                // Pastille : bouche-trou en attendant une vraie vignette (D-INT-1).
+                let retrait = 4.0 + e.profondeur as f32 * 8.0;
+                let rayon = (h * 0.26).clamp(3.0, 7.0);
+                let cx = r.x + retrait + rayon;
+                draw_circle(cx, r.y + r.h * 0.5, rayon, selecteur::teinte(e.categorie));
+
+                let tx = cx + rayon + 4.0;
+                let dispo = r.x + r.w - tx - 3.0;
+                let t = liste::tronquer(&e.libelle, dispo, taille as u16);
+                crate::police::texte(&t, tx, r.y + r.h * 0.5 + taille * 0.32, taille, WHITE);
+            }
+        }
+
+        // Le bouton reste **a la meme place** repliee ou non : il faut pouvoir
+        // rouvrir sans aller le chercher.
+        let survol = bouton.contains(souris);
+        draw_rectangle(bouton.x, bouton.y, bouton.w, bouton.h,
+            if survol { Color::new(0.0, 0.45, 0.45, 0.9) } else { Color::new(0.02, 0.03, 0.12, 0.9) });
+        draw_rectangle_lines(bouton.x, bouton.y, bouton.w, bouton.h, 1.0, cyan);
+        let signe = if self.selecteur_replie { ">>" } else { "<<" };
+        crate::police::texte(signe, bouton.x + 4.0, bouton.y + bouton.h * 0.72, 18.0, cyan);
     }
 
     /// Applique la vue par défaut du système : focalise l'étoile hôte (systèmes type S,

@@ -40,7 +40,18 @@ const MARGE: f32 = 6.0;
 
 /// Rectangle de la colonne, pour un écran donné.
 pub fn colonne(ecran: Vec2) -> Rect {
-    Rect::new(MARGE, MARGE, ecran.x * PART_LARGEUR - MARGE * 2.0, ecran.y - MARGE * 2.0)
+    colonne_depuis(ecran, MARGE)
+}
+
+/// La colonne, mais **commençant à `haut`**.
+///
+/// La vue système pose un bandeau de ressources en haut de l'écran ; la colonne
+/// doit passer dessous. Le décalage est **transmis** plutôt que recopié : deux
+/// constantes à tenir d'accord finiraient par diverger, et les deux zones se
+/// recouvriraient sans que rien ne le dise (`conception/interface.md` §1.2).
+pub fn colonne_depuis(ecran: Vec2, haut: f32) -> Rect {
+    let haut = haut.max(MARGE);
+    Rect::new(MARGE, haut, ecran.x * PART_LARGEUR - MARGE * 2.0, (ecran.y - haut - MARGE).max(0.0))
 }
 
 /// Hauteur d'une ligne : la place disponible divisée par le nombre d'items,
@@ -75,6 +86,44 @@ pub fn item_sous_curseur(colonne: Rect, n: usize, souris: Vec2) -> Option<usize>
     }
     let i = i as usize;
     (i < n).then_some(i)
+}
+
+/// Côté du bouton de repli, en pixels. Assez large pour être visé au doigt
+/// comme à la souris, assez petit pour ne pas manger une ligne d'item.
+pub const COTE_REPLI: f32 = 22.0;
+
+/// Rectangle du bouton `«` / `»`, en bas à gauche.
+///
+/// Sa position ne dépend **pas** de l'état de repli : le bouton ne bouge pas
+/// quand on replie, sinon il faudrait aller le rechercher pour rouvrir.
+pub fn bouton_repli(ecran: Vec2) -> Rect {
+    Rect::new(MARGE, ecran.y - MARGE - COTE_REPLI, COTE_REPLI, COTE_REPLI)
+}
+
+/// **Ce que la colonne mange à la souris**, selon qu'elle est repliée ou non.
+///
+/// Repliée, seul le bouton reste actif — le reste de la bande rend la main à la
+/// caméra, faute de quoi replier la liste ne libérerait pas la vue et n'aurait
+/// aucun intérêt.
+pub fn zone_active(ecran: Vec2, repliee: bool, haut: f32) -> Rect {
+    if repliee {
+        bouton_repli(ecran)
+    } else {
+        colonne_depuis(ecran, haut)
+    }
+}
+
+/// La colonne, amputée de la place du bouton de repli : c'est là que les items
+/// se posent. Sans ça, la dernière ligne passerait **sous** le bouton et serait
+/// impossible à cliquer.
+pub fn colonne_items(ecran: Vec2) -> Rect {
+    colonne_items_depuis(ecran, MARGE)
+}
+
+/// Idem, sous un bandeau de hauteur `haut`.
+pub fn colonne_items_depuis(ecran: Vec2, haut: f32) -> Rect {
+    let c = colonne_depuis(ecran, haut);
+    Rect::new(c.x, c.y, c.w, (c.h - COTE_REPLI - MARGE).max(0.0))
 }
 
 /// Le curseur est-il **sur la colonne** ? La caméra doit l'ignorer alors, sinon
@@ -219,6 +268,54 @@ mod tests {
                 }
             }
         }
+    }
+
+    // **Le bouton de repli ne bouge pas** quand on replie : sinon il faudrait
+    // aller le rechercher ailleurs pour rouvrir la colonne.
+    #[test]
+    fn le_bouton_de_repli_ne_bouge_pas() {
+        for l in [640.0_f32, 1000.0, 1920.0] {
+            let e = vec2(l, 700.0);
+            let b = bouton_repli(e);
+            // Dans la colonne, et en bas de l'écran.
+            let c = colonne(e);
+            assert!(b.x >= c.x - 1e-3 && b.x + b.w <= c.x + c.w + 1e-3, "largeur {l}");
+            assert!(b.y + b.h <= e.y - 1e-3, "le bouton dépasse en bas");
+            assert!(b.y > c.y + c.h * 0.5, "le bouton devrait être en bas de la colonne");
+        }
+    }
+
+    // **Repliée, la colonne rend la main à la caméra** : seul le bouton reste
+    // actif. Sans ça, replier la liste ne libérerait pas la vue derrière, et
+    // n'aurait aucun intérêt.
+    #[test]
+    fn repliee_la_colonne_ne_mange_plus_que_son_bouton() {
+        let e = ECRAN;
+        let dans_la_bande = vec2(colonne(e).x + 5.0, colonne(e).y + 30.0);
+        assert!(zone_active(e, false, MARGE).contains(dans_la_bande), "déployée, la colonne prend le clic");
+        assert!(!zone_active(e, true, MARGE).contains(dans_la_bande), "repliée, elle devrait le rendre");
+        // Le bouton, lui, reste pris dans les deux états.
+        let sur_bouton = bouton_repli(e).center();
+        assert!(zone_active(e, false, MARGE).contains(sur_bouton));
+        assert!(zone_active(e, true, MARGE).contains(sur_bouton));
+    }
+
+    // Les items ne descendent **pas sous le bouton** : la dernière ligne serait
+    // recouverte, donc impossible à cliquer.
+    #[test]
+    fn les_items_ne_passent_pas_sous_le_bouton_de_repli() {
+        let e = ECRAN;
+        let items = colonne_items(e);
+        let bouton = bouton_repli(e);
+        assert!(
+            items.y + items.h <= bouton.y + 1e-3,
+            "les items descendent à {} et le bouton commence à {}",
+            items.y + items.h,
+            bouton.y
+        );
+        // Et il reste de la place pour lister : un rectangle vide serait un bug
+        // que le test précédent laisserait passer.
+        assert!(items.h > ECRAN.y * 0.5, "la zone d'items est trop courte : {}", items.h);
     }
 
     #[test]

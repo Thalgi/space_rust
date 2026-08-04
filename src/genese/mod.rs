@@ -423,12 +423,12 @@ pub(crate) fn ajouter_planete(
 /// croissants (nombre de lunes déjà là). ω suit la 3e loi de Kepler. `rayon_lune` et
 /// `app` sont fournis par l'appelant. Renvoie `false` (rien posé) si la planète est
 /// trop proche de son étoile pour une lune stable.
-fn poser_lune(sys: &mut Systeme, parent: usize, rayon_planete: f32, rayon_lune: f32, app: Apparence) -> bool {
+fn poser_lune(sys: &mut Systeme, parent: usize, rayon_planete: f32, rayon_lune: f32, app: Apparence) -> Option<usize> {
     let roche = rayon_planete * 2.4; // bord interne : pas de lune sous la limite de Roche
     let dist_etoile = sys.position(parent).length();
     let hill_max = 0.14 * dist_etoile;
     if hill_max <= roche * 1.1 {
-        return false; // trop près de l'étoile : pas d'espace pour une lune stable
+        return None; // trop pres de l'etoile : pas d'espace pour une lune stable
     }
     // Créneau croissant réparti dans la bande [roche, hill_max] (indice = lunes déjà là).
     let i = sys.nb_lunes(parent) as f32;
@@ -446,8 +446,7 @@ fn poser_lune(sys: &mut Systeme, parent: usize, rayon_planete: f32, rayon_lune: 
     let phase: f32 = gen_range(0.0, TAU);
     let lune = Planete::new(Vec3::ZERO, Vec3::ZERO, rayon_lune.max(0.05), 0.05, app, Vec::new())
         .en_lune(parent, r_orbite, omega, incl, phase);
-    sys.ajouter(Box::new(lune));
-    true
+    Some(sys.ajouter(Box::new(lune)))
 }
 
 /// Ajoute une lune **générique** (petit corps gris ou glacé aléatoire) : utilisée par
@@ -466,8 +465,21 @@ pub(crate) fn ajouter_lune(sys: &mut Systeme, parent: usize, rayon_planete: f32)
 
 /// Ajoute une lune d'**apparence donnée** (preset nommé), de taille `taille_rel × R
 /// planète`. Sert aux presets scénarisés (lunes distinctes : Io, Europe, Titan…).
-pub(crate) fn ajouter_lune_preset(sys: &mut Systeme, parent: usize, rayon_planete: f32, taille_rel: f32, app: Apparence) {
-    poser_lune(sys, parent, rayon_planete, rayon_planete * taille_rel, app);
+/// Le **nom** se donne ici, avec le corps, et non par un `nommer` qui suivrait :
+/// une lune de preset peut etre **refusee** (limite de Roche, sphere de Hill trop
+/// serree). Nommer apres coup demanderait donc de traiter un `Option` a chaque
+/// appel, et surtout laisserait la possibilite d'ajouter une lune sans nom.
+pub(crate) fn ajouter_lune_preset(
+    sys: &mut Systeme,
+    parent: usize,
+    rayon_planete: f32,
+    taille_rel: f32,
+    app: Apparence,
+    nom: &'static str,
+) {
+    if let Some(idx) = poser_lune(sys, parent, rayon_planete, rayon_planete * taille_rel, app) {
+        sys.nommer(idx, nom);
+    }
 }
 
 /// Déploie un arbre stellaire (systèmes multiples) dans le système : crée les

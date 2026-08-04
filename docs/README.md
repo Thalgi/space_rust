@@ -36,6 +36,7 @@ suivi dédié ; les étoiles n'ont pas de conception dédiée — leur bucket li
 | Fichier | Sujet |
 |---|---|
 | [`stations.md`](suivi/stations.md) | **Priorités immédiates en tête** (à corriger avant tout), puis passation du chantier générateur de stations (état des lieux, bugs résolus), audit de référence du preset ISS, et **état/manques de l'ISV Venture Star** (Partie C). Fusion de 2 anciens docs. |
+| [`stations.md`](suivi/stations.md) **Partie F** | Journal des **mégastructures et vaisseaux** (2026-08-03 → 04) : tore de Stanford, complexe Elysium, panneaux d'échelle mégastructure, séparation vaisseaux/stations, coque et Raptor du Starship, colonne d'items déduite de l'enum, et l'incident de perte de travail non commité. |
 | [`assembleur.md`](suivi/assembleur.md) | Journal du chantier `conception/assembleur.md`, étape par étape : tableau de bord (Lot 1 fait, §9 « le boudin » fait, Lot 2 pas commencé), questions ouvertes, journal détaillé avec red-check de chaque étape. À relire en premier pour reprendre ce chantier — voir aussi [`STATE.md`](../STATE.md) à la racine. |
 | [`planetes.md`](suivi/planetes.md) | Bilan de la refonte v2 du rendu tellurique (fichiers touchés, perfs, tests) + catalogue des ~126 presets. Fusion de 2 anciens docs. |
 | [`geantes_gazeuses.md`](suivi/geantes_gazeuses.md) | Catalogue des géantes gazeuses (archétypes, features, presets) et bilan de la V2. |
@@ -46,7 +47,7 @@ suivi dédié ; les étoiles n'ont pas de conception dédiée — leur bucket li
 
 | Fichier | Sujet |
 |---|---|
-| [`fils.md`](reference/fils.md) | Catalogue généré des 31 variantes de composants du vaisseau : fils numérotés (mêmes numéros qu'à l'écran, touche **F**), profil tranché, serrage de l'enveloppe. Régénérer avec `FILS=1 cargo test --release le_catalogue_des_fils`. |
+| [`fils.md`](reference/fils.md) | Catalogue généré des 35 variantes de composants du vaisseau : fils numérotés (mêmes numéros qu'à l'écran, touche **F**), profil tranché, serrage de l'enveloppe. Régénérer avec `FILS=1 cargo test --release le_catalogue_des_fils`. |
 
 ---
 
