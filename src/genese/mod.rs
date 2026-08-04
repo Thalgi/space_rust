@@ -841,8 +841,8 @@ pub fn catalogue_gazeuses() -> Vec<(String, Apparence)> {
     // Géantes du système solaire
     push("Jupiter", gazeuse(vec3(0.9, 0.66, 0.4), vec3(0.74, 0.44, 0.26), vec3(0.99, 0.95, 0.86), 5.0, 1.9, vec3(0.85, 0.7, 0.5) * 0.3).avec_pole(vec3(0.6, 0.64, 0.7)).avec_jets(1.0).avec_tache(spot, 0.27, vec3(0.85, 0.34, 0.18)).avec_cyclones_pol().avec_tempetes(0.7));
     push("Saturne", gazeuse(vec3(0.9, 0.78, 0.5), vec3(0.7, 0.56, 0.34), vec3(0.97, 0.91, 0.68), 6.0, 0.9, vec3(0.88, 0.8, 0.55) * 0.3).avec_jets(0.9).avec_hexagone().avec_aurore(0.5, vec3(0.5, 0.7, 1.0)).avec_brume(0.22, vec3(0.95, 0.89, 0.68)).avec_pole(vec3(0.66, 0.63, 0.55)).avec_anneau_saturne(vec3(0.86, 0.79, 0.62)));
-    push("Uranus", gazeuse(vec3(0.6, 0.82, 0.82), vec3(0.45, 0.7, 0.72), vec3(0.72, 0.9, 0.9), 3.0, 0.6, vec3(0.6, 0.85, 0.88) * 0.3).avec_jets(0.15).avec_zonal_flou(0.5).avec_axe(vec3(0.25, 0.2, 0.95)).avec_brume(0.45, vec3(0.62, 0.84, 0.86)).avec_pole(vec3(0.62, 0.84, 0.86)));
-    push("Neptune", gazeuse(vec3(0.45, 0.56, 0.86), vec3(0.10, 0.18, 0.42), vec3(0.36, 0.5, 0.88), 4.0, 1.5, vec3(0.3, 0.45, 0.9) * 0.3).avec_jets(0.55).avec_zonal_flou(0.3).avec_tache_sombre(spot, 0.2, vec3(0.05, 0.07, 0.18)).avec_tempetes(0.9).avec_pole(vec3(0.3, 0.46, 0.74)));
+    push("Uranus", gazeuse(vec3(0.6, 0.82, 0.82), vec3(0.45, 0.7, 0.72), vec3(0.72, 0.9, 0.9), 3.0, 0.6, vec3(0.6, 0.85, 0.88) * 0.3).avec_jets(0.15).avec_zonal_flou(0.5).avec_axe(vec3(0.25, 0.2, 0.95)).avec_brume(0.45, vec3(0.62, 0.84, 0.86)).avec_pole(vec3(0.62, 0.84, 0.86)).avec_anneau_uranus(vec3(0.55, 0.72, 0.82)));
+    push("Neptune", gazeuse(vec3(0.45, 0.56, 0.86), vec3(0.10, 0.18, 0.42), vec3(0.36, 0.5, 0.88), 4.0, 1.5, vec3(0.3, 0.45, 0.9) * 0.3).avec_jets(0.55).avec_zonal_flou(0.3).avec_tache_sombre(spot, 0.2, vec3(0.05, 0.07, 0.18)).avec_tempetes(0.9).avec_pole(vec3(0.3, 0.46, 0.74)).avec_anneau_neptune(vec3(0.42, 0.5, 0.68)));
 
     // Classification de Sudarsky (par température)
     push("Classe I (ammoniac)", gazeuse(vec3(0.86, 0.8, 0.66), vec3(0.62, 0.56, 0.44), vec3(0.95, 0.92, 0.82), 5.0, 1.4, vec3(0.85, 0.8, 0.6) * 0.3).avec_jets(0.5).avec_zonal_flou(0.25).avec_pole(vec3(0.62, 0.6, 0.55)));
@@ -944,10 +944,13 @@ mod tests_noms_presets {
             if !l.starts_with("sys.nommer(") {
                 continue;
             }
-            // Deux exceptions légitimes : l'étoile hôte et Pandora, qui ne
-            // passent ni l'une ni l'autre par `ajouter_planete`.
+            // Exceptions légitimes : les corps qui ne passent **pas** par
+            // `ajouter_planete` — l'étoile hôte, Pandora (construite en ligne)
+            // et l'ISS (un `EnginOrbital`, pas une planète). Chacune se
+            // reconnaît à un nom de liaison explicite, pour que la liste reste
+            // lisible plutôt que d'être une passoire.
             assert!(
-                l.contains("soleil") || l.contains("idx_pandora"),
+                l.contains("soleil") || l.contains("idx_pandora") || l.contains("idx_iss"),
                 "presets.rs:{} nomme une planète après coup : « {l} » — le nom                  doit entrer par `ajouter_planete(.., Some(\"…\"))`",
                 i + 1
             );

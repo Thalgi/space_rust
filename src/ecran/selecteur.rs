@@ -94,6 +94,7 @@ pub fn teinte_categorie(cat: Categorie) -> Color {
         Categorie::Planete => Color::new(0.45, 0.70, 0.95, 1.0),
         Categorie::Lune => Color::new(0.72, 0.74, 0.78, 1.0),
         Categorie::Asteroide | Categorie::Comete => Color::new(0.55, 0.50, 0.45, 1.0),
+        Categorie::Engin => Color::new(0.80, 0.82, 0.86, 1.0),
     }
 }
 

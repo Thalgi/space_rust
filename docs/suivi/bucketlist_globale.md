@@ -4,6 +4,9 @@ Principe directeur : **chaque astre reste « 1 quad + 1 shader » (faible coût)
 toute la génération est **déterministe par graine (seed)** → un même nombre redonne
 exactement le même système (reproductible, partageable).
 
+> Légende : `[x]` fait, `[ ]` à faire, `[~]` **partiellement** fait (le détail suit
+> sur la ligne). Relu et recalé le **2026-08-04**.
+
 ---
 
 ## 1. Étoile aléatoire (fondation)
@@ -44,6 +47,11 @@ exactement le même système (reproductible, partageable).
 - [x] **Lunes** : orbite analytique autour de leur planète (suivent la planète), 3 max par planète.
 - [x] **Anneaux** des géantes (Saturne larges/inclinés, Uranus quasi verticaux) + occlusion correcte (2 passes).
 - [ ] **Comètes** : orbite très excentrique + **queue** pointant à l'opposé de l'étoile.
+      (`Categorie::Comete` existe, mais aucune comète n'est encore engendrée.)
+- [x] **Disque épars** et **nuage de Oort** (coquille sphérique) dans le preset solaire —
+      quatre familles de petits corps au total.
+- [x] **Anneaux d'Uranus et de Neptune** au catalogue (la galerie et la vue système
+      lisent la même apparence).
 - [x] **Atmosphères** : halo/rim lumineux (bleu sur mondes à océans, voile léger sinon, halo sur gazeuses/glacées).
 - [x] **Fond étoilé** : champ d'étoiles lointaines autour de la caméra (effet infini).
 - [x] **Contrôle du temps** : Espace = pause, Haut/Bas = accélérer/ralentir (×0.125–×16).
@@ -74,7 +82,9 @@ exactement le même système (reproductible, partageable).
 
 - [ ] **RNG à graine** (crate `rand` + `rand_chacha`, ou xorshift maison) pour la reproductibilité.
 - [ ] Trait/méthode commune de **génération** : chaque type d'astre sait se créer aléatoirement.
-- [ ] **UI** : champ graine + bouton « Générer un nouveau système », infos de l'astre survolé.
+- [~] **Infos de l'astre** faites — panneau de droite au clic (nom, type, distance, rayon,
+      habitabilité déduite) : [`conception/interface.md`](../conception/interface.md) §I.3.
+      Champ graine éditable : toujours à faire.
 - [x] Gestion correcte de la **transparence/profondeur** des anneaux (rendu en 2 passes).
 - [x] **Material partagé** (un seul pipeline par type, cloné) -> corrige « Pipelines amount exceeded », gros gain init/mémoire GPU.
 - [ ] **LOD / culling** si la ceinture d'astéroïdes devient lourde.
@@ -93,7 +103,8 @@ exactement le même système (reproductible, partageable).
 - [x] **Deux modes** (`ecran/` : accueil, skymap, objet) : écran d'accueil à 2 boutons, vue système complète, et vue d'un astre isolé (soleil/planète aléatoire) pour travailler le rendu d'un seul corps. `main` = aiguilleur.
 - [ ] **Trait commun de génération** : chaque type d'astre sait se créer aléatoirement (`Genere`).
 - [ ] **RNG à graine dédié** (`rand`/`rand_chacha`) plutôt que la RNG globale de macroquad.
-- [ ] **Infos de l'astre survolé** (nom, type, distance) + champ graine éditable dans l'UI.
+- [~] **Infos de l'astre** faites (panneau de droite, étape I.3). Champ graine éditable :
+      toujours à faire.
 
 ## 8. Aspect des planètes — manques
 
@@ -111,26 +122,70 @@ exactement le même système (reproductible, partageable).
 ## 9. Types d'étoiles — manques
 
 - [x] **Naine rouge (M)**, **naine blanche** (minuscule, très chaude/bleutée), **géante rouge** (énorme, froide) — variantes au tirage.
-- [ ] **Supergéante** + densités/masses cohérentes (zone habitable très lointaine pour les géantes).
+- [~] **Supergéante bleue** faite. Densités/masses cohérentes : toujours à faire
+      (`MASSE_ETOILE` reste fixe à 1000, cf. ligne suivante).
 - [ ] **Masse gravitationnelle dépendante du type** (actuellement fixe à 1000).
 - [ ] **Activité variable** : taux d'éruptions/taches plus élevé pour les naines M et étoiles jeunes.
 - [ ] **Pulsation/variabilité** (étoiles variables) : luminosité qui oscille légèrement.
-- [ ] **Classes spéciales** : Wolf-Rayet (vents forts), étoile à neutrons / pulsar (jets).
+- [~] **Classes spéciales** : pulsar, magnétar, étoile à neutrons **faits** (`etoile.rs`, et
+      `est_remnant()` leur retire la zone habitable). Wolf-Rayet : toujours à faire.
 
-## 10. Systèmes binaires & trinaires — conception nécessaire
+## 10. Systèmes binaires & trinaires — ✅ fait
 
-But : générer des systèmes à 2–3 étoiles crédibles. Points de conception à trancher :
+Conception : [`conception/systemes_multiples.md`](../conception/systemes_multiples.md).
+Presets `binaire`, `trinaire`, `quadruple`, plus Alpha Centauri (A+B réels).
 
-- [ ] **Modèle gravitationnel** : aujourd'hui l'étoile est fixe à l'origine. Pour 2–3 étoiles,
-      choisir entre (a) intégrer réellement les étoiles en N-corps autour du barycentre,
-      ou (b) orbites analytiques pré-calculées des étoiles (plus stable, plus simple).
-- [ ] **Types d'orbites planétaires** : **P-type** (circumbinaire, autour des deux étoiles) vs
-      **S-type** (autour d'une seule étoile, l'autre lointaine) — règles de stabilité (zones interdites).
-- [ ] **Éclairage à plusieurs sources** : le shader des planètes ne gère qu'une lumière ;
-      étendre à 2–3 (couleurs/positions), avec ombres douces et double terminateur.
-- [ ] **Zone habitable composite** (somme des flux des étoiles) à recalculer et afficher.
-- [ ] **Couronnes/couleurs** distinctes par étoile, barycentre visible, repère caméra adapté.
-- [ ] **UI** : la « source de lumière » et le « centre » ne sont plus uniques → généraliser `Systeme`.
+- [x] **Modèle gravitationnel** : option (b) retenue — **orbites analytiques** dans un
+      `ArbreStellaire` hiérarchique, évalué en `f(t)`. Plus stable qu'un N-corps sur des
+      étoiles, et rejouable à l'identique.
+- [x] **P-type et S-type** : `Foyer::Barycentre` (circumbinaire) contre `Foyer::Etoile(idx)`
+      (circumstellaire). Chaque planète déclare le sien.
+- [x] **Éclairage à plusieurs sources** : jusqu'à **4** (`CameraInfo::lights_pos/lights_color`),
+      double terminateur compris.
+- [x] **Zone habitable composite** : somme des luminosités (`zone_habitable(l_tot)`), tracée
+      autour du barycentre quand elle tombe hors des orbites stellaires, et la HZ propre de
+      chaque étoile sinon.
+- [x] **`Systeme` généralisé** : plus de « la » source de lumière ni de centre unique.
+
+---
+
+## 10 bis. Engins en orbite — ✅ premier jet
+
+- [x] **`Categorie::Engin`** : une station assemblée dans `vaisseau/` peut être mise en
+      orbite dans un système (`src/engin.rs`), avec orbite analytique comme une lune.
+- [x] **L'ISS autour de la Terre** dans le preset solaire — le premier pont entre le
+      constructeur de stations et le générateur de systèmes.
+- [ ] ⚠️ **L'échelle est exagérée** et le restera tant qu'il n'y aura pas de vue « orbite
+      basse » : à l'échelle réelle l'ISS fait 9 × 10⁻⁶ unité de monde. Facteurs nommés
+      (`ORBITE_ISS`, `ECHELLE_ISS`).
+- [ ] Vaisseaux **mobiles** (transferts entre astres), et l'ISV / le Starship en orbite.
+
+## 11. Interface de jeu (vue système) — ✅ premier jet
+
+Conception : [`conception/interface.md`](../conception/interface.md).
+Journal : [`suivi/interface.md`](interface.md).
+
+C'est la **première interface de jeu** du projet : tout ce qui existait avant
+(menu graine, presets, hot-reload) est de l'outillage de développement.
+
+- [x] **Barre de ressources** : les 14 sprites 16×16 en grille 7×2, chaque produit sous sa
+      matière première. Filtrage au plus proche voisin, échelles entières seulement.
+- [x] **Nom du système**, dérivé de l'étoile hôte.
+- [x] **Sélecteur d'astres** à gauche, rétractable, un dixième de la largeur au plus.
+      Lunes en retrait sous leur planète.
+- [x] **Panneau d'astre** au clic : nom, type, distance, rayon, **habitabilité déduite**
+      de la luminosité cumulée et de la distance orbitale.
+- [x] **Vignette rendue** de l'astre dans le panneau (cible de rendu dédiée, avec son
+      propre tampon de profondeur).
+- [x] **Noms propres** sur les corps des presets ; numérotation orbitale (I, II, III…, et
+      « III-2 » pour une lune) partout ailleurs.
+- [ ] **L'économie** : production, consommation, coûts, recherche. Les quantités affichées
+      sont **figées** (dette D-INT-2 dans [`STATE.md`](../../STATE.md)). C'est un chantier
+      de conception à part entière — les 14 ressources et leurs 3 chaînes de raffinage
+      (minerai→métal, minerai rare→métal rare, nourriture brute→transformée) sont déjà
+      inscrites dans les sprites.
+- [ ] **Pas de monnaie** : décision de conception — l'**énergie** en tient lieu. Rien ne
+      s'achète avec un nombre abstrait.
 
 ---
 

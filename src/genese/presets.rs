@@ -38,9 +38,13 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
         preset_tellurique("Fer (Mercure)"), Some("Mercure"));
     let venus = ajouter_planete(&mut sys, 0.72, 0.007, 3.4 * deg, 0.52, 1.0,
         preset_tellurique("Venus (etuve)"), Some("Venus"));
-    let terre = ajouter_planete(&mut sys, 1.0, 0.017, 0.0, 0.55, 1.0,
+    // Rayon de la Terre : nomme parce que l'ISS s'en sert pour son orbite et son
+    // envergure. Recopie, il ferait deriver la station le jour ou la planete
+    // change de taille.
+    let rayon_terre = 0.55;
+    let terre = ajouter_planete(&mut sys, 1.0, 0.017, 0.0, rayon_terre, 1.0,
         preset_tellurique("Terre"), Some("Terre"));
-    ajouter_lune_preset(&mut sys, terre, 0.55, 0.24, preset_tellurique("Lune"), "Lune");
+    ajouter_lune_preset(&mut sys, terre, rayon_terre, 0.24, preset_tellurique("Lune"), "Lune");
     let mars = ajouter_planete(&mut sys, 1.52, 0.093, 1.85 * deg, 0.42, 0.4,
         preset_tellurique("Badlands"), Some("Mars")); // analogue de Mars (rouille, canyons)
     // Phobos + Deimos : deux petits corps sombres captures.
@@ -73,12 +77,42 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
     let pluton = ajouter_planete(&mut sys, 39.5, 0.249, 17.1 * deg, 0.3, 0.1,
         preset_tellurique("Boule de neige"), Some("Pluton")); // nain glace
 
+    // ===== Population de petits corps, du plus proche au plus lointain =====
+    // Quatre familles distinctes, toutes deja modelisees par `DisqueConfig` mais
+    // dont ce preset n'utilisait que les deux premieres. Les distances sont
+    // reelles (UA) ; seuls les effectifs sont reduits, un nuage de Oort compte
+    // ~10^12 corps.
     sys.ajouter(Box::new(Disque::new(DisqueConfig::asteroides(
         900, 2.2 * etoile::UA, 3.3 * etoile::UA, MASSE_ETOILE,
     ))));
     sys.ajouter(Box::new(Disque::new(DisqueConfig::kuiper(
         2000, 30.0 * etoile::UA, 48.0 * etoile::UA, MASSE_ETOILE,
     ))));
+    // Disque epars : au-dela de Kuiper, orbites excentriques et tres inclinees
+    // (c'est de la que viennent les cometes de la famille de Jupiter).
+    sys.ajouter(Box::new(Disque::new(DisqueConfig::epars(
+        900, 48.0 * etoile::UA, 120.0 * etoile::UA, MASSE_ETOILE,
+    ))));
+    // Nuage de Oort : coquille **spherique**, pas un disque -- il enveloppe le
+    // systeme au lieu de le ceinturer. Bord interne ramene a 300 UA (le vrai est
+    // vers 2 000) : au-dela, il sort de tout cadrage utilisable.
+    sys.ajouter(Box::new(Disque::new(DisqueConfig::oort(
+        2600, 300.0 * etoile::UA, 480.0 * etoile::UA, MASSE_ETOILE,
+    ))));
+
+    // ===== L'ISS, en orbite terrestre =====
+    // Le pont entre les deux moities du projet : la station est **assemblee**
+    // par `vaisseau::preset_iss` (le meme modele que la vue stations), cuite en
+    // maillage, puis mise en orbite comme une lune. Voir `engin.rs` pour
+    // l'exageration d'echelle, qui est assumee et inevitable.
+    if let Some(iss) = crate::engin::EnginOrbital::iss(
+        &crate::vaisseau::preset_iss(),
+        terre,
+        rayon_terre,
+    ) {
+        let idx_iss = sys.ajouter(Box::new(iss));
+        sys.nommer(idx_iss, "ISS");
+    }
 
     (sys, "Systeme solaire - jusqu'a Pluton".to_string())
 }

@@ -10,6 +10,9 @@ pub enum Categorie {
     Lune,
     Asteroide,
     Comete,
+    /// **Engin construit** : station ou vaisseau assemblé dans `vaisseau/`, mis
+    /// en orbite dans un système. Voir `engin.rs`.
+    Engin,
 }
 
 /// Foyer d'une planète « sur rails » : autour de quoi elle orbite.

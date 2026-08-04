@@ -7,6 +7,10 @@
 >
 > Écran visé : la **Skymap** ([`src/ecran/skymap.rs`](../../src/ecran/skymap.rs)),
 > pas la Starmap. Voir §1.1.
+>
+> **État au 2026-08-04 : les six étapes I.0 à I.5 sont faites**, et quatre des
+> cinq bouche-trous soldés. Journal détaillé (décisions, red-checks, tests
+> faibles trouvés) : [`suivi/interface.md`](../suivi/interface.md).
 
 ---
 
@@ -232,6 +236,33 @@ chaque produit **sous** sa matière première :
 Cette disposition est une **proposition à juger à l'écran**, pas un acquis. Ce
 qui est acquis, c'est que la barre affiche une liste **ordonnée et groupée**
 qu'on peut réarranger sans toucher au code de dessin.
+
+### 1.3 Le partage haut / bas
+
+Trois recouvrements sont apparus dès que l'interface de jeu s'est posée sur un
+écran qui portait déjà l'outillage de développement (bascules d'orbites, de
+zone habitable, de physique, menu de presets) :
+
+1. les bascules étaient dessinées à `y = 34` — **au milieu** de la barre de
+   ressources, qui va de 8 à 76 ;
+2. le panneau d'astre, en haut à droite, recouvrait les boutons MENU / RETOUR ;
+3. sur un écran étroit, MENU rattrapait la barre de ressources (à 640 px la
+   barre va jusqu'à `x = 632`, le bouton commençait à 518).
+
+**Règle posée : le haut appartient au jeu, le bas à l'atelier.**
+
+| bande | contenu |
+|---|---|
+| Haut gauche | barre de ressources, nom du système |
+| Toute la gauche | sélecteur d'astres |
+| **Bas droite** | panneau de l'astre sélectionné |
+| **Bande basse** (56 px) | bascules, MENU / RETOUR, ligne d'état (graine, FPS, raccourcis) |
+
+La bande basse démarre **à droite de la colonne** et sa géométrie est une source
+unique (`bandeau::strip_outils`) : le menu la **reçoit** au lieu de la
+recalculer, comme la colonne reçoit déjà la hauteur du bandeau. Les bascules s'y
+**resserrent** quand elle est trop courte — à 640 px il reste 560 px pour 587 px
+de boutons, et sans ce facteur la dernière sortait de l'écran.
 
 ---
 

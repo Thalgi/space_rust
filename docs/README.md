@@ -36,6 +36,7 @@ suivi dédié ; les étoiles n'ont pas de conception dédiée — leur bucket li
 | Fichier | Sujet |
 |---|---|
 | [`stations.md`](suivi/stations.md) | **Priorités immédiates en tête** (à corriger avant tout), puis passation du chantier générateur de stations (état des lieux, bugs résolus), audit de référence du preset ISS, et **état/manques de l'ISV Venture Star** (Partie C). Fusion de 2 anciens docs. |
+| [`interface.md`](suivi/interface.md) | Journal de **l'interface de jeu** (vue système) : étapes I.0 à I.5, les deux manques qui n'étaient pas de l'affichage (noms d'astres, économie), la limite de test (`macroquad::rand` exige le contexte graphique), et comment les quatre bouche-trous ont été soldés. |
 | [`stations.md`](suivi/stations.md) **Partie F** | Journal des **mégastructures et vaisseaux** (2026-08-03 → 04) : tore de Stanford, complexe Elysium, panneaux d'échelle mégastructure, séparation vaisseaux/stations, coque et Raptor du Starship, colonne d'items déduite de l'enum, et l'incident de perte de travail non commité. |
 | [`assembleur.md`](suivi/assembleur.md) | Journal du chantier `conception/assembleur.md`, étape par étape : tableau de bord (Lot 1 fait, §9 « le boudin » fait, Lot 2 pas commencé), questions ouvertes, journal détaillé avec red-check de chaque étape. À relire en premier pour reprendre ce chantier — voir aussi [`STATE.md`](../STATE.md) à la racine. |
 | [`planetes.md`](suivi/planetes.md) | Bilan de la refonte v2 du rendu tellurique (fichiers touchés, perfs, tests) + catalogue des ~126 presets. Fusion de 2 anciens docs. |

@@ -20,7 +20,7 @@ sur un fichier contenant du travail non commité. Pour annuler ses propres
 modifications : ré-éditer les lignes, ou sauvegarder le fichier dans le
 scratchpad **avant** de le toucher (red-checks compris).
 
-État vérifié : **344 tests verts** (`cargo test --release`, ~0,9 s),
+État vérifié : **351 tests verts** (`cargo test --release`, ~1,0 s),
 **`cargo clippy` compile** (0 erreur).
 
 ## Chantier courant : l'interface de jeu
@@ -56,6 +56,32 @@ Deux acquis à ne pas réécrire : **`ecran::liste` *est* le sélecteur** (colon
 bornée, hauteur de ligne adaptative, item sous le curseur — rien en lui ne
 connaît les composants), et **l'habitabilité se déduit** de
 `etoile::zone_habitable` au lieu de se stocker.
+
+## La vue de départ : le système solaire
+
+La `Skymap` ouvre désormais sur **le preset solaire**, et non plus sur une
+graine procédurale : depuis qu'elle porte l'interface de jeu, elle doit ouvrir
+sur un lieu connu — on y reconnaît les planètes, on y juge les distances. `G`
+tire toujours un système au hasard.
+
+Remis au niveau au passage :
+
+- **Anneaux d'Uranus** (monobande bleu ciel) et **de Neptune** (arcs), ajoutés
+  au **catalogue** et non au preset : la galerie et la vue système lisent la
+  même apparence.
+- **Quatre familles de petits corps** au lieu de deux — ceinture principale,
+  Kuiper, **disque épars** (orbites excentriques et inclinées) et **nuage de
+  Oort** (coquille sphérique, pas un disque). Toutes existaient déjà dans
+  `DisqueConfig` ; le preset n'en utilisait que la moitié.
+- **L'ISS en orbite terrestre** (`src/engin.rs`) : le pont entre les deux
+  moitiés du projet — la station est assemblée par `vaisseau::preset_iss`, cuite
+  en maillage, puis mise en orbite comme une lune. Nouvelle
+  `Categorie::Engin`.
+
+⚠️ **L'échelle de l'ISS est fausse, et c'est inévitable.** À l'échelle réelle
+elle ferait 9 × 10⁻⁶ unité de monde — mille fois moins qu'un pixel. Les facteurs
+sont **nommés** (`ORBITE_ISS`, `ECHELLE_ISS`) plutôt que noyés dans un calcul :
+un mensonge d'échelle assumé vaut mieux qu'un mensonge implicite.
 
 ## Chantiers en pause
 

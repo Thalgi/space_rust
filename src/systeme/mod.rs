@@ -255,6 +255,7 @@ impl Systeme {
             }
             Categorie::Asteroide => "CEINTURE".to_string(),
             Categorie::Comete => "COMETE".to_string(),
+            Categorie::Engin => "ENGIN".to_string(),
         }
     }
 
@@ -554,7 +555,7 @@ mod tests_designation {
     #[test]
     fn aucune_categorie_ne_rend_une_designation_vide() {
         let mut sys = Systeme::new();
-        for cat in [Categorie::Etoile, Categorie::Planete, Categorie::Lune, Categorie::Asteroide, Categorie::Comete] {
+        for cat in [Categorie::Etoile, Categorie::Planete, Categorie::Lune, Categorie::Asteroide, Categorie::Comete, Categorie::Engin] {
             let i = CorpsEssai::poser(&mut sys, cat, 100.0, None);
             assert!(!sys.designation(i).is_empty(), "{cat:?} rend une designation vide");
         }

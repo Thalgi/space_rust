@@ -3,13 +3,13 @@
 //! travailler le rendu d'un seul corps). `main` se contente d'alterner entre eux.
 
 mod accueil;
-mod bandeau;
+pub(crate) mod bandeau;
 mod catalogue;
 mod designation;
 mod enveloppes;
 mod fiche;
 mod fils;
-mod liste;
+pub(crate) mod liste;
 mod galerie;
 mod galerie_disques;
 mod galerie_etoiles;

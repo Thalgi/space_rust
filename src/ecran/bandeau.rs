@@ -108,6 +108,25 @@ fn largeur_case(ecran: Vec2) -> f32 {
     (dispo / Ressource::COLONNES as f32).clamp(CASE_MIN, CASE_MAX)
 }
 
+/// Hauteur reservee **en bas** de l'ecran a l'outillage de developpement :
+/// une rangee de bascules plus la ligne d'etat.
+///
+/// Le partage est celui-ci : **le haut appartient au jeu** (ressources, nom du
+/// systeme), **le bas a l'atelier** (graine, physique, orbites, FPS). Avant ce
+/// reglage les bascules etaient dessinees a y = 34, c'est-a-dire au milieu de
+/// la barre de ressources.
+pub const BAS_OUTILS: f32 = 56.0;
+
+/// Bande basse laissee a l'outillage, a droite de la colonne d'astres.
+///
+/// Une seule source : la fiche d'astre s'en sert pour savoir ou s'arreter, et
+/// le menu pour savoir ou poser ses bascules. Deux constantes recopiees se
+/// seraient recouvertes.
+pub fn strip_outils(ecran: Vec2) -> Rect {
+    let gauche = ecran.x * crate::ecran::liste::PART_LARGEUR + MARGE;
+    Rect::new(gauche, ecran.y - BAS_OUTILS, (ecran.x - gauche - MARGE).max(0.0), BAS_OUTILS)
+}
+
 /// Rectangle du bandeau entier — les deux lignes **et** le nom du système.
 pub fn rectangle(ecran: Vec2) -> Rect {
     let l = largeur_case(ecran) * Ressource::COLONNES as f32;
@@ -229,6 +248,23 @@ mod tests {
             }
             // Et elle ne réserve pas non plus la moitié de l'écran.
             assert!(occupee < h * 0.35, "{l}x{h} : le bandeau mange {occupee} px");
+        }
+    }
+
+    // **La bande d'outils ne touche ni la barre, ni la colonne.** C'est le
+    // partage haut/bas : sans lui, les bascules de developpement retombent au
+    // milieu des compteurs, ce qui etait le defaut signale.
+    #[test]
+    fn la_bande_doutils_reste_en_bas_et_a_droite_de_la_colonne() {
+        for (l, h) in ECRANS {
+            let e = vec2(l, h);
+            let s = strip_outils(e);
+            let b = rectangle(e);
+            assert!(s.y >= b.y + b.h, "{l}x{h} : la bande d'outils remonte dans le bandeau");
+            assert!(s.y + s.h <= h + 1e-3, "{l}x{h} : elle deborde en bas");
+            // A droite de la colonne d'astres (un dixieme de la largeur).
+            assert!(s.x >= l * crate::ecran::liste::PART_LARGEUR, "{l}x{h} : elle mord sur la colonne");
+            assert!(s.w > 0.0, "{l}x{h} : bande vide");
         }
     }
 

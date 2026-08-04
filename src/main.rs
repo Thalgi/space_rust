@@ -2,6 +2,7 @@ mod astre;
 mod camera;
 mod disque;
 mod ecran;
+mod engin;
 mod etoile;
 mod fond;
 mod genese;

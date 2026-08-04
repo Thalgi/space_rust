@@ -32,23 +32,23 @@ impl Menu {
         None
     }
 
-    pub fn dessiner(&self, m: Vec2, presets: &[PresetSauve], focus: bool) {
-        minitel_ligne(Self::btn_orb(), if self.orbites { "ORB PLAN: ON" } else { "ORB PLAN: OFF" }, m);
-        minitel_ligne(Self::btn_orb_et(), if self.orbites_etoiles { "ORB ETOI: ON" } else { "ORB ETOI: OFF" }, m);
-        minitel_ligne(Self::btn_zone(), if self.zone { "ZONE: ON" } else { "ZONE: OFF" }, m);
+    pub fn dessiner(&self, m: Vec2, presets: &[PresetSauve], focus: bool, outils: Rect, haut: f32) {
+        minitel_ligne(Self::btn(outils, 0), if self.orbites { "ORB PLAN: ON" } else { "ORB PLAN: OFF" }, m);
+        minitel_ligne(Self::btn(outils, 1), if self.orbites_etoiles { "ORB ETOI: ON" } else { "ORB ETOI: OFF" }, m);
+        minitel_ligne(Self::btn(outils, 2), if self.zone { "ZONE: ON" } else { "ZONE: OFF" }, m);
         minitel_ligne(
-            Self::btn_phys(),
+            Self::btn(outils, 3),
             if self.phys_rails { "PHYS: SUR RAILS" } else { "PHYS: N-CORPS" },
             m,
         );
-        minitel_ligne(Self::bouton(), "MENU", m);
+        minitel_ligne(Self::bouton(outils), "MENU", m);
         if focus {
-            minitel_ligne(Self::retour(), "RETOUR", m);
+            minitel_ligne(Self::retour(outils), "RETOUR", m);
         }
         if !self.ouvert {
             return;
         }
-        let mr = self.menu_rect(presets.len());
+        let mr = self.menu_rect(presets.len(), haut);
         minitel_panel(mr, "* MINITEL * MENU");
         let mut labels: Vec<String> = vec![
             "SYSTEME SOLAIRE".into(),
@@ -67,7 +67,7 @@ impl Menu {
         labels.push("SAUVER CE SYSTEME".into());
         labels.push("QUITTER (SAUVE)".into());
         for (i, lab) in labels.iter().enumerate() {
-            minitel_ligne(self.entry_rect(i, presets.len()), lab, m);
+            minitel_ligne(self.entry_rect(i, presets.len(), haut), lab, m);
         }
         if self.saisie {
             let y = mr.y + 34.0 + labels.len() as f32 * 30.0 + 6.0;

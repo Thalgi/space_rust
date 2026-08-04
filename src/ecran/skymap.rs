@@ -64,19 +64,29 @@ pub struct Skymap {
 }
 
 impl Skymap {
+    /// **Le système solaire est la vue de départ.**
+    ///
+    /// C'était une graine procédurale (`1`), utile tant que l'écran servait à
+    /// mettre au point le générateur. Depuis que la vue système porte
+    /// l'interface de jeu, elle doit ouvrir sur un lieu **connu** : on y
+    /// reconnaît les planètes, on y juge les distances, et l'ISS y donne
+    /// l'échelle. `G` continue de tirer un système au hasard.
     pub fn new() -> Self {
         let seed: u64 = 1;
-        let (sys, info) = construire_systeme(seed);
+        let (sys, info) = construire_preset_solaire();
         Self {
             seed,
             sys,
             info,
             fond: Fond::new(900),
-            cam: Camera::new(360.0),
+            // Recul qui cadre le systeme solaire jusqu'a Neptune : la meme
+            // valeur que `ActionMenu::Solaire`, pour que le depart et le
+            // rechargement du preset donnent la meme vue.
+            cam: Camera::new(1280.0),
             rendu: RenduStandard::new(),
             menu: Menu::new(),
             presets: charger_presets(),
-            source: Source::Graine(seed),
+            source: Source::Solaire,
             vitesse: 1.0,
             pause: false,
             selecteur_replie: false,
@@ -162,7 +172,15 @@ impl Skymap {
         self.sys.reglages_etoile(freq, forme, puissance, alea);
 
         // UI -> action éventuelle + zone cliquable (pour bloquer la caméra).
-        let (sur_menu, action) = self.menu.input(m, clic, self.presets.len(), self.cam.focus_actif());
+        //
+        // Le menu **reçoit** sa place au lieu de la calculer : la bande basse
+        // réservée à l'outillage et le premier `y` libre sous la barre de
+        // ressources. Il ne connaît pas la mise en page du jeu, il s'y range.
+        let ecran_ui = vec2(screen_width(), screen_height());
+        let outils = bandeau::strip_outils(ecran_ui);
+        let sous_bandeau = bandeau::hauteur_occupee(ecran_ui);
+        let (sur_menu, action) =
+            self.menu.input(m, clic, self.presets.len(), self.cam.focus_actif(), outils, sous_bandeau);
         if let Some(a) = action {
             self.appliquer(a);
         }
@@ -245,16 +263,17 @@ impl Skymap {
                 self.cam.zoom(),
                 temps
             ),
-            12.0,
-            screen_height() - 10.0,
-            16.0,
+            bandeau::strip_outils(vec2(screen_width(), screen_height())).x,
+            screen_height() - 8.0,
+            15.0,
             Color::new(0.55, 0.7, 0.75, 1.0),
         );
         let ecran_ui = vec2(screen_width(), screen_height());
         self.bandeau_dessiner(ecran_ui);
         self.selecteur_dessiner(ecran_ui, bandeau::hauteur_occupee(ecran_ui), m);
         self.fiche_dessiner(ecran_ui);
-        self.menu.dessiner(m, &self.presets, self.cam.focus_actif());
+        self.menu.dessiner(m, &self.presets, self.cam.focus_actif(),
+            bandeau::strip_outils(ecran_ui), bandeau::hauteur_occupee(ecran_ui));
         false
     }
 

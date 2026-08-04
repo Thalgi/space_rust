@@ -56,16 +56,25 @@ pub struct Fiche {
     pub habitabilite: Habitabilite,
 }
 
-/// Rectangle du panneau, à droite de l'écran.
+/// Rectangle du panneau, **en bas à droite**.
 ///
-/// Largeur bornée en **fraction** de l'écran mais aussi en pixels : sur un
-/// écran très large, un panneau proportionnel deviendrait une colonne vide, et
-/// sur un écran étroit il mangerait la vue.
+/// Largeur bornée en fraction de l'écran mais aussi en pixels : sur un écran
+/// très large, un panneau proportionnel deviendrait une colonne vide, et sur un
+/// écran étroit il mangerait la vue.
+///
+/// En bas et non en haut : le haut à droite porte déjà les boutons d'outillage
+/// (MENU, RETOUR), que le panneau recouvrait. Le bas à droite est le seul coin
+/// que rien d'autre ne réclame — la barre de ressources tient le haut à gauche,
+/// le sélecteur toute la gauche.
+///
+/// Il s'arrête **au-dessus** de la bande d'outils, dont il lit la hauteur au
+/// lieu de la recopier.
 pub fn rectangle(ecran: Vec2) -> Rect {
     const MARGE: f32 = 8.0;
     let l = (ecran.x * 0.22).clamp(180.0, 320.0);
     let h = (ecran.y * 0.42).clamp(150.0, 320.0);
-    Rect::new(ecran.x - l - MARGE, MARGE, l, h)
+    let bas = ecran.y - super::bandeau::BAS_OUTILS - MARGE;
+    Rect::new(ecran.x - l - MARGE, (bas - h).max(MARGE), l, h)
 }
 
 /// Nom lisible d'une catégorie.
@@ -76,6 +85,7 @@ pub fn nom_categorie(c: Categorie) -> &'static str {
         Categorie::Lune => "LUNE",
         Categorie::Asteroide => "CEINTURE",
         Categorie::Comete => "COMETE",
+        Categorie::Engin => "ENGIN",
     }
 }
 
@@ -288,20 +298,31 @@ mod tests {
         assert!(fiche(&sys, 9999).is_none());
     }
 
-    // Le panneau tient **dans l'écran**, à toutes les tailles, et ne recouvre
-    // pas la colonne de gauche : les deux se disputeraient les clics.
+    // Le panneau tient **dans l'écran**, ne recouvre ni la colonne de gauche,
+    // ni le bandeau de ressources, ni la bande d'outils du bas. Chacun de ces
+    // recouvrements ferait se disputer les clics — et c'est précisément ce qui
+    // avait été signalé à l'écran.
     #[test]
-    fn le_panneau_tient_dans_lecran_sans_toucher_la_colonne() {
+    fn le_panneau_ne_recouvre_aucune_autre_zone() {
         for (l, h) in [(640.0_f32, 480.0_f32), (1000.0, 700.0), (1920.0, 1080.0), (3840.0, 2160.0)] {
             let e = vec2(l, h);
             let r = rectangle(e);
             assert!(r.x >= 0.0 && r.x + r.w <= l + 1e-3, "{l}x{h} : déborde à droite");
             assert!(r.y >= 0.0 && r.y + r.h <= h + 1e-3, "{l}x{h} : déborde en bas");
-            // La colonne de gauche fait un dixième de la largeur : le panneau
-            // doit commencer bien après.
             assert!(r.x > l / 10.0, "{l}x{h} : le panneau mord sur la colonne");
-            // Et il reste lisible : un panneau de 40 px ne dirait rien.
             assert!(r.w >= 180.0, "{l}x{h} : panneau trop étroit ({})", r.w);
+            // **En bas** : au-dessus de la bande d'outils, et dans la moitié
+            // basse de l'écran dès qu'il y a la place.
+            let strip = super::super::bandeau::strip_outils(e);
+            assert!(
+                r.y + r.h <= strip.y + 1e-3,
+                "{l}x{h} : le panneau descend sur la bande d'outils"
+            );
+            // Et il ne remonte pas dans le bandeau de ressources.
+            let b = super::super::bandeau::rectangle(e);
+            let chevauche_bandeau = r.x < b.x + b.w && b.x < r.x + r.w
+                && r.y < b.y + b.h && b.y < r.y + r.h;
+            assert!(!chevauche_bandeau, "{l}x{h} : le panneau recouvre la barre de ressources");
         }
     }
 
@@ -309,7 +330,7 @@ mod tests {
     // afficherait une ligne blanche.
     #[test]
     fn chaque_categorie_et_verdict_a_un_libelle() {
-        for c in [Categorie::Etoile, Categorie::Planete, Categorie::Lune, Categorie::Asteroide, Categorie::Comete] {
+        for c in [Categorie::Etoile, Categorie::Planete, Categorie::Lune, Categorie::Asteroide, Categorie::Comete, Categorie::Engin] {
             assert!(!nom_categorie(c).is_empty(), "{c:?}");
         }
         for h in [Habitabilite::Habitable, Habitabilite::TropChaud, Habitabilite::TropFroid, Habitabilite::SansObjet] {
