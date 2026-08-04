@@ -20,7 +20,7 @@ sur un fichier contenant du travail non commité. Pour annuler ses propres
 modifications : ré-éditer les lignes, ou sauvegarder le fichier dans le
 scratchpad **avant** de le toucher (red-checks compris).
 
-État vérifié : **337 tests verts** (`cargo test --release`, ~1,0 s),
+État vérifié : **339 tests verts** (`cargo test --release`, ~0,8 s),
 **`cargo clippy` compile** (0 erreur).
 
 ## Chantier courant : l'interface de jeu
@@ -151,7 +151,7 @@ bouche-trou non listé est un mensonge à l'écran — il a l'air fini.
 | **D-INT-2** | **`Tresorerie` figée** : les quatorze quantités sont écrites à la main, rien ne les fait bouger. | à venir, étape I.4 | L'économie : production, consommation, coûts, recherche. C'est un chantier de conception à part entière, et la barre a été écrite pour pouvoir l'attendre (`conception/interface.md` §2.2b). |
 | **D-INT-3** | **Vignette du panneau** : disque uni, comme la pastille de la colonne. Le panneau lui-même est fait (nom, type, distance, rayon, habitabilité déduite). | `ecran/skymap.rs::fiche_dessiner` | Même besoin que D-INT-1 : un rendu miniature de l'astre. Les deux se règlent ensemble. |
 | **D-INT-4** | ~~Nom du système~~ — **soldée** : dérivé de l'étoile hôte (`Systeme::nom_systeme`). Repli sur le libellé de génération pour un système engendré, dont les étoiles n'ont pas de nom propre. | — | — |
-| **D-INT-5** | **Les noms de presets ne sont pas testés** : aucun test ne peut bâtir un système (`macroquad::rand` exige le contexte graphique). Une planète de preset peut perdre son `nommer` sans que rien ne rougisse. | `genese/presets.rs` | Rien de propre à court terme. `ajouter_lune_preset` exige déjà un nom dans sa signature ; faire de même pour les planètes fermerait le trou. |
+| **D-INT-5** | ~~Noms de presets non gardés~~ — **soldée** : `ajouter_planete`/`ajouter_planete_autour` exigent un `Option<&'static str>`, comme `ajouter_lune_preset`. Chaque appelant doit dire `Some("Terre")` ou `None`. Deux tests lisent la **source** pour interdire le retour du `sys.nommer` après coup — seul moyen, faute de pouvoir bâtir un système en test. | — | — |
 
 ## Dettes préexistantes
 

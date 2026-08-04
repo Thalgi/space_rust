@@ -119,7 +119,7 @@ fn construire_simple() -> (Systeme, String) {
 
         let e: f32 = gen_range(0.0, 0.2);
         let incl: f32 = gen_range(0.0, 0.16);
-        let idx = ajouter_planete(&mut sys, a, e, incl, rayon, masse, app);
+        let idx = ajouter_planete(&mut sys, a, e, incl, rayon, masse, app, None);
         precedent = Some((a, rayon));
 
         let n_lunes: i32 = match type_p {
@@ -359,7 +359,7 @@ fn placer_planetes(sys: &mut Systeme, plan: &Plan) {
         };
         let e: f32 = gen_range(0.0, 0.12);
         let incl: f32 = gen_range(0.0, 0.08);
-        let idx = ajouter_planete_autour(sys, plan.foyer, plan.masse_centrale, a, e, incl, rayon, masse, app);
+        let idx = ajouter_planete_autour(sys, plan.foyer, plan.masse_centrale, a, e, incl, rayon, masse, app, None);
         let n_lunes: i32 = match type_p {
             TypePlanete::Gazeuse => gen_range(1, 4),
             _ => gen_range(0, 2),
@@ -373,6 +373,15 @@ fn placer_planetes(sys: &mut Systeme, plan: &Plan) {
 
 /// Ajoute une planète orbitant un `foyer` (étoile hôte S-type, ou barycentre P-type),
 /// autour d'une `masse_centrale` donnée. `a_au` = demi-grand axe relatif au foyer.
+/// Le **nom** est un parametre, et il n'a pas de valeur par defaut : chaque
+/// appelant doit dire `Some("Terre")` ou `None`. C'etait la dette D-INT-5 —
+/// tant que le nom se posait par un `sys.nommer` apres coup, une planete de
+/// preset pouvait le perdre sans que rien ne rougisse (aucun test ne peut batir
+/// un systeme, `conception/interface.md` 5.1 bis). Le rendre obligatoire deplace
+/// la garantie dans le compilateur, comme pour `ajouter_lune_preset`.
+///
+/// `None` est le cas de la **generation procedurale** : ses systemes retombent
+/// sur la numerotation orbitale, par decision de conception (2.2a).
 pub(crate) fn ajouter_planete_autour(
     sys: &mut Systeme,
     foyer: Foyer,
@@ -383,6 +392,7 @@ pub(crate) fn ajouter_planete_autour(
     rayon: f32,
     masse: f32,
     app: Apparence,
+    nom: Option<&'static str>,
 ) -> usize {
     let a_monde = a_au * etoile::UA;
     let phi: f32 = gen_range(0.0, TAU);
@@ -395,11 +405,15 @@ pub(crate) fn ajouter_planete_autour(
     let orb = crate::orbite::Orbite::new(a_monde, e, a1, q, mu, 0.0);
     let (pos, vel) = orb.etat(0.0);
     let orbite = orb.polyligne(96);
-    sys.ajouter(Box::new(
+    let idx = sys.ajouter(Box::new(
         Planete::new(pos, vel, rayon, masse, app, orbite)
             .avec_orbite(orb)
             .avec_foyer(foyer),
-    ))
+    ));
+    if let Some(n) = nom {
+        sys.nommer(idx, n);
+    }
+    idx
 }
 
 /// Planète autour de l'étoile unique à l'origine (cas mono-étoile).
@@ -411,8 +425,9 @@ pub(crate) fn ajouter_planete(
     rayon: f32,
     masse: f32,
     app: Apparence,
+    nom: Option<&'static str>,
 ) -> usize {
-    ajouter_planete_autour(sys, Foyer::Barycentre, MASSE_ETOILE, a_au, e, incl, rayon, masse, app)
+    ajouter_planete_autour(sys, Foyer::Barycentre, MASSE_ETOILE, a_au, e, incl, rayon, masse, app, nom)
 }
 
 /// Cœur du placement d'une lune : la pose sur le prochain créneau orbital dans le
@@ -902,4 +917,59 @@ pub fn planete_aleatoire() -> (f32, Apparence) {
         apparence_glacee()
     };
     (rayon, app)
+}
+
+#[cfg(test)]
+mod tests_noms_presets {
+    // ⚠️ Aucun test ne peut **bâtir** un système : `genese` tire ses aléas par
+    // `macroquad::rand`, qui exige le contexte graphique
+    // (`conception/interface.md` §5.1 bis). On ne peut donc pas vérifier à
+    // l'exécution que Mercure s'appelle Mercure.
+    //
+    // Ce qu'on peut vérifier, c'est la **source** : que plus aucun preset ne
+    // nomme une planète par un `sys.nommer` après coup. C'était la dette
+    // D-INT-5 — tant que ce chemin existait, un preset pouvait l'oublier. Le
+    // nom passe désormais par la signature d'`ajouter_planete`, donc par le
+    // compilateur ; ce test garde la porte fermée.
+    //
+    // Lire le fichier source est un procédé qu'on ne se permet qu'ici, faute de
+    // tout autre moyen, et **uniquement** pour interdire un motif — jamais pour
+    // vérifier un comportement.
+    const PRESETS: &str = include_str!("presets.rs");
+
+    #[test]
+    fn aucune_planete_de_preset_nest_nommee_apres_coup() {
+        for (i, ligne) in PRESETS.lines().enumerate() {
+            let l = ligne.trim();
+            if !l.starts_with("sys.nommer(") {
+                continue;
+            }
+            // Deux exceptions légitimes : l'étoile hôte et Pandora, qui ne
+            // passent ni l'une ni l'autre par `ajouter_planete`.
+            assert!(
+                l.contains("soleil") || l.contains("idx_pandora"),
+                "presets.rs:{} nomme une planète après coup : « {l} » — le nom                  doit entrer par `ajouter_planete(.., Some(\"…\"))`",
+                i + 1
+            );
+        }
+    }
+
+    // Le corollaire : les presets **nomment vraiment** leurs planètes. Sans
+    // cette moitié, supprimer tous les noms passerait le test ci-dessus.
+    #[test]
+    fn les_presets_nomment_bien_leurs_planetes() {
+        // Plancher **généreux**, pas une cible : il y a 19 planètes nommées
+        // aujourd'hui, et le seuil est là pour attraper une suppression en
+        // masse, pas pour se déclencher à chaque preset qu'on retouche. Un
+        // seuil calé sur le compte du jour serait une prophétie
+        // auto-réalisatrice — il suivrait n'importe quelle valeur.
+        let nommees = PRESETS.matches("Some(\"").count();
+        assert!(nommees >= 15, "seulement {nommees} planètes nommées dans les presets");
+        // Les lunes passent par un autre chemin : le nom est le dernier
+        // argument d'`ajouter_lune_preset`, et la signature l'exige déjà.
+        assert!(PRESETS.matches("ajouter_lune_preset(").count() >= 15);
+        for attendu in ["Mercure", "Terre", "Jupiter", "Pluton", "Polyphemus", "Pandora"] {
+            assert!(PRESETS.contains(attendu), "{attendu} a disparu des presets");
+        }
+    }
 }

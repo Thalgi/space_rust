@@ -35,52 +35,43 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
     // propre se pose a part, par `nommer` : il vivait jusqu'ici en commentaire,
     // donc nulle part pour le programme (`conception/interface.md` 2.2a).
     let mercure = ajouter_planete(&mut sys, 0.39, 0.205, 7.0 * deg, 0.32, 0.3,
-        preset_tellurique("Fer (Mercure)"));
-    sys.nommer(mercure, "Mercure");
+        preset_tellurique("Fer (Mercure)"), Some("Mercure"));
     let venus = ajouter_planete(&mut sys, 0.72, 0.007, 3.4 * deg, 0.52, 1.0,
-        preset_tellurique("Venus (etuve)"));
-    sys.nommer(venus, "Venus");
+        preset_tellurique("Venus (etuve)"), Some("Venus"));
     let terre = ajouter_planete(&mut sys, 1.0, 0.017, 0.0, 0.55, 1.0,
-        preset_tellurique("Terre"));
-    sys.nommer(terre, "Terre");
+        preset_tellurique("Terre"), Some("Terre"));
     ajouter_lune_preset(&mut sys, terre, 0.55, 0.24, preset_tellurique("Lune"), "Lune");
     let mars = ajouter_planete(&mut sys, 1.52, 0.093, 1.85 * deg, 0.42, 0.4,
-        preset_tellurique("Badlands")); // analogue de Mars (rouille, canyons)
-    sys.nommer(mars, "Mars");
+        preset_tellurique("Badlands"), Some("Mars")); // analogue de Mars (rouille, canyons)
     // Phobos + Deimos : deux petits corps sombres captures.
     ajouter_lune_preset(&mut sys, mars, 0.42, 0.05, preset_tellurique("Carbone"), "Phobos");
     ajouter_lune_preset(&mut sys, mars, 0.42, 0.05, preset_tellurique("Carbone"), "Deimos");
     let jupiter = ajouter_planete(&mut sys, 5.2, 0.049, 1.3 * deg, 1.7, 20.0,
-        preset_gazeuse("Jupiter"));
-    sys.nommer(jupiter, "Jupiter");
+        preset_gazeuse("Jupiter"), Some("Jupiter"));
     // 4 lunes galileennes (interne -> externe), aspects distincts.
     ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.10, preset_tellurique("Io (soufre)"), "Io");
     ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.09, preset_tellurique("Subglaciaire"), "Europe");
     ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.13, preset_tellurique("Lune"), "Ganymede");
     ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.12, preset_tellurique("Carbone"), "Callisto");
     let saturne = ajouter_planete(&mut sys, 9.58, 0.056, 2.49 * deg, 1.45, 12.0,
-        preset_gazeuse("Saturne"));
-    sys.nommer(saturne, "Saturne");
+        preset_gazeuse("Saturne"), Some("Saturne"));
     // Encelade, Rhea, Titan (le plus gros), Japet (interne -> externe).
     ajouter_lune_preset(&mut sys, saturne, 1.45, 0.06, preset_tellurique("Pics de glace"), "Encelade");
     ajouter_lune_preset(&mut sys, saturne, 1.45, 0.07, preset_tellurique("Boule de neige"), "Rhea");
     ajouter_lune_preset(&mut sys, saturne, 1.45, 0.13, preset_tellurique("Titan"), "Titan");
     ajouter_lune_preset(&mut sys, saturne, 1.45, 0.07, preset_tellurique("Carbone"), "Japet");
     let uranus = ajouter_planete(&mut sys, 19.2, 0.046, 0.77 * deg, 1.0, 6.0,
-        preset_gazeuse("Uranus"));
-    sys.nommer(uranus, "Uranus");
+        preset_gazeuse("Uranus"), Some("Uranus"));
     // Ariel, Umbriel, Titania, Oberon (interne -> externe).
     ajouter_lune_preset(&mut sys, uranus, 1.0, 0.07, preset_tellurique("Boule de neige"), "Ariel");
     ajouter_lune_preset(&mut sys, uranus, 1.0, 0.07, preset_tellurique("Carbone"), "Umbriel");
     ajouter_lune_preset(&mut sys, uranus, 1.0, 0.09, preset_tellurique("Subglaciaire"), "Titania");
     ajouter_lune_preset(&mut sys, uranus, 1.0, 0.08, preset_tellurique("Lune"), "Oberon");
     let neptune = ajouter_planete(&mut sys, 30.05, 0.010, 1.77 * deg, 1.0, 6.0,
-        preset_gazeuse("Neptune"));
-    sys.nommer(neptune, "Neptune");
+        preset_gazeuse("Neptune"), Some("Neptune"));
     ajouter_lune_preset(&mut sys, neptune, 1.0, 0.11, preset_tellurique("Cryovolcan"), "Triton");
     let pluton = ajouter_planete(&mut sys, 39.5, 0.249, 17.1 * deg, 0.3, 0.1,
-        preset_tellurique("Boule de neige")); // nain glace
-    sys.nommer(pluton, "Pluton");
+        preset_tellurique("Boule de neige"), Some("Pluton")); // nain glace
 
     sys.ajouter(Box::new(Disque::new(DisqueConfig::asteroides(
         900, 2.2 * etoile::UA, 3.3 * etoile::UA, MASSE_ETOILE,
@@ -109,13 +100,13 @@ pub fn construire_preset_tau_ceti() -> (Systeme, String) {
 
     use TypePlanete::Tellurique;
     ajouter_planete(&mut sys, 0.133, 0.06, 2.0 * deg, 0.45, 2.0,
-        app_simple(Tellurique, vec3(0.55, 0.5, 0.45), vec3(0.34, 0.31, 0.28), z, 0.0));
+        app_simple(Tellurique, vec3(0.55, 0.5, 0.45), vec3(0.34, 0.31, 0.28), z, 0.0), None);
     ajouter_planete(&mut sys, 0.243, 0.23, 1.5 * deg, 0.45, 2.0,
-        app_simple(Tellurique, vec3(0.7, 0.45, 0.3), vec3(0.45, 0.28, 0.2), z, 0.0));
+        app_simple(Tellurique, vec3(0.7, 0.45, 0.3), vec3(0.45, 0.28, 0.2), z, 0.0), None);
     ajouter_planete(&mut sys, 0.538, 0.18, 1.0 * deg, 0.6, 4.0,
-        app_simple(Tellurique, vec3(0.3, 0.5, 0.25), vec3(0.4, 0.34, 0.25), vec3(0.1, 0.35, 0.7), 1.0));
+        app_simple(Tellurique, vec3(0.3, 0.5, 0.25), vec3(0.4, 0.34, 0.25), vec3(0.1, 0.35, 0.7), 1.0), None);
     ajouter_planete(&mut sys, 1.34, 0.16, 1.5 * deg, 0.6, 4.0,
-        app_simple(Tellurique, vec3(0.6, 0.4, 0.3), vec3(0.4, 0.26, 0.2), vec3(0.7, 0.8, 0.9), 0.1));
+        app_simple(Tellurique, vec3(0.6, 0.4, 0.3), vec3(0.4, 0.26, 0.2), vec3(0.7, 0.8, 0.9), 0.1), None);
 
     sys.ajouter(Box::new(Disque::new(DisqueConfig::kuiper(
         1600, 3.0 * etoile::UA, 16.0 * etoile::UA, MASSE_ETOILE,
@@ -147,7 +138,7 @@ pub fn construire_preset_avatar() -> (Systeme, String) {
     use TypePlanete::Tellurique;
     // Petite tellurique interne brûlée (flavor système).
     ajouter_planete(&mut sys, 0.55, 0.05, 3.0 * deg, 0.34, 0.4,
-        app_simple(Tellurique, vec3(0.55, 0.42, 0.32), vec3(0.36, 0.28, 0.22), z, 0.0));
+        app_simple(Tellurique, vec3(0.55, 0.42, 0.32), vec3(0.36, 0.28, 0.22), z, 0.0), None);
 
     // Polyphemus : géante gazeuse bleu-vert dans la zone habitable, avec anneaux.
     let poly = ajouter_planete(&mut sys, 1.35, 0.03, 1.2 * deg, 1.7, 20.0,
@@ -157,7 +148,7 @@ pub fn construire_preset_avatar() -> (Systeme, String) {
             .avec_cyclones_pol()
             .avec_tempetes(0.6)
             .avec_pole(vec3(0.4, 0.56, 0.56))
-            .avec_anneau_saturne(vec3(0.66, 0.78, 0.74)));
+            .avec_anneau_saturne(vec3(0.66, 0.78, 0.74)), Some("Polyphemus"));
 
     // Pandora : lune luxuriante, bioluminescente, montagnes flottantes (relief fort).
     let pandora_app = tellurique(
@@ -172,7 +163,8 @@ pub fn construire_preset_avatar() -> (Systeme, String) {
     let r_poly = 1.7; // rayon visuel de Polyphemus (cf. ajouter_planete ci-dessus)
     let pandora = Planete::new(Vec3::ZERO, Vec3::ZERO, r_poly * 0.34, 0.1, pandora_app, Vec::new())
         .en_lune(poly, r_poly * 4.2, 0.9, 0.12, 0.0);
-    sys.ajouter(Box::new(pandora));
+    let idx_pandora = sys.ajouter(Box::new(pandora));
+    sys.nommer(idx_pandora, "Pandora");
 
     // Lunes secondaires de Polyphemus (le système en compte une douzaine).
     for _ in 0..4 {
@@ -183,7 +175,7 @@ pub fn construire_preset_avatar() -> (Systeme, String) {
     let externe = ajouter_planete(&mut sys, 4.8, 0.05, 1.6 * deg, 1.2, 10.0,
         gazeuse(vec3(0.5, 0.62, 0.74), vec3(0.3, 0.42, 0.56), vec3(0.7, 0.82, 0.92), 4.0, 1.0, vec3(0.5, 0.65, 0.8) * 0.3)
             .avec_brume(0.35, vec3(0.66, 0.78, 0.88))
-            .avec_pole(vec3(0.5, 0.6, 0.7)));
+            .avec_pole(vec3(0.5, 0.6, 0.7)), None);
     ajouter_lune(&mut sys, externe, 1.2);
 
     // Ceinture d'astéroïdes entre Polyphemus et la géante externe.
@@ -219,19 +211,19 @@ pub fn construire_preset_alpha_centauri() -> (Systeme, String) {
     let aca = Foyer::Etoile(0);
     // Odyssey & Ulysses : telluriques « glace autour d'un noyau rocheux », orbites chaotiques (e élevé).
     ajouter_planete_autour(&mut sys, aca, ma, 0.5, 0.28, 6.0 * deg, 0.32, 0.4,
-        preset_tellurique("Boule de neige"));
+        preset_tellurique("Boule de neige"), None);
     ajouter_planete_autour(&mut sys, aca, ma, 0.82, 0.24, 5.0 * deg, 0.36, 0.5,
-        preset_tellurique("Subglaciaire"));
+        preset_tellurique("Subglaciaire"), None);
     // Oceanus : géante gazeuse entièrement recouverte d'eau (nuages d'eau, albédo haut), essaim de lunes.
     let oceanus = ajouter_planete_autour(&mut sys, aca, ma, 1.1, 0.03, 1.0 * deg, 1.3, 12.0,
-        preset_gazeuse("Classe II (eau, albedo haut)"));
+        preset_gazeuse("Classe II (eau, albedo haut)"), Some("Oceanus"));
     for _ in 0..4 {
         ajouter_lune(&mut sys, oceanus, 1.3);
     }
     // Polyphemus : la plus grande planète d'ACA, dans la zone habitable ; œil de tempête agrandi
     // (plus grand que la Grande Tache Rouge, cf. canon) par rapport au preset galerie.
     let poly = ajouter_planete_autour(&mut sys, aca, ma, 1.5, 0.03, 1.2 * deg, 1.8, 22.0,
-        preset_gazeuse("Polyphemus (Avatar)").avec_tache(spot, 0.3, vec3(0.88, 0.34, 0.16)));
+        preset_gazeuse("Polyphemus (Avatar)").avec_tache(spot, 0.3, vec3(0.88, 0.34, 0.16)), Some("Polyphemus"));
     let r_poly = 1.8;
     // Pandora : lune luxuriante, bioluminescente (preset catalogue « Pandora »).
     sys.ajouter(Box::new(
@@ -255,7 +247,7 @@ pub fn construire_preset_alpha_centauri() -> (Systeme, String) {
     // Coeus : la plus petite géante gazeuse, la plus externe (preset « Classe I (ammoniac) », terne) ;
     // lunes Dionysos + Bacchus.
     let coeus = ajouter_planete_autour(&mut sys, aca, ma, 2.3, 0.06, 2.0 * deg, 1.1, 8.0,
-        preset_gazeuse("Classe I (ammoniac)"));
+        preset_gazeuse("Classe I (ammoniac)"), Some("Coeus"));
     let r_coeus = 1.1;
     // Dionysos : grosse lune glacée (~19 000 km), orbite classique.
     sys.ajouter(Box::new(
@@ -273,38 +265,38 @@ pub fn construire_preset_alpha_centauri() -> (Systeme, String) {
     let acb = Foyer::Etoile(1);
     // Vulcain & Hermès : enfers sans air, cratérisés (façon Mercure).
     ajouter_planete_autour(&mut sys, acb, mb, 0.3, 0.08, 5.0 * deg, 0.3, 0.3,
-        preset_tellurique("Fer (Mercure)"));
+        preset_tellurique("Fer (Mercure)"), None);
     ajouter_planete_autour(&mut sys, acb, mb, 0.46, 0.06, 4.0 * deg, 0.32, 0.35,
-        preset_tellurique("Lune"));
+        preset_tellurique("Lune"), None);
     // Aphrodite : presque aucune atmosphère (contrairement à Vénus), croûte de sels (preset « Salines »). 1 lune.
     let aphrodite = ajouter_planete_autour(&mut sys, acb, mb, 0.66, 0.02, 2.0 * deg, 0.42, 0.6,
-        preset_tellurique("Salines"));
+        preset_tellurique("Salines"), Some("Aphrodite"));
     ajouter_lune(&mut sys, aphrodite, 0.42);
     // Gaea : effet de serre massif emballé (preset « Venus (etuve) »). 2 lunes.
     let gaea = ajouter_planete_autour(&mut sys, acb, mb, 0.9, 0.02, 1.0 * deg, 0.46, 0.7,
-        preset_tellurique("Venus (etuve)"));
+        preset_tellurique("Venus (etuve)"), Some("Gaea"));
     for _ in 0..2 {
         ajouter_lune(&mut sys, gaea, 0.46);
     }
     // Ares : atmosphère fine, rougeâtre, badlands (façon Mars). Quelques lunes.
     let ares = ajouter_planete_autour(&mut sys, acb, mb, 1.25, 0.09, 1.8 * deg, 0.4, 0.5,
-        preset_tellurique("Badlands"));
+        preset_tellurique("Badlands"), Some("Ares"));
     for _ in 0..2 {
         ajouter_lune(&mut sys, ares, 0.4);
     }
     // Zeus : la plus grande planète de tout le système (preset « Jupiter »).
     let zeus = ajouter_planete_autour(&mut sys, acb, mb, 1.7, 0.05, 1.3 * deg, 2.0, 24.0,
-        preset_gazeuse("Jupiter"));
+        preset_gazeuse("Jupiter"), Some("Zeus"));
     for _ in 0..3 {
         ajouter_lune(&mut sys, zeus, 2.0);
     }
     // Cronus : géante à anneaux, orbite chaotique (preset « Saturne »).
     let cronus = ajouter_planete_autour(&mut sys, acb, mb, 2.15, 0.11, 2.5 * deg, 1.5, 12.0,
-        preset_gazeuse("Saturne"));
+        preset_gazeuse("Saturne"), Some("Cronus"));
     ajouter_lune(&mut sys, cronus, 1.5);
     // Poséidon : géante bleue annelée, orbite chaotique (preset « Anneaux en arcs (type Neptune) »).
     let poseidon = ajouter_planete_autour(&mut sys, acb, mb, 2.55, 0.13, 1.8 * deg, 1.3, 10.0,
-        preset_gazeuse("Anneaux en arcs (type Neptune)"));
+        preset_gazeuse("Anneaux en arcs (type Neptune)"), Some("Poseidon"));
     ajouter_lune(&mut sys, poseidon, 1.3);
 
     // Vue par défaut : focaliser ACA (Etoile 0) sur sa zone planétaire.
@@ -334,14 +326,14 @@ pub fn construire_preset_proxima() -> (Systeme, String) {
     // Géante gazeuse proche et chaude (preset « Jupiter chaud »). Rayon réduit (0.85) pour ne pas
     // écraser la petite naine rouge ; ses lunes se dimensionnent sur ce rayon -> plus discrètes.
     let r_gg = 0.85;
-    let gg = ajouter_planete(&mut sys, 0.2, 0.04, 2.0 * deg, r_gg, 8.0, preset_gazeuse("Jupiter chaud"));
+    let gg = ajouter_planete(&mut sys, 0.2, 0.04, 2.0 * deg, r_gg, 8.0, preset_gazeuse("Jupiter chaud"), None);
     for _ in 0..2 {
         ajouter_lune(&mut sys, gg, r_gg);
     }
     // Planète rocheuse 1 : désert aride (preset « Desert »).
-    ajouter_planete(&mut sys, 0.42, 0.1, 3.0 * deg, 0.34, 0.5, preset_tellurique("Desert"));
+    ajouter_planete(&mut sys, 0.42, 0.1, 3.0 * deg, 0.34, 0.5, preset_tellurique("Desert"), None);
     // Planète rocheuse 2 : plus externe, froide, verrouillée par les marées -> monde « eyeball » gelé.
-    ajouter_planete(&mut sys, 0.85, 0.07, 2.0 * deg, 0.4, 0.7, preset_tellurique("Eyeball gele"));
+    ajouter_planete(&mut sys, 0.85, 0.07, 2.0 * deg, 0.4, 0.7, preset_tellurique("Eyeball gele"), None);
 
     (sys, "Proxima Centauri (Avatar) - naine rouge M".to_string())
 }
@@ -359,13 +351,13 @@ pub fn construire_preset_binaire() -> (Systeme, String) {
     // soleils — sa face nuit s'illumine quand le compagnon passe derrière.
     let terre = ajouter_planete_autour(&mut sys, Foyer::Etoile(0), 1.1 * MASSE_ETOILE, 1.2, 0.02, 0.0, 0.55, 1.0,
         app_simple(TypePlanete::Tellurique, vec3(0.3, 0.55, 0.25), vec3(0.4, 0.34, 0.25), vec3(0.1, 0.35, 0.75), 1.0)
-            .avec_atmo(vec3(0.35, 0.55, 1.0) * 0.9));
+            .avec_atmo(vec3(0.35, 0.55, 1.0) * 0.9), None);
     ajouter_lune(&mut sys, terre, 0.55);
 
     // Planète TYPE P (circumbinaire, « Tatooine ») : orbite le BARYCENTRE du couple,
     // au-delà du rayon critique de stabilité (~18 UA pour ce couple) -> 24 UA.
     ajouter_planete_autour(&mut sys, Foyer::Barycentre, 2.0 * MASSE_ETOILE, 24.0, 0.05, 0.05, 0.7, 0.6,
-        app_simple(TypePlanete::Tellurique, vec3(0.55, 0.45, 0.35), vec3(0.4, 0.3, 0.24), vec3(0.6, 0.75, 0.9), 0.15));
+        app_simple(TypePlanete::Tellurique, vec3(0.55, 0.45, 0.35), vec3(0.4, 0.3, 0.24), vec3(0.6, 0.75, 0.9), 0.15), None);
 
     (sys, "Binaire A+B : planetes type S + type P".to_string())
 }
