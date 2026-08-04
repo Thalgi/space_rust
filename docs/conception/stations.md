@@ -1210,6 +1210,106 @@ que de coder chaque cible en dur.
 
 ---
 
+## Partie D bis — Vaisseaux & supervaisseaux
+
+> Ouvert le **2026-08-02**. La vitrine « mégastructures » mêlait des **stations**
+> (anneau, tore de Stanford, complexe Elysium) et un **vaisseau** (l'ISV). Les
+> deux ont été séparés en deux entrées de menu, et cette partie ouvre la
+> seconde.
+
+### D.1 Pourquoi la séparation n'est pas cosmétique
+
+Une station et un vaisseau ne se dimensionnent pas sur la même chose :
+
+| | station | vaisseau |
+|---|---|---|
+| ce qui fixe la taille | ce qu'elle **abrite** | ce qu'il **emporte** |
+| ce qui fixe la forme | l'axe de **rotation** (gravité) | l'axe de **poussée** |
+| silhouette | ramassée autour d'un axe | **allongée**, tout en enfilade |
+| organes obligés | anneau, moyeu, rayons | épine, réservoirs, tuyère |
+
+D'où deux vitrines. Les mélanger obligeait la caméra à cadrer un tore de 58 m et
+un vaisseau de 378 m dans la même vue, et rendait les deux illisibles.
+
+**« Supervaisseau » commence là où le véhicule cesse d'être lançable d'une
+pièce** — donc là où il faut l'assembler en orbite. C'est la même frontière que
+celle des classes A→D de la Partie D, vue depuis la propulsion.
+
+### D.2 Les deux cibles, mesurées
+
+L'unité vaut ~2,25 m (`P1` = rayon d'un module ISS).
+
+| Cible | réel | en unités | classe |
+|---|---|---|---|
+| **Starship** (SpaceX, étage supérieur) | 50 m × 9 m | **22,2 × 4,0 U** | A — lançable d'une pièce |
+| **Endurance** (*Interstellar*) | 64 m de diamètre | **28,4 U de diamètre** | B/C — assemblée |
+| ISV *(fait)* | ~378 m | 168 U | C — supervaisseau |
+
+⚠️ **Le Starship tombe pile sur la grille** : 9 m de diamètre = 4,0 U, donc un
+rayon de 2,0 U — exactement `P2`. C'est la première cible du projet dont le
+gabarit ne demande aucune dérogation à `Profil`, et ça vaut d'être noté avant de
+commencer : tout ce qui s'y monte pourra rester sur la grille.
+
+### D.3 Endurance — anatomie
+
+Un **anneau fermé de douze modules**, sans moyeu ni rayons : l'anneau *est* le
+vaisseau. Il tourne sur lui-même pour la gravité.
+
+- 12 modules à 30° d'arc, corde ≈ **7,4 U** chacun — c'est la cote qui commande
+  tout le reste ;
+- quatre familles de modules se répètent autour de l'anneau (habitat permanent,
+  soutes, et les postes d'amarrage des **Rangers** et des **Landers**) ;
+- les modules se touchent **bord à bord** : la structure travaille en
+  compression circonférentielle, il n'y a rien au centre pour la reprendre ;
+- propulsion et réservoirs sur la face arrière de l'anneau.
+
+**Ce qui est déjà là** : `poser_anneau` sait fermer une topologie circulaire par
+cuisson géométrique, et le tore de Stanford a montré qu'un anneau se dessine en
+primitive plutôt qu'en briques. **Ce qui manque** : un module en **coin d'arc**
+(trapèze courbe), et le dispositif qui alterne quatre familles autour du cercle.
+
+⚠️ L'Endurance n'est **pas** un tore : sa section est un caisson à faces planes,
+pas un tube de révolution. Réutiliser `Composant::Tore` la rendrait ronde là où
+elle est facettée — c'est ce qui fait toute sa silhouette.
+
+### D.4 Starship — anatomie
+
+Un fût unique, et c'est ce qui le rend intéressant : **aucune brique du parc ne
+sait faire une coque lisse porteuse**. Tout y est du treillis ou du module
+pressurisé court.
+
+- fût **inox nu** de 4,0 U de diamètre sur ~22 U, à section constante ;
+- **ogive** en pointe (coiffe), pas un cône ;
+- **quatre volets** : deux avant courts, deux arrière plus grands, articulés —
+  ce sont eux qui donnent la silhouette, et ils **bougent** (rentrée) ;
+- **six Raptor** en deux couronnes : trois atmosphériques au centre, trois
+  « vacuum » à jupe large en périphérie ;
+- pas de panneaux solaires, pas de radiateurs déployés.
+
+**Ce qui manque** : la coque lisse à ogive, les volets articulés (une charnière
+existe déjà — `Charniere` —, mais pour un bras d'équipage, pas pour un volet), et
+une **grappe de tuyères** à deux diamètres. Le reste (réservoirs, structure
+interne) n'est pas visible et n'a pas à être modelé.
+
+### D.5 Ordre de travail proposé
+
+Comme pour l'ISV : **brique d'abord, assemblage ensuite** (§C.29, leçon 1).
+
+1. **Starship en premier**, parce qu'il est petit, qu'il tombe sur la grille, et
+   qu'il n'a qu'une brique vraiment neuve (la coque à ogive). C'est le meilleur
+   rapport apprentissage/risque pour ouvrir la vitrine.
+2. Volets articulés — la brique qui **bouge**, à traiter seule.
+3. Grappe de Raptors (deux diamètres de tuyère).
+4. Module en coin d'arc de l'Endurance, jugé seul.
+5. Assemblage de l'anneau à douze, avec l'alternance des familles.
+6. Propulsion et réservoirs arrière de l'Endurance.
+
+### Sources
+- [Starship — SpaceX](https://www.spacex.com/vehicles/starship/)
+- [Endurance — Interstellar Wiki](https://interstellarfilm.fandom.com/wiki/Endurance)
+
+---
+
 ## Partie E — Refonte du système de composants (vers un éditeur façon VAB)
 
 > Document de conception (2026-07-29), mis à jour au fil de l'implémentation.

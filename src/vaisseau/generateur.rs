@@ -9,7 +9,7 @@ use super::{
     Assembleur, Composant, EtatStation, GenrePort, PiedHexa, Profil, Repere, Sorties, StyleTreillis,
     BOUCLIER_ELANCEMENT,
     VarianteAntenne, VarianteCaisson, VarianteCharge, VarianteCoiffe, VarianteModule,
-    VariantePanneau, VariantePanneauMega, VariantePropulseur, VarianteRadiateur,
+    VariantePanneau, VariantePanneauMega, VariantePropulseur, VarianteRadiateur, VarianteRaptor,
 };
 use macroquad::prelude::*;
 use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2, PI, TAU};
@@ -1097,6 +1097,71 @@ pub fn demo_anneaux() -> EtatStation {
         poser_anneau(&mut asm, Vec3::new(x, 0.0, 0.0), Vec3::Z, n, r, *style);
         prev_r = r;
     }
+    asm.terminer()
+}
+
+/// Vitrine des **deux Raptor**, côte à côte et à leur taille relative réelle.
+///
+/// Ils ne sont **pas** ramenés à la même taille : c'est justement le rapport
+/// entre les deux qu'il faut juger — le RVac fait presque le double de
+/// diamètre, et c'est ce qui décide de leur implantation sur le cul du vaisseau.
+pub fn demo_raptor() -> EtatStation {
+    let mut asm = Assembleur::new();
+    // Agrandis d'un facteur commun : à leur taille réelle (0,58 U de sortie)
+    // ils sont trop petits pour qu'on juge la powerhead. Le **rapport** entre
+    // les deux, lui, est préservé — c'est tout ce qui compte ici.
+    let zoom = 4.0;
+    let ecart: f32 = VarianteRaptor::TOUTES
+        .iter()
+        .map(|v| v.rayon_nominal() * zoom)
+        .fold(0.0, f32::max)
+        * 2.6;
+    let n = VarianteRaptor::TOUTES.len();
+    for (i, variante) in VarianteRaptor::TOUTES.into_iter().enumerate() {
+        let x = (i as f32 - (n as f32 - 1.0) * 0.5) * ecart;
+        let m = Composant::Raptor {
+            profil: Profil::P0,
+            variante,
+            rayon: variante.rayon_nominal() * zoom,
+        };
+        asm.ajouter(cuire(Repere::new(vec3(x, 0.0, 0.0), Quat::IDENTITY), &m));
+    }
+    asm.terminer()
+}
+
+// --- Starship ---------------------------------------------------------------
+
+/// Cotes du Starship, **prises sur l'engin réel** et converties à l'échelle du
+/// projet (1 U ≈ 2,25 m) — jamais choisies à l'œil.
+///
+/// | | réel | ici |
+/// |---|---:|---:|
+/// | diamètre | 9 m | 4,0 U → rayon **2,0 U = `P2` pile** |
+/// | hauteur hors-tout | 50 m | 22,2 U |
+/// | ogive | ~11 m | 4,9 U (22 % du total) |
+///
+/// C'est la première cible du projet dont le gabarit tombe **exactement** sur la
+/// grille `Profil` : aucune dérogation à prévoir pour ce qui viendra s'y monter.
+const STARSHIP_RAYON: Profil = Profil::P2;
+const STARSHIP_HAUTEUR: f32 = 50.0 / 2.25;
+const STARSHIP_NEZ: f32 = 11.0 / 2.25;
+/// Fût = tout ce qui n'est pas l'ogive. Dérivé, pour que retoucher l'un des
+/// deux ne puisse pas laisser l'autre en arrière.
+const STARSHIP_FUT: f32 = STARSHIP_HAUTEUR - STARSHIP_NEZ;
+
+/// **Starship (SpaceX)** — étape 1 : la coque seule.
+///
+/// Ordre de travail (`docs/conception/stations.md` §D.5) : coque, moteurs,
+/// volets, bouclier thermique, hublot. Chaque étape se juge **seule** avant la
+/// suivante — c'est la leçon 1 du chantier ISV (§C.29).
+pub fn preset_starship() -> EtatStation {
+    let mut asm = Assembleur::new();
+    let coque = Composant::CoqueOgive {
+        profil: STARSHIP_RAYON,
+        longueur: STARSHIP_FUT,
+        nez: STARSHIP_NEZ,
+    };
+    asm.ajouter(cuire(Repere::IDENTITE, &coque));
     asm.terminer()
 }
 
@@ -4654,6 +4719,7 @@ mod tests {
     }
 
 }
+
 
 
 

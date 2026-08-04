@@ -80,6 +80,9 @@ async fn main() {
                         Cible::Megastructures => {
                             Etat::Station(Box::new(VueStation::new(Categorie::Megastructures)))
                         }
+                        Cible::Vaisseaux => {
+                            Etat::Station(Box::new(VueStation::new(Categorie::Vaisseaux)))
+                        }
                     };
                 }
             }

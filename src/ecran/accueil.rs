@@ -19,6 +19,8 @@ pub enum Cible {
     Generateur,
     /// Grandes stations & mégastructures.
     Megastructures,
+    /// Vaisseaux et supervaisseaux (ISV, puis Endurance et Starship).
+    Vaisseaux,
 }
 
 /// Écran d'accueil : titre + deux blocs de boutons (astres / vaisseaux).
@@ -40,7 +42,8 @@ const BLOC_STATIONS: &[(&str, Cible)] = &[
     ("BRIQUES - COMPOSANTS", Cible::Briques),
     ("PETITES STATIONS - ISS / MIR / TIANGONG", Cible::PetitesStations),
     ("GENERATEUR PROCEDURAL", Cible::Generateur),
-    ("MEGASTRUCTURES - ISV / ANNEAUX", Cible::Megastructures),
+    ("MEGASTRUCTURES - ANNEAUX / TORES", Cible::Megastructures),
+    ("VAISSEAUX & SUPERVAISSEAUX", Cible::Vaisseaux),
 ];
 
 impl Accueil {

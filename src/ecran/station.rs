@@ -1,5 +1,6 @@
 use super::catalogue::{self, Item, Reglages};
 use super::enveloppes;
+use super::liste;
 use super::fils;
 use super::pixel::FiltrePixel;
 use super::panache::RenduPanache;
@@ -13,7 +14,7 @@ use crate::vaisseau::{
 use macroquad::prelude::*;
 
 /// Catégories de la vue station : chacune ne fait cycler (touche **D**) que ses
-/// propres items. Le menu route quatre entrées vers cette même vue.
+/// propres items. Le menu route cinq entrées vers cette même vue.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Categorie {
     /// Catalogue des composants (briques).
@@ -22,8 +23,10 @@ pub enum Categorie {
     PetitesStations,
     /// Générateur procédural (G / S / 1-4 / O).
     Generateur,
-    /// Grandes stations & mégastructures.
+    /// Grandes stations & mégastructures — ce qui tient une orbite.
     Megastructures,
+    /// Vaisseaux et supervaisseaux — ce qui se déplace.
+    Vaisseaux,
 }
 
 /// Vitesse de rotation de la section d'équipage, en radians par seconde.
@@ -55,25 +58,34 @@ impl Categorie {
     /// Table de la catégorie. **Vide pour le générateur**, qui n'est pas
     /// énuméré : son unique item est paramétrique (graine, style, complexité,
     /// ossature) et se rebâtit à chaque touche.
-    fn items(self) -> &'static [Item] {
+    fn table(self) -> &'static [Item] {
         match self {
             Categorie::Briques => catalogue::BRIQUES,
             Categorie::PetitesStations => catalogue::PETITES_STATIONS,
             Categorie::Megastructures => catalogue::MEGASTRUCTURES,
+            Categorie::Vaisseaux => catalogue::VAISSEAUX,
             Categorie::Generateur => &[],
         }
     }
 
-    /// Nombre d'items à cycler. Dérivé de la table — il n'y a plus de compte
-    /// écrit à la main à tenir d'accord avec elle. Le `max(1)` ne sert qu'au
-    /// générateur, dont l'unique item n'est pas dans une table.
-    fn nb(self) -> usize {
-        self.items().len().max(1)
+    /// La catégorie reçoit-elle **une entrée par composant** ?
+    ///
+    /// Seules les briques : une pièce isolée y a sa place, alors qu'une station
+    /// ou un vaisseau est un assemblage et n'a rien à faire dans cette liste.
+    fn avec_pieces(self) -> bool {
+        matches!(self, Categorie::Briques)
     }
 
-    /// Item courant de la catégorie, ou `None` pour le générateur.
-    fn item(self, idx: usize) -> Option<&'static Item> {
-        self.items().get(idx % self.nb())
+    /// La liste **effective** : les vitrines curatées, puis une entrée par
+    /// composant. C'est elle que la vue affiche et cycle.
+    fn liste(self) -> Vec<Item> {
+        catalogue::items(self.table(), self.avec_pieces())
+    }
+
+    /// Nombre d'items à cycler. Le `max(1)` ne sert qu'au générateur, dont
+    /// l'unique item n'est dans aucune table.
+    fn nb(self) -> usize {
+        self.liste().len().max(1)
     }
 
     fn nom(self) -> &'static str {
@@ -82,15 +94,19 @@ impl Categorie {
             Categorie::PetitesStations => "PETITES STATIONS",
             Categorie::Generateur => "GENERATEUR",
             Categorie::Megastructures => "MEGASTRUCTURES",
+            Categorie::Vaisseaux => "VAISSEAUX & SUPERVAISSEAUX",
         }
     }
 }
 
-/// Vue station : quatre catégories (menu), chacune cyclée par **D**. Le
+/// Vue station : cinq catégories (menu), chacune cyclée par **D**. Le
 /// générateur réagit en plus à G (graine), S (style), 1-4 (complexité), O
 /// (ossature). P = ports, N = numéros, M = cuit/immédiat, X = pixel.
 pub struct VueStation {
     categorie: Categorie,
+    /// Liste effective (curatée + engendrée), bâtie une fois : la reconstruire
+    /// à chaque frame rebâtirait 35 composants pour rien.
+    items: Vec<Item>,
     etat: EtatStation,
     titre: String,
     idx: usize,
@@ -160,6 +176,7 @@ impl VueStation {
         cam.yaw = 0.7;
         cam.pitch = 0.3;
         let mut vue = Self {
+            items: categorie.liste(),
             categorie,
             etat: EtatStation::Vide,
             titre: String::new(),
@@ -206,14 +223,17 @@ impl VueStation {
         // Dissocié par défaut : seul l'ISV complet renseigne une moitié
         // tournante, et c'est sa `Fabrique` qui le décide, pas un indice.
         self.tournant = None;
-        let (etat, titre) = match self.categorie.item(self.idx) {
-            Some(item) => {
-                let bati = item.batir(self.reglages());
+        // Bâti **avant** le match : la liste appartient à la vue, donc tenir un
+        // `&Item` pendant qu'on écrit `self.tournant` emprunterait deux fois.
+        let reglages = self.reglages();
+        let produit = self.item().map(|it| (it.batir(reglages), it.titre()));
+        let (etat, titre) = match produit {
+            Some((bati, titre)) => {
                 self.tournant = bati.tournant.map(|section| {
                     let maillage = section.doit_dessiner().map(MaillageStation::cuire);
                     (section, maillage)
                 });
-                (bati.etat, item.titre())
+                (bati.etat, titre)
             }
             // Générateur : le seul item non énuméré, parce qu'il est
             // paramétrique et non catalogué.
@@ -268,7 +288,7 @@ impl VueStation {
     /// avec l'autre variante le décalerait de 3,2 % — assez pour que le collier
     /// morde dans la flèche ou s'en détache.
     fn epine_courante(&self) -> Option<Epine> {
-        self.categorie.item(self.idx).and_then(Item::epine)
+        self.item().and_then(Item::epine)
     }
 
     fn cadrer(&mut self) {
@@ -285,15 +305,61 @@ impl VueStation {
     /// L'item affiché comporte-t-il une section d'équipage à faire tourner ou à
     /// replier ? Deux vues sont concernées : la brique de démonstration, et l'ISV
     /// complet où la section est montée sur le vaisseau.
+    /// Item courant, ou `None` pour le générateur (liste vide).
+    fn item(&self) -> Option<&Item> {
+        if self.items.is_empty() {
+            return None;
+        }
+        self.items.get(self.idx % self.items.len())
+    }
+
+    /// Dessine la **colonne des items** et rend l'index cliqué, s'il y en a un.
+    ///
+    /// Le calcul (colonne, lignes, item visé, troncature) vit dans
+    /// `ecran::liste` et s'y teste ; ici il ne reste que la pose des
+    /// rectangles — `conception/assembleur.md` §10.9.
+    fn colonne_items(&self, souris: Vec2, clic: bool) -> Option<usize> {
+        if self.items.is_empty() {
+            return None;
+        }
+        let ecran = vec2(screen_width(), screen_height());
+        let col = liste::colonne(ecran);
+        let n = self.items.len();
+        draw_rectangle(col.x - 4.0, col.y - 4.0, col.w + 8.0, col.h + 8.0, Color::new(0.02, 0.03, 0.12, 0.92));
+        let h = liste::hauteur_ligne(col, n);
+        let taille = (h * 0.52).clamp(9.0, 14.0);
+        for (i, item) in self.items.iter().enumerate() {
+            let r = liste::ligne(col, n, i);
+            if r.y + r.h > col.y + col.h {
+                break; // déborde : on ne dessine pas hors de la colonne
+            }
+            let courant = i == self.idx % n;
+            let survol = r.contains(souris);
+            let (bg, fg) = match (courant, survol) {
+                (true, _) => (Color::new(0.0, 0.62, 0.62, 1.0), BLACK),
+                (false, true) => (Color::new(0.06, 0.20, 0.26, 1.0), Color::new(0.75, 1.0, 0.9, 1.0)),
+                _ => (Color::new(0.04, 0.05, 0.18, 0.0), Color::new(0.52, 0.86, 0.72, 1.0)),
+            };
+            draw_rectangle(r.x, r.y, r.w, r.h, bg);
+            let texte = liste::tronquer(liste::abrege(&item.libelle), r.w - 8.0, taille as u16);
+            crate::police::texte(&texte, r.x + 4.0, r.y + r.h * 0.5 + taille * 0.35, taille, fg);
+        }
+        if clic {
+            liste::item_sous_curseur(col, n, souris)
+        } else {
+            None
+        }
+    }
+
     fn rotation_possible(&self) -> bool {
-        self.categorie.item(self.idx).is_some_and(Item::rotation)
+        self.item().is_some_and(Item::rotation)
     }
 
     /// L'item affiché a-t-il une propulsion à allumer ? Deux vues : la brique
     /// du radiateur méga (qui n'en montre que la chauffe, faute de tuyère) et
     /// l'ISV complet.
     fn allumage_possible(&self) -> bool {
-        self.categorie.item(self.idx).is_some_and(Item::allumage)
+        self.item().is_some_and(Item::allumage)
     }
 
     /// Recuit ce que le **régime moteur** vient de changer.
@@ -320,7 +386,7 @@ impl VueStation {
     /// différents (l'ISV est couché, un anneau tourne à plat) ; la catégorie ne
     /// pouvait pas le savoir.
     fn axe_rotation(&self) -> Vec3 {
-        self.categorie.item(self.idx).map_or(Vec3::Y, |i| i.axe_rotation())
+        self.item().map_or(Vec3::Y, |i| i.axe_rotation())
     }
 
     /// Un bouton de la vue : rendu normal s'il est actif, **grisé et inerte**
@@ -490,7 +556,12 @@ impl VueStation {
             self.recuire_regime();
         }
 
-        self.cam.input_orbite(false);
+        // La colonne mange le glisser : sans ça, sélectionner un item ferait
+        // aussi pivoter la vue derrière. Le **calcul** se fait ici, tôt ; le
+        // dessin, lui, doit attendre la passe interface — dessiné maintenant,
+        // il serait effacé par le `clear_background` du rendu 3D qui suit.
+        let sur_liste = liste::sur_la_liste(vec2(screen_width(), screen_height()), m);
+        self.cam.input_orbite(sur_liste);
 
         let aspect = screen_width() / screen_height();
         let (cam_info, mut cam3d) = self.cam.construire(Vec3::ZERO, aspect);
@@ -642,6 +713,14 @@ impl VueStation {
         // voit que la fonction existe et à quoi elle se rattache.
         self.boutons_equipage(m, clic);
 
+        // Colonne des items : dessinée **avec l'interface**, après la 3D.
+        if let Some(i) = self.colonne_items(m, clic) {
+            if i != self.idx {
+                self.idx = i;
+                self.charger();
+            }
+        }
+
         let etat_ports = if self.ports { "ON" } else { "OFF" };
         let etat_env = if self.enveloppes { "ON" } else { "OFF" };
         let etat_fils = if self.fils { "ON" } else { "OFF" };
@@ -684,8 +763,9 @@ mod tests {
     #[test]
     fn un_tour_de_cyclage_visite_chaque_item_une_fois() {
         for cat in CATEGORIES {
+            let liste = cat.liste();
             let vus: Vec<&str> = (0..cat.nb())
-                .map(|idx| cat.item(idx).map_or("<generateur>", |it| it.libelle))
+                .map(|idx| liste.get(idx % cat.nb()).map_or("<generateur>", |it| it.libelle.as_ref()))
                 .collect();
             assert_eq!(vus.len(), cat.nb(), "{}", cat.nom());
             for (i, a) in vus.iter().enumerate() {
@@ -695,8 +775,8 @@ mod tests {
             }
             // Et le tour suivant redonne le premier : le cyclage boucle.
             assert_eq!(
-                cat.item(cat.nb()).map(|it| it.libelle),
-                cat.item(0).map(|it| it.libelle),
+                liste.get(cat.nb() % cat.nb()).map(|it| it.libelle.as_ref()),
+                liste.first().map(|it| it.libelle.as_ref()),
                 "{} : le cyclage ne reboucle pas",
                 cat.nom()
             );
@@ -712,7 +792,7 @@ mod tests {
     #[test]
     fn seul_le_generateur_nest_pas_catalogue() {
         for cat in CATEGORIES {
-            let catalogue = cat.item(0).is_some();
+            let catalogue = !cat.liste().is_empty();
             assert_eq!(
                 catalogue,
                 cat != Categorie::Generateur,

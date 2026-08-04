@@ -27,6 +27,7 @@ suivi dédié ; les étoiles n'ont pas de conception dédiée — leur bucket li
 | [`planetes.md`](conception/planetes.md) | Planètes telluriques : pipeline de rendu (grille cube-sphere, érosion, hydrologie, biomes) + modèle de variantes/catalogue. Fusion de 2 anciens docs. |
 | [`geantes_gazeuses.md`](conception/geantes_gazeuses.md) | Géantes gazeuses : surface V2 (profil zonal, palette, vortex, pôles) + recherche noises/patterns. Fusion de 2 anciens docs. |
 | [`ceintures.md`](conception/ceintures.md) | Champs de débris unifiés : ceintures d'astéroïdes, anneaux planétaires, disques proto*, nuage de Oort — un seul modèle `Disque` paramétrique. |
+| [`interface.md`](conception/interface.md) | **L'interface de jeu** (vue système) : barre de ressources, nom du système, sélecteur de planètes rétractable, panneau de planète au clic. Lecture du schéma du 2026-08-04, inventaire des 14 sprites, ce qui manque au modèle (noms d'astres, économie), découpage en étapes I.0–I.5. |
 | [`starmap.md`](conception/starmap.md) | Vue galactique (voisinage stellaire, projection oblique rétro, zoom vers la Skymap). |
 | [`systemes_multiples.md`](conception/systemes_multiples.md) | Systèmes à plusieurs étoiles (binaires/trinaires/quadruples), modèle orbital analytique unifié (étoiles + planètes + lunes « sur rails »). |
 

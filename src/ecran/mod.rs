@@ -7,6 +7,7 @@ mod catalogue;
 mod designation;
 mod enveloppes;
 mod fils;
+mod liste;
 mod galerie;
 mod galerie_disques;
 mod galerie_etoiles;

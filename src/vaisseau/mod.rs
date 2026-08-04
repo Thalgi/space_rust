@@ -33,8 +33,8 @@ pub(crate) use chantier::FACTEUR_COLLISION;
 pub use chantier::PortLibre;
 pub(crate) use composant::{rayon_panache, teinte_panache};
 pub use composant::{
-    hexagone_ceinture,
-    Composant, VariantePanneauMega, DonneesSousEnsemble, FamillePropulsion, PiedHexa, Sorties, StyleTreillis, VarianteAntenne,
+    echantillons, hexagone_ceinture,
+    Composant, VariantePanneauMega, VarianteRaptor, DonneesSousEnsemble, FamillePropulsion, PiedHexa, Sorties, StyleTreillis, VarianteAntenne,
     BOUCLIER_ELANCEMENT,
     VarianteCaisson, VarianteCharge, VarianteCoiffe, VarianteModule, VariantePanneau,
     VariantePropulseur, VarianteRadiateur,
@@ -48,9 +48,9 @@ pub use composant::{
 // le second preset recale bien sa charge utile.
 pub use generateur::{
     demo_anneaux, demo_bouclier_grand, demo_bouclier_petit, demo_bouclier_thermique, demo_cargo, demo_charpente, demo_charpente_hexa,
-    demo_epine_pavillon, demo_equipage, demo_panneaux_mega, demo_habitat_isv, demo_moteur_antimatiere,
+    demo_epine_pavillon, demo_equipage, demo_panneaux_mega, demo_raptor, demo_habitat_isv, demo_moteur_antimatiere,
     demo_moteur_antimatiere_principal, demo_radiateur_mega, demo_reservoir,
-    generer, preset_anneau, preset_elysium, preset_stanford,
+    generer, preset_anneau, preset_elysium, preset_stanford, preset_starship,
     preset_comsat, preset_iss, preset_isv_equipage, preset_isv_fixe, preset_isv_moteur, preset_mir,
     preset_sonde, preset_tiangong, Epine, EtatEquipage, Ossature,
     ParamsStation, Style, ISV_AXE,

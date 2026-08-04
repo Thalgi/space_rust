@@ -40,6 +40,8 @@ mod panneau_mega;
 #[allow(unused_imports)]
 pub(crate) use panache::{rayon as rayon_panache, teinte as teinte_panache};
 mod thermique;
+mod coque;
+mod raptor;
 mod tore;
 /// Section du bardage thermique, exposée pour que l'assemblage puisse vérifier
 /// qu'il **épouse** l'épine. C'est la surface qui se plaque sur la poutre — la
@@ -52,6 +54,7 @@ mod cargo;
 mod reservoir;
 mod treillis;
 pub use panneau_mega::VariantePanneauMega;
+pub use raptor::VarianteRaptor;
 pub use treillis::{hexagone_ceinture, PiedHexa, StyleTreillis};
 use commun::*;
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
@@ -303,6 +306,28 @@ pub enum Composant {
         jonctions: usize,
         phase: f32,
     },
+    /// **Coque a ogive tangente** : le fut cylindrique d'un lanceur, ferme par
+    /// un nez dont la pente rejoint le fut **sans cassure**. C'est la forme du
+    /// Starship, et la raison du choix est geometrique et non stylistique : une
+    /// ogive tangente est le seul profil qui raccorde un cylindre avec une
+    /// derivee nulle, donc sans arete visible a la jonction.
+    ///
+    /// `longueur` est le fut seul, `nez` la fleche de l'ogive : la hauteur
+    /// hors-tout est leur somme (`coque::hauteur`), jamais recopiee.
+    CoqueOgive {
+        profil: Profil,
+        longueur: f32,
+        nez: f32,
+    },
+    /// **Moteur Raptor** (SpaceX), en deux declinaisons : tuyere courte pour
+    /// l'atmosphere, longue jupe de detente pour le vide. Le `rayon` est celui
+    /// de la **sortie** — c'est la cote qui decide de l'implantation sur le cul
+    /// du vaisseau, et elle est donc explicite plutot que deduite de `profil`.
+    Raptor {
+        profil: Profil,
+        variante: VarianteRaptor,
+        rayon: f32,
+    },
     /// **Collier de rotation** de la section d'équipage : tambour **creux** qui
     /// ceinture l'épine et porte les bras. `alesage` est le rayon intérieur
     /// libre — il doit dégager l'épine, sinon la section ne pourrait pas
@@ -434,6 +459,56 @@ impl Composant {
     /// Ports dans le repère **local** du composant (montage + hôtes libres,
     /// indistincts : on marque l'occupé à l'assemblage). Convention `Repere` :
     /// `avant = rot*Z` sortant, `haut = rot*Y`.
+    /// Nom court de la variante, en majuscules — l'etiquette d'un bouton.
+    ///
+    /// Exhaustif **a dessein**, comme la chaine d'echantillons et `categorie` :
+    /// ajouter une variante a `Composant` casse la compilation ici. C'est ce
+    /// qui permet a la colonne de la vue composants de se **deduire** de l'enum
+    /// au lieu d'etre une seconde liste a tenir a jour a la main — le jour ou
+    /// une brique arrive, son bouton arrive avec elle.
+    ///
+    /// Ne dit **que** la famille, jamais la variante ni les cotes : c'est
+    /// `nom()` de chaque enum de variante qui s'en charge.
+    pub fn nom(&self) -> &'static str {
+        match self {
+            Composant::ModuleAxial { .. } => "MODULE AXIAL",
+            Composant::Noeud { .. } => "NOEUD",
+            Composant::PanneauSolaire { .. } => "PANNEAU SOLAIRE",
+            Composant::Treillis { .. } => "TREILLIS",
+            Composant::Radiateur { .. } => "RADIATEUR",
+            Composant::Antenne { .. } => "ANTENNE",
+            Composant::Adaptateur { .. } => "ADAPTATEUR",
+            Composant::Caisson { .. } => "CAISSON",
+            Composant::ChargeUtile { .. } => "CHARGE UTILE",
+            Composant::Propulseur { .. } => "PROPULSEUR",
+            Composant::Charpente { .. } => "CHARPENTE",
+            Composant::CharpenteHexa { .. } => "CHARPENTE HEXA",
+            Composant::RadiateurMega { .. } => "RADIATEUR MEGA",
+            Composant::Motrice { .. } => "MOTRICE",
+            Composant::BlocMoteur { .. } => "BLOC MOTEUR",
+            Composant::Reservoir { .. } => "RESERVOIR",
+            Composant::MoteurAntimatiere { .. } => "MOTEUR ANTIMATIERE",
+            Composant::Coiffe { .. } => "COIFFE",
+            Composant::ReacteurAntimatiere { .. } => "REACTEUR ANTIMATIERE",
+            Composant::TreillisHexagone { .. } => "TREILLIS HEXAGONE",
+            Composant::NacelleCargo { .. } => "NACELLE CARGO",
+            Composant::RatelierCargo { .. } => "RATELIER CARGO",
+            Composant::ModuleHabitat { .. } => "MODULE HABITAT",
+            Composant::ModuleEquipage { .. } => "MODULE EQUIPAGE",
+            Composant::BouclierPetit { .. } => "BOUCLIER PETIT",
+            Composant::BouclierGrand { .. } => "BOUCLIER GRAND",
+            Composant::BouclierThermique { .. } => "BOUCLIER THERMIQUE",
+            Composant::Panache { .. } => "PANACHE",
+            Composant::PanneauMega { .. } => "PANNEAU MEGA",
+            Composant::Tore { .. } => "TORE",
+            Composant::CoqueOgive { .. } => "COQUE OGIVE",
+            Composant::Raptor { .. } => "RAPTOR",
+            Composant::CollierRotatif { .. } => "COLLIER ROTATIF",
+            Composant::Charniere { .. } => "CHARNIERE",
+            Composant::SousEnsemble { .. } => "SOUS-ENSEMBLE",
+        }
+    }
+
     pub fn ports(&self) -> Vec<Port> {
         match self {
             Composant::ModuleAxial { profil, longueur, .. } => module_axial::ports(*profil, *longueur),
@@ -468,6 +543,8 @@ impl Composant {
             Composant::Panache { .. } => vec![],
             Composant::PanneauMega { profil, .. } => panneau_mega::ports(*profil),
             Composant::Tore { .. } => vec![],
+            Composant::CoqueOgive { profil, longueur, nez } => coque::ports(*profil, *longueur, *nez),
+            Composant::Raptor { profil, variante, rayon } => raptor::ports(*profil, *variante, *rayon),
             // Bardage de surface enfilé sur l'épine, posé à la main : pas de port.
             Composant::BouclierThermique { .. } => vec![],
             Composant::CollierRotatif { profil, longueur, .. } => equipage::collier_ports(*profil, *longueur),
@@ -519,6 +596,8 @@ impl Composant {
             Composant::Tore { rayon_majeur, rayon_mineur, segments, anneaux, jonctions, phase } => {
                 tore::dessiner(p, *rayon_majeur, *rayon_mineur, *segments, *anneaux, *jonctions, *phase)
             }
+            Composant::CoqueOgive { profil, longueur, nez } => coque::dessiner(p, *profil, *longueur, *nez),
+            Composant::Raptor { variante, rayon, .. } => raptor::dessiner(p, *variante, *rayon),
             Composant::BouclierThermique { rayon_pied, rayon_bout, courbure, longueur, rangs } => {
                 thermique::dessiner(p, *rayon_pied, *rayon_bout, *courbure, *longueur, *rangs)
             }
@@ -586,6 +665,8 @@ impl Composant {
             Composant::Panache { .. } => panache::cout(),
             Composant::PanneauMega { longueur, largeur, .. } => panneau_mega::cout(*longueur, *largeur),
             Composant::Tore { rayon_majeur, .. } => tore::cout(*rayon_majeur),
+            Composant::CoqueOgive { longueur, nez, .. } => coque::cout(*longueur, *nez),
+            Composant::Raptor { variante, rayon, .. } => raptor::cout(*variante, *rayon),
             Composant::BouclierThermique { .. } => thermique::cout(),
             Composant::CollierRotatif { .. } => equipage::collier_cout(),
             Composant::Charniere { .. } => equipage::charniere_cout(),
@@ -673,6 +754,8 @@ impl Composant {
             Composant::Panache { .. } => panache::rayon_local(),
             Composant::PanneauMega { longueur, largeur, .. } => panneau_mega::rayon_local(*longueur, *largeur),
             Composant::Tore { rayon_majeur, rayon_mineur, .. } => tore::rayon_local(*rayon_majeur, *rayon_mineur),
+            Composant::CoqueOgive { profil, longueur, nez } => coque::rayon_local(*profil, *longueur, *nez),
+            Composant::Raptor { variante, rayon, .. } => raptor::rayon_local(*variante, *rayon),
             Composant::BouclierThermique { rayon_pied, rayon_bout, longueur, .. } => thermique::rayon_local(*rayon_pied, *rayon_bout, *longueur),
             Composant::CollierRotatif { rayon, longueur, .. } => equipage::collier_rayon_local(*rayon, *longueur),
             Composant::Charniere { taille, .. } => equipage::charniere_rayon_local(*taille),
@@ -793,6 +876,30 @@ impl Composant {
             // L'aile pivote : la sphère couvre toutes ses orientations.
             Composant::PanneauMega { .. } => centree(),
             Composant::Tore { .. } => centree(),
+            // Coque et moteur : deux fuseaux couches sur +Z, centres sur
+            // l'origine. Le rayon de la capsule est le rayon **hors-tout** de
+            // chaque module — cordons de soudure et cannelures compris. Les
+            // deux depassent du rayon nominal, et une capsule calee dessus
+            // laissait des sommets dehors.
+            //
+            // ⚠️ Le demi-axe vaut `rayon_local`, **pas** la demi-hauteur moins
+            // le rayon. Une capsule ne ferme pas a plat : rabattre le segment
+            // d'un rayon laisse la **couronne du culot** dehors, la ou le fut
+            // s'arrete net (mesure : 0,85 hors d'une enveloppe de 2,03). Le
+            // demi-axe doit donc valoir `hypot(demi_hauteur, rayon)` — ce que
+            // `rayon_local` calcule deja, et c'est l'idiome de `ModuleAxial`.
+            Composant::CoqueOgive { profil, longueur, nez } => Enveloppe::axe(
+                Vec3::ZERO,
+                Vec3::Z,
+                coque::rayon_local(*profil, *longueur, *nez),
+                coque::rayon_hors_tout(*profil),
+            ),
+            Composant::Raptor { variante, rayon, .. } => Enveloppe::axe(
+                Vec3::ZERO,
+                Vec3::Z,
+                raptor::rayon_local(*variante, *rayon),
+                raptor::rayon_hors_tout(*rayon),
+            ),
             Composant::BouclierThermique { rayon_pied, rayon_bout, longueur, .. } => thermique::englobant(*rayon_pied, *rayon_bout, *longueur),
             // Râtelier : trois nacelles en triforce autour de l'axe — aussi
             // large que long, la sphère est juste.
@@ -891,7 +998,13 @@ fn suivante(c: &Composant) -> Option<Composant> {
             inclinaison: 0.3,
         },
         Composant::PanneauMega { .. } => Composant::Tore { rayon_majeur: 12.0, rayon_mineur: 1.5, segments: 48, anneaux: 12, jonctions: 3, phase: 0.5 },
-        Composant::Tore { .. } => Composant::CollierRotatif { profil: Profil::P1, rayon: 3.0, alesage: 2.0, longueur: 3.0 },
+        Composant::Tore { .. } => Composant::CoqueOgive { profil: Profil::P2, longueur: 8.0, nez: 3.0 },
+        Composant::CoqueOgive { .. } => Composant::Raptor {
+            profil: Profil::P0,
+            variante: VarianteRaptor::Vide,
+            rayon: VarianteRaptor::Vide.rayon_nominal(),
+        },
+        Composant::Raptor { .. } => Composant::CollierRotatif { profil: Profil::P1, rayon: 3.0, alesage: 2.0, longueur: 3.0 },
         Composant::CollierRotatif { .. } => Composant::Charniere { taille: 1.0, repli: 0.5 },
         Composant::Charniere { .. } => sous_ensemble_echantillon(),
         // Fin de chaîne. C'est la seule variante sans successeur.
@@ -910,7 +1023,7 @@ fn sous_ensemble_echantillon() -> Composant {
     ch.figer(Profil::P1).expect("un composite de deux modules")
 }
 
-/// La chaîne déroulée, du premier au dernier : **31 échantillons**, un par
+/// La chaîne déroulée, du premier au dernier : **35 échantillons**, un par
 /// variante. Sert au balayage de couverture (§5.5, tests) et, depuis L2.4, à
 /// la palette (ci-dessous) : les mêmes valeurs, pas une seconde liste à tenir
 /// à jour en double.
@@ -994,7 +1107,8 @@ pub fn categorie(c: &Composant) -> Categorie {
         | Composant::CharpenteHexa { .. }
         | Composant::Adaptateur { .. }
         | Composant::Coiffe { .. }
-        | Composant::BlocMoteur { .. } => Categorie::Structure,
+        | Composant::BlocMoteur { .. }
+        | Composant::CoqueOgive { .. } => Categorie::Structure,
         Composant::ModuleHabitat { .. } | Composant::ModuleEquipage { .. } | Composant::CollierRotatif { .. } => {
             Categorie::Habitat
         }
@@ -1013,7 +1127,8 @@ pub fn categorie(c: &Composant) -> Categorie {
         | Composant::Motrice { .. }
         | Composant::MoteurAntimatiere { .. }
         | Composant::ReacteurAntimatiere { .. }
-        | Composant::Reservoir { .. } => Categorie::Propulsion,
+        | Composant::Reservoir { .. }
+        | Composant::Raptor { .. } => Categorie::Propulsion,
         Composant::BouclierPetit { .. } | Composant::BouclierGrand { .. } => Categorie::Bouclier,
         Composant::SousEnsemble { .. } => Categorie::Composite,
         // Le tore rejoint les pièces **posées à la main** : comme
@@ -2967,6 +3082,138 @@ mod tests {
         assert!(tore::cote_tuile() > 0.0);
     }
 
+    // --- Coque a ogive tangente (Starship) ---
+
+    // **Ce qui fait qu'une ogive est tangente** : sa pente rejoint le fut a
+    // zero. C'est la seule raison de preferer cette formule a un cone ou a une
+    // demi-sphere, et donc la seule chose qui vaille d'etre gardee.
+    //
+    // Mesure sur une **pente**, pas sur un rayon : le rayon de raccord vaut R
+    // pour toutes les formes de nez du monde, donc l'y comparer ne distingue
+    // pas une ogive d'un cone. La derivee, elle, les separe — un cone garde sa
+    // pente `R/L` jusqu'au bout.
+    #[test]
+    fn logive_rejoint_le_fut_sans_cassure() {
+        let (r, l) = (2.0_f32, 5.0_f32);
+        let h = l * 1e-3;
+        let pente = |x: f32| (coque::ogive_essai(r, l, x) - coque::ogive_essai(r, l, x - h)) / h;
+        let au_raccord = pente(l);
+        assert!(
+            au_raccord.abs() < 1e-2,
+            "pente au raccord = {au_raccord}, l'ogive fait une arete sur le fut"
+        );
+        // Et le cone, lui, ne passerait pas : sa pente y vaut R/L = 0,4.
+        assert!(
+            (r / l) > 10.0 * au_raccord.abs(),
+            "le test ne distingue pas une ogive d'un cone"
+        );
+        // La pente est bien **decroissante** de la pointe au raccord : c'est un
+        // galbe, pas un profil qui repart.
+        assert!(pente(l * 0.2) > pente(l * 0.6) && pente(l * 0.6) > au_raccord);
+    }
+
+    // L'ogive part d'une pointe et arrive **exactement** au rayon du fut :
+    // sans ca, le nez serait plus large ou plus etroit que le corps, et la
+    // jonction se verrait quelle que soit la tangence.
+    #[test]
+    fn logive_va_de_la_pointe_au_rayon_du_fut() {
+        let (r, l) = (2.0_f32, 5.0_f32);
+        assert!(coque::ogive_essai(r, l, 0.0).abs() < 1e-4, "la pointe n'est pas fermee");
+        assert!((coque::ogive_essai(r, l, l) - r).abs() < 1e-4, "le raccord n'atteint pas le fut");
+        // Monotone : aucun renflement en cours de route.
+        let mut prec = -1.0;
+        for k in 0..=20 {
+            let y = coque::ogive_essai(r, l, l * k as f32 / 20.0);
+            assert!(y >= prec - 1e-5, "l'ogive se retrecit a x = {}", l * k as f32 / 20.0);
+            prec = y;
+        }
+    }
+
+    // La hauteur hors-tout est **fut + nez**, une seule fois : c'est la cote
+    // dont dependent les deux ports, l'enveloppe et le cadrage camera. Recopiee
+    // quelque part, elle aurait plante la propulsion dans le culot (§C.5).
+    #[test]
+    fn la_hauteur_hors_tout_est_le_fut_plus_le_nez() {
+        assert!((coque::hauteur(8.0, 3.0) - 11.0).abs() < 1e-6);
+        let c = Composant::CoqueOgive { profil: Profil::P2, longueur: 8.0, nez: 3.0 };
+        let ports = c.ports();
+        assert_eq!(ports.len(), 2, "une base et un sommet");
+        let ecart = (ports[0].repere.pos - ports[1].repere.pos).length();
+        assert!((ecart - coque::hauteur(8.0, 3.0)).abs() < 1e-4, "les ports sont a {ecart}");
+    }
+
+    // Les cordons de soudure sont **poses sur** la tole : ils depassent du
+    // rayon nominal. L'enveloppe doit donc se caler sur le rayon hors-tout, et
+    // non sur `profil.rayon()` — sinon des sommets sortent de la capsule.
+    #[test]
+    fn les_cordons_de_soudure_debordent_du_rayon_nominal() {
+        for profil in [Profil::P1, Profil::P2, Profil::P3] {
+            assert!(
+                coque::rayon_hors_tout(profil) > profil.rayon(),
+                "{profil:?} : le hors-tout n'inclut pas les cordons"
+            );
+        }
+    }
+
+    // --- Raptor ---
+
+    // **La signature d'une tuyere de detente** : elle s'ouvre vite au col puis
+    // s'aplatit. Un cone, lui, s'ouvre lineairement. Mesure a mi-hauteur :
+    // l'exposant `t^0,55` doit y avoir deja depasse la moitie de l'evasement.
+    #[test]
+    fn la_cloche_souvre_vite_au_col_puis_saplatit() {
+        for variante in VarianteRaptor::TOUTES {
+            let r = variante.rayon_nominal();
+            let (col, sortie) = (raptor::cloche_essai(variante, r, 0.0), raptor::cloche_essai(variante, r, 1.0));
+            let mi = raptor::cloche_essai(variante, r, 0.5);
+            let part = (mi - col) / (sortie - col);
+            assert!(
+                part > 0.6,
+                "{variante:?} : a mi-hauteur la cloche n'a fait que {part:.2} de son evasement — c'est un cone"
+            );
+        }
+    }
+
+    // Le col et la sortie sont les deux cotes que la physique impose
+    // (`r_col = r_e / sqrt(eps)`). Le RVac se detend plus (eps 90 contre 40),
+    // donc son col est **relativement** plus etroit — c'est ce qui lui donne sa
+    // silhouette, et c'est la ce qui doit etre garde.
+    #[test]
+    fn le_rvac_se_detend_plus_que_le_rsl() {
+        let etranglement = |v: VarianteRaptor| {
+            let r = v.rayon_nominal();
+            raptor::cloche_essai(v, r, 0.0) / raptor::cloche_essai(v, r, 1.0)
+        };
+        let (sl, vac) = (etranglement(VarianteRaptor::Atmospherique), etranglement(VarianteRaptor::Vide));
+        assert!(vac < sl, "le RVac ({vac:.3}) devrait etre plus etrangle que le RSL ({sl:.3})");
+        // Et les rapports de detente reels : sqrt(40) contre sqrt(90).
+        assert!((sl - 1.0 / 40.0_f32.sqrt()).abs() < 1e-4);
+        assert!((vac - 1.0 / 90.0_f32.sqrt()).abs() < 1e-4);
+        // La sortie du RVac fait presque le double : c'est ce qui decide de
+        // l'implantation en deux couronnes sur le cul du vaisseau.
+        let rapport = VarianteRaptor::Vide.rayon_nominal() / VarianteRaptor::Atmospherique.rayon_nominal();
+        assert!(rapport > 1.7, "rapport des sorties = {rapport:.2}");
+    }
+
+    // Le moteur se monte par le **haut** : son unique port regarde l'hote, et
+    // la tuyere s'en eloigne. Monte a l'envers, la cloche rentrerait dans le
+    // vaisseau — et rien d'autre ne le dirait.
+    #[test]
+    fn le_raptor_se_monte_par_le_haut() {
+        for variante in VarianteRaptor::TOUTES {
+            let r = variante.rayon_nominal();
+            let c = Composant::Raptor { profil: Profil::P0, variante, rayon: r };
+            let ports = c.ports();
+            assert_eq!(ports.len(), 1, "un moteur ne porte rien");
+            assert!(
+                ports[0].repere.pos.z > 0.0,
+                "{variante:?} : le port est du cote de la tuyere"
+            );
+            // Et il est bien au sommet, pas quelque part au milieu.
+            assert!((ports[0].repere.pos.z - variante.hauteur(r) * 0.5).abs() < 1e-5);
+        }
+    }
+
     // --- Panneaux mégastructure : le suivi solaire ---
 
     /// Fils d'un panneau, à un couple d'angles donné.
@@ -3330,7 +3577,7 @@ mod tests {
         // développeur est alors déjà dans ce fichier (le `match` de `suivante`
         // ne compile plus sans lui), et bumper ce nombre est la confirmation
         // qu'il a bien recousu la chaîne au lieu de la court-circuiter.
-        assert_eq!(ech.len(), 33, "la chaîne ne visite pas les 33 variantes");
+        assert_eq!(ech.len(), 35, "la chaîne ne visite pas les 35 variantes");
     }
 
     // ================================================================
