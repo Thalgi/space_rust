@@ -478,24 +478,34 @@ pub(crate) fn ajouter_lune(sys: &mut Systeme, parent: usize, rayon_planete: f32)
     poser_lune(sys, parent, rayon_planete, rayon, app);
 }
 
-/// Ajoute une lune d'**apparence donnée** (preset nommé), de taille `taille_rel × R
-/// planète`. Sert aux presets scénarisés (lunes distinctes : Io, Europe, Titan…).
-/// Le **nom** se donne ici, avec le corps, et non par un `nommer` qui suivrait :
-/// une lune de preset peut etre **refusee** (limite de Roche, sphere de Hill trop
-/// serree). Nommer apres coup demanderait donc de traiter un `Option` a chaque
-/// appel, et surtout laisserait la possibilite d'ajouter une lune sans nom.
-pub(crate) fn ajouter_lune_preset(
+/// Pose une lune à une distance **donnée**, sans placement procédural.
+///
+/// `poser_lune` répartit les lunes entre la limite de Roche et 14 % de la
+/// distance à l'étoile : commode pour un système inventé, faux pour le nôtre. À
+/// l'échelle vraie l'écart saute aux yeux — la Lune se retrouvait vers 0,8 unité
+/// quand la vraie est à 0,123, six fois trop loin.
+///
+/// Pas de plancher sur le rayon non plus : `poser_lune` force `.max(0.05)`, ce
+/// qui à l'échelle vraie fait **vingt-quatre fois la Terre**. Phobos doit avoir
+/// le droit d'être invisible.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn ajouter_lune_reelle(
     sys: &mut Systeme,
     parent: usize,
-    rayon_planete: f32,
-    taille_rel: f32,
+    rayon_lune: f32,
+    r_orbite: f32,
+    omega: f32,
+    incl: f32,
+    phase: f32,
     app: Apparence,
     nom: &'static str,
 ) {
-    if let Some(idx) = poser_lune(sys, parent, rayon_planete, rayon_planete * taille_rel, app) {
-        sys.nommer(idx, nom);
-    }
+    let lune = Planete::new(Vec3::ZERO, Vec3::ZERO, rayon_lune, 0.05, app, Vec::new())
+        .en_lune(parent, r_orbite, omega, incl, phase);
+    let idx = sys.ajouter(Box::new(lune));
+    sys.nommer(idx, nom);
 }
+
 
 /// Déploie un arbre stellaire (systèmes multiples) dans le système : crée les
 /// étoiles-feuilles et installe l'arbre évaluable. Voir `crate::stellaire`.
@@ -1045,9 +1055,18 @@ mod tests_noms_presets {
         // auto-réalisatrice — il suivrait n'importe quelle valeur.
         let nommees = PRESETS.matches("Some(\"").count();
         assert!(nommees >= 15, "seulement {nommees} planètes nommées dans les presets");
-        // Les lunes passent par un autre chemin : le nom est le dernier
-        // argument d'`ajouter_lune_preset`, et la signature l'exige déjà.
-        assert!(PRESETS.matches("ajouter_lune_preset(").count() >= 15);
+        // Les lunes passent par un autre chemin : elles sont posées par nom,
+        // et `ajouter_lune_reelle` exige déjà ce nom dans sa signature.
+        //
+        // Le test comptait les appels à `ajouter_lune_preset`, disparu avec le
+        // passage aux orbites réelles. On vérifie maintenant la **chose
+        // voulue** : chaque lune de la table est effectivement posée.
+        for (nom, _, _, _) in super::presets::LUNES {
+            assert!(
+                PRESETS.contains(&format!("\"{nom}\"")),
+                "{nom} est dans la table mais n'est posée nulle part"
+            );
+        }
         for attendu in ["Mercure", "Terre", "Jupiter", "Pluton", "Polyphemus", "Pandora"] {
             assert!(PRESETS.contains(attendu), "{attendu} a disparu des presets");
         }

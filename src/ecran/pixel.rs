@@ -64,7 +64,7 @@ thread_local! {
     static PALETTE_CHARGEE: Cell<Option<usize>> = const { Cell::new(None) };
 }
 
-/// Compile le matériau et lui attache la matrice de tramage.
+/// Compile le matériau de quantification.
 fn charger() -> Option<Material> {
     let mat = load_material(
         ShaderSource::Glsl {
@@ -87,15 +87,13 @@ fn charger() -> Option<Material> {
                 ),
                 UniformDesc::new("nb_couleurs", UniformType::Float1),
                 UniformDesc::new("taille_cible", UniformType::Float2),
-                UniformDesc::new("cote_trame", UniformType::Float1),
-                UniformDesc::new("force_trame", UniformType::Float1),
+                UniformDesc::new("gamma", UniformType::Float1),
                 UniformDesc::new("ecretage_seuil", UniformType::Float1),
                 UniformDesc::new("ecretage_force", UniformType::Float1),
                 UniformDesc::new("saturation", UniformType::Float1),
                 UniformDesc::new("sat_hautes", UniformType::Float1),
                 UniformDesc::new("sat_rolloff", UniformType::Float2),
             ],
-            textures: vec!["tramage".to_string()],
             pipeline_params: PipelineParams {
                 // Le blit compose la couche pixelisée PAR-DESSUS le fond
                 // stellaire net : sans mélange alpha explicite, le vide de la
@@ -113,14 +111,6 @@ fn charger() -> Option<Material> {
     .map_err(|e| error!("shader de palette non compilé, rendu sans quantification : {e}"))
     .ok()?;
 
-    // La matrice de Bayer, en texture : `Nearest` est impératif, une
-    // interpolation lisserait les seuils et le tramage perdrait son motif.
-    let cote = palette::COTE_TRAME as u16;
-    let trame = Texture2D::from_rgba8(cote, cote, &palette::texture_bayer());
-    trame.set_filter(FilterMode::Nearest);
-    mat.set_texture("tramage", trame);
-
-    mat.set_uniform("cote_trame", palette::COTE_TRAME as f32);
     mat.set_uniform("ecretage_seuil", palette::ECRETAGE_SEUIL);
     mat.set_uniform("ecretage_force", palette::ECRETAGE_FORCE);
     mat.set_uniform("sat_hautes", palette::SAT_HAUTES);
@@ -149,7 +139,7 @@ fn activer_quantificateur(cible: Vec2) -> bool {
 
         // Ceux-ci changent avec la fenêtre ou le réglage : à chaque blit.
         m.set_uniform("taille_cible", (cible.x, cible.y));
-        m.set_uniform("force_trame", etat.tramage.force());
+        m.set_uniform("gamma", etat.gamma);
         m.set_uniform("saturation", etat.saturation.gain());
         gl_use_material(m);
         true

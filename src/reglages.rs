@@ -18,6 +18,7 @@
 //! saura la faire — pas avant.
 
 use macroquad::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 
 /// Comment la scène 3D est rendue.
@@ -27,7 +28,7 @@ use std::cell::Cell;
 /// une **seconde** étape qui s'empile dessus — l'offrir sans les gros pixels
 /// n'aurait pas de sens (des à-plats de palette en pleine résolution), et
 /// remplacer le mode existant ferait perdre un rendu qui marche.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum ModeRendu {
     /// Aucun filtre : la scène est dessinée à la résolution de l'écran.
     Net,
@@ -71,57 +72,6 @@ impl ModeRendu {
     }
 }
 
-/// Force du tramage ordonné appliqué avant la quantification.
-///
-/// # Pourquoi c'est nécessaire
-///
-/// Mesuré sur Resurrect 64 : un dégradé de gris ne tombe que sur **8 couleurs**,
-/// et une marche fait sauter la clarté de L=49 à L=69. Sans tramage, une région
-/// entière d'une planète bascule d'un coup quand l'ombrage la traverse — c'est
-/// le scintillement observé à l'écran.
-///
-/// Le tramage rend les teintes intermédiaires en mélangeant spatialement deux
-/// entrées voisines, si bien que la transition devient progressive.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Tramage {
-    /// Aucun. Aplats francs, et les marches de la palette en pleine face.
-    Non,
-    /// Discret : adoucit sans que le motif se remarque.
-    Leger,
-    /// Assez fort pour traverser les grandes marches d'une palette d'artiste.
-    Fort,
-}
-
-impl Tramage {
-    pub const TOUS: [Tramage; 3] = [Tramage::Non, Tramage::Leger, Tramage::Fort];
-
-    pub fn nom(self) -> &'static str {
-        match self {
-            Tramage::Non => "NON",
-            Tramage::Leger => "LEGER",
-            Tramage::Fort => "FORT",
-        }
-    }
-
-    pub fn suivant(self) -> Self {
-        let i = Self::TOUS.iter().position(|t| *t == self).unwrap_or(0);
-        Self::TOUS[(i + 1) % Self::TOUS.len()]
-    }
-
-    /// Amplitude, en unités sRGB.
-    ///
-    /// `Fort` vaut 0,18 parce que c'est **la taille mesurée de la pire marche**
-    /// de Resurrect 64 dans les gris (de 0,50 à 0,68) : en deçà, le tramage ne
-    /// traverse pas et la bande bascule quand même.
-    pub fn force(self) -> f32 {
-        match self {
-            Tramage::Non => 0.0,
-            Tramage::Leger => 0.08,
-            Tramage::Fort => 0.18,
-        }
-    }
-}
-
 /// Combien on ravive la couleur avant de quantifier.
 ///
 /// # Pourquoi c'est nécessaire
@@ -135,7 +85,7 @@ impl Tramage {
 /// Raviver avant la recherche pousse la couleur sur les **rampes colorées** de
 /// la palette au lieu de ses neutres — c'est d'ailleurs ce que fait un
 /// dessinateur, qui ne peint pas avec les teintes intermédiaires ternes.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Saturation {
     /// Aucune retouche : la couleur part telle que la scène l'a produite.
     Non,
@@ -170,6 +120,13 @@ impl Saturation {
     }
 }
 
+/// Bornes du gamma. En dessous de 0,5 l'image se noie, au-dessus de 2,5 elle
+/// se delave : au-dela, le curseur ne reglerait plus rien d'utile.
+pub const GAMMA_MIN: f32 = 0.5;
+pub const GAMMA_MAX: f32 = 2.5;
+/// Gamma neutre : l'image passe telle quelle.
+pub const GAMMA_NEUTRE: f32 = 1.0;
+
 /// L'état de rendu au démarrage. **Une seule constante** pour l'état global et
 /// pour [`Reglages::default`] : deux valeurs écrites séparément finiraient par
 /// diverger, et l'écran des paramètres annoncerait un réglage que le rendu
@@ -177,21 +134,22 @@ impl Saturation {
 const RENDU_INITIAL: EtatRendu = EtatRendu {
     mode: ModeRendu::Net,
     palette: 0,
-    tramage: Tramage::Fort,
     // `Fort` par défaut : c'est le réglage qui corrige l'aspect terne constaté à
     // l'écran, et il est calé sur une mesure, pas sur un goût.
     saturation: Saturation::Fort,
+    gamma: GAMMA_NEUTRE,
 };
 
 /// Ce que le code de dessin a besoin de savoir du rendu.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct EtatRendu {
     pub mode: ModeRendu,
     /// Indice dans [`crate::palette::toutes`] — le nombre de palettes dépend du
     /// dossier d'assets, donc il est ramené dans les bornes à la lecture.
     pub palette: usize,
-    pub tramage: Tramage,
     pub saturation: Saturation,
+    /// Correction gamma appliquee avant la quantification. 1 = neutre.
+    pub gamma: f32,
 }
 
 thread_local! {
@@ -214,7 +172,7 @@ pub fn mode_rendu() -> ModeRendu {
     etat_rendu().mode
 }
 
-/// Change le **mode** seul, sans toucher à la palette ni au tramage : c'est ce
+/// Change le **mode** seul, sans toucher aux autres réglages : c'est ce
 /// que font les raccourcis clavier des vues.
 pub fn regler_rendu(m: ModeRendu) {
     RENDU.with(|r| {
@@ -230,7 +188,7 @@ pub fn regler_etat_rendu(e: EtatRendu) {
 }
 
 /// Comment la fenêtre occupe l'écran.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum ModeAffichage {
     /// Fenêtre classique, à la taille choisie dans [`Reglages::resolution`].
     Fenetre,
@@ -264,7 +222,7 @@ impl ModeAffichage {
 }
 
 /// Une taille de fenêtre proposée.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Resolution {
     pub largeur: u32,
     pub hauteur: u32,
@@ -322,14 +280,16 @@ impl Resolution {
 }
 
 /// L'état des réglages.
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Reglages {
     pub mode: ModeAffichage,
     pub resolution: Resolution,
     pub rendu: ModeRendu,
     /// Indice de palette dans [`crate::palette::toutes`].
     pub palette: usize,
-    pub tramage: Tramage,
     pub saturation: Saturation,
+    /// Correction gamma appliquee avant la quantification. 1 = neutre.
+    pub gamma: f32,
 }
 
 impl Default for Reglages {
@@ -342,13 +302,60 @@ impl Default for Reglages {
             resolution: Resolution::TOUTES[6],
             rendu: RENDU_INITIAL.mode,
             palette: RENDU_INITIAL.palette,
-            tramage: RENDU_INITIAL.tramage,
             saturation: RENDU_INITIAL.saturation,
+            gamma: RENDU_INITIAL.gamma,
         }
     }
 }
 
+/// Fichier de sauvegarde, a cote du jeu -- meme convention que les presets.
+const FICHIER: &str = "reglages.json";
+
 impl Reglages {
+    /// Relit les reglages sauvegardes, ou rend les valeurs par defaut.
+    ///
+    /// **Tout echec retombe sur `default()`** : fichier absent (premier
+    /// lancement), JSON casse, champ ajoute depuis la derniere version. Un
+    /// reglage perdu n'est rien ; un jeu qui refuse de demarrer parce qu'un
+    /// fichier de confort est mal forme serait absurde.
+    pub fn charger() -> Self {
+        let lu: Option<Self> = std::fs::read_to_string(FICHIER)
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok());
+        match lu {
+            Some(mut r) => {
+                r.assainir();
+                r
+            }
+            None => Self::default(),
+        }
+    }
+
+    /// Ecrit les reglages. Silencieux en cas d'echec : un disque plein ne doit
+    /// pas interrompre une partie.
+    pub fn sauvegarder(&self) {
+        if let Ok(t) = serde_json::to_string_pretty(self) {
+            let _ = std::fs::write(FICHIER, t);
+        }
+    }
+
+    /// Ramene les valeurs relues dans leurs bornes.
+    ///
+    /// Le fichier est **editable a la main** et vient parfois d'une autre
+    /// version : un indice de palette qui ne pointe plus nulle part, ou un gamma
+    /// a zero, sortiraient un ecran noir sans rien expliquer.
+    pub fn assainir(&mut self) {
+        let n = crate::palette::toutes().len().max(1);
+        self.palette %= n;
+        if !self.gamma.is_finite() {
+            self.gamma = GAMMA_NEUTRE;
+        }
+        self.gamma = self.gamma.clamp(GAMMA_MIN, GAMMA_MAX);
+        if !Resolution::TOUTES.contains(&self.resolution) {
+            self.resolution = Self::default().resolution;
+        }
+    }
+
     /// Applique les réglages à la fenêtre.
     ///
     /// ⚠️ **N'est pas idempotent côté système** : `request_new_screen_size`
@@ -358,11 +365,15 @@ impl Reglages {
     pub fn appliquer(&self) {
         // Le rendu, lui, est idempotent : ce n'est qu'une écriture d'état lue
         // par le code de dessin à la frame suivante.
+        // Sauvegarde ici, et pas dans chaque branche de l'écran : `appliquer`
+        // est le **point de passage unique** de tout changement de réglage.
+        // Répartie dans les six actions du menu, elle finirait par en oublier une.
+        self.sauvegarder();
         regler_etat_rendu(EtatRendu {
             mode: self.rendu,
             palette: self.palette,
-            tramage: self.tramage,
             saturation: self.saturation,
+            gamma: self.gamma,
         });
         match self.mode {
             ModeAffichage::Fenetre => {
@@ -468,6 +479,59 @@ mod tests {
         assert!(!ModeAffichage::SansBordure.taille_reglable());
     }
 
+    // **Les reglages font l'aller-retour par le JSON sans rien perdre.**
+    //
+    // C'est tout l'objet de la sauvegarde : ce qu'on relit doit etre ce qu'on a
+    // ecrit. Un champ ajoute sans serde passerait inapercu jusqu'au jour ou on
+    // remarque qu'un reglage ne tient pas.
+    #[test]
+    fn les_reglages_survivent_a_un_aller_retour_json() {
+        let mut r = Reglages::default();
+        r.mode = ModeAffichage::SansBordure;
+        r.resolution = Resolution::TOUTES[3];
+        r.rendu = ModeRendu::Palette;
+        r.saturation = Saturation::Moyen;
+        r.gamma = 1.73;
+        let txt = serde_json::to_string(&r).expect("serialisation");
+        let relu: Reglages = serde_json::from_str(&txt).expect("deserialisation");
+        assert_eq!(relu, r, "un reglage s'est perdu dans le JSON");
+    }
+
+    // **Un fichier abime ne casse pas le jeu.** Il est editable a la main et
+    // vient parfois d'une version anterieure : mieux vaut repartir des valeurs
+    // par defaut que refuser de demarrer pour un fichier de confort.
+    #[test]
+    fn un_json_illisible_retombe_sur_les_defauts() {
+        assert!(serde_json::from_str::<Reglages>("{ pas du json }").is_err());
+        assert!(serde_json::from_str::<Reglages>("{}").is_err());
+        // Et `charger` ne panique jamais, meme sans fichier.
+        let _ = Reglages::charger();
+    }
+
+    // **`assainir` ramene les valeurs dans leurs bornes.** Un gamma a zero ou un
+    // indice de palette hors liste sortiraient un ecran noir sans rien dire.
+    #[test]
+    fn assainir_ramene_les_valeurs_dans_leurs_bornes() {
+        let mut r = Reglages::default();
+        r.gamma = 0.0;
+        r.assainir();
+        assert!(r.gamma >= GAMMA_MIN, "gamma {} sous la borne", r.gamma);
+        r.gamma = f32::NAN;
+        r.assainir();
+        assert!(r.gamma.is_finite(), "gamma NaN laisse passer");
+        r.gamma = 99.0;
+        r.assainir();
+        assert!(r.gamma <= GAMMA_MAX, "gamma {} au-dessus de la borne", r.gamma);
+        // Un indice de palette hors liste est ramene dedans.
+        r.palette = 9999;
+        r.assainir();
+        assert!(r.palette < crate::palette::toutes().len(), "indice de palette hors liste");
+        // Une resolution absente de la liste revient au defaut.
+        r.resolution = Resolution { largeur: 1, hauteur: 1 };
+        r.assainir();
+        assert!(Resolution::TOUTES.contains(&r.resolution), "resolution hors liste conservee");
+    }
+
     // Le réglage par défaut est **dans la liste** : sinon le bouton afficherait
     // une taille absente du cycle, et le premier clic ferait un saut.
     #[test]
@@ -523,46 +587,7 @@ mod tests {
         let d = Reglages::default();
         assert_eq!(lu.mode, d.rendu, "le mode global et le défaut ont divergé");
         assert_eq!(lu.palette, d.palette, "la palette globale et le défaut ont divergé");
-        assert_eq!(lu.tramage, d.tramage, "le tramage global et le défaut ont divergé");
         assert_eq!(lu.saturation, d.saturation, "la saturation globale et le défaut ont divergé");
-    }
-
-    // Idem pour le tramage : un cycle qui sauterait un niveau le rendrait
-    // inatteignable, le menu étant le seul moyen d'en changer.
-    #[test]
-    fn le_cycle_du_tramage_le_visite_tout_et_boucle() {
-        let depart = Tramage::TOUS[0];
-        let mut vus = vec![depart];
-        let mut t = depart;
-        for _ in 0..Tramage::TOUS.len() - 1 {
-            t = t.suivant();
-            assert!(!vus.contains(&t), "le cycle repasse par {t:?} trop tôt");
-            vus.push(t);
-        }
-        assert_eq!(vus.len(), Tramage::TOUS.len(), "des niveaux sont inatteignables");
-        assert_eq!(t.suivant(), depart, "le cycle du tramage ne boucle pas");
-        let noms: std::collections::HashSet<&str> = Tramage::TOUS.iter().map(|t| t.nom()).collect();
-        assert_eq!(noms.len(), Tramage::TOUS.len(), "deux niveaux portent le même nom");
-    }
-
-    // **Les forces de tramage sont croissantes, et seul `Non` est nul.** Deux
-    // niveaux de même force donneraient deux entrées de menu indiscernables ;
-    // une force nulle ailleurs que sur `Non` serait un réglage sans effet.
-    #[test]
-    fn les_forces_de_tramage_sont_croissantes() {
-        assert_eq!(Tramage::Non.force(), 0.0, "« NON » trame quand même");
-        let mut precedente = -1.0;
-        for t in Tramage::TOUS {
-            assert!(t.force() > precedente, "{t:?} ne trame pas plus que le précédent");
-            precedente = t.force();
-        }
-        // Le plus fort doit couvrir la pire marche mesurée de Resurrect 64
-        // (0,50 → 0,68 dans les gris), sinon la bande bascule quand même.
-        assert!(
-            Tramage::Fort.force() >= 0.18,
-            "« FORT » à {} ne traverse pas la marche mesurée (0,18)",
-            Tramage::Fort.force()
-        );
     }
 
     // Même exigence de cycle pour la saturation.
@@ -609,14 +634,13 @@ mod tests {
             regler_etat_rendu(EtatRendu {
                 mode: ModeRendu::Net,
                 palette: 2,
-                tramage: Tramage::Leger,
                 saturation: Saturation::Moyen,
+                gamma: 1.0,
             });
             regler_rendu(ModeRendu::Palette);
             let e = etat_rendu();
             assert_eq!(e.mode, ModeRendu::Palette, "le mode n'a pas changé");
             assert_eq!(e.palette, 2, "la palette a été perdue");
-            assert_eq!(e.tramage, Tramage::Leger, "le tramage a été perdu");
             assert_eq!(e.saturation, Saturation::Moyen, "la saturation a été perdue");
         })
         .join()
@@ -632,13 +656,13 @@ mod tests {
                 regler_rendu(m);
                 assert_eq!(mode_rendu(), m, "{m:?} n'est pas relu tel quel");
             }
-            for t in Tramage::TOUS {
+            {
                 for palette in 0..3 {
                     let e = EtatRendu {
                         mode: ModeRendu::Palette,
                         palette,
-                        tramage: t,
                         saturation: Saturation::Moyen,
+                        gamma: 1.0,
                     };
                     regler_etat_rendu(e);
                     assert_eq!(etat_rendu(), e, "{e:?} n'est pas relu tel quel");

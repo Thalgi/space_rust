@@ -35,10 +35,14 @@
 //!
 //! Ces palettes ne sont pas fautives — elles sont faites pour qu'un dessinateur
 //! choisisse ses teintes, pas pour quantifier un ombrage continu. Les deux
-//! remèdes sont dans le shader : le **tramage ordonné** ([`matrice_bayer`]), qui
-//! rend les teintes intermédiaires en mélangeant spatialement deux entrées
-//! voisines, et l'**écrêtage des hautes lumières** ([`ECRETAGE_SEUIL`]), qui
-//! empêche le halo d'atteindre le blanc.
+//! Le remède est dans le shader : l'**écrêtage des hautes lumières**
+//! ([`ECRETAGE_SEUIL`]), qui empêche le halo d'atteindre le blanc, et la
+//! **saturation** avant recherche, qui écarte des neutres.
+//!
+//! ⚠️ Un **tramage ordonné de Bayer** a existé ici : il rendait les teintes
+//! intermédiaires en mélangeant spatialement deux entrées voisines, ce qui
+//! adoucissait les marches. Retiré le 2026-08-05 sur jugement visuel — le motif
+//! se voyait trop. Les marches de la palette sont donc de nouveau franches.
 //!
 //! # Ajouter une palette
 //!
@@ -71,11 +75,6 @@ use std::sync::OnceLock;
 /// ⚠️ Coût **par pixel** aussi : la recherche parcourt `nb_couleurs` entrées. Une
 /// palette de 182 coûte presque trois fois une de 64.
 pub const MAX: usize = 256;
-
-/// Côté de la matrice de tramage. 8 × 8 est le compromis habituel : assez de
-/// niveaux (64) pour traverser une marche de palette, assez petit pour rester
-/// invisible en motif.
-pub const COTE_TRAME: usize = 8;
 
 /// Au-dessus de ce niveau, les hautes lumières sont comprimées au lieu de
 /// monter tout droit vers le blanc.
@@ -118,40 +117,21 @@ pub const ECRETAGE_FORCE: f32 = 0.30;
 
 // ---------------------------------------------------------------- palettes
 
-/// Les palettes livrées avec le jeu : `(nom, couleurs)`.
+/// La palette livrée avec le jeu, **embarquée depuis son fichier**.
 ///
-/// En ajouter une tient en une ligne. Le nom est ce qu'affiche le menu.
-#[allow(clippy::type_complexity)]
-pub const INTEGREES: &[(&str, &[&str])] = &[
-    ("RESURRECT 64", &RESURRECT_64),
-    ("SWEETIE 16", &SWEETIE_16),
-    ("PICO-8", &PICO_8),
-];
+/// `include_str!` plutôt qu'une constante recopiée : le `.hex` reste la source,
+/// lisible et remplaçable, et il n'existe **qu'un seul** exemplaire des 182
+/// couleurs. Le fichier vit dans `assets/palettes/sources/`, hors du dossier
+/// scanné au démarrage — sinon il serait chargé deux fois et apparaîtrait en
+/// double au menu.
+///
+/// Embarquée et non simplement déposée : une palette au moins doit exister même
+/// sans dossier d'assets, faute de quoi le menu n'aurait rien à proposer et
+/// `palette(0)` n'aurait rien à rendre.
+const LOSPEC_2000: &str = include_str!("../assets/palettes/sources/lospec-2000.hex");
 
-/// Resurrect 64 — 64 teintes, très chromatique.
-const RESURRECT_64: [&str; 64] = [
-    "#2e222f", "#3e3546", "#625565", "#966c6c", "#ab947a", "#694f62", "#7f708a", "#9babb2",
-    "#c7dcd0", "#ffffff", "#6e2727", "#b33831", "#ea4f36", "#f57d4a", "#ae2334", "#e83b3b",
-    "#fb6b1d", "#f79617", "#f9c22b", "#7a3045", "#9e4539", "#cd683d", "#e6904e", "#fbb954",
-    "#4c3e24", "#676633", "#a2a947", "#d5e04b", "#fbff86", "#165a4c", "#239063", "#1ebc73",
-    "#91db69", "#cddf6c", "#313638", "#374e4a", "#547e64", "#92a984", "#b2ba90", "#0b5e65",
-    "#0b8a8f", "#0eaf9b", "#30e1b9", "#8ff8e2", "#323353", "#484a77", "#4d65b4", "#4d9be6",
-    "#8fd3ff", "#45293f", "#6b3e75", "#905ea9", "#a884f3", "#eaaded", "#753c54", "#a24b6f",
-    "#cf657f", "#ed8099", "#831c5d", "#c32454", "#f04f78", "#f68181", "#fca790", "#fdcbb0",
-];
-
-/// Sweetie 16 — 16 teintes. Sert surtout à vérifier qu'une **petite** palette
-/// traverse toute la chaîne (le shader s'arrête à `nb_couleurs`, pas à `MAX`).
-const SWEETIE_16: [&str; 16] = [
-    "#1a1c2c", "#5d275d", "#b13e53", "#ef7d57", "#ffcd75", "#a7f070", "#38b764", "#257179",
-    "#29366f", "#3b5dc9", "#41a6f6", "#73eff7", "#f4f4f4", "#94b0c2", "#566c86", "#333c57",
-];
-
-/// PICO-8 — les 16 couleurs de la console fantôme.
-const PICO_8: [&str; 16] = [
-    "#000000", "#1d2b53", "#7e2553", "#008751", "#ab5236", "#5f574f", "#c2c3c7", "#fff1e8",
-    "#ff004d", "#ffa300", "#ffec27", "#00e436", "#29adff", "#83769c", "#ff77a8", "#ffccaa",
-];
+/// Nom affiché de la palette embarquée.
+const NOM_EMBARQUEE: &str = "LOSPEC 2000";
 
 /// Une palette prête à servir : les couleurs, et leur version CIELAB.
 #[derive(Debug)]
@@ -240,12 +220,8 @@ struct Registre {
 fn registre() -> &'static Registre {
     static CACHE: OnceLock<Registre> = OnceLock::new();
     CACHE.get_or_init(|| {
-        let mut palettes: Vec<Palette> = INTEGREES
-            .iter()
-            .map(|(nom, hex)| {
-                Palette::depuis_hex(nom, hex).unwrap_or_else(|e| panic!("palette intégrée : {e}"))
-            })
-            .collect();
+        let mut palettes: Vec<Palette> = vec![Palette::depuis_texte(NOM_EMBARQUEE, LOSPEC_2000)
+            .unwrap_or_else(|e| panic!("palette embarquée illisible : {e}"))];
         let (trouvees, rejets) = trier(lire_dossier());
         palettes.extend(trouvees);
         Registre { palettes, rejets }
@@ -355,51 +331,6 @@ pub fn rgb_vers_lab(c: Vec3) -> Vec3 {
     vec3(116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
 }
 
-// ----------------------------------------------------------------- tramage
-
-/// Matrice de Bayer `COTE_TRAME × COTE_TRAME`, valeurs `0..n²-1`, en
-/// ligne par ligne.
-///
-/// Construction récursive classique : `M₂ₙ = [[4M, 4M+2], [4M+3, 4M+1]]`. Elle
-/// répartit les seuils de façon à ce que le motif ne fasse ni ligne ni paquet —
-/// c'est ce qui rend le tramage lisible comme une teinte intermédiaire plutôt
-/// que comme du bruit.
-pub fn matrice_bayer() -> Vec<u32> {
-    let mut m = vec![0u32];
-    let mut n = 1usize;
-    while n < COTE_TRAME {
-        let n2 = n * 2;
-        let mut r = vec![0u32; n2 * n2];
-        for y in 0..n {
-            for x in 0..n {
-                let v = m[y * n + x] * 4;
-                r[y * n2 + x] = v;
-                r[y * n2 + x + n] = v + 2;
-                r[(y + n) * n2 + x] = v + 3;
-                r[(y + n) * n2 + x + n] = v + 1;
-            }
-        }
-        m = r;
-        n = n2;
-    }
-    m
-}
-
-/// La matrice de Bayer en octets, pour la texture transmise au shader.
-///
-/// Une **texture** et non un tableau d'uniformes : GLSL ES 1.00 n'autorise
-/// l'indexation d'un tableau d'uniformes que par une constante, et l'indice de
-/// tramage se calcule à partir de la position du pixel.
-pub fn texture_bayer() -> Vec<u8> {
-    matrice_bayer()
-        .iter()
-        .flat_map(|v| {
-            let n = (((*v as f32 + 0.5) / (COTE_TRAME * COTE_TRAME) as f32) * 255.0).round() as u8;
-            [n, n, n, 255]
-        })
-        .collect()
-}
-
 // -------------------------------------------------- miroir CPU (tests seuls)
 
 /// Luminance perçue (Rec. 709) — l'axe autour duquel la saturation pivote.
@@ -482,29 +413,6 @@ pub fn quantifier(p: &Palette, couleur: Vec3) -> Vec3 {
     p.rgb[plus_proche(p, couleur)]
 }
 
-/// La chaîne complète, miroir CPU du shader : **saturation, écrêtage, tramage,
-/// quantification**, dans cet ordre.
-///
-/// L'ordre compte. La saturation d'abord, sur la couleur telle que la scène l'a
-/// produite ; l'écrêtage ensuite, qui a besoin de voir les dépassements
-/// au-dessus de 1 pour distinguer le cœur d'un reflet de son halo ; le tramage
-/// en dernier, juste avant la recherche.
-#[cfg(test)]
-pub fn quantifier_trame(
-    p: &Palette,
-    couleur: Vec3,
-    x: usize,
-    y: usize,
-    force: f32,
-    saturation: f32,
-) -> Vec3 {
-    let m = matrice_bayer();
-    let cellule = m[(y % COTE_TRAME) * COTE_TRAME + (x % COTE_TRAME)];
-    let seuil = (cellule as f32 + 0.5) / (COTE_TRAME * COTE_TRAME) as f32 - 0.5;
-    let c = ecreter(saturer(couleur, saturation)) + Vec3::splat(seuil * force);
-    quantifier(p, c.clamp(Vec3::ZERO, Vec3::ONE))
-}
-
 #[cfg(test)]
 // Ces tests affirment des choses sur des CONSTANTES, et clippy y voit une
 // condition toujours vraie. Elle l'est — aujourd'hui. Le jour où quelqu'un
@@ -520,7 +428,7 @@ mod tests {
     }
 
     fn integrees() -> Vec<Palette> {
-        INTEGREES.iter().map(|(n, h)| Palette::depuis_hex(n, h).expect(n)).collect()
+        vec![Palette::depuis_texte(NOM_EMBARQUEE, LOSPEC_2000).expect("palette embarquée")]
     }
 
     // **Un fichier refusé est conservé avec sa raison**, pas seulement ignoré.
@@ -568,16 +476,17 @@ ffffff".to_string()))]);
         assert_eq!(ok[0].nom, "ENDESGA_32", "nom inattendu : {}", ok[0].nom);
     }
 
-    // **Toutes les palettes intégrées se construisent.** Un hexa mal recopié
-    // rendrait la palette entière indisponible au démarrage.
+    // **La palette embarquee se construit.** C'est la seule livree avec le jeu :
+    // si elle ne se lit pas, le menu n'a rien a proposer et `palette(0)` n'a rien
+    // a rendre. Elle est donc chargee par `include_str!`, pas depuis le disque.
     #[test]
-    fn les_palettes_integrees_se_construisent() {
-        assert!(!INTEGREES.is_empty(), "aucune palette intégrée");
-        for (nom, hex) in INTEGREES {
-            let p = Palette::depuis_hex(nom, hex)
-                .unwrap_or_else(|e| panic!("{e}"));
-            assert_eq!(p.nb(), hex.len(), "{nom} : {} couleurs lues sur {}", p.nb(), hex.len());
-        }
+    fn la_palette_embarquee_se_construit() {
+        let p = Palette::depuis_texte(NOM_EMBARQUEE, LOSPEC_2000)
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert!(p.nb() > 100, "seulement {} couleurs : fichier tronque ?", p.nb());
+        assert_eq!(p.nom, NOM_EMBARQUEE);
+        // Et il y en a toujours au moins une au registre, dossier d'assets ou pas.
+        assert!(!toutes().is_empty(), "aucune palette disponible");
     }
 
     // **Aucune ne dépasse le plafond du shader**, et aucune n'est trop courte.
@@ -595,14 +504,14 @@ ffffff".to_string()))]);
         assert!(Palette::depuis_hex("VIDE", &[]).is_err(), "une palette vide est passée");
     }
 
-    // Les noms servent au menu : **distincts et non vides**, sinon deux entrées
-    // deviennent indiscernables.
+    // Deux palettes ne peuvent pas porter le meme nom : le menu les rendrait
+    // indiscernables. Le registre melange l'embarquee et celles du dossier.
     #[test]
     fn les_palettes_ont_des_noms_distincts_et_non_vides() {
         let mut vus = HashSet::new();
-        for (nom, _) in INTEGREES {
-            assert!(!nom.trim().is_empty(), "palette sans nom");
-            assert!(vus.insert(*nom), "{nom} en double");
+        for p in toutes() {
+            assert!(!p.nom.trim().is_empty(), "palette sans nom");
+            assert!(vus.insert(p.nom.clone()), "{} en double", p.nom);
         }
     }
 
@@ -731,61 +640,15 @@ ffffff".to_string()))]);
     // pourrait choisir par accident : il répète la dernière.
     #[test]
     fn le_tableau_transmis_est_complete_sans_inventer_de_couleur() {
-        let p = &integrees()[1]; // une petite palette (16)
+        // Une petite palette construite pour l'occasion : le registre n'en
+        // contient plus qu'une, longue.
+        let p = &Palette::depuis_hex("ESSAI", &["#000000", "#ffffff", "#ff0000"]).unwrap();
         let t = p.tableau(&p.rgb);
         assert_eq!(t.len(), MAX);
         assert_eq!(&t[..p.nb()], &p.rgb[..], "les vraies couleurs ont bougé");
         for (i, c) in t.iter().enumerate().skip(p.nb()) {
             assert_eq!(*c, *p.rgb.last().unwrap(), "case {i} : remplissage inattendu");
         }
-    }
-
-    // **La matrice de Bayer est une permutation** de 0..n²-1 : chaque seuil
-    // exactement une fois. Un doublon créerait un motif visible et laisserait des
-    // niveaux inatteignables.
-    #[test]
-    fn la_matrice_de_bayer_est_une_permutation() {
-        let m = matrice_bayer();
-        assert_eq!(m.len(), COTE_TRAME * COTE_TRAME);
-        let mut vus: Vec<u32> = m.clone();
-        vus.sort_unstable();
-        let attendu: Vec<u32> = (0..(COTE_TRAME * COTE_TRAME) as u32).collect();
-        assert_eq!(vus, attendu, "la matrice n'est pas une permutation");
-        // Et c'est bien la matrice de Bayer, pas n'importe quelle permutation :
-        // sa première ligne est connue.
-        assert_eq!(&m[..8], &[0, 32, 8, 40, 2, 34, 10, 42], "ce n'est pas Bayer");
-    }
-
-    // **Le tramage restitue des teintes intermédiaires.** C'est le remède au
-    // défaut observé : sans lui, un dégradé doux ne donne qu'une poignée
-    // d'aplats qui basculent d'un bloc. Le test compare, sur une même rampe, le
-    // nombre de couleurs obtenues avec et sans tramage.
-    #[test]
-    fn le_tramage_restitue_des_teintes_intermediaires() {
-        let p = &integrees()[0];
-        let mut sans = HashSet::new();
-        let mut avec = HashSet::new();
-        // Une rampe de gris douce, sur un bloc de 8×8 pixels par échelon.
-        for i in 0..64 {
-            let v = 0.2 + 0.6 * (i as f32 / 63.0);
-            let c = Vec3::splat(v);
-            sans.insert(octets(quantifier(p, c)));
-            for y in 0..COTE_TRAME {
-                for x in 0..COTE_TRAME {
-                    // Saturation neutre : ce test-ci ne mesure que le tramage.
-                    avec.insert(octets(quantifier_trame(p, c, x, y, 0.18, 1.0)));
-                }
-            }
-        }
-        assert!(
-            avec.len() > sans.len(),
-            "le tramage n'apporte rien : {} couleurs avec, {} sans",
-            avec.len(),
-            sans.len()
-        );
-        // Sans tramage, la rampe s'effondre sur très peu d'aplats — c'est la
-        // mesure du défaut d'origine.
-        assert!(sans.len() <= 8, "la rampe donne déjà {} couleurs", sans.len());
     }
 
     /// Chroma CIELAB — la « vivacité » d'une couleur.

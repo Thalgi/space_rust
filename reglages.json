@@ -1,0 +1,11 @@
+{
+  "mode": "Fenetre",
+  "resolution": {
+    "largeur": 1920,
+    "hauteur": 1080
+  },
+  "rendu": "Palette",
+  "palette": 0,
+  "saturation": "Fort",
+  "gamma": 1.2975206
+}

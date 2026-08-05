@@ -11,17 +11,12 @@ precision highp float;
 //
 // Trois etapes, dans cet ordre :
 //   1. ecretage des hautes lumieres  (sinon le halo du speculaire devient blanc)
-//   2. tramage ordonne de Bayer      (sinon les bandes basculent d'un bloc)
 //   3. recherche du plus proche      (la quantification elle-meme)
 
 varying lowp vec2 uv;
 varying lowp vec4 color;
 
 uniform sampler2D Texture;
-// Matrice de Bayer 8x8. Une TEXTURE et non un tableau d'uniformes : GLSL ES
-// 1.00 n'autorise l'indexation d'un tableau d'uniformes que par une constante,
-// or l'indice de tramage se calcule depuis la position du pixel.
-uniform sampler2D tramage;
 
 #define MAX 256
 uniform vec3 palette_lab[MAX];
@@ -32,8 +27,10 @@ uniform float nb_couleurs;
 // Taille de la cible basse resolution, pour indexer le tramage sur la grille
 // des GROS pixels et non sur celle de l'ecran.
 uniform vec2 taille_cible;
-uniform float cote_trame;
-uniform float force_trame;
+
+// Correction gamma appliquee AVANT la recherche : elle change la clarte, donc
+// les entrees de palette retenues. 1 = neutre.
+uniform float gamma;
 
 uniform float ecretage_seuil;
 uniform float ecretage_force;
@@ -113,18 +110,14 @@ void main() {
     // ecreter ensuite (qui a besoin des depassements), tramer en dernier.
     vec3 c = ecreter(saturer(src.rgb));
 
-    // --- Tramage ordonne ---
-    //
-    // L'offset se prend sur la grille de la CIBLE : indexe sur les pixels de
-    // l'ecran, le motif serait plus fin que les gros pixels et invisible.
-    if (force_trame > 0.0) {
-        vec2 pc = floor(uv * taille_cible);
-        vec2 duv = (mod(pc, cote_trame) + 0.5) / cote_trame;
-        float seuil = texture2D(tramage, duv).r - 0.5;
-        c += seuil * force_trame;
+    // Gamma AVANT la quantification : corriger apres ne ferait que deplacer des
+    // couleurs deja choisies hors de la palette.
+    c = clamp(c, 0.0, 1.0);
+    if (abs(gamma - 1.0) > 0.001) {
+        c = pow(c, vec3(1.0 / gamma));
     }
 
-    vec3 lab = rgb2lab(clamp(c, 0.0, 1.0));
+    vec3 lab = rgb2lab(c);
 
     // ATTENTION : on retient la COULEUR, pas l'indice.
     //

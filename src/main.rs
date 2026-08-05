@@ -59,7 +59,11 @@ async fn main() {
 
     // Les reglages survivent aux changements d'ecran : ils appartiennent au
     // jeu, pas a une vue.
-    let mut reglages = reglages::Reglages::default();
+    // Relus du disque : sans ça, chaque lancement repartait en fenêtré 1280x720
+    // et rendu net, et il fallait tout reconfigurer avant de pouvoir juger quoi
+    // que ce soit à l'écran.
+    let mut reglages = reglages::Reglages::charger();
+    reglages.appliquer();
     let mut etat = Etat::Accueil(Accueil::new());
 
     loop {

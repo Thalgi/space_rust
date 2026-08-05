@@ -106,9 +106,28 @@ Tailles : 9 entrées en 4:3, 16:10 et 16:9, de 1024 × 768 à 1920 × 1200.
 **Pas de 4K**, comme demandé — et le rendu est en impostors plein écran, donc le
 coût monte comme le nombre de pixels.
 
-**Dette D-PARAM-1** : les réglages ne sont **pas sauvegardés** — ils repartent
-en fenêtré 1280 × 720, rendu net, à chaque lancement. `genese/persistance.rs`
-sait déjà écrire du JSON dans le dossier du jeu ; c'est là que ça se brancherait.
+**D-PARAM-1 soldée** : les réglages sont **sauvegardés** dans `reglages.json`,
+à côté du jeu, et relus au démarrage.
+
+La sauvegarde vit dans `appliquer()` — le **point de passage unique** de tout
+changement. Répartie dans les six actions du menu, elle finirait par en oublier
+une.
+
+⚠️ **Tout échec de lecture retombe sur `default()`** : fichier absent, JSON
+cassé, champ ajouté depuis la dernière version. Un réglage perdu n'est rien ; un
+jeu qui refuse de démarrer pour un fichier de confort serait absurde. `assainir`
+borne ensuite ce qui a été relu — le fichier est éditable à la main, et un gamma
+à zéro ou un indice de palette hors liste donneraient un écran noir sans rien
+expliquer.
+
+**GAMMA au curseur** (0,5 → 2,5), appliqué **avant** la quantification : corriger
+après ne ferait que déplacer des couleurs déjà choisies hors de la palette. Le
+calcul (`gamma_depuis_x` / `x_depuis_gamma`) est séparé du dessin, donc testé.
+
+⚠️ **Le tramage a été retiré** le 2026-08-05, sur jugement visuel : le motif se
+voyait trop. C'était le remède aux **marches de la palette** (basculement de
+bandes entières décrit plus bas) — elles redeviennent donc franches. La
+saturation et l'écrêtage restent.
 
 ### Rendu pixel art (PARAMETRES → RENDU / PALETTE / TRAMAGE)
 
@@ -307,6 +326,134 @@ un océan. Ce sont des cas limites délibérés. Les tests encodent désormais l
 règle juste — *une rivière coule d'eau ou de lave*, *la végétation veut de l'eau
 ou une atmosphère* — et chacun vérifie que **le cas limite existe encore**, sans
 quoi la règle deviendrait vide sans que rien ne le dise.
+
+## ⚠️ Piège : matériau partagé + lots de dessin (D-GPU-1)
+
+**Toutes les planètes partagent un seul matériau** : `mat_corps()` rend des clones
+du même template, et les clones partagent le pipeline. `mat.set_texture(...)`
+n'attache donc **pas** une texture à *ce* dessin — elle l'écrit dans le pipeline,
+et macroquad ne l'applique qu'au **vidage du lot**.
+
+Conséquence : sans vidage explicite, *le dernier corps dessiné impose ses
+textures à tous les précédents*. Dans le système solaire, le dernier est une
+tellurique, donc `zonal = tex_vide()` (canal vert à 0) → `band = 0` →
+`base = belt` → **les quatre géantes sortaient d'un brun uni**.
+
+La galerie y échappait **par accident** : elle change de viewport à chaque
+cellule, et chaque `set_camera` vide le lot. C'est pourquoi le défaut ne se
+voyait que dans la vue système — et pourquoi le chercher dans les données ne
+pouvait pas aboutir (le profil zonal CPU était parfait, c'est testé).
+
+Corrigé par un `get_internal_gl().flush()` après chaque `draw_mesh` de planète.
+
+⚠️ **Le piège reste ouvert pour toute texture par objet.** `terrain` court le même
+risque sur les telluriques ; il n'est masqué que parce qu'elles partagent souvent
+`tex_vide()`. Toute nouvelle texture par astre doit être posée **entre deux
+vidages**.
+
+⚠️ **Non testable** : c'est de l'état GPU, invisible à `cargo test`. Le garde
+honnête serait une comparaison d'images rendues, que le projet n'a pas. C'est le
+**quatrième** défaut de la session où une valeur juste n'atteignait pas le shader
+(calotte, villes, atmo de Titan, texture zonale) : la donnée était bonne, la
+plomberie non.
+
+⚠️ **Coût** : le vidage est fait à chaque planète, donc plus d'appels de dessin
+qu'avant. Invisible aux effectifs actuels ; si la vue système rame un jour, ne
+vider que sur **changement** de textures plutôt qu'inconditionnellement.
+
+## Echelle du système solaire
+
+**Les distances étaient déjà réelles** : `a_monde = a_au * UA` avec `UA = 48`,
+linéaire, sans compression, et le preset porte les vraies valeurs (0,39 → 39,5 UA).
+Il n'y avait rien à corriger là.
+
+**Échelle vraie depuis le 2026-08-05 : plus aucune exagération.** `R_TERRE` vaut
+`4,2588e-5 × UA`, soit **0,002 unité** — le vrai rayon terrestre. Le Soleil suit
+(109,2 rayons terrestres au lieu des **mille** qu'il valait). Les lunes aussi :
+elles étaient exagérées *à part*, la Lune à 0,44 rayon terrestre au lieu de 0,27,
+et Ganymède sortait plus petite qu'elle alors qu'elle la dépasse de moitié.
+
+⚠️ **Conséquence assumée** : les planètes sont minuscules. Il faut approcher
+vraiment pour qu'une planète fasse quelques pixels, et depuis l'orbite de Neptune
+le système intérieur est un point. C'est le système solaire.
+
+**Les lunes ont désormais leurs vraies orbites** (table `LUNES` : demi-grands
+axes réels en km). Le placement procédural les mettait six fois trop loin — notre
+Lune vers 0,8 unité au lieu de 0,123, soit 60,3 rayons terrestres.
+
+**Les périodes suivent Kepler avec la masse du parent** (`MASSES_TERRESTRES`).
+C'est indispensable : Io et la Lune sont à peu près à la même distance de leur
+planète, mais Io boucle en 1,8 jour contre 27,3 — parce que Jupiter pèse 318
+Terres. Sans les masses, toutes les lunes tourneraient à la même vitesse. La
+constante est calée sur la période de notre Lune ; vérification indépendante :
+Io ressort à 1,76 jour (vrai : 1,769). Triton est **rétrograde**.
+
+⚠️ **Deux pièges trouvés en chemin.** `ajouter_lune_preset` prenait une taille
+**relative** (`rayon_planete * taille_rel`) : lui passer un rayon absolu rendait
+les lunes 2 000 fois trop petites. Et `poser_lune` forçait `.max(0.05)` sur le
+rayon, soit **vingt-quatre fois la Terre** à l'échelle vraie — toutes les lunes
+sortaient en boules géantes. `ajouter_lune_reelle` n'a ni l'un ni l'autre :
+Phobos a le droit d'être invisible.
+
+### Bouton d'échelle
+
+`ECHELLE_CORPS` (dans `presets.rs`) multiplie les rayons du Soleil, des planètes
+et des lunes **sans toucher aux distances**. À `1.0` = échelle vraie. Le monter
+est le compromis habituel pour rendre un système lisible, et c'est désormais un
+seul endroit.
+
+**Réglé à ×5.** L'échelle magnifie chaque planète **avec son cortège** :
+`distance_lune` la multiplie aussi. Seules les distances au Soleil restent
+vraies.
+
+⚠️ **Pourquoi les orbites de lunes suivent l'échelle.** Elles ne la suivaient
+pas d'abord, et ×5 a mis **Phobos à l'intérieur de Mars** : il n'orbite qu'à
+2,76 rayons martiens, ce qui plafonnait `ECHELLE_CORPS` à **1,15** — autant dire
+aucun réglage. J'avais estimé le plafond à ×25 en regardant la Lune (60 rayons
+terrestres) au lieu de la lune la **plus serrée**. C'est le test qui l'a dit.
+
+### Palette
+
+**Une seule, Lospec 2000**, embarquée par `include_str!` depuis
+`assets/palettes/sources/lospec-2000.hex`. Embarquée et non simplement déposée :
+il en faut **au moins une** même sans dossier d'assets, sinon le menu n'a rien à
+proposer et `palette(0)` rien à rendre.
+
+Les trois anciennes intégrées (Resurrect 64, Sweetie 16, PICO-8) sont retirées.
+Les `.hex` déposés ont été **déplacés** dans `assets/palettes/sources/` (pas
+supprimés) : ce sous-dossier n'est pas scanné, sinon Lospec 2000 serait chargée
+deux fois et apparaîtrait en double. Déposer un `.hex` dans
+`assets/palettes/` en ajoute toujours une.
+
+**Ce qui était faux avant ça, ce sont les rapports de rayons.** Écrits à la main dans chaque appel :
+Jupiter valait 3,1 fois la Terre au lieu de **11**, Pluton près de trois fois trop
+gros. Les rapports étaient incohérents et rien ne le disait — c'est
+vraisemblablement ce qui faisait que le système ne se lisait pas.
+
+Ils viennent maintenant d'une table unique, `RAYONS_TERRESTRES` (valeurs UAI), via
+`rayon_monde(nom)`. Le facteur d'exagération reste (`R_TERRE = 0,55` ; à l'échelle
+vraie la Terre ferait un demi-millième de pixel) mais il est **commun**, donc les
+rapports sont exacts.
+
+⚠️ **Piège évité** : `ajouter_lune_preset` reçoit le rayon de la planète pour
+calculer la limite de Roche, et ces rayons étaient **recopiés en dur** (`1.7`
+pour Jupiter). Grossir Jupiter sans les toucher aurait posé ses lunes **dans** la
+planète. Tout passe désormais par `rayon_monde`.
+
+**Ceintures aux distances réelles** : disque épars 48 → 1 000 UA (Sedna monte à
+937), nuage de Oort **2 000 → 20 000 UA** au lieu de 300 → 480. Le bord interne
+est désormais le vrai ; le nuage externe (jusqu'à ~100 000 UA) reste tronqué.
+⚠️ Conséquence assumée : il faut un zoom bien plus large pour apercevoir Oort.
+
+⚠️ **Les rayons des lunes restent exagérés** et sans rapport exact : Phobos
+mesure 11 km, soit 0,001 unité — invisible. C'est le même mensonge assumé que
+l'échelle de l'ISS.
+
+⚠️ **Limite de test** : `construire_preset_solaire` exige le contexte graphique.
+Les tests prouvent que la table est juste, pas que le preset s'en sert — un rayon
+réécrit à la main les laissait tous verts. D'où
+`le_preset_solaire_puise_ses_rayons_dans_la_table`, qui inspecte le **texte
+source** (`include_str!`). Inhabituel, mais c'est le seul garde possible ici.
 
 ## Chantiers en pause
 

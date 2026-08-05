@@ -23,8 +23,8 @@ pub enum Action {
     CyclerRendu,
     /// Passe à la palette suivante. Sans objet hors du mode palette.
     CyclerPalette,
-    /// Passe au niveau de tramage suivant. Sans objet hors du mode palette.
-    CyclerTramage,
+    /// Fait glisser le gamma. Sans objet hors du mode palette.
+    GlisserGamma,
     /// Passe au niveau de saturation suivant. Sans objet hors du mode palette.
     CyclerSaturation,
     /// Revient à l'accueil.
@@ -77,8 +77,8 @@ pub fn lignes(r: &Reglages) -> Vec<Ligne> {
             active: r.rendu.quantifie(),
         },
         Ligne {
-            libelle: format!("TRAMAGE : {}", r.tramage.nom()),
-            action: Action::CyclerTramage,
+            libelle: format!("GAMMA : {:.2}", r.gamma),
+            action: Action::GlisserGamma,
             active: r.rendu.quantifie(),
         },
         Ligne {
@@ -116,6 +116,30 @@ pub fn lignes_de_rejet(rejets: &[crate::palette::Rejet]) -> Vec<String> {
         v.push(format!("  ... et {} autre(s)", rejets.len() - REJETS_DETAILLES));
     }
     v
+}
+
+/// Marge interne de la piste du curseur, pour que le bouton ne sorte pas du
+/// cadre a fond de course.
+const MARGE_CURSEUR: f32 = 18.0;
+
+/// Valeur de gamma correspondant a une abscisse dans la ligne.
+///
+/// Separee du dessin **parce que c'est la que se decide la valeur** : c'est ce
+/// qui se teste, pas le rectangle qu'on peint.
+pub fn gamma_depuis_x(ligne: Rect, x: f32) -> f32 {
+    let a = ligne.x + MARGE_CURSEUR;
+    let b = ligne.x + ligne.w - MARGE_CURSEUR;
+    let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
+    crate::reglages::GAMMA_MIN + t * (crate::reglages::GAMMA_MAX - crate::reglages::GAMMA_MIN)
+}
+
+/// L'inverse : ou poser le bouton pour une valeur donnee.
+pub fn x_depuis_gamma(ligne: Rect, gamma: f32) -> f32 {
+    let a = ligne.x + MARGE_CURSEUR;
+    let b = ligne.x + ligne.w - MARGE_CURSEUR;
+    let t = (gamma - crate::reglages::GAMMA_MIN)
+        / (crate::reglages::GAMMA_MAX - crate::reglages::GAMMA_MIN);
+    a + t.clamp(0.0, 1.0) * (b - a)
 }
 
 /// Rectangle de la ligne `i`, pour un écran donné.
@@ -164,10 +188,31 @@ impl Parametres {
             Color::new(0.0, 0.9, 0.9, 1.0),
         );
 
+        // Glisser continu : tant que le bouton reste enfonce sur la ligne du
+        // gamma, la valeur suit la souris. Sans ca, il faudrait cliquer point
+        // par point pour regler.
+        if is_mouse_button_down(MouseButton::Left) {
+            if let Some(i) = l.iter().position(|x| x.action == Action::GlisserGamma) {
+                if l[i].active && rectangle(ecran, i).contains(m) {
+                    reglages.gamma = gamma_depuis_x(rectangle(ecran, i), m.x);
+                    reglages.appliquer();
+                }
+            }
+        }
+
         for (i, ligne) in l.iter().enumerate() {
             let r = rectangle(ecran, i);
             if ligne.active {
                 minitel_ligne(r, &ligne.libelle, m);
+                if ligne.action == Action::GlisserGamma {
+                    // Piste + bouton, dans la moitie droite de la ligne.
+                    let cy = r.y + r.h * 0.5;
+                    let a = r.x + MARGE_CURSEUR;
+                    let b = r.x + r.w - MARGE_CURSEUR;
+                    draw_line(a, cy, b, cy, 2.0, Color::new(0.20, 0.45, 0.48, 1.0));
+                    let x = x_depuis_gamma(r, reglages.gamma);
+                    draw_rectangle(x - 4.0, r.y + 6.0, 8.0, r.h - 12.0, Color::new(0.0, 0.9, 0.9, 1.0));
+                }
             } else {
                 // Grisée : même cadre, teinte éteinte, et le curseur ne
                 // l'allume pas — elle doit se lire comme hors service.
@@ -234,8 +279,10 @@ impl Parametres {
                 reglages.appliquer();
                 false
             }
-            Some(Action::CyclerTramage) => {
-                reglages.tramage = reglages.tramage.suivant();
+            Some(Action::GlisserGamma) => {
+                // Le clic pose la valeur ; le glisser la suit, gere plus haut.
+                let i = l.iter().position(|x| x.action == Action::GlisserGamma).unwrap();
+                reglages.gamma = gamma_depuis_x(rectangle(ecran, i), m.x);
                 reglages.appliquer();
                 false
             }
@@ -307,7 +354,7 @@ mod tests {
     #[test]
     fn les_reglages_de_palette_se_grisent_hors_du_mode_palette() {
         let concernees =
-            [Action::CyclerPalette, Action::CyclerTramage, Action::CyclerSaturation];
+            [Action::CyclerPalette, Action::GlisserGamma, Action::CyclerSaturation];
         for rendu in ModeRendu::TOUS {
             let mut r = Reglages::default();
             r.rendu = rendu;
@@ -468,6 +515,42 @@ mod tests {
         assert!(l.last().unwrap().contains('4'), "le reste n'est pas résumé : {}", l.last().unwrap());
     }
 
+    // **Le curseur couvre toute la plage, et rien de plus.** Un curseur qui
+    // n'atteint pas ses bornes rend une partie du reglage inaccessible ; un qui
+    // les depasse laisse poser un gamma nul, donc un ecran noir.
+    #[test]
+    fn le_curseur_de_gamma_couvre_sa_plage_sans_la_deborder() {
+        use crate::reglages::{GAMMA_MAX, GAMMA_MIN};
+        let r = rectangle(ECRAN, 4);
+        // Fond de course a gauche et a droite, et bien au-dela.
+        assert!((gamma_depuis_x(r, r.x - 500.0) - GAMMA_MIN).abs() < 1e-4);
+        assert!((gamma_depuis_x(r, r.x + r.w + 500.0) - GAMMA_MAX).abs() < 1e-4);
+        // Le milieu de la piste donne le milieu de la plage.
+        let milieu = gamma_depuis_x(r, r.x + r.w * 0.5);
+        assert!((milieu - (GAMMA_MIN + GAMMA_MAX) * 0.5).abs() < 0.02, "milieu a {milieu}");
+        // Et la valeur est monotone : glisser a droite augmente toujours.
+        let mut precedent = f32::NEG_INFINITY;
+        for k in 0..=20 {
+            let g = gamma_depuis_x(r, r.x + r.w * (k as f32 / 20.0));
+            assert!(g >= precedent - 1e-6, "le gamma redescend a k={k}");
+            precedent = g;
+        }
+    }
+
+    // **Aller-retour du curseur** : poser une valeur puis relire sa position
+    // doit rendre la meme valeur, sinon le bouton ne serait pas sous la souris.
+    #[test]
+    fn le_bouton_du_curseur_se_pose_ou_on_lit_la_valeur() {
+        let r = rectangle(ECRAN, 4);
+        for g in [0.5, 0.9, 1.0, 1.6, 2.5] {
+            let x = x_depuis_gamma(r, g);
+            let relu = gamma_depuis_x(r, x);
+            assert!((relu - g).abs() < 1e-3, "gamma {g} relu {relu}");
+            // Le bouton reste dans la ligne.
+            assert!(x >= r.x && x <= r.x + r.w, "bouton hors de la ligne pour {g}");
+        }
+    }
+
     // Chaque action est **atteignable** : une action qu'aucune ligne ne porte
     // serait du code mort, et l'inverse une ligne sans effet.
     #[test]
@@ -481,7 +564,7 @@ mod tests {
             Action::CyclerResolution,
             Action::CyclerRendu,
             Action::CyclerPalette,
-            Action::CyclerTramage,
+            Action::GlisserGamma,
             Action::CyclerSaturation,
             Action::Retour,
         ] {

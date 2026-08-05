@@ -3,6 +3,19 @@ use crate::systeme::Systeme;
 use macroquad::prelude::*;
 
 /// Base orthonormée **(droite, haut, avant)** d'une caméra orbitale de lacet
+/// Distance minimale a la cible, donc **plafond de zoom** : `zoom = dist_ref /
+/// dist`, si bien qu'une reference de 1 280 donne x2 560.
+///
+/// Elle valait 2,0 (soit x640). Depuis que les corps sont a l'echelle vraie, une
+/// planete ne fait que quelques millemes d'unite : il faut pouvoir descendre
+/// bien plus bas pour qu'elle occupe l'ecran. A 0,01, une reference de 1 280
+/// donne x128 000, de quoi remplir l'ecran avec la Terre (rayon ~0,010 unite a
+/// ECHELLE_CORPS = 5).
+pub const DIST_MIN: f32 = 0.01;
+
+/// Distance maximale : de quoi englober le nuage de Oort.
+pub const DIST_MAX: f32 = 30000.0;
+
 /// `yaw` et de tangage `pitch`. Indépendante de la distance : la direction
 /// cible → caméra est déjà unitaire.
 ///
@@ -111,6 +124,11 @@ impl Camera {
         self.dist_ref / self.dist
     }
 
+    /// Zoom maximal atteignable depuis le cadrage de reference courant.
+    pub fn zoom_max(&self) -> f32 {
+        self.dist_ref / DIST_MIN
+    }
+
     /// Rotation (glisser) + zoom (molette), sauf si la souris est sur l'UI.
     pub fn input_orbite(&mut self, sur_ui: bool) {
         let s = mouse_position();
@@ -122,7 +140,7 @@ impl Camera {
         if !sur_ui {
             let mol = mouse_wheel().1;
             if mol != 0.0 {
-                self.dist = (self.dist * (1.0 - mol.signum() * 0.1)).clamp(2.0, 30000.0);
+                self.dist = (self.dist * (1.0 - mol.signum() * 0.1)).clamp(DIST_MIN, DIST_MAX);
             }
         }
     }
@@ -148,11 +166,28 @@ impl Camera {
             lights_pos: [Vec3::ZERO; 4],
             lights_color: [Vec3::ZERO; 4],
         };
+        // **Plans de coupe proportionnels a la distance.**
+        //
+        // Les valeurs par defaut de macroquad (0,01 et 10 000) ne tiennent plus
+        // aux deux bouts :
+        //
+        // - au plus pres, `z_near` valait exactement `DIST_MIN` : la planete se
+        //   posait SUR le plan de coupe et disparaissait ;
+        // - au plus loin, `z_far` a 10 000 coupait avant meme `DIST_MAX`
+        //   (30 000), donc bien avant le nuage de Oort.
+        //
+        // Les faire suivre la distance donne un cadrage utilisable partout, et
+        // garde le rapport near/far constant -- c'est lui qui fixe la precision
+        // du tampon de profondeur, un near minuscule avec un far enorme fait
+        // clignoter les surfaces.
+        let (z_near, z_far) = (self.dist * 0.01, self.dist * 1000.0);
         let cam3d = Camera3D {
             position: pos,
             target,
             up: Vec3::Y,
             aspect: Some(aspect),
+            z_near,
+            z_far,
             ..Default::default()
         };
         (info, cam3d)
@@ -173,5 +208,60 @@ impl Camera {
             self.focus = Some(idx);
         }
         touche
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // **Le plafond de zoom.** Il n'est ecrit nulle part en dur : il tombe du
+    // plancher de distance, `zoom = dist_ref / dist`. A 2,0 on plafonnait a
+    // x640, ce qui ne suffit plus depuis que les corps sont a l'echelle vraie --
+    // une planete y mesure quelques millemes d'unite.
+    #[test]
+    fn le_zoom_monte_jusqua_2560() {
+        // `Camera::new` exige le contexte graphique : on eprouve donc
+        // l'arithmetique du plafond, qui est tout ce que la constante decide.
+        let plafond = |dist_ref: f32| dist_ref / DIST_MIN;
+        assert!(
+            plafond(1280.0) >= 2560.0,
+            "plafond a x{} : le plancher de distance ({DIST_MIN}) est trop haut",
+            plafond(1280.0)
+        );
+        // Le plafond doit avoir **quadruple** : il etait a x640 pour la meme
+        // reference, plancher 2,0.
+        assert!(plafond(1280.0) >= 4.0 * (1280.0 / 2.0), "le plafond n'a pas quadruple");
+    }
+
+    // **Les plans de coupe encadrent la cible a toute distance.** Les valeurs
+    // par defaut de macroquad coupaient aux deux bouts : `z_near` valait
+    // exactement `DIST_MIN`, et `z_far` s'arretait a 10 000 quand `DIST_MAX` est
+    // a 30 000.
+    #[test]
+    fn les_plans_de_coupe_encadrent_la_cible() {
+        for dist in [DIST_MIN, 1.0, 48.0, 1440.0, DIST_MAX] {
+            let (near, far) = (dist * 0.01, dist * 1000.0);
+            assert!(near > 0.0, "near nul a dist={dist}");
+            assert!(near < dist, "near {near} devant la cible a dist={dist}");
+            assert!(far > dist, "far {far} coupe avant la cible a dist={dist}");
+            // Marge confortable autour de la cible, des deux cotes.
+            assert!(dist / near >= 50.0, "trop peu de marge devant a dist={dist}");
+            assert!(far / dist >= 50.0, "trop peu de marge derriere a dist={dist}");
+        }
+        // Et de quoi englober le nuage de Oort (2 000 UA = 96 000 unites) une
+        // fois recule au maximum.
+        assert!(DIST_MAX * 1000.0 > 96_000.0, "le nuage de Oort reste coupe");
+    }
+
+    // Le plancher reste **strictement positif** : a zero, `zoom` diviserait par
+    // zero et la camera se retrouverait dans la cible.
+    #[test]
+    fn le_plancher_de_distance_reste_positif() {
+        assert!(DIST_MIN > 0.0, "plancher nul : division par zero dans zoom()");
+        assert!(DIST_MIN < DIST_MAX, "plancher au-dessus du plafond");
+        // Et le plafond englobe le nuage de Oort (2 000 UA = 96 000 unites,
+        // tronque a 20 000 UA ; on vise au moins de quoi cadrer Neptune a 30 UA).
+        assert!(DIST_MAX > 30.0 * 48.0, "plafond trop bas pour cadrer Neptune");
     }
 }
