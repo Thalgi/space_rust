@@ -24,14 +24,24 @@
 use crate::sprites::Ressource;
 use macroquad::prelude::*;
 
-/// Marge autour du bandeau.
+/// Marge latérale du bandeau.
 const MARGE: f32 = 8.0;
+/// Marge **haute** : nulle. La barre est collée au bord supérieur — c'est un
+/// bandeau d'état, pas une fenêtre ; un jour d'écart le ferait flotter.
+const HAUT: f32 = 0.0;
 /// Largeur d'une case, bornée. Trop étroite, le nombre ne tient pas ; trop
 /// large, les quatorze compteurs s'éparpillent sur tout l'écran.
-const CASE_MIN: f32 = 58.0;
-const CASE_MAX: f32 = 108.0;
-/// Hauteur d'une ligne : de quoi loger une icône 16 px avec de l'air.
-const LIGNE: f32 = 22.0;
+///
+/// Le plancher tient compte de l'icône : 32 px de sprite plus le nombre.
+const CASE_MIN: f32 = 88.0;
+const CASE_MAX: f32 = 132.0;
+/// Hauteur d'une ligne.
+///
+/// Elle **commande la taille des icônes** : `taille_ecran` ne rend que des
+/// multiples entiers de 16, donc une ligne de 22 donnait des sprites de 16 px
+/// (×1) et une ligne de 38 en donne de 32 (×2). C'est le seul réglage qui les
+/// fasse changer de palier — les agrandir passe par ici.
+const LIGNE: f32 = 38.0;
 /// Place réservée sous les deux lignes pour le **nom du système**.
 const NOM_SYSTEME: f32 = 24.0;
 
@@ -130,7 +140,7 @@ pub fn strip_outils(ecran: Vec2) -> Rect {
 /// Rectangle du bandeau entier — les deux lignes **et** le nom du système.
 pub fn rectangle(ecran: Vec2) -> Rect {
     let l = largeur_case(ecran) * Ressource::COLONNES as f32;
-    Rect::new(MARGE, MARGE, l, LIGNE * 2.0 + NOM_SYSTEME)
+    Rect::new(MARGE, HAUT, l, LIGNE * 2.0 + NOM_SYSTEME)
 }
 
 /// Hauteur totale occupée en haut de l'écran, marge comprise.
@@ -215,6 +225,30 @@ mod tests {
                     assert!(!chevauche, "{l}x{h} : les cases {i} et {j} se recouvrent");
                 }
             }
+        }
+    }
+
+    // **La barre est collée en haut** : c'est un bandeau d'état, pas une
+    // fenêtre. Un jour au-dessus le ferait flotter.
+    #[test]
+    fn le_bandeau_colle_au_bord_superieur() {
+        for (l, h) in ECRANS {
+            assert!(rectangle(vec2(l, h)).y <= 1e-6, "{l}x{h} : le bandeau flotte");
+        }
+    }
+
+    // **Les icônes tiennent leur palier ×2.** `taille_ecran` ne rend que des
+    // multiples de 16 : la hauteur de ligne doit laisser passer 32 px, sinon
+    // les sprites retombent silencieusement à 16 et la barre a l'air inchangée.
+    #[test]
+    fn les_icones_font_bien_deux_fois_le_sprite() {
+        let cote = crate::sprites::taille_ecran(LIGNE - 4.0);
+        assert_eq!(cote, 32.0, "icônes à {cote} px : la ligne de {LIGNE} ne laisse pas passer le ×2");
+        // Et la case doit loger l'icône **plus** le nombre.
+        for (l, h) in ECRANS {
+            let c = case(vec2(l, h), Ressource::Minerai);
+            assert!(c.w >= cote + 30.0, "{l}x{h} : case de {} px pour une icône de {cote}", c.w);
+            assert!(c.h >= cote, "{l}x{h} : ligne plus basse que l'icône");
         }
     }
 

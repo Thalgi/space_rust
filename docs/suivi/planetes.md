@@ -256,3 +256,27 @@ Diversity sont couvertes, plus les non-habitables et les cas spéciaux.
 ### Non-habitables
 - [x] Lune · Diamant · Chthonien · Subglaciaire · Vénus · Titan · Fer/Mercure · Carbone ·
   Ash · Io (soufre)
+
+---
+
+## Passe de cohérence du catalogue (2026-08-05)
+
+Partie de « Mercure a de la glace ». Trois trouvailles, détaillées dans
+[`STATE.md`](../../STATE.md) § « Cohérence du catalogue de planètes » :
+
+1. **`calotte = 1` ne voulait pas dire « aucune banquise ».** Le seuil
+   `smoothstep(calotte, calotte + 0.05, bord)` reçoit un `bord` perturbé de
+   ±0,30 par du bruit, et `froid` vaut déjà 1 au pôle. Tous les presets qui
+   déclarent 1 pour dire « pas de glace » — Mercure, la Lune, Carbone, Vénus —
+   sortaient coiffés de blanc. C'est désormais un sentinelle exact.
+2. **Les lumières de ville s'allumaient partout.** `villes` vaut 1 par défaut et
+   le shader n'excluait que la lave et les mondes voilés : les cailloux morts
+   étaient colonisés. La condition « ni air ni eau ⇒ pas de villes » vit
+   maintenant dans la donnée, où elle se teste.
+3. **Un test à moi était faux** : « pas de rivières sans eau » mordait sur
+   `Crevasse`, dont les rivières sont des coulées de **lave** (`riv_lave`). La
+   règle correcte est « une rivière coule d'eau **ou de lave** ».
+
+**Ce que la passe n'a PAS trouvé** : la donnée du catalogue était déjà cohérente
+sur tous les invariants testés. Les deux vrais défauts étaient dans le rendu, pas
+dans les presets — il n'y avait donc rien à « repasser » preset par preset.

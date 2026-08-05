@@ -21,6 +21,10 @@ pub enum Cible {
     Megastructures,
     /// Vaisseaux et supervaisseaux (ISV, puis Endurance et Starship).
     Vaisseaux,
+    /// Réglages du jeu (affichage, taille de fenêtre, rendu).
+    Parametres,
+    /// Ferme le jeu.
+    Quitter,
 }
 
 /// Écran d'accueil : titre + deux blocs de boutons (astres / vaisseaux).
@@ -94,6 +98,24 @@ impl Accueil {
 
         let choix = Self::bloc("[ ASTRES & GALERIES ]", BLOC_ASTRES, xg, y0, m, clic)
             .or_else(|| Self::bloc("[ STATIONS & MEGASTRUCTURES ]", BLOC_STATIONS, xd, y0, m, clic));
+
+        // Les paramètres valent pour **tout le jeu**, pas pour une famille de
+        // vues : ils se posent donc à part, sous les deux blocs, et non dans
+        // l'un des deux.
+        let hauteur_bloc = BLOC_ASTRES.len().max(BLOC_STATIONS.len()) as f32 * 52.0;
+        let r = Rect::new(cx - 190.0, y0 + hauteur_bloc + 28.0, 380.0, 40.0);
+        minitel_ligne(r, "PARAMETRES", m);
+        if clic && r.contains(m) {
+            return Some(Cible::Parametres);
+        }
+
+        // QUITTER, sous les paramètres. En dernier, parce qu'un bouton qui ferme
+        // le jeu ne doit jamais border un bouton qu'on clique souvent.
+        let q = Rect::new(cx - 190.0, r.y + r.h + 12.0, 380.0, 40.0);
+        minitel_ligne(q, "QUITTER", m);
+        if clic && q.contains(m) {
+            return Some(Cible::Quitter);
+        }
 
         choix.copied()
     }

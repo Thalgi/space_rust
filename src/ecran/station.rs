@@ -725,7 +725,7 @@ impl VueStation {
         let etat_env = if self.enveloppes { "ON" } else { "OFF" };
         let etat_fils = if self.fils { "ON" } else { "OFF" };
         let etat_num = if self.numeros { "ON" } else { "OFF" };
-        let etat_pix = if self.pixel.actif { "ON" } else { "OFF" };
+        let etat_pix = crate::reglages::mode_rendu().nom();
         // Les réglages du générateur ne sont rappelés que dans sa catégorie.
         let gen = if self.categorie == Categorie::Generateur {
             "1-4: complexite   O: ossature   G: graine   S: style   "

@@ -20,8 +20,7 @@ sur un fichier contenant du travail non commité. Pour annuler ses propres
 modifications : ré-éditer les lignes, ou sauvegarder le fichier dans le
 scratchpad **avant** de le toucher (red-checks compris).
 
-État vérifié : **351 tests verts** (`cargo test --release`, ~1,0 s),
-**`cargo clippy` compile** (0 erreur).
+État vérifié : **411 tests verts**, **`cargo clippy` : 0 erreur**.
 
 ## Chantier courant : l'interface de jeu
 
@@ -82,6 +81,174 @@ Remis au niveau au passage :
 elle ferait 9 × 10⁻⁶ unité de monde — mille fois moins qu'un pixel. Les facteurs
 sont **nommés** (`ORBITE_ISS`, `ECHELLE_ISS`) plutôt que noyés dans un calcul :
 un mensonge d'échelle assumé vaut mieux qu'un mensonge implicite.
+
+## Paramètres du jeu
+
+Écran **PARAMETRES** depuis l'accueil (`src/ecran/parametres.rs`), modèle dans
+`src/reglages.rs`. Six réglages, et la place est faite pour les suivants : les
+entrées sont une **liste**, en ajouter une tient en une ligne.
+
+Un bouton **QUITTER** est posé sous PARAMETRES sur l'accueil. Il sort de la
+boucle de jeu (`return`) plutôt que d'appeler `process::exit`, pour que miniquad
+ferme sa fenêtre proprement. ⚠️ Sa géométrie est **calculée en ligne dans
+`accueil.rs` et n'est donc pas testée** — comme tout le reste de cet écran ; le
+non-recouvrement avec PARAMETRES tient à la construction (52 px d'écart pour
+40 px de haut).
+
+⚠️ **Deux modes d'affichage, pas trois.** macroquad n'expose qu'un
+`set_fullscreen(bool)`, et miniquad l'implémente sur Windows en passant la
+fenêtre en `WS_POPUP` à la taille de l'écran (`native/windows.rs`) — c'est
+**déjà** un plein écran sans bordure. Il n'existe pas de mode exclusif
+(changement de mode vidéo). Proposer « plein écran » et « sans bordure »
+séparément donnerait deux boutons au comportement identique.
+
+Tailles : 9 entrées en 4:3, 16:10 et 16:9, de 1024 × 768 à 1920 × 1200.
+**Pas de 4K**, comme demandé — et le rendu est en impostors plein écran, donc le
+coût monte comme le nombre de pixels.
+
+**Dette D-PARAM-1** : les réglages ne sont **pas sauvegardés** — ils repartent
+en fenêtré 1280 × 720, rendu net, à chaque lancement. `genese/persistance.rs`
+sait déjà écrire du JSON dans le dossier du jeu ; c'est là que ça se brancherait.
+
+### Rendu pixel art (PARAMETRES → RENDU / PALETTE / TRAMAGE)
+
+Trois états de rendu : `NET`, `PIXEL ART` (gros pixels, ce qui existait déjà sous
+la touche **P**), `PIXEL ART + PALETTE` (quantification CIELAB). Trois réglages
+s'ajoutent en mode palette, grisés sinon : **palette**, **tramage** et
+**saturation**. Conception complète, corrections apportées au guide d'origine et
+dettes : [`docs/conception/pixel_art.md`](docs/conception/pixel_art.md).
+
+**Ajouter une palette** : déposer un `.hex` (format Lospec, un hexa par ligne)
+dans [`assets/palettes/`](assets/palettes/) — ramassé au démarrage, aucun code à
+toucher. Trois palettes intégrées : Resurrect 64, Sweetie 16, PICO-8.
+
+**Rien n'est refusé en silence.** Un `.hex` que le jeu n'a pas pu charger est
+listé **à l'écran**, dans PARAMETRES, en ambre, avec son nom de fichier et la
+raison (`palette::rejets`). C'est la réponse à la classe d'erreur qui a coûté le
+plus cher cette session : deux palettes déposées n'apparaissaient jamais au menu
+et la seule trace partait dans une console que personne ne lit.
+
+La décision (quoi dire, combien en détailler) vit dans `lignes_de_rejet`, séparée
+du dessin et **testée** ; la lecture disque (`lire_dossier`) ne décide de rien, et
+le tri (`trier`) est pur — c'est ce qui rend l'ensemble testable sans contexte
+graphique.
+
+⚠️ **Plafond : 256 couleurs** (`palette::MAX`), relevé depuis 64 — Lospec 2000
+(182) et AllStars (128) étaient **rejetées puis ignorées**, avec pour seule trace
+une ligne de console. Le coût de rendu monte avec le nombre de couleurs : la
+recherche parcourt toute la palette **par pixel**.
+
+⚠️ **Une palette d'artiste n'est pas une rampe de dégradé.** Mesuré sur
+Resurrect 64 : un dégradé de gris ne tombe que sur **8 couleurs**, avec une
+marche de L=49 à L=69, et tout ce qui dépasse 89 % s'écrase sur le blanc. Trois
+défauts constatés à l'écran en découlent, chacun avec son remède mesuré :
+
+| Défaut vu | Cause mesurée | Remède |
+|---|---|---|
+| Bandes qui basculent d'un bloc | marche de 0,18 en gris | **tramage de Bayer**, `FORT` = 0,18 |
+| Reflet en aplat blanc | spéculaire additif > 1,0 | **écrêtage** (cœur blanc, halo non) |
+| Couleurs ternes, océans gris-violet | les **neutres** de la palette attirent les couleurs peu saturées | **saturation** ×1,9 à luminance constante (+53 % de chroma) |
+
+Deux fausses pistes écartées par la mesure, à ne pas re-explorer : la recherche
+CIELAB garde déjà 85 % de la chroma (pondérer L n'y change rien), et le tramage
+ne désature pas.
+
+⚠️ L'écrêtage n'agit **que dans la passe pixel art** : le spéculaire de
+`planete.frag.glsl` n'est pas touché, le modifier changerait le rendu `NET` et
+donc la galerie, les presets et les captures de non-régression.
+
+Le mode est **global** (`reglages::etat_rendu`), pas par vue : les touches P et
+le menu pilotent le même état, et P ne change que le mode (ni la palette ni le
+tramage). `ecran/pixel.rs` est devenu la **source unique du blit** — les quatre
+vues y passent, ainsi que le facteur `PIX` et la création de cible qui étaient
+recopiés trois fois.
+
+⚠️ **Seule la couche 3D est quantifiée.** Fond stellaire, orbites et textes
+restent nets, comme c'était déjà la règle.
+
+⚠️ **D-PIX-1** : le miroir CPU testable (`palette.rs`) et le shader
+(`palette.frag.glsl`) sont deux écritures du même algorithme ; aucun test ne
+compile de GLSL, donc rien ne garantit qu'ils restent d'accord.
+
+## Le système solaire et le catalogue
+
+Le preset solaire (`genese/presets.rs`) tire **déjà** ses apparences du
+catalogue de la galerie (`preset_tellurique` / `preset_gazeuse`, qui **paniquent**
+sur un nom inconnu — il n'y a pas de repli silencieux). Deux corrections le
+2026-08-05 :
+
+**1. Le catalogue est devenu déterministe** — c'était la cause racine.
+
+`catalogue_telluriques()` / `catalogue_gazeuses()` tiraient une graine **et** une
+taille au sort à chaque construction. Conséquence : la « Terre » de la galerie
+n'était pas une référence, mais une planète différente à chaque ouverture de
+l'écran. Le système solaire ne pouvait donc **pas** lui ressembler — il n'y avait
+rien à quoi ressembler.
+
+Graine et taille sont maintenant déduites du **nom du preset**
+(`genese::graine_de_nom`, FNV-1a, et `ClasseTaille::rayon_pour`). Le brassage n'a
+pas disparu : il a changé de place, dans la galerie, où la touche **G**
+incrémente une `variation`. À `variation == 0`, le décalage est nul — **la vue
+par défaut de la galerie EST le catalogue canonique**, ce qui est ce à quoi le
+système solaire s'aligne.
+
+Les corps à preset **unique** prennent donc la graine du catalogue et sont
+identiques à leur vignette de galerie. `fige(…, "<corps>")` ne subsiste que là où
+un preset est **réutilisé** (Callisto et Obéron tirent tous deux « Lune »), sans
+quoi ils seraient rigoureusement jumeaux.
+
+**Gain de côté** : sans `gen_range`, le catalogue **se teste enfin**. Cinq tests
+neufs, dont « chaque preset demandé par les systèmes scénarisés existe » — jusqu'ici
+garanti par un seul `panic!` au lancement, écran noir à la clé.
+
+**2. Appariements revus**, pour cesser de recycler le même preset :
+
+| Corps | Avant | Après | Pourquoi |
+|---|---|---|---|
+| Ganymède | `Lune` | `Crevasse` | ses sillons (sulci) |
+| Callisto | `Carbone` | `Lune` | le corps le plus cratérisé connu |
+| Ariel | `Boule de neige` | `Supraglacial` | terrains fracturés brillants |
+| Pluton | `Boule de neige` | `Ice Dunes` | dunes vues par New Horizons |
+
+⚠️ **Fixtures recopiées** : les listes de noms des tests (`DEMANDES_TELLURIQUES`,
+`DEMANDES_GAZEUSES`, `CORPS`) sont recopiées de `presets.rs`. Un nom ajouté là-haut
+sans l'être ici est **moins couvert**, il ne devient pas faux.
+
+⚠️ **Piège évité de justesse** : `chaque_taille_reste_dans_les_bornes_de_sa_classe`
+déduisait d'abord ses bornes de `rayon_pour`, la fonction même qu'il teste —
+l'attendu bougeait avec elle et le test ne pouvait pas échouer. Il lit maintenant
+`bornes_terrestres()` à la source. C'est le mode de défaillance récurrent du
+projet : *un test qui mesure autre chose que ce que son nom annonce*.
+
+⚠️ **Bug de LOD corrigé** (`rendu.rs`) : `planete::set_viewport_h` n'était réglé
+**que par la galerie**. Dans la vue système, `px_rayon` retombait sur
+`screen_height()` — donc en mode pixel art, les planètes étaient ombrées avec le
+détail d'un plein écran alors qu'elles sont dessinées dans une cible deux fois
+plus petite. Les débris avaient déjà leur correction, pas les planètes.
+
+## Cohérence du catalogue de planètes
+
+Passe du 2026-08-05, déclenchée par « Mercure a de la glace ». **Trois défauts,
+dont deux dans le shader** — la donnée, elle, était déjà cohérente.
+
+| Défaut | Où | Cause |
+|---|---|---|
+| Banquise sur des mondes sans climat (Mercure, Lune, Carbone, Vénus) | `planete.frag.glsl` | `calotte = 1` était censé dire « aucune », mais le seuil est perturbé par un bruit de ±0,30 et `froid` atteint déjà 1 au pôle : `smoothstep(1, 1.05, 1.5)` rendait 1 |
+| Lumières de ville sur les cailloux morts | `apparence.rs` + shader | `villes` vaut **1 par défaut** et le shader n'excluait que lave et voile — aucune condition d'air ou d'eau |
+| (faux positif) Rivières sans eau sur `Crevasse` | — | ce sont des **coulées de lave** (`riv_lave`) : c'est le test qui était faux |
+
+`calotte >= 1` est maintenant un **sentinelle exact** dans le shader, et
+« ni air ni eau ⇒ pas de villes » est appliqué **dans la donnée** (le `push` du
+catalogue), là où ça se teste.
+
+Six tests de cohérence neufs, tous red-checkés. Ils tiennent des invariants, pas
+des valeurs : *pas de climat ⇒ pas de banquise*, *un monde annoncé gelé porte
+vraiment de la glace*, *un monde habitable garde ses villes* (sans quoi une règle
+trop large les éteindrait partout sans qu'on le voie), *une rivière coule d'eau
+ou de lave*.
+
+⚠️ Ces tests ne sont possibles que **depuis que le catalogue est déterministe** :
+avant, il exigeait le contexte graphique.
 
 ## Chantiers en pause
 
@@ -177,7 +344,7 @@ chantier de conception à part entière.
 | # | Bouche-trou | Où | Ce qu'il faut à la place |
 |---|---|---|---|
 | **D-INT-1** | ~~Pastille de catégorie~~ — **soldée** : la pastille prend la **teinte réelle** du corps (`Astre::teinte`, tirée de l'apparence), relevée pour rester visible sur fond nuit. Une retouche d'apparence se voit aussitôt dans la colonne. Reste un disque, et c'est voulu : à 6–14 px de diamètre, un rendu de planète serait de la bouillie. | — | — |
-| **D-INT-2** | **`Tresorerie` figée** : les quatorze quantités sont écrites à la main, rien ne les fait bouger. | à venir, étape I.4 | L'économie : production, consommation, coûts, recherche. C'est un chantier de conception à part entière, et la barre a été écrite pour pouvoir l'attendre (`conception/interface.md` §2.2b). |
+| **D-INT-2** | **`Tresorerie` figée** : les quatorze quantités sont écrites à la main, rien ne les fait bouger. | `ecran/bandeau.rs::Tresorerie` | L'économie : production, consommation, coûts, recherche. Chantier de **conception** à part entière ; la barre a été écrite pour pouvoir l'attendre (`conception/interface.md` §2.2b). |
 | **D-INT-3** | ~~Vignette du panneau~~ — **soldée** : l'astre est **réellement rendu** (`ecran/vignette.rs`) dans une cible 192×192 avec son propre tampon de profondeur, sous l'éclairage du système, caméra placée du côté éclairé et reculée pour laisser tenir un anneau. | — | — |
 | **D-INT-4** | ~~Nom du système~~ — **soldée** : dérivé de l'étoile hôte (`Systeme::nom_systeme`). Repli sur le libellé de génération pour un système engendré, dont les étoiles n'ont pas de nom propre. | — | — |
 | **D-INT-5** | ~~Noms de presets non gardés~~ — **soldée** : `ajouter_planete`/`ajouter_planete_autour` exigent un `Option<&'static str>`, comme `ajouter_lune_preset`. Chaque appelant doit dire `Some("Terre")` ou `None`. Deux tests lisent la **source** pour interdire le retour du `sys.nommer` après coup — seul moyen, faute de pouvoir bâtir un système en test. | — | — |

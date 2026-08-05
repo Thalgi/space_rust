@@ -31,7 +31,7 @@ pub enum ClasseTaille {
 
 impl ClasseTaille {
     /// Bornes (min, max) du rayon réel de la classe, en rayons terrestres.
-    fn bornes_terrestres(self) -> (f32, f32) {
+    pub(crate) fn bornes_terrestres(self) -> (f32, f32) {
         match self {
             ClasseTaille::Lune => (0.20, 0.45),
             ClasseTaille::Naine => (0.38, 0.62),
@@ -57,6 +57,17 @@ impl ClasseTaille {
     pub fn rayon_aleatoire(self) -> f32 {
         let (lo, hi) = self.bornes_terrestres();
         rayon_visuel(gen_range(lo, hi))
+    }
+
+    /// Le rayon **à la position `t`** dans les bornes de la classe (`t` dans
+    /// 0..1). C'est [`Self::rayon_aleatoire`] sans le hasard.
+    ///
+    /// Sert au catalogue, qui doit être **reproductible** : une entrée de
+    /// catalogue est une référence, et une référence qui change à chaque lecture
+    /// n'en est pas une. `t` y est déduit du nom du preset.
+    pub fn rayon_pour(self, t: f32) -> f32 {
+        let (lo, hi) = self.bornes_terrestres();
+        rayon_visuel(lo + (hi - lo) * t.clamp(0.0, 1.0))
     }
 }
 

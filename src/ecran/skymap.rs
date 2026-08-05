@@ -292,7 +292,8 @@ impl Skymap {
         let col = liste::colonne_items_depuis(ecran, haut);
         let entrees = selecteur::entrees(&self.sys);
         let i = liste::item_sous_curseur(col, entrees.len(), souris)?;
-        Some(entrees[i].idx)
+        // Le barycentre est une ligne d'arbre, pas un astre : rien a cadrer.
+        entrees[i].idx
     }
 
     /// Barre de ressources et nom du systeme. **Passe interface uniquement.**
@@ -385,14 +386,37 @@ impl Skymap {
                 if r.contains(souris) {
                     draw_rectangle(r.x, r.y, r.w, r.h, Color::new(0.0, 0.45, 0.45, 0.35));
                 }
-                if focus == Some(e.idx) {
+                if e.idx.is_some() && focus == e.idx {
                     draw_rectangle_lines(r.x, r.y, r.w, r.h, 1.0, cyan);
                 }
-                // Pastille : bouche-trou en attendant une vraie vignette (D-INT-1).
-                let retrait = 4.0 + e.profondeur as f32 * 8.0;
+
+                // --- Trait d'arbre, a gauche de la pastille ---
+                //
+                // Une racine n'en a pas ; un fils recoit un coude, et le
+                // **dernier** un coude ferme, faute de quoi le trait vertical
+                // descendrait sous la derniere planete vers rien.
+                let retrait = 4.0 + e.profondeur as f32 * 11.0;
                 let rayon = (h * 0.26).clamp(3.0, 7.0);
                 let cx = r.x + retrait + rayon;
-                draw_circle(cx, r.y + r.h * 0.5, rayon, selecteur::teinte_astre(&self.sys, e.idx, e.categorie));
+                let mi = r.y + r.h * 0.5;
+                if e.profondeur > 0 {
+                    let trait_col = Color::new(0.0, 0.55, 0.55, 0.85);
+                    let bx = r.x + 4.0 + rayon;
+                    let bas = if e.branche == selecteur::Branche::Dernier { mi } else { r.y + r.h };
+                    draw_line(bx, r.y, bx, bas, 1.0, trait_col);
+                    draw_line(bx, mi, cx - rayon - 1.0, mi, 1.0, trait_col);
+                }
+
+                let teinte = match e.idx {
+                    Some(i) => selecteur::teinte_astre(&self.sys, i, e.categorie),
+                    // Le barycentre n'est pas un corps : un petit reperage creux.
+                    None => Color::new(0.35, 0.45, 0.5, 1.0),
+                };
+                if e.idx.is_some() {
+                    draw_circle(cx, mi, rayon, teinte);
+                } else {
+                    draw_circle_lines(cx, mi, rayon * 0.8, 1.0, teinte);
+                }
 
                 let tx = cx + rayon + 4.0;
                 let dispo = r.x + r.w - tx - 3.0;

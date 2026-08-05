@@ -14,9 +14,15 @@ pub struct Galerie {
     scroll_cible: f32, // le scroll réel converge vers la cible (défilement doux)
     // Filtre pixel (P) : phase 3D rendue en basse résolution puis upscalée
     // en plus proche voisin ; les textes restent nets.
-    pixelise: bool,
     cible: Option<RenderTarget>,
     rt_dims: (u32, u32),
+    /// Brassage des géographies. **0 = le catalogue tel quel**, c'est-à-dire la
+    /// référence à laquelle le système solaire doit ressembler ; G l'incrémente.
+    ///
+    /// Le catalogue est désormais **déterministe** (`genese::graine_de_nom`) :
+    /// c'est ici que vit le hasard, parce que rebrasser les cartes est le rôle de
+    /// cet écran, pas celui de la source.
+    variation: u32,
     jour: bool,
     villes: u8, // index 0..4 -> niveau 0, 0.5, 1, 1.5, 2
     gazeuse: bool, // false = telluriques, true = géantes gazeuses
@@ -40,9 +46,9 @@ impl Galerie {
             cellules: Vec::new(),
             scroll: 0.0,
             scroll_cible: 0.0,
-            pixelise: false,
             cible: None,
             rt_dims: (0, 0),
+            variation: 0,
             jour: false,
             villes: 2, // démarre sur « actuel » (niveau 1.0)
             gazeuse,
@@ -59,9 +65,19 @@ impl Galerie {
         } else {
             catalogue_telluriques()
         };
+        // Décalage de géographie : nul à la première construction, pour que la vue
+        // par défaut de la galerie SOIT le catalogue canonique. Sans ce zéro, il
+        // n'existerait de nouveau aucune référence stable à laquelle comparer le
+        // système solaire.
+        let decalage = if self.variation == 0 {
+            0.0
+        } else {
+            crate::genese::graine_de_nom(&format!("variation~{}", self.variation))
+        };
         self.cellules = catalogue
             .into_iter()
-            .map(|(nom, app)| {
+            .map(|(nom, mut app)| {
+                app.seed = (app.seed + decalage) % 1000.0;
                 let rare = crate::genese::est_rare(&nom);
                 // Rayon issu de la taille du preset (source unique) : les mondes
                 // apparaissent à leur taille relative dans la grille.
@@ -93,6 +109,7 @@ impl Galerie {
         }
         if is_key_pressed(KeyCode::G) {
             self.seed = self.seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            self.variation = self.variation.wrapping_add(1);
             self.construire();
         }
         if is_key_pressed(KeyCode::R) {
@@ -100,7 +117,8 @@ impl Galerie {
             self.construire();
         }
         if is_key_pressed(KeyCode::P) {
-            self.pixelise = !self.pixelise; // filtre pixel ON/OFF
+            // Cycle NET -> PIXEL -> PIXEL+PALETTE, sur le réglage global.
+            crate::reglages::regler_rendu(crate::reglages::mode_rendu().suivant());
         }
         if is_key_pressed(KeyCode::B) {
             // Bench complet en tâche de fond (telluriques uniquement) ->
@@ -163,21 +181,12 @@ impl Galerie {
         };
 
         // Filtre pixel : cible basse résolution (recréée si la fenêtre change).
-        const PIX: u32 = 2;
-        if self.pixelise {
-            let dims = (
-                (screen_width() as u32 / PIX).max(2),
-                (screen_height() as u32 / PIX).max(2),
-            );
+        // Le mode vient des réglages — la galerie n'a pas d'interrupteur à elle.
+        let pixelise = crate::reglages::mode_rendu().pixelise();
+        if pixelise {
+            let dims = super::pixel::dimensions();
             if self.rt_dims != dims || self.cible.is_none() {
-                // depth: true — indispensable pour l'occlusion en mode pixel.
-                let rt = render_target_ex(
-                    dims.0,
-                    dims.1,
-                    RenderTargetParams { sample_count: 1, depth: true },
-                );
-                rt.texture.set_filter(FilterMode::Nearest);
-                self.cible = Some(rt);
+                self.cible = Some(super::pixel::nouvelle_cible(dims.0, dims.1));
                 self.rt_dims = dims;
             }
             // Nettoyage de la cible au fond d'écran.
@@ -226,13 +235,13 @@ impl Galerie {
                 )),
                 ..Default::default()
             };
-            if self.pixelise {
+            if pixelise {
                 // Rendu dans la cible basse-déf. Le blit final (flip_y) PRÉSERVE
                 // les hauteurs GL (bas de la cible = bas de l'écran) : on adresse
                 // donc la cible dans le MÊME repère bas-gauche que le rendu
                 // direct, juste divisé par l'échelle. (L'ancien adressage haut-bas
                 // inversait l'ordre des rangées et décalait étiquettes/scroll.)
-                let p = PIX as f32;
+                let p = super::pixel::PIX as f32;
                 cam3d.render_target = self.cible.clone();
                 cam3d.viewport = Some((
                     (cell_x / p) as i32,
@@ -258,7 +267,7 @@ impl Galerie {
             };
             planete.set_villes(self.villes as f32 * 0.5);
             // LOD : le rendu se fait dans la cellule, pas plein écran.
-            let ech = if self.pixelise { PIX as f32 } else { 1.0 };
+            let ech = if pixelise { super::pixel::PIX as f32 } else { 1.0 };
             crate::planete::set_viewport_h(render_h / ech);
             planete.draw(&cam);
             labels.push((nom.clone(), *rare, cell_x, cell_y + render_h + 16.0));
@@ -267,19 +276,9 @@ impl Galerie {
 
         // --- Phase 2D : on remet la caméra écran UNE fois, puis tout le texte. ---
         set_default_camera();
-        if self.pixelise {
+        if pixelise {
             if let Some(rt) = &self.cible {
-                draw_texture_ex(
-                    &rt.texture,
-                    0.0,
-                    0.0,
-                    WHITE,
-                    DrawTextureParams {
-                        dest_size: Some(vec2(screen_width(), screen_height())),
-                        flip_y: true,
-                        ..Default::default()
-                    },
-                );
+                super::pixel::blit(&rt.texture);
             }
         }
         let nom_col = Color::new(0.7, 0.9, 0.8, 1.0);
@@ -325,9 +324,9 @@ impl Galerie {
             let moyen = if nb > 0 { total / nb } else { 0 };
             crate::police::texte(
                 &format!(
-                    "{} FPS   pixel: {}   terrains: {}   dernier: {} ms   moyen: {} ms   (B -> bench_terrain.txt)",
+                    "{} FPS   rendu: {}   terrains: {}   dernier: {} ms   moyen: {} ms   (B -> bench_terrain.txt)",
                     get_fps(),
-                    if self.pixelise { "ON" } else { "off" },
+                    crate::reglages::mode_rendu().nom(),
                     nb,
                     dernier,
                     moyen,

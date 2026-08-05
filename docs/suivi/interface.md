@@ -296,6 +296,53 @@ reste 560 px pour 587 px de boutons, et la dernière sortait de l'écran.
 zones n'en recouvre une autre, à quatre tailles d'écran. C'est le genre de
 défaut qui ne se voyait qu'à l'œil ; il est désormais gardé.
 
+## Passe de lisibilité (2026-08-04, retours d'écran)
+
+Quatre demandes après la première mise à l'écran.
+
+### Le sélecteur devient un arbre, et perd ses lunes
+
+Le preset solaire compte **16 lunes pour 9 planètes** : listées, elles noyaient
+la structure du système, qui est justement ce que cette colonne sert à lire.
+Elles disparaissent, ainsi que les ceintures (déjà exclues).
+
+Surtout, la liste était **plate** : dans un système multiple, rien ne disait
+quelle planète orbite quelle étoile. Elle est maintenant un arbre — étoiles à la
+racine, corps dessous, avec un trait `├─` / `└─` à gauche.
+
+**La hiérarchie vient du foyer, pas de la distance** : une planète de type S se
+range sous son étoile hôte (`Foyer::Etoile`), une circumbinaire sous une racine
+« BARYCENTRE » qui n'est pas un astre et ne se sélectionne pas. À **une seule
+étoile**, tout se range sous elle : un barycentre n'apprendrait rien.
+
+Les **engins restent listés** (l'ISS sous la Terre) : ce sont les objets du
+joueur, pas du décor. À dire si ce n'est pas le bon arbitrage.
+
+### La barre collée en haut, icônes doublées
+
+`HAUT = 0` : c'est un bandeau d'état, pas une fenêtre — un jour d'écart le
+faisait flotter.
+
+Les icônes passent de 16 à **32 px**. Le réglage n'est pas où on l'attend :
+`sprites::taille_ecran` ne rend que des **multiples entiers de 16**, donc c'est
+la *hauteur de ligne* qui commande le palier. À 22 px de ligne les sprites
+tombaient à ×1 ; il a fallu passer la ligne à 38 pour atteindre ×2, et élargir
+les cases (88 px de plancher) pour loger l'icône **plus** le nombre. Un test
+pinne le palier : sans lui, retoucher `LIGNE` ferait retomber les sprites à 16
+sans que la barre ait l'air d'avoir changé.
+
+### Deux tests qui mesuraient autre chose que leur nom
+
+1. `pas_de_barycentre_dans_un_systeme_a_une_etoile` vérifiait « aucune entrée non
+   sélectionnable » et « aucun libellé BARYCENTRE ». Les deux restaient vraies
+   quand les planètes cessaient de trouver leur étoile : elles devenaient des
+   racines *sélectionnables*, sans barycentre pour autant. **Compter les racines**
+   capture la propriété — il doit y en avoir exactement une, et c'est l'étoile.
+2. Un sabotage de la garde `if multiple` ne pouvait **pas** rougir : la liste des
+   circumbinaires ne peut être non vide que dans un système multiple, donc la
+   garde était une **branche morte** qu'un lecteur croit vivante. Retirée, et
+   l'invariant est désormais tenu par un test plutôt que par un raisonnement.
+
 ## Ce qui reste
 
 - **D-INT-2, l'économie** : production, consommation, coûts, recherche. Les

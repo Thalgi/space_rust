@@ -762,7 +762,15 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
         float bord = froid
                    + (fbm(p * 1.3 + 40.0) - 0.5) * 0.42
                    + (fbm(p * 3.5 + 55.0) - 0.5) * 0.18;
-        float gel = smoothstep(calotte, calotte + 0.05, bord);
+        // `calotte = 1` veut dire AUCUNE banquise, et cela doit etre exact.
+        //
+        // Le seuil seul ne suffisait pas : `bord` vaut `froid` (la latitude, qui
+        // atteint 1 au pole, PLUS un terme d'altitude) augmente d'un bruit de
+        // +/-0,30. Au pole il montait donc vers 1,5, et `smoothstep(1, 1.05, 1.5)`
+        // rendait 1 : calotte pleine. Mercure, la Lune, Carbone et Venus --
+        // tous les presets qui declarent 1 pour dire << pas de glace >> --
+        // sortaient coiffes de blanc.
+        float gel = calotte >= 1.0 ? 0.0 : smoothstep(calotte, calotte + 0.05, bord);
         if (gel > 0.0) {
             // La glace N'EST PAS un autocollant : elle lit l'eau et le relief.
             vec3 gcol;

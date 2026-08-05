@@ -346,9 +346,12 @@ déclarée entre deux étapes.
    place ? Il est aujourd'hui l'unique interface de la Skymap et relève de
    l'outillage de développement (graine, presets, shaders). Il peut cohabiter,
    mais la question de sa place se posera.
-3. ~~Les lunes dans le sélecteur~~ — **tranché** : listées, **en retrait** sous
-   leur planète. Les exclure cacherait 16 des 26 corps du preset solaire ; les
-   mettre à plat ferait perdre à quelle planète elles appartiennent.
+3. ~~Les lunes dans le sélecteur~~ — **tranché deux fois**. D'abord listées en
+   retrait ; puis **retirées** après la première mise à l'écran (2026-08-04).
+   Les 16 lunes du preset solaire, pour 9 planètes, noyaient la structure du
+   système — qui est justement ce que cette colonne sert à lire. Le sélecteur
+   ne montre plus que les étoiles, les planètes et les engins du joueur.
+   Voir §6, l'arbre.
 
 ### 5.1 bis Une limite de test à connaître
 
@@ -373,6 +376,49 @@ Production et consommation de ressources, arbre de recherche, coûts de
 construction, colonisation, tout lien entre les stations/vaisseaux déjà
 modélisés et cette interface. La barre affiche un état ; personne ne le fait
 encore bouger.
+
+---
+
+## 6. Le sélecteur est un **arbre** (2026-08-04)
+
+Ajouté après la première mise à l'écran : la liste était **plate**, et dans un
+système à plusieurs étoiles rien ne disait quelle planète orbite laquelle.
+
+```
+Soleil
+├─ Mercure
+├─ Venus
+├─ Terre
+│  └─ ISS          (un engin du joueur, sous sa planète)
+└─ Neptune
+
+Alpha Centauri A
+├─ Odyssey
+└─ Oceanus
+Alpha Centauri B
+└─ Aphrodite
+BARYCENTRE          (ni astre, ni sélectionnable)
+└─ (circumbinaire)
+```
+
+Trois règles :
+
+1. **La hiérarchie vient du foyer, pas de la distance.** Une planète de type S
+   se range sous son étoile hôte (`Foyer::Etoile`), une circumbinaire sous le
+   barycentre. C'est la seule chose qui rende un système multiple lisible.
+2. **Le barycentre n'apparaît que s'il y a plusieurs étoiles**, et il n'est pas
+   sélectionnable — ce n'est pas un corps. À une seule étoile, tout se range
+   sous elle. Cette règle n'a **pas** de garde dans le code : `racine_de` range
+   déjà tout sous l'unique étoile, si bien que la liste des circumbinaires ne
+   peut pas être non vide autrement. Une garde y aurait été une branche morte ;
+   un test tient l'invariant à sa place.
+3. **Ni lunes, ni ceintures.** Les premières noient la structure, les secondes
+   ne sont pas sélectionnables dans la vue (`Systeme::pick` les ignore) : les
+   lister donnerait une entrée qu'un clic dans la vue ne pourrait jamais
+   désigner en retour.
+
+Le dernier enfant d'un parent porte un `└─` et non un `├─` : sans cette
+distinction, le trait vertical descendrait sous la dernière planète vers rien.
 
 ---
 

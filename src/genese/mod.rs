@@ -583,6 +583,44 @@ pub fn est_rare(nom: &str) -> bool {
 /// Classe de taille d'un preset tellurique nommé. Les mondes Gaia / super-habitables
 /// sont des super-Terres (plus gros) ; les corps rocheux sans air / lunes sont des
 /// naines (plus petits). Tout le reste est une tellurique standard.
+/// Hachage FNV-1a 32 bits d'un nom. Court, sans dépendance, bien dispersant.
+///
+/// C'est la **source unique** du peu d'aléa apparent que garde le catalogue :
+/// géographie et taille en sont déduites, ce qui les rend reproductibles.
+fn hachage(nom: &str) -> u32 {
+    let mut h: u32 = 2166136261;
+    for o in nom.as_bytes() {
+        h ^= *o as u32;
+        h = h.wrapping_mul(16777619);
+    }
+    h
+}
+
+/// Graine de géographie déduite d'un nom, dans la plage du catalogue (0..1000).
+///
+/// # Pourquoi le catalogue ne tire plus au sort
+///
+/// Il posait une graine **aléatoire** à chaque construction. Conséquence : la
+/// « Terre » de la galerie n'était pas une référence mais une planète
+/// différente à chaque ouverture de l'écran — et le système solaire, qui puise
+/// dans le même catalogue, ne pouvait donc **pas** lui ressembler. Il n'y avait
+/// rien à quoi ressembler.
+///
+/// Le brassage n'a pas disparu, il a changé de place : c'est la galerie qui
+/// l'applique (touche G), ce qui est son rôle.
+pub fn graine_de_nom(nom: &str) -> f32 {
+    (hachage(nom) % 100_000) as f32 / 100.0
+}
+
+/// Position dans les bornes de classe (0..1), déduite d'un nom.
+///
+/// Salée différemment de [`graine_de_nom`] : sans ça, deux presets de graine
+/// voisine auraient aussi des tailles voisines, et la corrélation se verrait
+/// dans la grille de la galerie.
+fn fraction_de_nom(nom: &str) -> f32 {
+    (hachage(&format!("{nom}~taille")) % 10_000) as f32 / 10_000.0
+}
+
 fn classe_tellurique(nom: &str) -> ClasseTaille {
     match nom {
         "Dry Gaia" | "Cold Gaia" | "Wet Superhabitable" | "Dry Superhabitable"
@@ -615,9 +653,21 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
     let mut v: Vec<(String, Apparence)> = Vec::new();
     // Chaque preset reçoit une graine aléatoire -> géographie unique, et la touche G
     // (qui change la graine de la galerie) régénère des cartes différentes.
+    // **Deterministe.** Une entree de catalogue est une reference : elle doit
+    // etre la meme d'une lecture a l'autre, sinon rien ne peut s'y comparer.
+    // Le brassage vit desormais dans la galerie (touche G).
     let mut push = |nom: &str, mut app: Apparence| {
-        app.seed = gen_range(0.0, 1000.0);
-        app.taille = classe_tellurique(nom).rayon_aleatoire();
+        app.seed = graine_de_nom(nom);
+        app.taille = classe_tellurique(nom).rayon_pour(fraction_de_nom(nom));
+        // **Pas d'air ni d'eau, pas de villes.**
+        //
+        // `Apparence::villes` vaut 1 par defaut et le shader n'exigeait rien de
+        // plus qu'un monde ni de lave ni voile : Mercure, la Lune, Callisto et
+        // tous les cailloux morts s'allumaient de lumieres de ville cote nuit.
+        // La condition est ici, dans la donnee, parce qu'elle se teste.
+        if app.atmo == Vec3::ZERO && app.eau <= 0.0 {
+            app.villes = 0.0;
+        }
         v.push((nom.to_string(), app));
     };
 
@@ -831,9 +881,10 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
 /// de Sudarsky (classes I–V par température/nuages) + géantes de glace + naines brunes.
 pub fn catalogue_gazeuses() -> Vec<(String, Apparence)> {
     let mut v: Vec<(String, Apparence)> = Vec::new();
+    // Deterministe, comme les telluriques ci-dessus.
     let mut push = |nom: &str, mut app: Apparence| {
-        app.seed = gen_range(0.0, 1000.0);
-        app.taille = classe_gazeuse(nom).rayon_aleatoire();
+        app.seed = graine_de_nom(nom);
+        app.taille = classe_gazeuse(nom).rayon_pour(fraction_de_nom(nom));
         v.push((nom.to_string(), app));
     };
     let spot = vec3(0.6, -0.22, 0.77);
@@ -974,5 +1025,283 @@ mod tests_noms_presets {
         for attendu in ["Mercure", "Terre", "Jupiter", "Pluton", "Polyphemus", "Pandora"] {
             assert!(PRESETS.contains(attendu), "{attendu} a disparu des presets");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_catalogue {
+    use super::*;
+
+    // **Le catalogue est reproductible.** C'est la propriété qui manquait : il
+    // posait une graine et une taille tirées au sort à chaque construction, si
+    // bien que la « Terre » de la galerie était une planète différente à chaque
+    // ouverture de l'écran — et que le système solaire, qui puise dans le même
+    // catalogue, ne pouvait pas lui ressembler. Il n'y avait rien à quoi
+    // ressembler.
+    //
+    // Ce test n'était pas écrivable avant : `gen_range` exige le contexte
+    // graphique, donc le catalogue ne se construisait pas en test.
+    #[test]
+    fn le_catalogue_est_reproductible() {
+        for (a, b) in [
+            (catalogue_telluriques(), catalogue_telluriques()),
+            (catalogue_gazeuses(), catalogue_gazeuses()),
+        ] {
+            assert_eq!(a.len(), b.len(), "le catalogue change de taille");
+            assert!(!a.is_empty(), "catalogue vide");
+            for ((na, aa), (nb, ab)) in a.iter().zip(b.iter()) {
+                assert_eq!(na, nb, "l'ordre du catalogue change");
+                assert_eq!(aa.seed, ab.seed, "{na} : la géographie change d'une lecture à l'autre");
+                assert_eq!(aa.taille, ab.taille, "{na} : la taille change d'une lecture à l'autre");
+            }
+        }
+    }
+
+    // Deux entrées de même nom rendraient `preset_tellurique` ambigu : il prend
+    // la première, l'autre serait inatteignable depuis le système solaire.
+    #[test]
+    fn aucun_nom_en_double_dans_le_catalogue() {
+        for cat in [catalogue_telluriques(), catalogue_gazeuses()] {
+            let mut vus = std::collections::HashSet::new();
+            for (nom, _) in &cat {
+                assert!(vus.insert(nom.clone()), "{nom} apparaît deux fois");
+            }
+        }
+    }
+
+    // La taille reste **dans les bornes de sa classe** : `rayon_pour` interpole,
+    // il ne doit pas sortir de la plage que `rayon_aleatoire` couvrait.
+    #[test]
+    fn chaque_taille_reste_dans_les_bornes_de_sa_classe() {
+        for (cat, classe) in [
+            (catalogue_telluriques(), classe_tellurique as fn(&str) -> ClasseTaille),
+            (catalogue_gazeuses(), classe_gazeuse as fn(&str) -> ClasseTaille),
+        ] {
+            for (nom, app) in &cat {
+                let c = classe(nom);
+                // Bornes prises à la SOURCE (`bornes_terrestres`), pas via
+                // `rayon_pour` : les déduire de la fonction testée faisait bouger
+                // l'attendu avec elle, et le test ne pouvait pas échouer.
+                let (lo_t, hi_t) = c.bornes_terrestres();
+                let (lo, hi) = (crate::genese::taille::rayon_visuel(lo_t), crate::genese::taille::rayon_visuel(hi_t));
+                assert!(
+                    app.taille >= lo - 1e-4 && app.taille <= hi + 1e-4,
+                    "{nom} : taille {} hors bornes [{lo}, {hi}]",
+                    app.taille
+                );
+            }
+        }
+    }
+
+    // Les graines occupent vraiment la plage : un hachage qui les tasserait
+    // donnerait des géographies toutes semblables.
+    #[test]
+    fn les_graines_du_catalogue_sont_dispersees() {
+        let cat = catalogue_telluriques();
+        let min = cat.iter().map(|(_, a)| a.seed).fold(f32::INFINITY, f32::min);
+        let max = cat.iter().map(|(_, a)| a.seed).fold(f32::NEG_INFINITY, f32::max);
+        assert!(min < 100.0 && max > 900.0, "graines tassées entre {min} et {max}");
+        // Et deux presets ne partagent pas leur géographie.
+        let mut vues = std::collections::HashSet::new();
+        for (nom, a) in &cat {
+            assert!(vues.insert(a.seed.to_bits()), "{nom} : géographie en double");
+        }
+    }
+
+    // **Chaque preset demande par les systemes scenarises existe au catalogue.**
+    //
+    // C'etait garanti par le seul `panic!` de `preset_tellurique`, donc decouvert
+    // au lancement, ecran noir a la cle. Le test n'etait pas ecrivable tant que le
+    // catalogue appelait `gen_range` : il exige le contexte graphique.
+    //
+    // /!\ Les deux listes sont des **fixtures recopiees** de `presets.rs`. Un nom
+    // ajoute la-haut sans l'etre ici est moins couvert, il ne devient pas faux.
+    #[test]
+    fn chaque_preset_demande_existe_au_catalogue() {
+        let cat_t: std::collections::HashSet<String> =
+            catalogue_telluriques().into_iter().map(|(n, _)| n).collect();
+        for nom in DEMANDES_TELLURIQUES {
+            assert!(cat_t.contains(*nom), "preset tellurique absent du catalogue : {nom}");
+        }
+        let cat_g: std::collections::HashSet<String> =
+            catalogue_gazeuses().into_iter().map(|(n, _)| n).collect();
+        for nom in DEMANDES_GAZEUSES {
+            assert!(cat_g.contains(*nom), "preset gazeuse absent du catalogue : {nom}");
+        }
+    }
+
+    const DEMANDES_TELLURIQUES: &[&str] = &[
+        "Badlands",
+        "Boule de neige",
+        "Carbone",
+        "Crevasse",
+        "Cryovolcan",
+        "Desert",
+        "Eyeball gele",
+        "Fer (Mercure)",
+        "Ice Dunes",
+        "Io (soufre)",
+        "Lave",
+        "Lune",
+        "Pandora",
+        "Pics de glace",
+        "Salines",
+        "Subglaciaire",
+        "Supraglacial",
+        "Terre",
+        "Titan",
+        "Venus (etuve)",
+    ];
+
+    const DEMANDES_GAZEUSES: &[&str] = &[
+        "Anneaux en arcs (type Neptune)",
+        "Classe I (ammoniac)",
+        "Classe II (eau, albedo haut)",
+        "Jupiter",
+        "Jupiter chaud",
+        "Neptune",
+        "Polyphemus (Avatar)",
+        "Saturne",
+        "Uranus",
+    ];
+}
+
+#[cfg(test)]
+mod tests_coherence {
+    use super::*;
+
+    /// Amplitude du bruit qui perturbe le seuil de banquise dans
+    /// `planete.frag.glsl` : `±0,42/2` puis `±0,18/2`.
+    const BRUIT_CALOTTE: f32 = 0.21 + 0.09;
+
+    // **Pas de climat, pas de banquise.**
+    //
+    // `grad_lat` est le gradient de température par latitude : à 0, la planète
+    // n'a aucun climat latitudinal (Mercure, la Lune, un monde de carbone). Une
+    // calotte polaire y serait sans cause.
+    //
+    // Le seuil doit alors valoir exactement 1, le sentinelle « aucune » —
+    // n'importe quelle valeur en dessous laisse le **bruit** (±0,30) franchir le
+    // seuil près des pôles, où `froid` vaut déjà 1. C'est très exactement le bug
+    // qui coiffait Mercure de glace.
+    #[test]
+    fn un_monde_sans_climat_na_pas_de_banquise() {
+        for (nom, app) in catalogue_telluriques() {
+            if app.grad_lat != 0.0 {
+                continue;
+            }
+            assert!(
+                app.calotte >= 1.0,
+                "{nom} : grad_lat=0 (aucun climat) mais calotte={} — le bruit y \
+                 fabriquera de la glace sans raison",
+                app.calotte
+            );
+        }
+    }
+
+    // **Un seuil de banquise reste dans 0..1.** Au-delà de 1 il ne veut rien dire
+    // de plus que « aucune » ; en dessous de 0, la planète serait intégralement
+    // gelée sans que le preset le dise.
+    #[test]
+    fn les_seuils_de_banquise_sont_dans_leur_plage() {
+        for (nom, app) in catalogue_telluriques() {
+            assert!(
+                (0.0..=1.0).contains(&app.calotte),
+                "{nom} : calotte={} hors de 0..1",
+                app.calotte
+            );
+            assert!(
+                (0.0..=1.0).contains(&app.grad_lat),
+                "{nom} : grad_lat={} hors de 0..1",
+                app.grad_lat
+            );
+        }
+    }
+
+    // **Un monde déclaré gelé l'est vraiment.** Un preset dont le nom annonce la
+    // glace mais dont le seuil est si haut que le bruit ne l'atteint jamais
+    // serait un preset qui ment : il rendrait une planète nue.
+    #[test]
+    fn un_monde_declare_gele_porte_vraiment_de_la_glace() {
+        let glaces = [
+            "Boule de neige", "Pics de glace", "Subglaciaire", "Ice Dunes",
+            "Supraglacial", "Arctique", "Glacial", "Snow", "Toundra",
+        ];
+        let cat = catalogue_telluriques();
+        for g in glaces {
+            let (_, app) = cat
+                .iter()
+                .find(|(n, _)| n == g)
+                .unwrap_or_else(|| panic!("preset {g} absent du catalogue"));
+            // Il faut que le seuil soit franchissable : sinon aucune glace.
+            assert!(
+                app.calotte < 1.0 + BRUIT_CALOTTE,
+                "{g} : calotte={} — annoncé gelé, mais aucune glace n'apparaîtra",
+                app.calotte
+            );
+            // Et un monde gelé a forcément un climat latitudinal.
+            assert!(app.grad_lat > 0.0, "{g} : gelé mais grad_lat=0");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests_coherence_2 {
+    use super::*;
+
+    // **Pas d'air ni d'eau, pas de villes.** Le shader n'excluait que la lave et
+    // les mondes voilés : tous les cailloux morts — Mercure, la Lune, Carbone —
+    // portaient des lumières de ville côté nuit, `villes` valant 1 par défaut.
+    #[test]
+    fn un_monde_sans_air_ni_eau_na_pas_de_villes() {
+        for (nom, app) in catalogue_telluriques() {
+            if app.atmo == Vec3::ZERO && app.eau <= 0.0 {
+                assert_eq!(app.villes, 0.0, "{nom} : ni air ni eau, mais des villes");
+            }
+        }
+    }
+
+    // Et l'inverse : **un monde habitable garde ses villes**. Une règle trop
+    // large les éteindrait partout, ce qui passerait le test ci-dessus sans que
+    // personne ne le voie.
+    #[test]
+    fn un_monde_habitable_garde_ses_villes() {
+        let cat = catalogue_telluriques();
+        let habitables: Vec<_> = cat
+            .iter()
+            .filter(|(_, a)| a.atmo != Vec3::ZERO && a.eau > 0.0)
+            .collect();
+        assert!(habitables.len() > 20, "trop peu de mondes habitables : {}", habitables.len());
+        for (nom, app) in habitables {
+            assert!(app.villes > 0.0, "{nom} : habitable mais sans villes");
+        }
+    }
+
+    // **Une rivière coule d'eau ou de lave, jamais de rien.**
+    //
+    // Première version : « pas de rivières sans eau ». Elle a mordu sur
+    // `Crevasse` — à tort. Ce preset a bien `eau = 0`, mais ses rivières sont
+    // des **coulées de lave** (`riv_lave`, chaleur géothermique au fond des
+    // crevasses) : elles n'ont pas besoin d'océan. Le test disait autre chose que
+    // ce que son nom annonçait.
+    #[test]
+    fn une_riviere_coule_deau_ou_de_lave() {
+        let mut vues_lave = 0;
+        for (nom, app) in catalogue_telluriques() {
+            if app.rivieres > 0.0 && app.eau <= 0.0 {
+                assert!(
+                    app.riv_lave > 0.0,
+                    "{nom} : des rivières sans eau et sans lave — elles couleraient sur la roche nue"
+                );
+                vues_lave += 1;
+            }
+            // Les récifs, eux, sont bel et bien marins.
+            if app.eau <= 0.0 {
+                assert_eq!(app.recifs, 0.0, "{nom} : des récifs sans eau");
+            }
+        }
+        // Et le cas « rivières de lave » existe vraiment : sans ça, la branche
+        // ci-dessus ne serait jamais parcourue et le test ne prouverait rien.
+        assert!(vues_lave > 0, "aucune rivière de lave au catalogue : la règle n'est pas exercée");
     }
 }

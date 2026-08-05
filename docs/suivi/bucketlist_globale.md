@@ -160,6 +160,80 @@ Presets `binaire`, `trinaire`, `quadruple`, plus Alpha Centauri (A+B réels).
       (`ORBITE_ISS`, `ECHELLE_ISS`).
 - [ ] Vaisseaux **mobiles** (transferts entre astres), et l'ISV / le Starship en orbite.
 
+## 10 ter. Paramètres du jeu — ✅ premier jet
+
+- [x] **Écran PARAMETRES** depuis l'accueil, modèle testable (`src/reglages.rs`) séparé de
+      l'écran (`src/ecran/parametres.rs`).
+- [x] **Mode d'affichage** : fenêtré / plein écran sans bordure. ⚠️ Pas de mode **exclusif** :
+      macroquad n'expose qu'un `set_fullscreen(bool)`, et miniquad l'implémente déjà en
+      `WS_POPUP` plein écran — « plein écran » et « sans bordure » seraient le même bouton.
+- [x] **Taille de fenêtre** : 9 entrées en 4:3, 16:10 et 16:9, jusqu'à 1920 × 1200. Pas de 4K.
+      Grisée en plein écran, où c'est l'écran qui décide.
+- [x] **Pipeline de rendu** : `NET` / `PIXEL ART` / `PIXEL ART + PALETTE 64` — voir §10 quater.
+      Plus palette, tramage et saturation, grisés hors du mode palette.
+- [x] **Bouton QUITTER** sur l'accueil, sous PARAMETRES. Sort de la boucle de jeu, sans
+      `process::exit`, pour que miniquad ferme sa fenêtre proprement.
+- [ ] **Sauvegarde des réglages** (dette D-PARAM-1) : ils repartent aux valeurs par défaut
+      à chaque lancement. `genese/persistance.rs` sait déjà écrire du JSON.
+- [ ] Autres réglages à venir : volume, langue, taille des pixels (dette D-PIX-4 : `PIX = 2`
+      est figé).
+
+## 10 quater. Rendu pixel art — ✅ premier jet
+
+Conception : [`conception/pixel_art.md`](../conception/pixel_art.md).
+
+Le sous-échantillonnage existait depuis longtemps (touche P) ; ce qui manquait
+était la **quantification vers une palette fixe**, sans quoi l'éclairage 3D
+produit des dégradés continus — de la 3D basse résolution, pas du pixel art.
+
+- [x] **Palettes** (`src/palette.rs`), l'hexadécimal comme source unique. Trois intégrées
+      (Resurrect 64, Sweetie 16, PICO-8) **de longueurs différentes**, plus tout `.hex` déposé
+      dans `assets/palettes/` — format Lospec, ramassé au démarrage, aucun code à toucher.
+- [x] **Conversion sRGB → CIELAB** côté CPU, une fois par couleur : le shader ne convertit
+      que le pixel courant, une fois au lieu de N+1.
+- [x] **Quantification GPU** (`src/shaders/palette.frag.glsl`), distance au carré, `discard`
+      des pixels transparents (l'espace est majoritairement vide).
+- [x] **Tramage ordonné de Bayer 8×8** — le remède au basculement de bandes. Réglable
+      (NON / LEGER / FORT), `FORT` par défaut car calé sur la pire marche mesurée (0,18).
+- [x] **Écrêtage des hautes lumières** — le remède au reflet spéculaire en aplat blanc.
+      Le cœur du reflet reste blanc, son halo ne l'est plus.
+- [x] **Saturation avant quantification** — le remède aux couleurs ternes (océans gris-violet).
+      À luminance constante, ×1,9 par défaut : +53 % de chroma en sortie, mesuré. Le gain
+      retombe dans les hautes lumières, ce qui supprime aussi l'anneau cyan du reflet.
+- [x] **Blit unifié** : `ecran/pixel.rs` devient la source unique du blit, du facteur `PIX` et
+      de la création de cible — c'était recopié dans trois vues.
+- [x] **Réglage global** : les touches P et le menu pilotent le même état ; les trois booléens
+      `pixelise` séparés ont disparu.
+- [ ] **D-PIX-1** : le miroir CPU testable et le shader sont deux écritures du même algorithme ;
+      aucun test ne compile de GLSL. La surface de divergence a grandi (écrêtage, tramage).
+- [ ] **D-PIX-3** : pas de contour (passe Sobel / profondeur).
+- [ ] **D-PIX-4** : `PIX = 2` figé — une ligne de menu de plus.
+- [ ] **D-PIX-5** : tramage en espace écran, donc fixe pendant que les objets bougent.
+- [ ] **Quantifier toute l'interface** : aujourd'hui seule la couche 3D l'est, les textes et le
+      fond stellaire restent nets. Décision assumée, pas un oubli.
+
+## 10 quinquies. Catalogue reproductible — ✅ fait
+
+Le catalogue tirait graine **et** taille au sort à chaque construction : sa
+« Terre » était une planète différente à chaque ouverture de l'écran, donc une
+référence à laquelle rien ne pouvait se comparer.
+
+- [x] **Graine et taille déduites du nom** du preset (`genese::graine_de_nom`,
+      `ClasseTaille::rayon_pour`). Plus aucun `gen_range` dans les deux catalogues.
+- [x] **Le brassage passe à la galerie** : `variation` incrémentée par G, décalage
+      **nul au départ** — la vue par défaut EST le catalogue canonique.
+- [x] **Le système solaire s'y aligne** : les corps à preset unique sont identiques
+      à leur vignette de galerie ; `fige()` ne reste que sur les presets réutilisés.
+- [x] **Le catalogue se teste enfin** (il exigeait le contexte graphique) : 5 tests,
+      dont « chaque preset demandé existe », jusqu'ici garanti par un seul `panic!`.
+- [x] **Bug de LOD** : `planete::set_viewport_h` n'était réglé que par la galerie ;
+      en mode pixel art, les planètes étaient ombrées avec le détail d'un plein écran.
+- [x] **Plafond de palette 64 → 256** : Lospec 2000 (182) et AllStars (128) étaient
+      **rejetées puis ignorées**, avec pour seule trace une ligne de console.
+- [x] **Plus de rejet silencieux** (lot E) : les `.hex` refusés sont listés à l'écran
+      dans PARAMETRES, nom de fichier et raison. La lecture disque ne décide de rien,
+      le tri est pur, la mise en forme est testée — 5 tests red-checkés.
+
 ## 11. Interface de jeu (vue système) — ✅ premier jet
 
 Conception : [`conception/interface.md`](../conception/interface.md).
@@ -171,8 +245,9 @@ C'est la **première interface de jeu** du projet : tout ce qui existait avant
 - [x] **Barre de ressources** : les 14 sprites 16×16 en grille 7×2, chaque produit sous sa
       matière première. Filtrage au plus proche voisin, échelles entières seulement.
 - [x] **Nom du système**, dérivé de l'étoile hôte.
-- [x] **Sélecteur d'astres** à gauche, rétractable, un dixième de la largeur au plus.
-      Lunes en retrait sous leur planète.
+- [x] **Sélecteur d'astres** à gauche, rétractable, un dixième de la largeur au plus,
+      en **arbre** : étoiles à la racine, planètes dessous selon leur foyer (type S sous
+      leur étoile, circumbinaires sous un barycentre). Lunes et ceintures exclues.
 - [x] **Panneau d'astre** au clic : nom, type, distance, rayon, **habitabilité déduite**
       de la luminosité cumulée et de la distance orbitale.
 - [x] **Vignette rendue** de l'astre dans le panneau (cible de rendu dédiée, avec son

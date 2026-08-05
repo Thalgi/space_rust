@@ -180,6 +180,21 @@ impl Systeme {
         self.astres[idx].draw(&c);
     }
 
+    /// Foyer de l'astre `idx` : autour de quoi il orbite. `None` s'il n'en a
+    /// pas (une étoile, une ceinture) ou si l'index est invalide.
+    ///
+    /// C'est ce qui donne sa **hiérarchie** au sélecteur : une planète de type S
+    /// se range sous son étoile hôte, une circumbinaire sous le barycentre.
+    pub fn foyer_de(&self, idx: usize) -> Option<Foyer> {
+        self.astres.get(idx).and_then(|a| a.foyer())
+    }
+
+    /// Nombre d'étoiles du système. Décide de la forme de l'arbre : à une seule
+    /// étoile, tout se range sous elle et le barycentre n'a pas lieu d'être.
+    pub fn nb_etoiles(&self) -> usize {
+        self.astres.iter().filter(|a| a.categorie() == Categorie::Etoile).count()
+    }
+
     /// Teinte propre de l'astre `idx`, tirée de son apparence. `None` s'il n'en
     /// a pas (ceinture) ou si l'index est invalide.
     pub fn teinte_de(&self, idx: usize) -> Option<Vec3> {

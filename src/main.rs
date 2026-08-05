@@ -9,8 +9,10 @@ mod genese;
 mod impostor;
 mod menu;
 mod orbite;
+mod palette;
 mod planete;
 mod police;
+mod reglages;
 mod rendu;
 mod stabilite;
 mod starmap;
@@ -22,6 +24,7 @@ mod ui;
 mod vaisseau;
 
 use ecran::{
+    Parametres,
     Accueil, Categorie, Cible, Galerie, GalerieDisques, GalerieEtoiles, Objet, Skymap,
     SortieStarmap, Starmap, VueStation,
 };
@@ -46,6 +49,7 @@ enum Etat {
     GalerieDisques(Box<GalerieDisques>),
     GalerieEtoiles(Box<GalerieEtoiles>),
     Station(Box<VueStation>),
+    Parametres(Parametres),
 }
 
 #[macroquad::main(window_conf)]
@@ -53,6 +57,9 @@ async fn main() {
     police::charger().await;
     sprites::charger().await;
 
+    // Les reglages survivent aux changements d'ecran : ils appartiennent au
+    // jeu, pas a une vue.
+    let mut reglages = reglages::Reglages::default();
     let mut etat = Etat::Accueil(Accueil::new());
 
     loop {
@@ -71,6 +78,11 @@ async fn main() {
                         Cible::GalerieEtoiles => {
                             Etat::GalerieEtoiles(Box::new(GalerieEtoiles::new()))
                         }
+                        Cible::Parametres => Etat::Parametres(Parametres::new()),
+                        // On sort de la boucle de jeu plutôt que d'appeler
+                        // `process::exit` : miniquad ferme alors sa fenêtre
+                        // proprement.
+                        Cible::Quitter => return,
                         Cible::Briques => {
                             Etat::Station(Box::new(VueStation::new(Categorie::Briques)))
                         }
@@ -121,6 +133,11 @@ async fn main() {
             }
             Etat::GalerieEtoiles(g) => {
                 if g.frame() {
+                    etat = Etat::Accueil(Accueil::new());
+                }
+            }
+            Etat::Parametres(p) => {
+                if p.frame(&mut reglages) {
                     etat = Etat::Accueil(Accueil::new());
                 }
             }

@@ -94,8 +94,8 @@ impl Briques {
 
         crate::police::texte(
             &format!(
-                "Fleches haut/bas: brique   glisser: pivoter   molette: zoom   P: pixel ({})   Echap: menu",
-                if self.pixel.actif { "ON" } else { "off" }
+                "Fleches haut/bas: brique   glisser: pivoter   molette: zoom   P: rendu ({})   Echap: menu",
+                crate::reglages::mode_rendu().nom()
             ),
             12.0,
             24.0,

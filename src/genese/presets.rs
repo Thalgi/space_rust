@@ -7,11 +7,31 @@ use crate::astre::Foyer;
 use crate::stellaire::{Feuille, Noeud, Variante};
 use crate::disque::{Disque, DisqueConfig};
 use crate::etoile;
-use crate::planete::{Planete, TypePlanete};
+use crate::planete::{Apparence, Planete, TypePlanete};
 use crate::soleil::Soleil;
 use crate::systeme::Systeme;
 use macroquad::prelude::*;
 use macroquad::rand::srand;
+
+/// Graine de géographie **déduite du nom du corps**.
+///
+/// Délègue à [`super::graine_de_nom`], la même fonction que celle qui donne
+/// maintenant leur graine aux entrées du catalogue — une seule source.
+///
+/// Ne sert plus qu'aux corps qui **partagent** une apparence de catalogue :
+/// Callisto et Obéron tirent tous deux « Lune », et sans cela ils seraient
+/// rigoureusement jumeaux. Les corps à preset unique gardent, eux, la graine du
+/// catalogue : ils sont donc **identiques à leur vignette de galerie**, ce qui
+/// est tout l'objet de la manoeuvre.
+fn graine_nom(nom: &str) -> f32 {
+    super::graine_de_nom(nom)
+}
+
+/// Apparence du catalogue, **géographie figée** par le nom du corps.
+fn fige(mut app: Apparence, corps: &str) -> Apparence {
+    app.seed = graine_nom(corps);
+    app
+}
 
 /// Preset reproduisant notre système solaire (Mercure → Pluton + ceintures).
 pub fn construire_preset_solaire() -> (Systeme, String) {
@@ -31,9 +51,20 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
     // les distances (UA reelles), excentricites, inclinaisons, rayons et masses.
     //
     // ATTENTION : les noms passes a `preset_*` sont ceux d'une **apparence**,
-    // pas d'un astre -- "Lune" sert a la fois a notre Lune et a Ganymede. Le nom
+    // pas d'un astre -- "Lune" sert a la fois a notre Lune et a Callisto. Le nom
     // propre se pose a part, par `nommer` : il vivait jusqu'ici en commentaire,
     // donc nulle part pour le programme (`conception/interface.md` 2.2a).
+    //
+    // `fige(..., "<corps>")` arrete la geographie sur une graine deduite du nom :
+    // sans elle, chaque lancement redessine les continents (voir `graine_nom`).
+    //
+    // Appariements revus le 2026-08-05, pour cesser de recycler le meme preset
+    // sur des corps que rien ne rapproche :
+    //   Ganymede : "Lune" -> "Crevasse"      ses sillons (sulci) sont sa signature
+    //   Callisto : "Carbone" -> "Lune"       le corps le plus cratelise connu
+    //   Ariel    : "Boule de neige" -> "Supraglacial"  terrains fractures brillants
+    //   Pluton   : "Boule de neige" -> "Ice Dunes"     New Horizons y a vu des dunes
+    // Japet garde "Carbone" (son hemisphere sombre) et n'est donc plus un doublon.
     let mercure = ajouter_planete(&mut sys, 0.39, 0.205, 7.0 * deg, 0.32, 0.3,
         preset_tellurique("Fer (Mercure)"), Some("Mercure"));
     let venus = ajouter_planete(&mut sys, 0.72, 0.007, 3.4 * deg, 0.52, 1.0,
@@ -44,38 +75,38 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
     let rayon_terre = 0.55;
     let terre = ajouter_planete(&mut sys, 1.0, 0.017, 0.0, rayon_terre, 1.0,
         preset_tellurique("Terre"), Some("Terre"));
-    ajouter_lune_preset(&mut sys, terre, rayon_terre, 0.24, preset_tellurique("Lune"), "Lune");
+    ajouter_lune_preset(&mut sys, terre, rayon_terre, 0.24, fige(preset_tellurique("Lune"), "Lune"), "Lune");
     let mars = ajouter_planete(&mut sys, 1.52, 0.093, 1.85 * deg, 0.42, 0.4,
         preset_tellurique("Badlands"), Some("Mars")); // analogue de Mars (rouille, canyons)
     // Phobos + Deimos : deux petits corps sombres captures.
-    ajouter_lune_preset(&mut sys, mars, 0.42, 0.05, preset_tellurique("Carbone"), "Phobos");
-    ajouter_lune_preset(&mut sys, mars, 0.42, 0.05, preset_tellurique("Carbone"), "Deimos");
+    ajouter_lune_preset(&mut sys, mars, 0.42, 0.05, fige(preset_tellurique("Carbone"), "Phobos"), "Phobos");
+    ajouter_lune_preset(&mut sys, mars, 0.42, 0.05, fige(preset_tellurique("Carbone"), "Deimos"), "Deimos");
     let jupiter = ajouter_planete(&mut sys, 5.2, 0.049, 1.3 * deg, 1.7, 20.0,
         preset_gazeuse("Jupiter"), Some("Jupiter"));
     // 4 lunes galileennes (interne -> externe), aspects distincts.
     ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.10, preset_tellurique("Io (soufre)"), "Io");
     ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.09, preset_tellurique("Subglaciaire"), "Europe");
-    ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.13, preset_tellurique("Lune"), "Ganymede");
-    ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.12, preset_tellurique("Carbone"), "Callisto");
+    ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.13, preset_tellurique("Crevasse"), "Ganymede");
+    ajouter_lune_preset(&mut sys, jupiter, 1.7, 0.12, fige(preset_tellurique("Lune"), "Callisto"), "Callisto");
     let saturne = ajouter_planete(&mut sys, 9.58, 0.056, 2.49 * deg, 1.45, 12.0,
         preset_gazeuse("Saturne"), Some("Saturne"));
     // Encelade, Rhea, Titan (le plus gros), Japet (interne -> externe).
     ajouter_lune_preset(&mut sys, saturne, 1.45, 0.06, preset_tellurique("Pics de glace"), "Encelade");
     ajouter_lune_preset(&mut sys, saturne, 1.45, 0.07, preset_tellurique("Boule de neige"), "Rhea");
     ajouter_lune_preset(&mut sys, saturne, 1.45, 0.13, preset_tellurique("Titan"), "Titan");
-    ajouter_lune_preset(&mut sys, saturne, 1.45, 0.07, preset_tellurique("Carbone"), "Japet");
+    ajouter_lune_preset(&mut sys, saturne, 1.45, 0.07, fige(preset_tellurique("Carbone"), "Japet"), "Japet");
     let uranus = ajouter_planete(&mut sys, 19.2, 0.046, 0.77 * deg, 1.0, 6.0,
         preset_gazeuse("Uranus"), Some("Uranus"));
     // Ariel, Umbriel, Titania, Oberon (interne -> externe).
-    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.07, preset_tellurique("Boule de neige"), "Ariel");
-    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.07, preset_tellurique("Carbone"), "Umbriel");
-    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.09, preset_tellurique("Subglaciaire"), "Titania");
-    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.08, preset_tellurique("Lune"), "Oberon");
+    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.07, preset_tellurique("Supraglacial"), "Ariel");
+    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.07, fige(preset_tellurique("Carbone"), "Umbriel"), "Umbriel");
+    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.09, fige(preset_tellurique("Subglaciaire"), "Titania"), "Titania");
+    ajouter_lune_preset(&mut sys, uranus, 1.0, 0.08, fige(preset_tellurique("Lune"), "Oberon"), "Oberon");
     let neptune = ajouter_planete(&mut sys, 30.05, 0.010, 1.77 * deg, 1.0, 6.0,
         preset_gazeuse("Neptune"), Some("Neptune"));
     ajouter_lune_preset(&mut sys, neptune, 1.0, 0.11, preset_tellurique("Cryovolcan"), "Triton");
     let pluton = ajouter_planete(&mut sys, 39.5, 0.249, 17.1 * deg, 0.3, 0.1,
-        preset_tellurique("Boule de neige"), Some("Pluton")); // nain glace
+        preset_tellurique("Ice Dunes"), Some("Pluton")); // nain glace
 
     // ===== Population de petits corps, du plus proche au plus lointain =====
     // Quatre familles distinctes, toutes deja modelisees par `DisqueConfig` mais
@@ -250,7 +281,7 @@ pub fn construire_preset_alpha_centauri() -> (Systeme, String) {
         preset_tellurique("Subglaciaire"), None);
     // Oceanus : géante gazeuse entièrement recouverte d'eau (nuages d'eau, albédo haut), essaim de lunes.
     let oceanus = ajouter_planete_autour(&mut sys, aca, ma, 1.1, 0.03, 1.0 * deg, 1.3, 12.0,
-        preset_gazeuse("Classe II (eau, albedo haut)"), Some("Oceanus"));
+        fige(preset_gazeuse("Classe II (eau, albedo haut)"), "Oceanus"), Some("Oceanus"));
     for _ in 0..4 {
         ajouter_lune(&mut sys, oceanus, 1.3);
     }
@@ -281,7 +312,7 @@ pub fn construire_preset_alpha_centauri() -> (Systeme, String) {
     // Coeus : la plus petite géante gazeuse, la plus externe (preset « Classe I (ammoniac) », terne) ;
     // lunes Dionysos + Bacchus.
     let coeus = ajouter_planete_autour(&mut sys, aca, ma, 2.3, 0.06, 2.0 * deg, 1.1, 8.0,
-        preset_gazeuse("Classe I (ammoniac)"), Some("Coeus"));
+        fige(preset_gazeuse("Classe I (ammoniac)"), "Coeus"), Some("Coeus"));
     let r_coeus = 1.1;
     // Dionysos : grosse lune glacée (~19 000 km), orbite classique.
     sys.ajouter(Box::new(
@@ -304,33 +335,33 @@ pub fn construire_preset_alpha_centauri() -> (Systeme, String) {
         preset_tellurique("Lune"), None);
     // Aphrodite : presque aucune atmosphère (contrairement à Vénus), croûte de sels (preset « Salines »). 1 lune.
     let aphrodite = ajouter_planete_autour(&mut sys, acb, mb, 0.66, 0.02, 2.0 * deg, 0.42, 0.6,
-        preset_tellurique("Salines"), Some("Aphrodite"));
+        fige(preset_tellurique("Salines"), "Aphrodite"), Some("Aphrodite"));
     ajouter_lune(&mut sys, aphrodite, 0.42);
     // Gaea : effet de serre massif emballé (preset « Venus (etuve) »). 2 lunes.
     let gaea = ajouter_planete_autour(&mut sys, acb, mb, 0.9, 0.02, 1.0 * deg, 0.46, 0.7,
-        preset_tellurique("Venus (etuve)"), Some("Gaea"));
+        fige(preset_tellurique("Venus (etuve)"), "Gaea"), Some("Gaea"));
     for _ in 0..2 {
         ajouter_lune(&mut sys, gaea, 0.46);
     }
     // Ares : atmosphère fine, rougeâtre, badlands (façon Mars). Quelques lunes.
     let ares = ajouter_planete_autour(&mut sys, acb, mb, 1.25, 0.09, 1.8 * deg, 0.4, 0.5,
-        preset_tellurique("Badlands"), Some("Ares"));
+        fige(preset_tellurique("Badlands"), "Ares"), Some("Ares"));
     for _ in 0..2 {
         ajouter_lune(&mut sys, ares, 0.4);
     }
     // Zeus : la plus grande planète de tout le système (preset « Jupiter »).
     let zeus = ajouter_planete_autour(&mut sys, acb, mb, 1.7, 0.05, 1.3 * deg, 2.0, 24.0,
-        preset_gazeuse("Jupiter"), Some("Zeus"));
+        fige(preset_gazeuse("Jupiter"), "Zeus"), Some("Zeus"));
     for _ in 0..3 {
         ajouter_lune(&mut sys, zeus, 2.0);
     }
     // Cronus : géante à anneaux, orbite chaotique (preset « Saturne »).
     let cronus = ajouter_planete_autour(&mut sys, acb, mb, 2.15, 0.11, 2.5 * deg, 1.5, 12.0,
-        preset_gazeuse("Saturne"), Some("Cronus"));
+        fige(preset_gazeuse("Saturne"), "Cronus"), Some("Cronus"));
     ajouter_lune(&mut sys, cronus, 1.5);
     // Poséidon : géante bleue annelée, orbite chaotique (preset « Anneaux en arcs (type Neptune) »).
     let poseidon = ajouter_planete_autour(&mut sys, acb, mb, 2.55, 0.13, 1.8 * deg, 1.3, 10.0,
-        preset_gazeuse("Anneaux en arcs (type Neptune)"), Some("Poseidon"));
+        fige(preset_gazeuse("Anneaux en arcs (type Neptune)"), "Poseidon"), Some("Poseidon"));
     ajouter_lune(&mut sys, poseidon, 1.3);
 
     // Vue par défaut : focaliser ACA (Etoile 0) sur sa zone planétaire.
@@ -425,4 +456,66 @@ pub fn construire_preset_quadruple() -> (Systeme, String) {
     let cd = Noeud::paire(c, d, 3.2, 0.2, 0.15, 0.5);
     deployer_arbre(&mut sys, Noeud::paire(ab, cd, 18.0, 0.25, 0.2, 0.0));
     (sys, "Quadruple 2+2 ((A-B)+(C-D))".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Les corps nommés du preset solaire.
+    ///
+    /// ⚠️ **Fixture recopiée**, pas la source : `construire_preset_solaire` a
+    /// besoin du contexte graphique (`srand`, `gen_range`) et ne peut donc pas
+    /// tourner en test. Si un corps s'ajoute là-haut sans être ajouté ici, ce
+    /// test **couvre moins** — il ne devient pas faux. C'est le compromis assumé.
+    const CORPS: &[&str] = &[
+        "Mercure", "Venus", "Terre", "Lune", "Mars", "Phobos", "Deimos", "Jupiter", "Io",
+        "Europe", "Ganymede", "Callisto", "Saturne", "Encelade", "Rhea", "Titan", "Japet",
+        "Uranus", "Ariel", "Umbriel", "Titania", "Oberon", "Neptune", "Triton", "Pluton",
+    ];
+
+    // **La géographie d'un corps ne dépend que de son nom.** C'est tout l'objet
+    // de `graine_nom` : avant, la graine venait du flux aléatoire, donc insérer
+    // une planète redessinait les continents de toutes les suivantes.
+    #[test]
+    fn la_graine_ne_depend_que_du_nom() {
+        for c in CORPS {
+            assert_eq!(graine_nom(c), graine_nom(c), "{c} : graine instable");
+        }
+        // Et elle ne dépend pas de l'ordre d'appel : deux lectures encadrant
+        // d'autres appels donnent le même résultat.
+        let avant = graine_nom("Terre");
+        for c in CORPS {
+            let _ = graine_nom(c);
+        }
+        assert_eq!(graine_nom("Terre"), avant, "la graine dépend de l'ordre d'appel");
+    }
+
+    // **Deux corps n'ont pas la même géographie.** Une collision donnerait deux
+    // lunes rigoureusement identiques — le défaut le plus visible ici, puisque
+    // plusieurs partagent déjà la même apparence de catalogue.
+    #[test]
+    fn deux_corps_nont_pas_la_meme_geographie() {
+        for (i, a) in CORPS.iter().enumerate() {
+            for b in &CORPS[i + 1..] {
+                assert_ne!(graine_nom(a), graine_nom(b), "{a} et {b} partagent leur géographie");
+            }
+        }
+    }
+
+    // La graine reste **dans la plage où le générateur de terrain a été réglé**
+    // (celle du catalogue). En sortir exposerait du bruit jamais éprouvé.
+    #[test]
+    fn la_graine_reste_dans_la_plage_du_catalogue() {
+        for c in CORPS {
+            let g = graine_nom(c);
+            assert!((0.0..1000.0).contains(&g), "{c} : graine {g} hors plage");
+        }
+        // Et elle occupe vraiment la plage : un hash qui rendrait toujours de
+        // petites valeurs passerait l'assertion ci-dessus tout en concentrant
+        // toutes les géographies au même endroit.
+        let max = CORPS.iter().map(|c| graine_nom(c)).fold(0.0_f32, f32::max);
+        let min = CORPS.iter().map(|c| graine_nom(c)).fold(1000.0_f32, f32::min);
+        assert!(max > 700.0 && min < 300.0, "graines tassées entre {min} et {max}");
+    }
 }
