@@ -163,3 +163,39 @@ pub fn generer_zonal(a: &Apparence) -> (Texture2D, f32) {
     let pole_lat = ((paires + 0.7) * pas).min(LAT_MAX * 0.95).sin();
     (tex, pole_lat)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // **Le profil zonal porte de vraies bandes.**
+    //
+    // C'est la STRUCTURE des géantes : le canal `b` devient le vert de la
+    // texture 1D, que le shader lit en `band` pour mélanger ceinture sombre et
+    // zone claire. S'il était plat, `mix(belt, zone, band)` rendrait une teinte
+    // unique et la planète serait une boule lisse — sans bandes, une géante
+    // gazeuse n'est plus une géante gazeuse.
+    //
+    // Écrit en enquêtant sur un Jupiter uniformément brun ; il a **innocenté**
+    // le CPU (b s'étend de 0,02 à 0,98), ce qui a déplacé la recherche vers le
+    // chemin GPU.
+    #[test]
+    fn le_profil_zonal_porte_de_vraies_bandes() {
+        for nom in ["Jupiter", "Saturne", "Neptune", "Uranus"] {
+            let cat = crate::genese::catalogue_gazeuses();
+            let (_, a) = cat.iter().find(|(n, _)| n == nom).expect("preset absent");
+            let p = profil(a);
+            let bmin = p.b.iter().cloned().fold(f32::INFINITY, f32::min);
+            let bmax = p.b.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+            assert!(
+                bmax - bmin > 0.5,
+                "{nom} : bandes plates ({bmin:.3}..{bmax:.3}) — la planète sortira unie"
+            );
+            // Et la vitesse zonale change de signe : sans jets rétrogrades, pas
+            // de cisaillement, donc pas de festons aux frontières.
+            let umin = p.u.iter().cloned().fold(f32::INFINITY, f32::min);
+            let umax = p.u.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+            assert!(umin < 0.0 && umax > 0.0, "{nom} : aucun jet rétrograde ({umin:.2}..{umax:.2})");
+        }
+    }
+}

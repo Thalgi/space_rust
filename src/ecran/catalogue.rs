@@ -27,7 +27,7 @@
 //! Il n'y a donc plus rien à tenir d'accord.
 
 use crate::vaisseau::{
-    cuire, echantillons, Assembleur, Composant, Repere,
+    cuire, Assembleur, Composant, Repere,
     demo_anneaux, demo_antennes, demo_bouclier_grand, demo_bouclier_petit, demo_bouclier_thermique,
     demo_caissons, demo_cargo, demo_chantier, demo_charpente, demo_charpente_hexa, demo_coiffes,
     demo_epine_pavillon, demo_equipage, demo_panneaux_mega, demo_raptor, demo_habitat_isv, demo_habitats, demo_moteur_antimatiere,

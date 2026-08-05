@@ -35,9 +35,8 @@
 use crate::vaisseau::peintre::Peintre;
 use crate::vaisseau::{GenrePort, Port, Profil, Repere};
 use macroquad::prelude::*;
-use std::f32::consts::{PI, TAU};
+use std::f32::consts::TAU;
 
-use super::commun::*;
 
 /// Les deux versions embarquées sur un Starship.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]

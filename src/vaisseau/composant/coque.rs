@@ -36,7 +36,6 @@ use crate::vaisseau::{GenrePort, Port, Profil, Repere};
 use macroquad::prelude::*;
 use std::f32::consts::{PI, TAU};
 
-use super::commun::*;
 
 /// Inox nu, non peint : clair et légèrement chaud. C'est la signature d'un
 /// Starship — un lanceur blanc lirait comme une Ariane.

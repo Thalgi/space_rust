@@ -24,8 +24,14 @@ mod unites;
 pub use assemblage::{Assembleur, Budget, EtatStation, Piece, Station};
 pub use enveloppe::{distance_point_rectangle, distance_point_segment, Enveloppe, Noyau};
 pub use inventaire::{fils, Fil, GenreFil};
-pub use mesure::{mesurer, silhouette, a_des_mailles, Mesure};
-pub(crate) use chantier::FACTEUR_COLLISION;
+// Réexportées **pour les tests seulement** : `composant/mod.rs` les appelle par
+// chemin complet (`crate::vaisseau::mesurer`) pour vérifier les enveloppes. Sans
+// le `cfg`, le binaire les compte comme inutilisées et ajoute trois
+// avertissements de bruit.
+#[cfg(test)]
+pub use composant::hexagone_ceinture;
+#[cfg(test)]
+pub use mesure::{a_des_mailles, mesurer, silhouette};
 // Réexporté pour la désignation de l'assembleur (`ecran::designation`), qui
 // projette les ports libres à l'écran. `Chantier` lui-même n'est pas encore
 // réexporté : aucune vue n'en tient un avant le Lot 4, et l'exporter à vide
@@ -33,7 +39,9 @@ pub(crate) use chantier::FACTEUR_COLLISION;
 pub use chantier::PortLibre;
 pub(crate) use composant::{rayon_panache, teinte_panache};
 pub use composant::{
-    echantillons, hexagone_ceinture,
+    // `echantillons` est appelée par chemin complet (`crate::vaisseau::…`)
+    // depuis `ecran/catalogue.rs` : la réexportation est bien utilisée.
+    echantillons,
     Composant, VariantePanneauMega, VarianteRaptor, DonneesSousEnsemble, FamillePropulsion, PiedHexa, Sorties, StyleTreillis, VarianteAntenne,
     BOUCLIER_ELANCEMENT,
     VarianteCaisson, VarianteCharge, VarianteCoiffe, VarianteModule, VariantePanneau,

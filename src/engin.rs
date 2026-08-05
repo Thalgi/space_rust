@@ -165,6 +165,11 @@ impl Astre for EnginOrbital {
 }
 
 #[cfg(test)]
+// Ces tests affirment des choses sur des CONSTANTES, et clippy y voit une
+// condition toujours vraie. Elle l'est — aujourd'hui. Le jour où quelqu'un
+// abaisse la constante, l'assertion devient fausse et le test tombe : c'est
+// précisément son rôle, garder la valeur ET dire pourquoi elle compte.
+#[allow(clippy::assertions_on_constants)]
 mod tests {
     use super::*;
 

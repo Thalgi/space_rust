@@ -625,7 +625,7 @@ fn classe_tellurique(nom: &str) -> ClasseTaille {
     match nom {
         "Dry Gaia" | "Cold Gaia" | "Wet Superhabitable" | "Dry Superhabitable"
         | "Cold Superhabitable" => ClasseTaille::SuperTerre,
-        "Lune" | "Titan" | "Fer (Mercure)" | "Carbone" | "Diamant" => ClasseTaille::Naine,
+        "Lune" | "Titan" | "Fer (Mercure)" | "Carbone" | "Diamant" | "Mars" => ClasseTaille::Naine,
         _ => ClasseTaille::Tellurique,
     }
 }
@@ -730,8 +730,25 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
     lave.relief = 0.0;
     push("Lave", lave);
     push("Venus (etuve)", tellurique(vec3(0.7, 0.6, 0.4), vec3(0.5, 0.42, 0.28), z, 0.0, 1.0, 0.15, 1.0, vec3(0.8, 0.7, 0.3) * 0.25).avec_voile(0.93, vec3(0.93, 0.82, 0.5)));
-    push("Titan", tellurique(vec3(0.6, 0.45, 0.25), vec3(0.45, 0.32, 0.2), vec3(0.5, 0.35, 0.15), 0.25, 3.0, 0.2, 0.9, z).avec_voile(0.78, vec3(0.85, 0.55, 0.25)));
+    // Titan porte un voile orange epais -- c'est meme ce qui le caracterise --
+    // mais son `atmo` etait a ZERO : le halo de limbe manquait, alors que le
+    // voile, lui, etait bien la. Une lune a l'atmosphere la plus dense du
+    // systeme solaire rendue sans halo.
+    push("Titan", tellurique(vec3(0.6, 0.45, 0.25), vec3(0.45, 0.32, 0.2), vec3(0.5, 0.35, 0.15), 0.25, 3.0, 0.2, 0.9, vec3(0.85, 0.55, 0.25) * 0.3).avec_voile(0.78, vec3(0.85, 0.55, 0.25)));
     push("Fer (Mercure)", tellurique(vec3(0.5, 0.48, 0.45), vec3(0.32, 0.3, 0.28), z, 0.0, 1.0, 0.0, 1.0, z).avec_relief(0.4).avec_crateres(0.85));
+    // Mars a son preset propre, comme Mercure et Venus -- il empruntait
+    // « Badlands », dont la rouille est trop sourde et le mesa trop marque.
+    //
+    // Les teintes viennent des vraies : regions claires en oxyde de fer
+    // (butterscotch, pas rouge brique) et regions sombres basaltiques. Ce
+    // CONTRASTE entre les deux est ce qui fait lire Mars ; une planete d'une
+    // seule rouille uniforme paraît terne, surtout apres quantification.
+    push("Mars", tellurique(vec3(0.80, 0.44, 0.24), vec3(0.46, 0.26, 0.19), z, 0.0, 1.0, 0.35, 0.90, vec3(0.85, 0.5, 0.35) * 0.10)
+        .avec_relief(0.45)
+        .avec_mesa(0.45)      // Valles Marineris, plateaux etages
+        .avec_dunes(0.35)     // ergs polaires
+        .avec_crateres(0.55)  // hemisphere sud crateurise
+        .avec_meteo(0.25, vec3(0.82, 0.62, 0.42), 0.6)); // tempetes de poussiere
     push("Carbone", tellurique(vec3(0.12, 0.12, 0.14), vec3(0.06, 0.06, 0.07), z, 0.0, 1.0, 0.0, 1.0, z).avec_crateres(0.4));
     push("Lune", tellurique(vec3(0.55, 0.54, 0.52), vec3(0.34, 0.33, 0.32), z, 0.0, 1.0, 0.0, 1.0, z).avec_relief(0.4).avec_crateres(0.95));
     push("Diamant", tellurique(vec3(0.22, 0.26, 0.34), vec3(0.1, 0.12, 0.17), z, 0.0, 1.0, 0.0, 1.0, z).avec_relief(0.5).avec_basalt(0.6));
@@ -885,6 +902,15 @@ pub fn catalogue_gazeuses() -> Vec<(String, Apparence)> {
     let mut push = |nom: &str, mut app: Apparence| {
         app.seed = graine_de_nom(nom);
         app.taille = classe_gazeuse(nom).rayon_pour(fraction_de_nom(nom));
+        // **Une geante gazeuse n'a ni sol ni villes.**
+        //
+        // `Apparence::new` donne 1 a `villes` et 0,35 a `relief` : des valeurs
+        // qui n'ont aucun sens ici. Elles sont **inertes aujourd'hui** -- le
+        // shader garde les deux derriere `type_p < 0.5` -- mais c'est
+        // exactement le genre de donnee fausse qui se reveille le jour ou l'on
+        // touche au garde. On la corrige a la source.
+        app.villes = 0.0;
+        app.relief = 0.0;
         v.push((nom.to_string(), app));
     };
     let spot = vec3(0.6, -0.22, 0.77);
@@ -1142,6 +1168,7 @@ mod tests_catalogue {
         "Ice Dunes",
         "Io (soufre)",
         "Lave",
+        "Mars",
         "Lune",
         "Pandora",
         "Pics de glace",
@@ -1303,5 +1330,99 @@ mod tests_coherence_2 {
         // Et le cas « rivières de lave » existe vraiment : sans ça, la branche
         // ci-dessus ne serait jamais parcourue et le test ne prouverait rien.
         assert!(vues_lave > 0, "aucune rivière de lave au catalogue : la règle n'est pas exercée");
+    }
+}
+
+#[cfg(test)]
+mod tests_coherence_3 {
+    use super::*;
+
+    // **Une géante gazeuse n'a ni sol, ni eau, ni villes.**
+    //
+    // Ces champs existent sur `Apparence`, partagée par les deux types, et
+    // `Apparence::new` leur donne des valeurs qui ne valent que pour une
+    // tellurique (`villes = 1`, `relief = 0,35`). Le shader les ignore
+    // aujourd'hui — tout est gardé derrière `type_p < 0.5` — mais une donnée
+    // fausse qui ne se voit pas est une donnée fausse qui attend son heure.
+    #[test]
+    fn une_geante_gazeuse_na_ni_sol_ni_villes() {
+        for (nom, a) in catalogue_gazeuses() {
+            assert_eq!(a.villes, 0.0, "{nom} : des villes sur une géante gazeuse");
+            assert_eq!(a.relief, 0.0, "{nom} : du relief sur une géante gazeuse");
+            assert_eq!(a.eau, 0.0, "{nom} : de l'eau de surface sur une géante");
+            assert_eq!(a.veg_couv, 0.0, "{nom} : de la végétation sur une géante");
+            assert_eq!(a.crateres, 0.0, "{nom} : des cratères sur une géante");
+            assert_eq!(a.rivieres, 0.0, "{nom} : des rivières sur une géante");
+            assert!(a.calotte >= 1.0, "{nom} : une banquise sur une géante");
+        }
+    }
+
+    // **Mars est rousse, et contrastée.** Elle empruntait « Badlands », dont la
+    // rouille est trop sourde : à l'écran elle ne se lisait pas comme Mars.
+    //
+    // Le test tient deux choses. La **teinte** — le rouge domine franchement le
+    // bleu, sinon on retombe sur un gris-brun. Et le **contraste** entre régions
+    // claires (oxyde de fer) et sombres (basalte) : c'est lui qui fait lire la
+    // planète, et une rouille uniforme paraît terne, surtout après quantification.
+    #[test]
+    fn mars_est_rousse_et_contrastee() {
+        let cat = catalogue_telluriques();
+        let (_, m) = cat.iter().find(|(n, _)| n == "Mars").expect("preset Mars absent");
+        assert!(m.couleur.x > m.couleur.z * 2.5, "Mars n'est pas rousse : {:?}", m.couleur);
+        assert!(m.couleur.x > m.couleur.y * 1.5, "Mars tire trop vers le jaune : {:?}", m.couleur);
+        // Contraste clair/sombre entre les deux teintes de sol.
+        let clair = m.couleur.x + m.couleur.y + m.couleur.z;
+        let sombre = m.couleur2.x + m.couleur2.y + m.couleur2.z;
+        assert!(clair > sombre * 1.4, "regions claires et sombres trop proches : {clair} vs {sombre}");
+        // Mars a des calottes : un climat, et un seuil franchissable.
+        assert!(m.grad_lat > 0.0 && m.calotte < 1.0, "Mars sans calotte polaire");
+        // Et pas d'eau libre.
+        assert_eq!(m.eau, 0.0, "Mars avec de l'eau de surface");
+    }
+
+    // Et le catalogue gazeux n'est pas vide : sans ça, la boucle ci-dessus ne
+    // parcourrait rien et le test passerait sans rien vérifier.
+    #[test]
+    fn le_catalogue_gazeux_est_peuple() {
+        assert!(
+            catalogue_gazeuses().len() > 20,
+            "seulement {} géantes au catalogue",
+            catalogue_gazeuses().len()
+        );
+    }
+
+    // **Ce qui pousse a besoin d'eau, ce qui flotte a besoin d'air.** Deux
+    // incohérences visibles à l'écran : de la végétation sur un monde sec, des
+    // nuages sur un monde sans atmosphère.
+    // ⚠️ Deuxième fois que la règle candidate était **trop stricte** et que le
+    // catalogue avait raison. « Pas de végétation sans eau » mordait sur
+    // `Lichen` : un lichen pousse sur la roche nue et prend son humidité dans
+    // l'**air**, pas dans un océan. Comme les rivières de lave de `Crevasse`,
+    // c'est un cas limite délibéré, pas un oubli.
+    //
+    // La règle juste : il faut de l'eau **ou** une atmosphère — mais pas rien.
+    #[test]
+    fn la_vie_et_les_nuages_ont_leurs_conditions() {
+        let mut vies_aeriennes = 0;
+        for (nom, a) in catalogue_telluriques() {
+            if a.veg_couv > 0.0 {
+                assert!(
+                    a.eau > 0.0 || a.atmo != Vec3::ZERO,
+                    "{nom} : de la végétation sans eau NI atmosphère"
+                );
+                if a.eau <= 0.0 {
+                    vies_aeriennes += 1;
+                }
+            }
+            if a.nuages > 0.0 {
+                assert_ne!(a.atmo, Vec3::ZERO, "{nom} : des nuages sans atmosphère");
+            }
+            if a.voile > 0.0 {
+                assert_ne!(a.atmo, Vec3::ZERO, "{nom} : un voile sans atmosphère");
+            }
+        }
+        // Le cas « vie sans océan » existe vraiment : sans lui, la branche
+        // ci-dessus ne serait jamais parcourue et le test ne prouverait rien.
+        assert!(vies_aeriennes > 0, "aucune flore aérienne : la règle n'est pas exercée");
     }
 }

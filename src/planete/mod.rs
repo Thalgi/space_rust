@@ -315,6 +315,22 @@ impl Astre for Planete {
             texture: None,
         };
         draw_mesh(&quad);
+        // **Vider le lot MAINTENANT.**
+        //
+        // Toutes les planetes partagent le meme materiau (`mat_corps` rend des
+        // clones du meme pipeline). `set_texture` n'attache donc pas la texture
+        // a CE dessin : il l'ecrit dans le pipeline, et macroquad ne l'applique
+        // qu'au vidage du lot. Sans ce flush, c'est le dernier corps dessine qui
+        // impose ses textures a tous les precedents -- dans le systeme solaire,
+        // une tellurique (donc `zonal = tex_vide`), et les quatre geantes
+        // sortaient d'un brun uni faute de profil de bandes.
+        //
+        // La galerie y echappait par accident : elle change de viewport a chaque
+        // cellule, ce qui vide le lot entre deux planetes. C'est pour ca que le
+        // defaut ne se voyait QUE dans la vue systeme.
+        unsafe {
+            get_internal_gl().flush();
+        }
         self.verts = quad.vertices;
         self.inds = quad.indices;
         gl_use_default_material();

@@ -60,6 +60,7 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
     //
     // Appariements revus le 2026-08-05, pour cesser de recycler le meme preset
     // sur des corps que rien ne rapproche :
+    //   Mars     : "Badlands" -> "Mars"      preset propre, rouille plus franche
     //   Ganymede : "Lune" -> "Crevasse"      ses sillons (sulci) sont sa signature
     //   Callisto : "Carbone" -> "Lune"       le corps le plus cratelise connu
     //   Ariel    : "Boule de neige" -> "Supraglacial"  terrains fractures brillants
@@ -77,7 +78,7 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
         preset_tellurique("Terre"), Some("Terre"));
     ajouter_lune_preset(&mut sys, terre, rayon_terre, 0.24, fige(preset_tellurique("Lune"), "Lune"), "Lune");
     let mars = ajouter_planete(&mut sys, 1.52, 0.093, 1.85 * deg, 0.42, 0.4,
-        preset_tellurique("Badlands"), Some("Mars")); // analogue de Mars (rouille, canyons)
+        preset_tellurique("Mars"), Some("Mars"));
     // Phobos + Deimos : deux petits corps sombres captures.
     ajouter_lune_preset(&mut sys, mars, 0.42, 0.05, fige(preset_tellurique("Carbone"), "Phobos"), "Phobos");
     ajouter_lune_preset(&mut sys, mars, 0.42, 0.05, fige(preset_tellurique("Carbone"), "Deimos"), "Deimos");

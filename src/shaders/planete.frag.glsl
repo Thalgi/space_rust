@@ -48,6 +48,10 @@ uniform vec3 gaz_pal[8];
 uniform sampler2D zonal;
 uniform float pole_lat;   // sin(latitude) où commence le régime polaire (zonal.rs)
 uniform float px_rayon;   // rayon apparent en pixels -> LOD du micro-détail (phase 6)
+// Rayon apparent (px) en dessous duquel les lumieres de villes restent eteintes.
+// 64 px : en dessous, le grain fin des reseaux urbains ne se resout plus et
+// devient du scintillement. Voir le bloc « Lumieres de villes » plus bas.
+#define VILLES_PX_MIN 64.0
 uniform vec3 atmo;        // halo atmosphérique (0 = aucun)
 uniform float lave;       // monde de lave : fissures incandescentes (0 = aucun)
 uniform float eau_motif;  // topologie de l'eau : 0 océan global,1 continents,2 mers,3 marais
@@ -1001,7 +1005,15 @@ void main() {
     // Lumières de villes (colonisation) : sur toute tellurique habitable (pas lave/voile),
     // propres à chaque planète (graine), sur la terre (1 - wet), côté nuit, regroupées en
     // réseaux : densité régionale (basse fréq) x grain fin de villes (haute fréq).
-    if (villes > 0.01 && type_p < 0.5 && lave < 0.5 && voile < 0.5) {
+    //
+    // ECHELLE : les villes ne s'allument qu'a partir d'une certaine taille a
+    // l'ecran. Leur grain est du bruit haute frequence (`fbm(d * 26)`) ; sur une
+    // planete de quelques dizaines de pixels il ne reste pas assez de pixels
+    // pour le resoudre, et il devient un moucheté qui scintille des que la
+    // camera bouge. Sous le filtre pixel art, ou la cible fait la moitie de
+    // l'ecran, le probleme est deux fois pire.
+    bool villes_visibles = px_rayon >= VILLES_PX_MIN;
+    if (villes > 0.01 && villes_visibles && type_p < 0.5 && lave < 0.5 && voile < 0.5) {
         // villes : 0..1 monte l'intensité (demi-paliers), >1 étend la couverture.
         float force = clamp(villes, 0.0, 1.0);
         float ext = clamp(villes - 1.0, 0.0, 3.0);

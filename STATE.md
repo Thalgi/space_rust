@@ -250,6 +250,64 @@ ou de lave*.
 ⚠️ Ces tests ne sont possibles que **depuis que le catalogue est déterministe** :
 avant, il exigeait le contexte graphique.
 
+## Revue de code du 2026-08-05 — liste à traiter
+
+Établi en passant tout le catalogue de planètes au crible et en dépouillant
+`cargo clippy`. **Par ordre d'urgence.**
+
+### P0 — défauts réels
+
+| # | Quoi | État |
+|---|---|---|
+| 1 | Banquise sur les mondes sans climat (`calotte = 1` n'était pas un sentinelle exact) | ✅ corrigé |
+| 2 | Villes sur les cailloux morts (`villes = 1` par défaut, shader sans condition d'air) | ✅ corrigé |
+| 3 | **Titan sans atmosphère** : voile orange épais mais `atmo = 0`, donc aucun halo de limbe | ✅ corrigé |
+| 4 | Géantes gazeuses avec `villes = 1` et `relief = 0,35` — inertes (gardées par `type_p`), latentes | ✅ corrigé |
+| 5 | `large_enum_variant` sur `ecran/objet.rs:14` — `Apparence` (376 o) contre 48 o pour la variante étoile : toute copie de `Specimen` traînait les 376 o. Boxée. | ✅ corrigé |
+
+### P1 — le bruit qui cache les vrais défauts
+
+C'est **la leçon de la session** : la palette Lospec était refusée avec une ligne
+de console, invisible au milieu du bruit. Tant que `clippy` sort 117
+avertissements, le 118ᵉ ne se voit pas.
+
+| # | Quoi | Volume | État |
+|---|---|---|---|
+| 6 | Imports inutilisés | 9 | ✅ |
+| 7 | Code mort (méthodes, fonctions, constantes jamais utilisées), surtout dans `vaisseau/` | **55** | ⏳ |
+| 8 | `assertions_on_constants` — **légitimes** : elles gardent une constante, l'abaisser fait échouer le test. `#[allow]` commenté sur les 4 modules de test concernés | 7 | ✅ |
+| 9 | `field_reassign_with_default` (tests), `needless_range_loop`, `useless_conversion`, `needless_update` | ~15 | ⏳ |
+
+**Avertissements : 117 → 105.**
+
+⚠️ **Le code mort n'est PAS un artefact de test.** Mesuré : 55 éléments morts
+pour la cible binaire, 57 avec les tests — donc il est bien inutilisé, pas
+seulement « utilisé ailleurs ». Le supprimer demande du **jugement**, pas un
+passage automatique : une partie est de l'API posée d'avance pour l'assembleur
+(Lot 4), et l'effacer coûterait plus cher que le bruit qu'elle fait. À trier
+élément par élément, pas en masse.
+
+⚠️ **Trois réexportations étaient utilisées par les seuls tests** (`mesurer`,
+`silhouette`, `a_des_mailles`, plus `hexagone_ceinture`) : appelées par chemin
+complet depuis `composant/mod.rs`, donc invisibles au binaire. Elles sont
+désormais `#[cfg(test)]` plutôt que supprimées — les retirer cassait la
+compilation des tests.
+
+### P2 — dettes déjà inscrites
+
+D-PARAM-1 (réglages non sauvegardés), D-PIX-1/3/4/5, `briques.rs`/`vaisseaux.rs`
+non déclarés dans `ecran/mod.rs`, hash CPU/GPU dupliqué dans 4 fichiers.
+
+### Ce que la revue a appris
+
+**Deux de mes trois règles candidates étaient trop strictes, et le catalogue avait
+raison.** Les rivières de `Crevasse` sont des coulées de **lave** (`riv_lave`), et
+la végétation de `Lichen` et `Fungi` prend son humidité dans l'**air**, pas dans
+un océan. Ce sont des cas limites délibérés. Les tests encodent désormais la
+règle juste — *une rivière coule d'eau ou de lave*, *la végétation veut de l'eau
+ou une atmosphère* — et chacun vérifie que **le cas limite existe encore**, sans
+quoi la règle deviendrait vide sans que rien ne le dise.
+
 ## Chantiers en pause
 
 | Chantier | Où on en est | Reprendre par |

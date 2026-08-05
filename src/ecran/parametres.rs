@@ -8,7 +8,7 @@
 //! Le modèle vit dans [`crate::reglages`] et se teste ; ici il n'y a que « où
 //! le rectangle se pose ».
 
-use crate::reglages::{ModeRendu, Reglages};
+use crate::reglages::Reglages;
 use crate::ui::minitel_ligne;
 use macroquad::prelude::*;
 
@@ -253,7 +253,7 @@ impl Parametres {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reglages::{ModeAffichage, Resolution};
+    use crate::reglages::{ModeAffichage, ModeRendu, Resolution};
 
     const ECRAN: Vec2 = Vec2::new(1000.0, 700.0);
 

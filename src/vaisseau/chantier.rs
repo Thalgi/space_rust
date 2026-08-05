@@ -13,7 +13,7 @@
 
 use super::{
     accoupler, cuire, Budget, Composant, DonneesSousEnsemble, EtatStation, GenrePort, Piece, Port,
-    Enveloppe, Profil, Repere, Station,
+    Profil, Repere, Station,
 };
 use macroquad::prelude::Vec3;
 use std::collections::HashSet;

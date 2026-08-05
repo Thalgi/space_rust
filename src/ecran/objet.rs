@@ -11,9 +11,14 @@ use macroquad::rand::gen_range;
 
 /// Le corps affiché, mémorisé pour pouvoir le reconstruire à l'identique
 /// (hot-reload des shaders sur ce specimen précis).
+///
+/// `app` est **boxée** : `Apparence` pèse ~376 octets contre 48 pour la variante
+/// étoile, et un enum coûte toujours sa plus grosse variante. Sans le Box, toute
+/// copie de `Specimen` — y compris celle d'une étoile, qui n'en a que faire —
+/// traînerait les 376 octets.
 enum Specimen {
     Soleil { rayon: f32, couleur: Vec3, lumi: f32, nom: String, couronne: f32 },
-    Planete { rayon: f32, app: Apparence },
+    Planete { rayon: f32, app: Box<Apparence> },
 }
 
 impl Specimen {
@@ -31,7 +36,7 @@ impl Specimen {
             }
         } else {
             let (rayon, app) = planete_aleatoire();
-            Specimen::Planete { rayon, app }
+            Specimen::Planete { rayon, app: Box::new(app) }
         }
     }
 
@@ -66,7 +71,7 @@ fn batir(spec: &Specimen) -> Systeme {
             sys.ajouter(Box::new(s));
         }
         Specimen::Planete { rayon, app } => {
-            sys.ajouter(Box::new(Planete::new(Vec3::ZERO, Vec3::ZERO, *rayon, 1.0, *app, Vec::new())));
+            sys.ajouter(Box::new(Planete::new(Vec3::ZERO, Vec3::ZERO, *rayon, 1.0, (**app).clone(), Vec::new())));
             // Pas d'étoile : lumière latérale de secours pour modeler le relief.
             sys.set_lumiere(vec3(6.0, 3.0, 6.0), Vec3::ONE);
         }
