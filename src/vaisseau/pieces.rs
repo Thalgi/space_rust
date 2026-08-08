@@ -273,6 +273,9 @@ pub(crate) fn treillis_triangulaire<P: Peintre>(
 /// puis longue flèche affinée (silhouette d'ISV). Les longerons sont tracés en
 /// **polyligne** de baie en baie pour **suivre la courbe** au lieu de la couper
 /// en droite.
+// Deux extremites, deux demi-sections, une courbure et deux teintes : la
+// signature EST la description de la poutre.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn treillis_conique<P: Peintre>(
     p: &mut P,
     a: Vec3,
@@ -368,9 +371,9 @@ pub(crate) const HEXA_GAIN_SILHOUETTE: f32 = 1.224_744_9; // √(3)/√(2) = cos
 /// hexagonal du pied. Sans ça la jupe de raccord n'a aucune arête franche.
 pub(crate) fn hexa_section(centre: Vec3, d: Vec3, h: Vec3, rayon: f32) -> [Vec3; 6] {
     let mut v = [Vec3::ZERO; 6];
-    for k in 0..6 {
+    for (k, s) in v.iter_mut().enumerate() {
         let a = FRAC_PI_3 * k as f32;
-        v[k] = centre + d * (rayon * a.cos()) + h * (rayon * a.sin());
+        *s = centre + d * (rayon * a.cos()) + h * (rayon * a.sin());
     }
     v
 }

@@ -116,6 +116,7 @@ pub fn zone_active(ecran: Vec2, repliee: bool, haut: f32) -> Rect {
 /// La colonne, amputée de la place du bouton de repli : c'est là que les items
 /// se posent. Sans ça, la dernière ligne passerait **sous** le bouton et serait
 /// impossible à cliquer.
+#[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
 pub fn colonne_items(ecran: Vec2) -> Rect {
     colonne_items_depuis(ecran, MARGE)
 }

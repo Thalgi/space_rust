@@ -27,6 +27,7 @@ pub enum Profil {
 
 impl Profil {
     /// Tous les profils, du plus petit au plus grand.
+    #[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
     pub const TOUS: [Profil; 4] = [Profil::P0, Profil::P1, Profil::P2, Profil::P3];
 
     /// Rayon nominal du profil, en unités monde (`U`).
@@ -41,6 +42,7 @@ impl Profil {
     }
 
     /// Diamètre nominal (= `2 * rayon`).
+    #[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
     pub fn diametre(self) -> f32 {
         2.0 * self.rayon()
     }
@@ -52,6 +54,7 @@ impl Profil {
     }
 
     /// Nom court, pour l'atelier / le débogage.
+    #[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
     pub fn nom(self) -> &'static str {
         match self {
             Profil::P0 => "P0",

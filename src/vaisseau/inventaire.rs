@@ -91,6 +91,7 @@ impl Fil {
         (self.a + self.b) * 0.5
     }
     /// Le plus grand des deux rayons — pour l'affichage et les bornes grossières.
+    #[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
     pub fn rayon_max(&self) -> f32 {
         self.rayon_a.max(self.rayon_b)
     }

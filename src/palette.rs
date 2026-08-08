@@ -146,6 +146,10 @@ pub struct Palette {
 impl Palette {
     /// Construit depuis une liste d'hexadécimaux. `Err` avec l'entrée fautive :
     /// une palette à moitié lue vaudrait moins qu'un message clair.
+    ///
+    /// **Tests seulement** : le jeu, lui, lit des fichiers (`depuis_texte`).
+    /// Celle-ci sert à écrire une palette à la main dans une assertion.
+    #[cfg(test)]
     pub fn depuis_hex(nom: &str, hex: &[&str]) -> Result<Palette, String> {
         let mut rgb = Vec::with_capacity(hex.len());
         for (i, h) in hex.iter().enumerate() {

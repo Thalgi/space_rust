@@ -145,6 +145,7 @@ impl EtatStation {
         }
     }
 
+    #[allow(dead_code)] // Economie du chantier (D-INT-2) : la regle existe, l'ecran qui la depense n'est pas la.
     pub fn est_prete(&self) -> bool {
         matches!(self, EtatStation::Prete(_))
     }
@@ -168,6 +169,7 @@ impl Budget {
         self.restant
     }
 
+    #[allow(dead_code)] // Economie du chantier (D-INT-2) : la regle existe, l'ecran qui la depense n'est pas la.
     pub fn epuise(&self) -> bool {
         self.restant <= 0.0
     }
@@ -223,6 +225,7 @@ impl Assembleur {
     /// Ajoute une pièce **seulement si** le budget couvre le `cout()` de son
     /// composant. Renvoie `true` quand la pièce a été posée (et le budget
     /// débité), `false` sinon. C'est le point d'intégration du générateur.
+    #[allow(dead_code)] // Economie du chantier (D-INT-2) : la regle existe, l'ecran qui la depense n'est pas la.
     pub fn ajouter_finance(&mut self, piece: Piece, budget: &mut Budget) -> bool {
         if budget.depenser(piece.composant.cout()) {
             self.pieces.push(piece);
@@ -233,6 +236,7 @@ impl Assembleur {
     }
 
     /// Nombre de pièces déjà posées dans le tampon (avant publication).
+    #[allow(dead_code)] // Economie du chantier (D-INT-2) : la regle existe, l'ecran qui la depense n'est pas la.
     pub fn nb_en_cours(&self) -> usize {
         self.pieces.len()
     }

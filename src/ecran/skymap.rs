@@ -339,7 +339,7 @@ impl Skymap {
         draw_rectangle_lines(zone.x, zone.y, zone.w, zone.h, 1.0, Color::new(0.0, 0.5, 0.5, 0.9));
 
         let mut y = zone.y + zone.h + 22.0;
-        let mut ligne = |t: String, c: Color, y: &mut f32| {
+        let ligne = |t: String, c: Color, y: &mut f32| {
             crate::police::texte(&t, r.x + 12.0, *y, 17.0, c);
             *y += 22.0;
         };
@@ -376,7 +376,7 @@ impl Skymap {
             draw_rectangle_lines(col.x, col.y, col.w, col.h, 1.0, Color::new(0.0, 0.5, 0.5, 0.9));
 
             let h = liste::hauteur_ligne(col, n);
-            let taille = (h * 0.62).clamp(11.0, 18.0);
+            let taille = (h * 0.62).clamp(crate::police::TAILLE_MIN, 18.0);
             let focus = self.cam.focus();
             for (i, e) in entrees.iter().enumerate() {
                 let r = liste::ligne(col, n, i);

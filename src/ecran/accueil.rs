@@ -87,8 +87,8 @@ impl Accueil {
 
         let cx = screen_width() * 0.5;
         let titre = "* GENERATEUR DE SYSTEMES *";
-        let tw = crate::police::mesure(titre, 36);
-        crate::police::texte(titre, cx - tw * 0.5, screen_height() * 0.12, 36.0, Color::new(0.0, 0.9, 0.9, 1.0));
+        let tw = crate::police::mesure(titre, crate::police::TAILLE_MAX as u16);
+        crate::police::texte(titre, cx - tw * 0.5, screen_height() * 0.12, crate::police::TAILLE_MAX, Color::new(0.0, 0.9, 0.9, 1.0));
 
         let bw = 380.0;
         let ecart = 48.0;

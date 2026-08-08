@@ -140,6 +140,7 @@ pub(super) fn grille_tuiles(rayon_majeur: f32, rayon_mineur: f32) -> (usize, usi
 }
 
 /// Côté d'une tuile, joint déduit — la cote que le bardage garde constante.
+#[allow(dead_code)] // Mesure de geometrie tenue par ses tests ; aucun dessin ne l'appelle aujourd'hui.
 pub(super) fn cote_tuile() -> f32 {
     TUILE - TUILE_JOINT
 }

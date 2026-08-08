@@ -25,6 +25,7 @@ use macroquad::prelude::*;
 /// Rayon d'accroche d'un port, en **pixels**. Généreux à dessein : un port est
 /// un point, viser au pixel près serait pénible, et les ports d'une station
 /// sont largement plus espacés que ça à l'écran dans les cadrages usuels.
+#[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
 pub const ACCROCHE_PIXELS: f32 = 18.0;
 
 /// Le port libre sous le curseur : le plus proche en **pixels**, dans la limite
@@ -39,6 +40,7 @@ pub const ACCROCHE_PIXELS: f32 = 18.0;
 /// et non un oubli — §8.4 allume les ports compatibles, donc l'utilisateur voit
 /// ceux qu'il peut viser, et un port caché reste visé délibérément quand on
 /// pointe dessus. À revoir seulement si l'usage montre que ça gêne.
+#[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
 pub fn port_sous_curseur(
     libres: &[PortLibre],
     souris: Vec2,

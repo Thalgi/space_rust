@@ -2483,5 +2483,293 @@ scratchpad **avant** de le toucher.
 
 ### Sources
 - [Stanford torus — Wikipedia](https://en.wikipedia.org/wiki/Stanford_torus)
+
+### F.7 Starship — la grappe de six Raptor (2026-08-05)
+
+Étape 2/5 de §D.5. Les six moteurs sont posés, en deux couronnes de trois.
+
+**Les rayons de couronne viennent du réel**, comme le reste de l'engin :
+
+| | réel (rayon) | ici |
+|---|---:|---:|
+| 3 RSL (atmosphériques) | 1,10 m | 0,489 U |
+| 3 RVac (vide) | 3,10 m | 1,378 U |
+
+**Une couronne de trois EST une symétrie radiale.** `Symetrie::Radiale(3)` pose
+le premier moteur et fabrique les deux autres ; recopier trois angles à la main
+laisserait une couronne devenir irrégulière sans que rien ne le dise. Le module
+`symetrie.rs`, écrit d'avance pour le Lot 4, **entre donc en service ici** — et
+son `#![allow(dead_code)]` de module a été **resserré sur les deux seuls
+éléments encore en attente** (`Miroir`, `nb_copies`), pour que le reste
+redevienne sensible au code mort.
+
+**Le placement est sorti du preset** (`starship_moteurs`) pour être *mesurable* :
+un placement se vérifie sans contexte graphique. Sept tests, tous red-checkés :
+rien ne dépasse de la jupe, rien ne s'interpénètre, les têtes affleurent le cul,
+chaque couronne est régulière, les deux sont déphasées, et le preset les pose
+vraiment.
+
+⚠️ **Un sabotage m'a corrigé.** J'avais annoncé « 0,057 U de jeu entre les
+couronnes », et élargir la couronne RSL aurait dû faire rougir la collision.
+C'est resté **vert** — et le test avait raison. Ces 0,057 U sont l'écart
+**radial entre deux anneaux**, pas la distance entre deux moteurs : décalées de
+60°, les couronnes laissent 1,19 U entre un RSL et son RVac voisin pour 0,83
+requis, et l'équation montre qu'un RSL ne peut *jamais* rejoindre un RVac en
+s'écartant sur son propre rayon (discriminant négatif). Le vrai risque de
+contact est **à l'intérieur** d'une couronne. Le commentaire disait une chose
+fausse au sujet d'une géométrie juste ; il a été corrigé.
+
+**Décalage de 60°** entre les deux couronnes : alignés, les RVac se logeraient
+pile derrière les RSL et le cul ne montrerait que trois directions au lieu de
+six. C'est le seul des sept tests qui porte sur l'aspect et non sur la mécanique.
+
+
+### F.8 Starship — jupe moteur et quatre volets (2026-08-06)
+
+Étapes 3 et 4 de §D.5, plus une correction de fond sur la hauteur.
+
+#### ⚠️ Les 50 m n'étaient pas les 50 m
+
+En posant les moteurs (F.7), je les avais accrochés **sous** une coque déjà
+haute de 50 m : le vaisseau mesurait 54 m. Une fusée se mesure jusqu'au **plan
+de sortie de ses tuyères**, pas jusqu'au bas de son réservoir.
+
+Corrigé en faisant de ce plan l'origine de toutes les cotes verticales
+(`starship_cul`). La jupe et la coque se **partagent** les 50 m au lieu de
+s'additionner : `STARSHIP_FUT = HAUTEUR − NEZ − JUPE_HAUT`. Le test
+`le_starship_mesure_toujours_cinquante_metres` tient l'addition, et rougit si on
+remet la jupe sous la coque.
+
+#### La jupe moteur
+
+Nouvelle brique `JupeMoteur` : une virole **ouverte aux deux bouts**, à double
+paroi (sans quoi on verrait à travers par l'arrière, le rendu ne faisant pas de
+faces doubles). Ouverte, et c'est le point — un cylindre plein cacherait les six
+cloches, autant ne pas les avoir modelées.
+
+Sa cote basse est **déduite, pas choisie** : elle doit couvrir au moins
+`JUPE_COUVERTURE` (2/3) de *chaque* moteur, et c'est le plus **court** qui
+contraint — à bord de jupe donné, c'est lui qui ressort le premier. D'où
+RSL couvert à exactement 2/3, RVac à 77 %.
+
+⚠️ Les moteurs sont bornés par la **paroi intérieure** de la jupe, pas par son
+rayon nominal : la paroi rentre de 2 %, et un RVac passe à quelques centimètres.
+Le test lit `jupe_rayon_interieur` à la source.
+
+#### Les quatre volets
+
+Nouvelle brique `Volet`, la seule pièce du vaisseau qui **bouge**.
+
+**Ce n'est pas une aile** : un volet de Starship *traîne*, il ne porte pas.
+L'engin tombe à plat, ventre au vent, et les volets modulent leur traînée pour
+tenir l'assiette. D'où l'épaisseur de caisson là où une aile serait fine — un
+profil d'aile lirait comme un avion.
+
+Deux courts en haut (4,5 × 5 m à 41 m du cul), deux longs en bas (7,5 × 8 m à
+8 m). **L'écartement fait la silhouette** : les rapprocher donnerait une croix.
+
+⚠️ **Les volets étaient posés à plat, dans le mauvais sens** — vu à l'écran,
+pas par un test. Le volet est dessiné **corde sur `X`, épaisseur sur `Z`** ;
+avec la seule rotation d'azimut, la corde s'enroulait donc *autour* de la coque
+et l'épaisseur se couchait le long du vaisseau. Corrigé par une pré-rotation de
+**−90° autour de Y** (l'axe d'envergure, donc le volet continue de pointer hors
+de la coque) : `R_z(azimut−90°) · R_y(−90°)`.
+
+⚠️ **Aucun test ne pouvait le voir**, et c'est la leçon. Celui de la hauteur
+mesurait `pos.z ± corde/2` **sans regarder la rotation** : il supposait
+l'orientation au lieu de la lire, donc il passait au vert quelle qu'elle soit.
+Il mesure désormais l'étendue réelle, coins tournés compris, et un test neuf
+(`la_corde_des_volets_suit_laxe_du_vaisseau`) tient les trois axes.
+
+⚠️ **Une paire de volets est un MIROIR, pas une rotation.** Deuxième défaut vu
+à l'écran : le volet du côté `−Y` sortait retourné, montrant son inox là où
+l'autre montre ses tuiles. La rotation d'azimut seule retourne le panneau ; il
+faut un **demi-tour supplémentaire sur le second de la paire**, autour de son
+axe d'envergure. `les_faces_tuilees_dune_paire_regardent_du_meme_cote` tient
+désormais l'invariant — et rougit aussi bien sans demi-tour qu'avec un demi-tour
+sur les deux.
+
+⚠️ **J'avais épinglé le mauvais invariant.** Le test précédent exigeait
+`corde.z > 0.999` — signé — ce qui était arbitraire : en miroir, les deux cordes
+pointent vers des bouts opposés du vaisseau, et c'est normal. Ce qui doit
+s'accorder, c'est la **face tuilée**. L'axialité est redevenue non signée, et la
+vraie garde est passée là où elle a un sens.
+
+ℹ️ **Le côté *global* du ventre n'est pas encore épinglé** : retourner les
+quatre volets ensemble passe au vert, faute d'une référence de ventre. C'est le
+bouclier thermique (étape 5/5) qui la fournira.
+
+⚠️ **Le signe compte, et `abs()` le perdait.** Première version du test : `+90°`
+passait au vert comme `−90°`, puisque la corde suit l'axe dans les deux cas —
+mais la face **tuilée** bascule alors de l'autre côté tangentiel, ce qui se voit.
+Assertion signée, et les trois sabotages rougissent : ancienne rotation, `+90`
+au lieu de `−90`, et ordre de composition inversé.
+
+⚠️ **L'enveloppe du volet était fausse** et un test existant l'a dit tout de
+suite (`les_rayons_declares_contiennent_la_piece` : « déborde de 1,43 hors d'une
+enveloppe de rayon 1,00 »). J'avais déclaré une capsule **centrée**, alors qu'un
+volet part de sa charnière et s'écarte — et qu'il pivote hors du plan avec le
+braquage. Elle lit désormais son bout à la source (`volet_bout`), la même
+fonction que le dessin, si bien qu'un changement de braquage ne peut plus la
+laisser en arrière.
+
+Cinq sabotages red-checkés, dont deux qui comptent : **volets tournés à
+l'envers** (ils rentreraient dans le réservoir, invisible sur un rendu de trois
+quarts) et **paire non opposée**.
+
+#### Deux verrous d'inventaire ont fait leur travail
+
+Ajouter deux variantes a fait rougir `la_chaine_dechantillons_visite_chaque_variante_une_fois`
+(35 → 37) et `le_catalogue_des_fils_est_a_jour`. C'est **voulu** : le compilateur
+garantit qu'une variante a un bras, pas qu'elle est atteinte par la chaîne. Les
+deux ont été mis à jour, pas contournés.
+
+
+
+### F.9 Starship — bardage de tuiles, et la cote des volets avant (2026-08-06)
+
+Étape 5/5 de §D.5.
+
+#### Les volets avant mordaient sur l'ogive
+
+Leur cote venait du réel — 41 m — mais le raccord fût/ogive est à
+`HAUTEUR − NEZ` = 17,3 U (39 m). Le volet avant, corde comprise, montait donc à
+19,3 U : **deux unités dans le nez**, où la coque se rétrécit déjà et où sa
+charnière, posée au rayon du fût, flottait au-dessus du vide. Visible de profil.
+
+La cote est désormais **déduite** — `HAUTEUR − NEZ − corde/2 − jeu` — donc 35,6 m,
+et elle suivra toute retouche de l'ogive au lieu de la contredire.
+
+#### Le bardage de tuiles
+
+Nouvelle brique `BardageTuiles` : un manchon **partiel**, sur un arc d'un peu
+plus de 180°, posé sur le fût. Un Starship ne rentre pas nez en avant — il tombe
+**à plat, ventre au vent** — et c'est ce contraste noir/inox sur un seul côté
+qui fait reconnaître l'engin, bien plus que sa silhouette.
+
+Il couvre **exactement le fût** : ni la jupe, ni l'ogive (un manchon cylindrique
+flotterait sur un cône). Les tuiles décollent de 1,2 % du rayon, sinon elles se
+battraient avec la coque dans le tampon de profondeur.
+
+#### ⚠️ Le ventre était écrit DEUX fois — il n'y avait pas de bouton
+
+Vu à l'écran : les quatre volets et le bardage tuilaient bien du même côté…
+mais du **mauvais**, tous ensemble. Et il n'y avait aucun moyen simple de les
+retourner, parce que le côté était codé à deux endroits — en dur (`+X`) dans
+`bardage_dessiner`, et dans le **signe** du quart de tour des volets.
+
+Les tests ne voyaient que leur **accord**, jamais leur orientation d'ensemble :
+un engin qui présente son dos à la caméra passait au vert.
+
+Corrigé par `STARSHIP_VENTRE`, **une seule constante d'azimut**. Le bardage s'y
+oriente, et le signe du quart de tour des volets s'en déduit
+(`-FRAC_PI_2 * VENTRE.cos()`). Le test compare désormais les deux à **la
+constante**, pas l'un à l'autre — et un second test interdit de poser le ventre
+sur une charnière (le bardage passerait sous les volets et la nappe serait
+coupée en deux).
+
+C'est la troisième fois de la session qu'un test vérifie une cohérence interne
+au lieu de la chose elle-même : masses recopiées, corde supposée axiale, ventre
+auto-référent. Le motif est toujours le même — **comparer deux copies plutôt
+qu'une copie à sa source**.
+
+#### Les volets sont **droits** au repos, et le commentaire disait l'inverse
+
+Ils étaient posés à `braquage = 0,55`, soit 41° — quatre gouvernes penchées vers
+le ventre en permanence, ce qui donne une silhouette affaissée. Position de
+repos remise à **zéro** : c'est celle de l'engin au sol et en montée, les
+gouvernes ne se braquent qu'à la rentrée.
+
+⚠️ **La documentation de `braquage` était à l'envers.** Elle annonçait
+« 0 = replié contre la coque, 1 = déployé » alors que le code fait le contraire :
+0 laisse le volet **droit**, 1 le braque à fond. Le commentaire a menti pendant
+toute la pose des volets sans qu'aucun test ne s'en aperçoive — parce qu'aucun
+ne mesurait ce que le paramètre *fait*.
+
+Deux tests neufs le tiennent maintenant : le sens (0 → droit, 1 → penché vers le
+ventre) et, surtout, que **c'est une rotation et non un glissement** — le bout
+reste à l'envergure de sa charnière quel que soit le braquage. Ce dernier
+invariant rougit sur un sabotage que le premier ne voit pas.
+
+#### La nappe monte jusqu'à la pointe
+
+L'ogive est tuilée elle aussi : le bardage suit le fût **puis** la courbe
+d'ogive, en relisant `ogive()` — la fonction de la coque — au lieu de
+réinventer le profil. S'arrêter au raccord laissait un nez d'inox nu, c'est-à-dire
+exactement la partie qui prend le plasma en premier.
+
+#### La lacune du 4/5 se referme
+
+À l'étape précédente j'avais noté que retourner **les quatre volets ensemble**
+passait au vert, faute d'une référence de ventre. Le bardage la fournit : il
+regarde `+X` par construction, et `le_bardage_et_les_volets_tuilent_le_meme_cote`
+rougit désormais aussi bien si on retourne les volets que si on tourne le
+bardage. Une brique qui ferme un trou de test laissé ouvert par la précédente.
+
+`+X` est **fixe et non paramétrable**, délibérément : le ventre est une
+direction unique, et un azimut réglable inviterait à poser deux boucliers qui ne
+regardent pas au même endroit.
+
+
+
+### F.10 Starship — debout, et les hublots (2026-08-06)
+
+Le Starship est **terminé** (5/5 de §D.5).
+
+#### Le vaisseau se montre debout
+
+Toutes les pièces du parc se bâtissent le long de `+Z`, et le Starship ne fait
+pas exception — c'est dans ce repère que ses cotes se lisent. Mais une fusée se
+**regarde debout** : `starship_debout()` fait un quart de tour autour de `X` pour
+amener l'axe sur `+Y`, moteurs en bas.
+
+⚠️ **Appliquée à l'assemblage seulement.** Tourner la géométrie à la source
+obligerait chaque cote et chaque test à raisonner en `Y` pour un gain nul : le
+vaisseau n'en serait pas plus juste, seulement plus difficile à lire.
+
+#### Les hublots — sur le nez, à l'opposé du bouclier
+
+Deux petits vitrages encadrés, côte à côte, **sur l'ogive** et **côté dos**.
+
+Premier jet posé côté ventre et sur le fût : les deux étaient faux, et pour des
+raisons physiques, pas esthétiques. Sur le cylindre, ce seraient des hublots de
+**réservoir** — l'équipage regarde par le nez. Et côté ventre, ce serait une
+baie vitrée percée dans le bouclier thermique, à l'endroit exact qui prend le
+plasma.
+
+⚠️ **Sur une ogive, un vitrage plat ne peut pas être radial.** Il se pose au
+rayon de la **courbe** (1,865 U et non 2,000), et sa normale s'**incline vers la
+pointe** en suivant la pente locale. Les deux sont relus sur `ogive_rayon`, la
+fonction que la coque dessine — pas approchés.
+
+C'est la seule teinte froide d'un engin qui n'est qu'inox et tuiles, et **la
+seule chose qui donne une échelle humaine** à une coque de 50 m.
+
+⚠️ **Une tolérance trop large a rendu un test aveugle.** Je bornais l'écart de
+rayon par `HUBLOT_ECART` (0,62) pour absorber le décalage tangentiel des deux
+hublots — mais l'erreur à détecter ne vaut que 0,14, si bien que poser le
+vitrage au rayon du fût passait au **vert**. Corrigé en projetant sur l'azimut :
+le décalage tangentiel lui est perpendiculaire, donc la composante radiale est
+exacte et la tolérance retombe à 1e-3.
+
+La **hauteur** sur le nez reste un choix et n'est pas épinglée — mais sa limite
+physique l'est : vers 90 % de la flèche, la peau ne fait plus que 0,44 U pour
+une demi-paire de 0,53, et les hublots s'enrouleraient autour de la pointe.
+
+#### ⚠️ Encore un test qui comparait des origines à des étendues
+
+Premier jet du test « debout » : *la pièce la plus basse est un moteur, la plus
+haute est la coque*. La seconde moitié est fausse — le repère de la coque est en
+son **milieu**, si bien qu'un hublot se pose plus haut que lui sans rien
+dépasser. Le test a rougi tout de suite, ce qui est la bonne nouvelle.
+
+Il n'affirme plus que ce qu'une origine peut dire : **ce qui est en bas** (un
+Raptor), et que l'engin est plus de trois fois plus haut que large. Quatre
+sabotages rougissent : pas de rotation, rotation inverse (nez en bas), hublots
+regardant l'intérieur du réservoir, hublots du mauvais côté.
+
+
+### Sources
+
 - [Starship — SpaceX](https://www.spacex.com/vehicles/starship/)
 - [Raptor (rocket engine) — Wikipedia](https://en.wikipedia.org/wiki/Raptor_(rocket_engine))

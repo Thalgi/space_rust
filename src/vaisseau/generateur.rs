@@ -5,9 +5,10 @@
 
 use super::chantier::Chantier;
 use super::montage::{cuire, port_monde, poser};
+use super::symetrie::Symetrie;
 use super::{
     Assembleur, Composant, EtatStation, GenrePort, PiedHexa, Profil, Repere, Sorties, StyleTreillis,
-    BOUCLIER_ELANCEMENT,
+    ogive_rayon, BARDAGE_ARC, BOUCLIER_ELANCEMENT, JUPE_COUVERTURE,
     VarianteAntenne, VarianteCaisson, VarianteCharge, VarianteCoiffe, VarianteModule,
     VariantePanneau, VariantePanneauMega, VariantePropulseur, VarianteRadiateur, VarianteRaptor,
 };
@@ -404,6 +405,7 @@ const fn fret_rayon(epine: f32) -> f32 {
 }
 /// Le même, pour l'épine carrée — la valeur historique, gardée pour les tests et
 /// pour que le calcul n'existe **qu'une fois**.
+#[allow(dead_code)] // Mesure de geometrie tenue par ses tests ; aucun dessin ne l'appelle aujourd'hui.
 const FRET_RAYON: f32 = fret_rayon(EPINE);
 
 /// Modules P1 par grande aile solaire (preset : 13/8 ≈ 1,6 ; réel : 16/8 = 2).
@@ -987,6 +989,7 @@ impl VarianteAnneau {
         VarianteAnneau::Structure,
     ];
 
+    #[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
     pub fn nom(self) -> &'static str {
         match self {
             VarianteAnneau::Habitation => "HABITATION",
@@ -1145,24 +1148,345 @@ pub fn demo_raptor() -> EtatStation {
 const STARSHIP_RAYON: Profil = Profil::P2;
 const STARSHIP_HAUTEUR: f32 = 50.0 / 2.25;
 const STARSHIP_NEZ: f32 = 11.0 / 2.25;
-/// Fût = tout ce qui n'est pas l'ogive. Dérivé, pour que retoucher l'un des
-/// deux ne puisse pas laisser l'autre en arrière.
-const STARSHIP_FUT: f32 = STARSHIP_HAUTEUR - STARSHIP_NEZ;
+/// Hauteur de la **jupe moteur**, mesurée depuis le cul du vaisseau.
+///
+/// Le haut de la jupe est au niveau du sommet du plus grand moteur : c'est là
+/// qu'est la structure de poussée, et au-dessus commence le réservoir.
+const STARSHIP_JUPE_HAUT: f32 = raptor_hauteur(VarianteRaptor::Vide);
 
-/// **Starship (SpaceX)** — étape 1 : la coque seule.
+/// Le **bord** inférieur de la jupe, mesuré depuis le cul.
+///
+/// Réglé par le moteur le plus **court** : c'est lui qui décide, puisqu'il faut
+/// couvrir au moins [`JUPE_COUVERTURE`] de *chaque* moteur et qu'à hauteur de
+/// couverture égale, le petit est le premier à ressortir.
+const STARSHIP_JUPE_BORD: f32 =
+    raptor_hauteur(VarianteRaptor::Atmospherique) * (1.0 - JUPE_COUVERTURE);
+
+/// Longueur de la virole de jupe.
+const STARSHIP_JUPE: f32 = STARSHIP_JUPE_HAUT - STARSHIP_JUPE_BORD;
+
+/// Fût = tout ce qui n'est ni l'ogive **ni la jupe**.
+///
+/// ⚠️ La jupe est **prise dans** les 50 m, pas ajoutée dessous. Une fusée se
+/// mesure jusqu'au plan de sortie de ses tuyères ; la poser sous une coque déjà
+/// haute de 50 m donnerait un engin de 54 m qui n'est plus un Starship.
+const STARSHIP_FUT: f32 = STARSHIP_HAUTEUR - STARSHIP_NEZ - STARSHIP_JUPE_HAUT;
+
+/// Hauteur d'un Raptor à son calibre nominal, en `const fn` pour que les cotes
+/// de la jupe s'en déduisent au lieu d'être recopiées.
+const fn raptor_hauteur(v: VarianteRaptor) -> f32 {
+    match v {
+        VarianteRaptor::Atmospherique => (1.30 / 2.0 / 2.25) * (3.10 / (1.30 / 2.0)),
+        VarianteRaptor::Vide => (2.40 / 2.0 / 2.25) * (4.60 / (2.40 / 2.0)),
+    }
+}
+
+/// Rayons des **deux couronnes de moteurs**, lus du réel comme le reste.
+///
+/// | | réel (rayon) | ici |
+/// |---|---:|---:|
+/// | couronne des 3 RSL (atmosphériques) | 1,10 m | 0,489 U |
+/// | couronne des 3 RVac (vide) | 3,10 m | 1,378 U |
+///
+/// La disposition n'est pas décorative : la cloche de détente 90 d'un RVac fait
+/// presque **le double** du diamètre de sortie d'un RSL, elle ne rentre nulle
+/// part ailleurs qu'en périphérie. C'est pour ça que les trois moteurs de
+/// pilotage — ceux qui sont sur cardan — sont ceux du centre.
+const STARSHIP_COURONNE_RSL: f32 = 1.10 / 2.25;
+const STARSHIP_COURONNE_RVAC: f32 = 3.10 / 2.25;
+
+/// Décalage angulaire de la couronne extérieure : un **demi-pas** (60°).
+///
+/// Les six moteurs ne sont pas alignés sur trois rayons. Alignés, les RVac
+/// s'inscriraient pile derrière les RSL et le cul perdrait sa lecture — on n'y
+/// verrait que trois directions au lieu de six.
+const STARSHIP_DEPHASAGE_RVAC: f32 = std::f32::consts::PI / 3.0;
+
+/// **Les six moteurs du Starship** : le composant et son repère, dans le repère
+/// de la coque.
+///
+/// Sortie de [`preset_starship`] pour être **mesurable**. Un placement se
+/// vérifie — rien ne dépasse de la jupe, rien ne s'interpénètre, les deux
+/// couronnes ne se chevauchent pas — et rien de tout cela n'exige un contexte
+/// graphique. Laissé dans le preset, il ne se jugerait qu'à l'œil.
+///
+/// Le **cul du vaisseau** (`starship_cul`) est le plan de sortie des tuyères :
+/// c'est jusque-là qu'on mesure les 50 m, donc rien ne descend plus bas. Les six
+/// moteurs y ont tous leur sortie, et montent d'autant qu'ils sont hauts — un
+/// RVac dépasse donc un RSL **par le haut**, jamais par le bas.
+///
+/// Un Raptor crache vers `−Z` dans son propre repère (`raptor.rs`,
+/// `z_sortie = −demi`) : aucune rotation n'est nécessaire, il suffit de le
+/// remonter d'une demi-hauteur pour poser sa sortie sur ce plan.
+fn starship_moteurs() -> Vec<(Composant, Repere)> {
+    let cul = starship_cul();
+    let mut v = Vec::with_capacity(6);
+    for (variante, couronne, phase) in [
+        (VarianteRaptor::Atmospherique, STARSHIP_COURONNE_RSL, 0.0),
+        (VarianteRaptor::Vide, STARSHIP_COURONNE_RVAC, STARSHIP_DEPHASAGE_RVAC),
+    ] {
+        let rayon = variante.rayon_nominal();
+        let z = cul + variante.hauteur(rayon) * 0.5;
+        let comp = Composant::Raptor { profil: Profil::P0, variante, rayon };
+        // Une couronne de trois **est** une symétrie radiale : on pose le
+        // premier moteur et `cuire_symetrie` fait les deux autres. Recopier
+        // trois angles à la main laisserait la porte ouverte à une couronne
+        // qui n'est plus régulière sans que rien ne le dise.
+        let base = Repere::new(vec3(couronne * phase.cos(), couronne * phase.sin(), z), Quat::IDENTITY);
+        for t in Symetrie::Radiale(3).transformations(Vec3::Z, Vec3::Z) {
+            let p = t.transform_point3(base.pos);
+            v.push((comp.clone(), Repere::new(p, base.rot)));
+        }
+    }
+    v
+}
+
+/// **Starship (SpaceX)** — étapes 1 et 2 : la coque, et la grappe de six Raptor.
 ///
 /// Ordre de travail (`docs/conception/stations.md` §D.5) : coque, moteurs,
 /// volets, bouclier thermique, hublot. Chaque étape se juge **seule** avant la
 /// suivante — c'est la leçon 1 du chantier ISV (§C.29).
 pub fn preset_starship() -> EtatStation {
     let mut asm = Assembleur::new();
+    let cul = starship_cul();
+    let debout = starship_debout();
+
+    // La coque commence **au-dessus de la jupe**, pas au cul : les deux se
+    // partagent les 50 m au lieu de s'additionner.
     let coque = Composant::CoqueOgive {
         profil: STARSHIP_RAYON,
         longueur: STARSHIP_FUT,
         nez: STARSHIP_NEZ,
     };
-    asm.ajouter(cuire(Repere::IDENTITE, &coque));
+    let z_coque = cul + STARSHIP_JUPE_HAUT + (STARSHIP_FUT + STARSHIP_NEZ) * 0.5;
+    asm.ajouter(cuire(debout.compose(Repere::new(vec3(0.0, 0.0, z_coque), Quat::IDENTITY)), &coque));
+
+    let jupe = Composant::JupeMoteur { profil: STARSHIP_RAYON, longueur: STARSHIP_JUPE };
+    let z_jupe = cul + (STARSHIP_JUPE_BORD + STARSHIP_JUPE_HAUT) * 0.5;
+    asm.ajouter(cuire(debout.compose(Repere::new(vec3(0.0, 0.0, z_jupe), Quat::IDENTITY)), &jupe));
+
+    let mut pieces = starship_moteurs();
+    pieces.extend(starship_volets());
+    pieces.extend(starship_hublots());
+    pieces.push(starship_bardage());
+    for (comp, repere) in pieces {
+        asm.ajouter(cuire(debout.compose(repere), &comp));
+    }
     asm.terminer()
+}
+
+/// **Les quatre volets**, cotes prises sur l'engin réel puis converties.
+///
+/// | | envergure | corde | position (depuis le cul) |
+/// |---|---:|---:|---:|
+/// | 2 avant (courts) | 4,5 m → 2,00 U | 5,0 m → 2,22 U | **déduite** (voir plus bas) |
+/// | 2 arrière (longs) | 7,5 m → 3,33 U | 8,0 m → 3,56 U | 8 m → 3,6 U |
+///
+/// **Ils ne sont pas à la même hauteur, et c'est la silhouette.** Les courts
+/// sont haut sur le fût, les longs juste au-dessus de la jupe ; c'est cet
+/// écartement qui fait lire l'engin de profil. Les rapprocher donnerait une
+/// croix, pas un Starship.
+const VOLET_AVANT_ENVERGURE: f32 = 4.5 / 2.25;
+const VOLET_AVANT_CORDE: f32 = 5.0 / 2.25;
+
+/// Jeu entre le haut du volet avant et le raccord fût/ogive.
+const VOLET_AVANT_JEU: f32 = 0.4;
+
+/// Cote du volet avant — **déduite, plus lue du réel**.
+///
+/// ⚠️ Elle valait 41 m, soit 18,2 U, alors que le raccord fût/ogive est à
+/// `HAUTEUR − NEZ` = 17,3 U : le volet mordait donc **sur l'ogive**, où la coque
+/// se rétrécit déjà. Sa charnière, posée au rayon du fût, flottait au-dessus du
+/// vide — ce qui se voit tout de suite de profil.
+///
+/// Le volet est maintenant calé pour que son **bord haut** reste sous le
+/// raccord : une cote qui suit toute retouche de l'ogive au lieu de la
+/// contredire.
+const VOLET_AVANT_COTE: f32 =
+    STARSHIP_HAUTEUR - STARSHIP_NEZ - VOLET_AVANT_CORDE * 0.5 - VOLET_AVANT_JEU;
+const VOLET_ARRIERE_ENVERGURE: f32 = 7.5 / 2.25;
+const VOLET_ARRIERE_CORDE: f32 = 8.0 / 2.25;
+const VOLET_ARRIERE_COTE: f32 = 8.0 / 2.25;
+
+/// **Azimut du ventre du Starship** : la direction que regarde tout ce qui est
+/// tuilé — le bardage, et les faces tuilées des quatre volets.
+///
+/// ⚠️ **Une seule constante, et c'est la correction.** Le côté était écrit deux
+/// fois — en dur dans `bardage_dessiner` (`+X`) et dans le signe de la rotation
+/// des volets — si bien que « les retourner tous ensemble » n'avait pas de
+/// bouton. Les tests ne voyaient qu'un **accord** entre les deux, jamais leur
+/// orientation d'ensemble, donc l'engin pouvait présenter son dos à la caméra
+/// sans qu'un seul rougisse.
+///
+/// Seules deux valeurs ont un sens tant que les charnières sont sur `±Y` : le
+/// ventre doit rester à 90° d'elles, donc `0` (+X) ou `PI` (−X).
+const STARSHIP_VENTRE: f32 = PI;
+
+/// Braquage au repos : **zéro**, volets droits.
+///
+/// C'est la position de l'engin au sol et en montée — les gouvernes ne se
+/// braquent qu'à la rentrée. Un braquage permanent donnait une silhouette
+/// affaissée, les quatre volets penchés vers le ventre.
+const VOLET_BRAQUAGE: f32 = 0.0;
+
+/// **Les quatre volets** : le composant et son repère, dans le repère du
+/// vaisseau.
+///
+/// Sortie du preset pour la même raison que les moteurs : un placement se
+/// mesure. Ils vont **par paires opposées** — c'est une symétrie miroir, et
+/// c'est ce qui garantit qu'aucun ne dérive tout seul.
+///
+/// Le volet est dessiné charnière sur `X`, s'écartant vers `+Y`. Pour le poser
+/// sur le flanc, on le tourne autour de `Z` : le `+Y` local devient la normale
+/// sortante de la coque, à l'azimut voulu.
+fn starship_volets() -> Vec<(Composant, Repere)> {
+    let cul = starship_cul();
+    let r = STARSHIP_RAYON.rayon();
+    let mut v = Vec::with_capacity(4);
+    for (envergure, corde, cote) in [
+        (VOLET_AVANT_ENVERGURE, VOLET_AVANT_CORDE, VOLET_AVANT_COTE),
+        (VOLET_ARRIERE_ENVERGURE, VOLET_ARRIERE_CORDE, VOLET_ARRIERE_COTE),
+    ] {
+        let comp = Composant::Volet { longueur: envergure, corde, braquage: VOLET_BRAQUAGE };
+        let z = cul + cote;
+        // Les deux volets d'une paire sont **opposés** : 90° et 270°. Ils
+        // encadrent le ventre du vaisseau, qui est la face au vent.
+        for (k, azimut) in [FRAC_PI_2, FRAC_PI_2 + PI].into_iter().enumerate() {
+            let pos = vec3(r * azimut.cos(), r * azimut.sin(), z);
+            // Deux rotations, et l'ordre compte (`R_z * R_y * v_local`).
+            //
+            // 1. **−90° autour de Y**, dans le repère du volet. Il est dessiné
+            //    corde sur `X` et épaisseur sur `Z` ; sans ce quart de tour, la
+            //    corde s'enroulerait **autour** de la coque et l'épaisseur se
+            //    coucherait le long de l'axe du vaisseau — soit exactement
+            //    l'inverse d'un volet. Y étant l'axe d'envergure, il n'est pas
+            //    touché : le volet continue de pointer hors de la coque.
+            // 2. **azimut − 90° autour de Z**, qui amène ce `+Y` local sur la
+            //    normale sortante de la coque, à l'azimut voulu.
+            //
+            // ⚠️ Et un **demi-tour sur le second de la paire**. Deux volets
+            // opposés sont **en miroir** par rapport au plan du ventre, pas en
+            // rotation l'un de l'autre : sans ce demi-tour, la simple rotation
+            // d'azimut retourne le panneau, et l'un présente son inox là où
+            // l'autre présente ses tuiles. Ça ne se voit que sur l'engin monté.
+            let demi_tour = if k == 1 { PI } else { 0.0 };
+            // Le quart de tour se fait **du côté du ventre** : `−90°` amène la
+            // face tuilée sur `+X`, `+90°` sur `−X`. Le signe se lit donc dans
+            // `STARSHIP_VENTRE` au lieu d'être écrit ici une seconde fois.
+            let quart = -FRAC_PI_2 * STARSHIP_VENTRE.cos();
+            let rot = Quat::from_rotation_z(azimut - FRAC_PI_2)
+                * Quat::from_rotation_y(quart + demi_tour);
+            v.push((comp.clone(), Repere::new(pos, rot)));
+        }
+    }
+    v
+}
+
+/// **Le bardage de tuiles** : le composant et son repère.
+///
+/// Il couvre le **fût entier**, de la jupe au raccord de l'ogive — c'est-à-dire
+/// exactement la partie à rayon constant, la seule qu'un manchon cylindrique
+/// puisse épouser.
+///
+/// ⚠️ **C'est lui qui définit le ventre.** Le bardage regarde `+X` (convention de
+/// `coque::bardage_dessiner`), et les faces tuilées des volets doivent regarder
+/// là aussi : sinon l'engin porte ses tuiles d'un côté et ses volets tuilés de
+/// l'autre. Tant qu'il n'existait pas, rien ne pouvait épingler ce côté — c'est
+/// la lacune signalée à l'étape 4/5, et elle se referme ici.
+fn starship_bardage() -> (Composant, Repere) {
+    let z = starship_cul() + STARSHIP_JUPE_HAUT + STARSHIP_FUT * 0.5;
+    (
+        Composant::BardageTuiles {
+            profil: STARSHIP_RAYON,
+            longueur: STARSHIP_FUT,
+            // ⚠️ **L'ogive est tuilée aussi.** La nappe d'un Starship est
+            // continue du fût à la pointe ; s'arrêter au raccord laisserait un
+            // nez d'inox nu, qui est exactement la partie qui prend le plasma
+            // en premier.
+            nez: STARSHIP_NEZ,
+            arc: BARDAGE_ARC,
+        },
+        // Le bardage est dessiné centré sur son `+X` : cette rotation l'amène
+        // sur le ventre choisi.
+        Repere::new(vec3(0.0, 0.0, z), Quat::from_rotation_z(STARSHIP_VENTRE)),
+    )
+}
+
+/// Rayon d'un hublot, et leur écartement — deux petits, côte à côte.
+const HUBLOT_RAYON: f32 = 0.5 / 2.25;
+const HUBLOT_ECART: f32 = 1.4 / 2.25;
+
+/// Où les hublots se posent sur l'ogive, en fraction de sa flèche depuis le
+/// raccord. Assez haut pour être sur le nez, assez bas pour que la peau y soit
+/// encore large — à la pointe, la coque est trop étroite pour un vitrage.
+const HUBLOT_MONTEE: f32 = 0.28;
+
+/// Les **deux hublots**, sur l'ogive, **à l'opposé du ventre**.
+///
+/// ⚠️ Deux corrections par rapport au premier jet, et les deux se voient :
+///
+/// 1. **Sur le nez, pas sur le fût.** L'équipage d'un Starship regarde par le
+///    nez ; des hublots sur le cylindre seraient des hublots de réservoir.
+/// 2. **Côté dos, pas côté ventre.** Le ventre est couvert de tuiles — y percer
+///    une baie vitrée reviendrait à trouer le bouclier thermique à l'endroit
+///    exact où il prend le plasma.
+///
+/// Sur une ogive, un vitrage plat ne peut pas être simplement radial : il doit
+/// **suivre la pente** de la peau. L'inclinaison est lue sur la courbe elle-même
+/// (`ogive_rayon`), par différence finie — pas approchée à l'œil.
+fn starship_hublots() -> Vec<(Composant, Repere)> {
+    let r_base = STARSHIP_RAYON.rayon();
+    let raccord = starship_cul() + STARSHIP_HAUTEUR - STARSHIP_NEZ;
+    // Rayon de la peau à `dh` au-dessus du raccord.
+    let peau = |dh: f32| ogive_rayon(r_base, STARSHIP_NEZ, STARSHIP_NEZ - dh);
+
+    let dh = STARSHIP_NEZ * HUBLOT_MONTEE;
+    let r = peau(dh);
+
+    // Pente locale `dr/dh` (négative : l'ogive se resserre), d'où l'inclinaison
+    // de la normale sortante vers la pointe.
+    let eps = STARSHIP_NEZ * 0.01;
+    let pente = (peau(dh + eps) - peau(dh - eps)) / (2.0 * eps);
+    let inclinaison = (-pente).atan();
+
+    // Le dos : à l'opposé du ventre.
+    let a = STARSHIP_VENTRE + PI;
+    // `+Z` local sur la normale de la peau, inclinaison comprise.
+    let rot = Quat::from_rotation_z(a) * Quat::from_rotation_y(FRAC_PI_2 - inclinaison);
+    let tangent = vec3(-a.sin(), a.cos(), 0.0);
+
+    [-0.5f32, 0.5]
+        .into_iter()
+        .map(|k| {
+            let centre =
+                vec3(r * a.cos(), r * a.sin(), raccord + dh) + tangent * (k * HUBLOT_ECART);
+            (Composant::Hublot { rayon: HUBLOT_RAYON }, Repere::new(centre, rot))
+        })
+        .collect()
+}
+
+/// **Le vaisseau debout** : la rotation d'exposition.
+///
+/// Toutes les pièces du parc se bâtissent le long de `+Z`, et le Starship ne
+/// fait pas exception — c'est dans ce repère que ses cotes se lisent et que ses
+/// tests raisonnent. Mais une fusée se **regarde debout**, moteurs en bas : un
+/// quart de tour autour de `X` amène son axe sur `+Y`.
+///
+/// ⚠️ Appliquée **à l'assemblage seulement**. Tourner la géométrie à la source
+/// obligerait chaque cote et chaque test à raisonner en `Y`, pour un gain nul :
+/// le vaisseau ne serait pas plus juste, seulement plus difficile à lire.
+fn starship_debout() -> Repere {
+    Repere::new(Vec3::ZERO, Quat::from_rotation_x(-FRAC_PI_2))
+}
+
+/// **Le cul du vaisseau** : le plan de sortie des tuyères, origine de toutes les
+/// cotes verticales du Starship.
+///
+/// Le vaisseau est centré sur l'origine et mesure [`STARSHIP_HAUTEUR`] : son
+/// point le plus bas est donc à `−hauteur/2`. Tout se cale là-dessus — jupe,
+/// moteurs, coque — pour qu'aucune pièce ne puisse dériver toute seule.
+fn starship_cul() -> f32 {
+    -STARSHIP_HAUTEUR * 0.5
 }
 
 // --- Elysium ---------------------------------------------------------------
@@ -1495,6 +1819,7 @@ pub fn demo_moteur_antimatiere() -> EtatStation {
 /// base (P3) s'évase vers le bas puis s'affine (P0) en une longue flèche vers le
 /// haut, d'un seul tenant. Moteurs, habitat et voiles radiateurs viendront s'y
 /// accrocher ensuite.
+#[allow(dead_code)] // ISV **monolithique**, remplace au catalogue par `preset_isv_fixe` + `preset_isv_equipage` ; garde comme reference d'assemblage complet.
 pub fn preset_isv() -> EtatStation {
     isv(Epine::Carree, true, 0.0)
 }
@@ -2099,6 +2424,7 @@ const fn hab_rayon(epine: f32) -> f32 {
     epine + HAB_JEU + HAB_INSCRIT
 }
 /// Le même, pour l'épine carrée (valeur historique, et calcul unique).
+#[allow(dead_code)] // Mesure de geometrie tenue par ses tests ; aucun dessin ne l'appelle aujourd'hui.
 const HAB_RAYON: f32 = hab_rayon(EPINE);
 /// Portée de la ferrure d'attache : du côté plat du module jusqu'à la surface
 /// de l'épine. Le module se pose **contre** la structure, il ne flotte pas à
@@ -2207,6 +2533,7 @@ const fn equipage_alesage(epine: f32) -> f32 {
     epine * 0.45
 }
 /// Le même, pour l'épine carrée (valeur historique, et calcul unique).
+#[allow(dead_code)] // Mesure de geometrie tenue par ses tests ; aucun dessin ne l'appelle aujourd'hui.
 const EQUIPAGE_ALESAGE: f32 = equipage_alesage(EPINE);
 /// Gabarit de la charnière de repli (demi-largeur de chape).
 const EQUIPAGE_CHARNIERE: f32 = 0.31;
@@ -3330,6 +3657,649 @@ mod tests {
 
     fn nb(etat: &EtatStation) -> usize {
         etat.doit_dessiner().map(|s| s.nb_pieces()).unwrap_or(0)
+    }
+
+    // ================= Starship : la grappe de six Raptor ==================
+    //
+    // Les cotes viennent du reel (`STARSHIP_COURONNE_*`), donc les tests ne
+    // verifient pas des nombres mais des **rapports geometriques** : ce qui
+    // rentre, ce qui ne se touche pas, ce qui affleure. Un rayon recopie a la
+    // main ne dirait rien -- il verifierait sa propre copie.
+
+    /// Demi-encombrement **lateral** d'un moteur pose : le rayon de sa capsule.
+    /// Lu sur `enveloppe_locale`, donc les cannelures comptent -- et les moteurs
+    /// n'etant jamais tournes, ce rayon local est aussi le rayon monde.
+    fn rayon_lateral(c: &Composant) -> f32 {
+        c.enveloppe_locale().rayon
+    }
+
+    /// Distance d'un moteur a l'axe du vaisseau.
+    fn distance_axe(r: &Repere) -> f32 {
+        r.pos.truncate().length()
+    }
+
+    // **Six moteurs, trois de chaque.** C'est l'anatomie (§D.4) ; s'en ecarter
+    // n'est plus un Starship.
+    #[test]
+    fn le_starship_porte_trois_raptor_de_chaque_sorte() {
+        let m = starship_moteurs();
+        assert_eq!(m.len(), 6, "il faut six moteurs");
+        let compte = |v: VarianteRaptor| {
+            m.iter()
+                .filter(|(c, _)| matches!(c, Composant::Raptor { variante, .. } if *variante == v))
+                .count()
+        };
+        assert_eq!(compte(VarianteRaptor::Atmospherique), 3, "trois RSL au centre");
+        assert_eq!(compte(VarianteRaptor::Vide), 3, "trois RVac en peripherie");
+    }
+
+    // ⚠️ **Rien ne depasse de la jupe.** Le RVac passe a ~8 cm du bord : c'est
+    // serre sur l'engin reel aussi, et c'est exactement pour ca que ca se teste.
+    // Elargir une cloche ou ecarter la couronne sans le voir ferait sortir les
+    // moteurs de la silhouette.
+    #[test]
+    fn les_moteurs_tiennent_dans_la_jupe() {
+        let coque = STARSHIP_RAYON.rayon();
+        for (c, r) in starship_moteurs() {
+            let bord = distance_axe(&r) + rayon_lateral(&c);
+            assert!(
+                bord <= coque,
+                "un moteur deborde : bord a {bord:.4} pour une jupe de {coque:.4}"
+            );
+        }
+    }
+
+    // **Aucun moteur n'en traverse un autre.** Les deux couronnes se recouvrent
+    // en z (le RVac descend plus bas que le RSL), donc seul l'ecart *lateral*
+    // les separe.
+    //
+    // ⚠️ Ne pas confondre avec l'ecart **radial** entre les deux anneaux, qui ne
+    // vaut que 0,057 U : ce n'est pas la distance entre deux moteurs. Decalees
+    // de 60°, les couronnes laissent 1,19 U entre un RSL et son RVac voisin pour
+    // 0,83 U requis. C'est le contact *dans* une couronne qui est le vrai risque
+    // -- trois RSL trop serres se traversent bien avant de gener un RVac.
+    #[test]
+    fn les_moteurs_ne_se_traversent_pas() {
+        let m = starship_moteurs();
+        for i in 0..m.len() {
+            for j in (i + 1)..m.len() {
+                let (ci, ri) = &m[i];
+                let (cj, rj) = &m[j];
+                let ecart = (ri.pos.truncate() - rj.pos.truncate()).length();
+                let besoin = rayon_lateral(ci) + rayon_lateral(cj);
+                assert!(
+                    ecart >= besoin,
+                    "moteurs {i} et {j} imbriques : {ecart:.4} d'entraxe pour {besoin:.4} requis"
+                );
+            }
+        }
+    }
+
+    // **Les six sorties sont dans le meme plan, et c'est le cul du vaisseau.**
+    // Un Raptor crache vers −Z et son repere est au **milieu** de sa hauteur :
+    // oublier la demi-hauteur ferait descendre la moitie du moteur sous le
+    // vaisseau, qui ne mesurerait plus 50 m.
+    #[test]
+    fn les_sorties_de_tuyere_sont_toutes_au_cul() {
+        let cul = starship_cul();
+        for (c, r) in starship_moteurs() {
+            let Composant::Raptor { variante, rayon, .. } = c else {
+                panic!("un moteur qui n'est pas un Raptor");
+            };
+            let sortie = r.pos.z - variante.hauteur(rayon) * 0.5;
+            assert!(
+                (sortie - cul).abs() < 1e-5,
+                "sortie de tuyere a {sortie:.4} au lieu du cul {cul:.4}"
+            );
+        }
+    }
+
+    // ⚠️ **La jupe couvre au moins deux tiers de chaque moteur.** C'est la
+    // demande explicite, et elle se mesure : un lanceur ne montre pas ses
+    // moteurs a nu. Le moteur le plus **court** est celui qui contraint --
+    // a bord de jupe donne, c'est lui qui ressort le premier.
+    #[test]
+    fn la_jupe_couvre_les_deux_tiers_de_chaque_moteur() {
+        let cul = starship_cul();
+        let bord = cul + STARSHIP_JUPE_BORD;
+        let haut = cul + STARSHIP_JUPE_HAUT;
+        for (c, r) in starship_moteurs() {
+            let Composant::Raptor { variante, rayon, .. } = c else { unreachable!() };
+            let h = variante.hauteur(rayon);
+            let (bas_m, haut_m) = (r.pos.z - h * 0.5, r.pos.z + h * 0.5);
+            // Recouvrement des deux segments [bord, haut] et [bas_m, haut_m].
+            let couvert = (haut_m.min(haut) - bas_m.max(bord)).max(0.0);
+            let part = couvert / h;
+            assert!(
+                part >= JUPE_COUVERTURE - 1e-5,
+                "{variante:?} couvert a {:.1} % au lieu de {:.1} % attendus",
+                part * 100.0,
+                JUPE_COUVERTURE * 100.0
+            );
+            // ...et il en reste quelque chose a voir : une jupe qui avale tout
+            // reviendrait a ne pas avoir modele les moteurs.
+            assert!(part < 1.0, "{variante:?} entierement avale par la jupe");
+        }
+    }
+
+    // Les moteurs doivent tenir dans la **paroi interieure** de la jupe, pas
+    // dans son rayon nominal : la paroi rentre, et un RVac passe a quelques
+    // centimetres. Lu a la source (`jupe_rayon_interieur`).
+    #[test]
+    fn les_moteurs_tiennent_dans_la_paroi_de_jupe() {
+        let dedans = crate::vaisseau::jupe_rayon_interieur(STARSHIP_RAYON);
+        for (c, r) in starship_moteurs() {
+            let bord = distance_axe(&r) + rayon_lateral(&c);
+            assert!(
+                bord <= dedans,
+                "un moteur touche la paroi de jupe : {bord:.4} pour {dedans:.4}"
+            );
+        }
+    }
+
+    // ⚠️ **Les 50 m sont les 50 m.** La jupe est prise DANS la hauteur, pas
+    // ajoutee dessous : coque + jupe doivent rendre exactement `STARSHIP_HAUTEUR`
+    // du plan de sortie a la pointe. C'est l'erreur qu'on vient de corriger --
+    // avant, les moteurs pendaient sous une coque deja haute de 50 m.
+    #[test]
+    fn le_starship_mesure_toujours_cinquante_metres() {
+        let total = STARSHIP_JUPE_HAUT + STARSHIP_FUT + STARSHIP_NEZ;
+        assert!(
+            (total - STARSHIP_HAUTEUR).abs() < 1e-4,
+            "hauteur hors-tout {total:.4} au lieu de {STARSHIP_HAUTEUR:.4}"
+        );
+        // Et rien ne descend sous le plan de sortie.
+        let cul = starship_cul();
+        for (c, r) in starship_moteurs() {
+            let Composant::Raptor { variante, rayon, .. } = c else { unreachable!() };
+            assert!(
+                r.pos.z - variante.hauteur(rayon) * 0.5 >= cul - 1e-5,
+                "une tuyere depasse sous le vaisseau"
+            );
+        }
+    }
+
+    // **Chaque couronne est reguliere** : trois moteurs a 120°, tous a la meme
+    // distance de l'axe et a la meme cote. C'est ce que `Symetrie::Radiale(3)`
+    // garantit -- le test tient la garantie, pas l'implementation.
+    #[test]
+    fn chaque_couronne_est_reguliere() {
+        for (v, attendu) in [
+            (VarianteRaptor::Atmospherique, STARSHIP_COURONNE_RSL),
+            (VarianteRaptor::Vide, STARSHIP_COURONNE_RVAC),
+        ] {
+            let couronne: Vec<Repere> = starship_moteurs()
+                .into_iter()
+                .filter(|(c, _)| matches!(c, Composant::Raptor { variante, .. } if *variante == v))
+                .map(|(_, r)| r)
+                .collect();
+            assert_eq!(couronne.len(), 3);
+            for r in &couronne {
+                assert!(
+                    (distance_axe(r) - attendu).abs() < 1e-5,
+                    "{v:?} a {:.4} de l'axe au lieu de {attendu:.4}",
+                    distance_axe(r)
+                );
+                assert!(
+                    (r.pos.z - couronne[0].pos.z).abs() < 1e-5,
+                    "{v:?} : les moteurs d'une couronne ne sont pas a la meme cote"
+                );
+            }
+            // Trois angles a 120° : les entraxes deux a deux sont tous egaux.
+            let d = |a: &Repere, b: &Repere| (a.pos.truncate() - b.pos.truncate()).length();
+            let (d01, d12, d20) = (
+                d(&couronne[0], &couronne[1]),
+                d(&couronne[1], &couronne[2]),
+                d(&couronne[2], &couronne[0]),
+            );
+            assert!(
+                (d01 - d12).abs() < 1e-4 && (d12 - d20).abs() < 1e-4,
+                "{v:?} : couronne irreguliere ({d01:.4}, {d12:.4}, {d20:.4})"
+            );
+        }
+    }
+
+    // **Les RVac ne sont pas alignes derriere les RSL.** Decales d'un demi-pas,
+    // le cul montre six directions ; alignes, il n'en montrerait que trois et
+    // perdrait sa lecture. C'est le seul des six tests qui porte sur l'aspect
+    // plutot que sur la mecanique -- d'ou son nom.
+    #[test]
+    fn les_deux_couronnes_sont_dephasees() {
+        let angle = |v: VarianteRaptor| -> f32 {
+            let r = starship_moteurs()
+                .into_iter()
+                .find(|(c, _)| matches!(c, Composant::Raptor { variante, .. } if *variante == v))
+                .expect("couronne absente")
+                .1;
+            r.pos.y.atan2(r.pos.x)
+        };
+        let ecart = (angle(VarianteRaptor::Vide) - angle(VarianteRaptor::Atmospherique)).abs();
+        // Modulo le pas de 120°, l'ecart doit valoir un demi-pas (60°).
+        let pas = TAU / 3.0;
+        let reste = ecart.rem_euclid(pas);
+        let demi = pas * 0.5;
+        assert!(
+            (reste - demi).abs() < 1e-4,
+            "dephasage de {:.1}° au lieu de {:.1}° : les RVac s'alignent derriere les RSL",
+            reste.to_degrees(),
+            demi.to_degrees()
+        );
+    }
+
+    // ============================ Les 4 volets =============================
+
+    // **Quatre volets, deux paires.** C'est l'anatomie (§D.4) : deux courts a
+    // l'avant, deux longs a l'arriere.
+    #[test]
+    fn le_starship_porte_quatre_volets_en_deux_paires() {
+        let v = starship_volets();
+        assert_eq!(v.len(), 4, "il faut quatre volets");
+        let mut envergures: Vec<f32> = v
+            .iter()
+            .map(|(c, _)| match c {
+                Composant::Volet { longueur, .. } => *longueur,
+                _ => panic!("ce n'est pas un volet"),
+            })
+            .collect();
+        envergures.sort_by(f32::total_cmp);
+        assert!(
+            (envergures[0] - envergures[1]).abs() < 1e-5,
+            "les deux volets avant n'ont pas la meme envergure"
+        );
+        assert!(
+            (envergures[2] - envergures[3]).abs() < 1e-5,
+            "les deux volets arriere n'ont pas la meme envergure"
+        );
+        assert!(
+            envergures[2] > envergures[1] * 1.2,
+            "les volets arriere doivent etre nettement plus grands que les avant"
+        );
+    }
+
+    // **Les paires sont opposees.** Deux volets d'une meme paire sont dos a dos
+    // autour de l'axe : c'est ce qui equilibre l'engin, et un ecart qui derive
+    // ne se verrait pas a l'oeil sur un rendu de trois quarts.
+    #[test]
+    fn les_volets_vont_par_paires_opposees() {
+        let v = starship_volets();
+        for paire in v.chunks(2) {
+            let (a, b) = (paire[0].1.pos, paire[1].1.pos);
+            assert!((a.z - b.z).abs() < 1e-5, "une paire n'est pas a la meme cote");
+            // Opposes : leur somme en XY est nulle.
+            let somme = (a.truncate() + b.truncate()).length();
+            assert!(somme < 1e-5, "paire non opposee, somme {somme:.4}");
+        }
+    }
+
+    // **Les volets sont poses SUR la coque**, pas dedans ni en l'air : leur
+    // charniere est exactement sur le rayon du fut.
+    #[test]
+    fn les_charnieres_sont_sur_la_peau() {
+        let r = STARSHIP_RAYON.rayon();
+        for (_, rep) in starship_volets() {
+            let d = rep.pos.truncate().length();
+            assert!(
+                (d - r).abs() < 1e-5,
+                "charniere a {d:.4} de l'axe pour une coque de {r:.4}"
+            );
+        }
+    }
+
+    // ⚠️ **Le volet s'ecarte vers l'exterieur, jamais vers l'interieur.** Le
+    // signe de la rotation est l'erreur classique de ce genre de pose : a
+    // l'envers, les quatre volets rentrent dans le reservoir et on ne voit
+    // plus rien. Le test suit le **bout** du volet, seul temoin du sens.
+    #[test]
+    fn les_volets_secartent_vers_lexterieur() {
+        for (c, rep) in starship_volets() {
+            let Composant::Volet { longueur, braquage, .. } = c else { unreachable!() };
+            let bout_local = crate::vaisseau::volet_bout(longueur, braquage);
+            let bout = rep.pos + rep.rot * bout_local;
+            assert!(
+                bout.truncate().length() > rep.pos.truncate().length(),
+                "un volet rentre dans la coque au lieu de s'en ecarter"
+            );
+        }
+    }
+
+    // ⚠️ **La corde suit l'axe du vaisseau, l'envergure en sort.**
+    //
+    // C'est l'orientation elle-meme, et rien d'autre ne la tenait : le volet est
+    // dessine corde sur `X` et epaisseur sur `Z`, si bien qu'avec la seule
+    // rotation d'azimut la corde s'enroulait **autour** de la coque et
+    // l'epaisseur se couchait le long du vaisseau -- un volet pose a plat, dans
+    // le mauvais sens. Aucun test ne le voyait : celui de la hauteur mesurait
+    // `pos.z ± corde/2` sans regarder la rotation, donc il passait au vert quelle
+    // que soit l'orientation. Il a fallu le voir a l'ecran.
+    #[test]
+    fn la_corde_des_volets_suit_laxe_du_vaisseau() {
+        for (_, rep) in starship_volets() {
+            let radial = vec3(rep.pos.x, rep.pos.y, 0.0).normalize();
+            let corde = rep.rot * Vec3::X;
+            let envergure = rep.rot * Vec3::Y;
+            let epaisseur = rep.rot * Vec3::Z;
+            // Non signee, et c'est **volontaire** : les deux volets d'une paire
+            // sont en miroir, donc leurs cordes pointent vers des bouts opposes
+            // du vaisseau. Ce qui doit s'accorder, c'est la face tuilee -- et
+            // c'est `les_faces_tuilees_dune_paire_regardent_du_meme_cote` qui le
+            // tient, pas une assertion de signe posee ici au hasard.
+            assert!(
+                corde.z.abs() > 0.999,
+                "la corde ne suit pas l'axe du vaisseau : {corde:?}"
+            );
+            assert!(
+                envergure.dot(radial) > 0.999,
+                "l'envergure ne sort pas de la coque : {envergure:?}"
+            );
+            // L'epaisseur est donc tangentielle : ni radiale, ni axiale.
+            assert!(
+                epaisseur.z.abs() < 1e-3 && epaisseur.dot(radial).abs() < 1e-3,
+                "l'epaisseur n'est pas tangentielle : {epaisseur:?}"
+            );
+        }
+    }
+
+    // ⚠️ **Les faces tuilees d'une paire regardent du meme cote.**
+    //
+    // C'est le defaut vu a l'ecran : le volet du cote `−Y` sortait retourne. Une
+    // paire de volets est un **miroir** par rapport au plan du ventre, pas une
+    // rotation -- sans demi-tour sur le second, l'un montre ses tuiles noires et
+    // l'autre son inox, ce qui saute aux yeux sur l'engin monte et qu'aucune
+    // garde de position ne pouvait voir.
+    #[test]
+    fn les_faces_tuilees_dune_paire_regardent_du_meme_cote() {
+        let v = starship_volets();
+        for paire in v.chunks(2) {
+            // La face au vent est dessinee en `−Z` local (`coque::volet_dessiner`).
+            let n0 = paire[0].1.rot * -Vec3::Z;
+            let n1 = paire[1].1.rot * -Vec3::Z;
+            assert!(
+                n0.dot(n1) > 0.999,
+                "les deux volets d'une paire tuilent des cotes opposes : {n0:?} contre {n1:?}"
+            );
+        }
+    }
+
+    // ⚠️ **Les volets restent sur la partie CYLINDRIQUE.**
+    //
+    // Leur charniere est posee au rayon du fut ; au-dela du raccord, l'ogive se
+    // retrecit et la charniere flotterait au-dessus du vide. Le volet avant
+    // etait a 18,2 U pour un raccord a 17,3 : il mordait sur le nez, et ca se
+    // voyait de profil bien avant qu'un test ne le dise.
+    #[test]
+    fn les_volets_restent_sur_la_partie_cylindrique() {
+        let cul = starship_cul();
+        let raccord = cul + STARSHIP_HAUTEUR - STARSHIP_NEZ;
+        let bord_jupe = cul + STARSHIP_JUPE_BORD;
+        for (c, rep) in starship_volets() {
+            let Composant::Volet { corde, .. } = c else { unreachable!() };
+            let (bas, haut) = (rep.pos.z - corde * 0.5, rep.pos.z + corde * 0.5);
+            assert!(
+                haut <= raccord,
+                "un volet mord sur l'ogive : {haut:.3} au-dessus du raccord {raccord:.3}"
+            );
+            assert!(
+                bas >= bord_jupe,
+                "un volet descend sous la jupe : {bas:.3} sous {bord_jupe:.3}"
+            );
+        }
+    }
+
+    // ⚠️ **Le bardage et les volets tuilent le MEME cote.**
+    //
+    // C'est la garde qui manquait a l'etape 4/5 : retourner les quatre volets
+    // ensemble passait au vert, faute d'une reference de ventre. Le bardage la
+    // fournit -- il regarde `+X` par construction -- et un engin qui porte ses
+    // tuiles d'un cote et ses volets tuiles de l'autre rougit desormais.
+    #[test]
+    fn le_bardage_et_les_volets_tuilent_le_meme_cote() {
+        // ⚠️ La reference est `STARSHIP_VENTRE`, pas le bardage. Les comparer
+        // l'un a l'autre ne disait que leur **accord** : les retourner tous
+        // ensemble passait au vert, et l'engin montrait son dos.
+        let attendu = vec3(STARSHIP_VENTRE.cos(), STARSHIP_VENTRE.sin(), 0.0);
+        let (_, rep_b) = starship_bardage();
+        let ventre = rep_b.rot * Vec3::X;
+        assert!(
+            ventre.dot(attendu) > 0.999,
+            "le bardage tuile {ventre:?} au lieu du ventre {attendu:?}"
+        );
+        for (_, rep) in starship_volets() {
+            let face = rep.rot * -Vec3::Z;
+            assert!(
+                face.dot(attendu) > 0.999,
+                "un volet tuile {face:?} au lieu du ventre {attendu:?}"
+            );
+        }
+    }
+
+    // Le ventre doit rester **a 90° des charnieres** : sur l'axe des volets, le
+    // bardage passerait sous eux et la nappe serait coupee en deux.
+    #[test]
+    fn le_ventre_est_a_angle_droit_des_charnieres() {
+        let ventre = vec3(STARSHIP_VENTRE.cos(), STARSHIP_VENTRE.sin(), 0.0);
+        for (_, rep) in starship_volets() {
+            let radial = vec3(rep.pos.x, rep.pos.y, 0.0).normalize();
+            assert!(
+                radial.dot(ventre).abs() < 1e-3,
+                "un volet est plante dans le ventre : {radial:?} contre {ventre:?}"
+            );
+        }
+    }
+
+    // Le bardage couvre **exactement le fut** : pas la jupe (deja en inox nu et
+    // d'un autre diametre utile), pas l'ogive (qui se retrecit, un manchon
+    // cylindrique y flotterait).
+    #[test]
+    fn le_bardage_couvre_exactement_le_fut() {
+        let cul = starship_cul();
+        let (c, rep) = starship_bardage();
+        let Composant::BardageTuiles { longueur, .. } = c else { unreachable!() };
+        let (bas, haut) = (rep.pos.z - longueur * 0.5, rep.pos.z + longueur * 0.5);
+        assert!(
+            (bas - (cul + STARSHIP_JUPE_HAUT)).abs() < 1e-4,
+            "le bardage ne part pas du haut de la jupe"
+        );
+        // ⚠️ Il ne s'arrete plus au raccord : il monte jusqu'a la pointe.
+        let Composant::BardageTuiles { nez, .. } = c else { unreachable!() };
+        assert!(
+            (haut + nez - (cul + STARSHIP_HAUTEUR)).abs() < 1e-4,
+            "le bardage ne monte pas jusqu'a la pointe"
+        );
+    }
+
+    // ⚠️ **Ce que `braquage` veut dire**, et rien ne le disait.
+    //
+    // Sa documentation annoncait « 0 = replie contre la coque » alors que le
+    // code fait l'inverse : 0 laisse le volet **droit**. Le commentaire a menti
+    // pendant toute la pose des volets sans qu'un test s'en apercoive.
+    #[test]
+    fn le_braquage_part_de_zero_et_penche_vers_le_ventre() {
+        let l = 3.0;
+        let droit = crate::vaisseau::volet_bout(l, 0.0);
+        assert!(droit.z.abs() < 1e-5, "a braquage nul le volet doit etre droit");
+        assert!((droit.y - l).abs() < 1e-5, "a braquage nul il est tendu sur toute son envergure");
+
+        let braque = crate::vaisseau::volet_bout(l, 1.0);
+        assert!(braque.z < -1e-3, "a braquage plein le bout penche vers le ventre");
+        assert!(braque.y < droit.y, "et se rapproche donc de la coque");
+
+        // **C'est une rotation, pas un glissement** : le bout reste a
+        // l'envergure de sa charniere quel que soit le braquage.
+        for b in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            let d = crate::vaisseau::volet_bout(l, b).length();
+            assert!((d - l).abs() < 1e-4, "braquage {b} : envergure {d:.4} au lieu de {l}");
+        }
+    }
+
+    // Et le Starship porte les siens **droits** : c'est sa position au sol.
+    #[test]
+    fn les_volets_du_starship_sont_droits() {
+        for (c, rep) in starship_volets() {
+            let Composant::Volet { longueur, braquage, .. } = c else { unreachable!() };
+            assert_eq!(braquage, 0.0, "les volets doivent etre droits au repos");
+            // Le bout est alors purement radial : ni axial, ni tangentiel.
+            let bout = rep.pos + rep.rot * crate::vaisseau::volet_bout(longueur, braquage);
+            assert!(
+                (bout.z - rep.pos.z).abs() < 1e-4,
+                "un volet droit ne doit pas deriver le long du vaisseau"
+            );
+        }
+    }
+
+    // ⚠️ **Le vaisseau se montre DEBOUT, moteurs en bas.**
+    //
+    // Il est bati le long de `+Z` comme toute piece du parc, mais expose l'axe
+    // sur `+Y`. La rotation ne s'applique qu'a l'assemblage : le reste des tests
+    // raisonne dans le repere du vaisseau, ou les cotes se lisent.
+    #[test]
+    fn le_starship_se_dresse_moteurs_en_bas() {
+        let debout = starship_debout();
+        let axe = debout.rot * Vec3::Z;
+        assert!(axe.dot(Vec3::Y) > 0.999, "le nez ne pointe pas vers le haut : {axe:?}");
+
+        // Et sur l'engin monte. ⚠️ On compare des **origines** de pieces, pas
+        // des etendues : le repere de la coque est en son milieu, si bien qu'un
+        // hublot pose plus haut que lui sans rien depasser. Ce test n'affirme
+        // donc que ce qu'une origine peut dire -- ce qui est en bas, et que
+        // l'engin est bien plus haut que large.
+        let etat = preset_starship();
+        let station = etat.doit_dessiner().expect("station prete");
+        let mut bas: Option<(f32, String)> = None;
+        let (mut min, mut max) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+        for p in station.pieces() {
+            let o = p.transforme.w_axis.truncate();
+            let nom = p.composant.nom().to_string();
+            if bas.as_ref().is_none_or(|(b, _)| o.y < *b) {
+                bas = Some((o.y, nom));
+            }
+            min = min.min(o);
+            max = max.max(o);
+        }
+        let (_, nom_bas) = bas.expect("des pieces");
+        assert_eq!(nom_bas, "RAPTOR", "la piece la plus basse devrait etre un moteur");
+        let etendue = max - min;
+        assert!(
+            etendue.y > etendue.x * 3.0 && etendue.y > etendue.z * 3.0,
+            "le vaisseau est couche : etendue {etendue:?}"
+        );
+    }
+
+    // ⚠️ **Les hublots sont sur l'OGIVE, et a l'OPPOSE du ventre.**
+    //
+    // Deux corrections vues a l'ecran. Sur le fut, ce seraient des hublots de
+    // reservoir ; cote ventre, ce serait une baie vitree percee dans le
+    // bouclier thermique, a l'endroit exact qui prend le plasma.
+    #[test]
+    fn les_hublots_sont_sur_le_nez_a_loppose_du_ventre() {
+        let ventre = vec3(STARSHIP_VENTRE.cos(), STARSHIP_VENTRE.sin(), 0.0);
+        let raccord = starship_cul() + STARSHIP_HAUTEUR - STARSHIP_NEZ;
+        let pointe = starship_cul() + STARSHIP_HAUTEUR;
+        let h = starship_hublots();
+        assert_eq!(h.len(), 2, "deux hublots");
+        for (_, rep) in &h {
+            // Sur le nez : au-dessus du raccord, sous la pointe.
+            assert!(
+                rep.pos.z > raccord && rep.pos.z < pointe,
+                "un hublot n'est pas sur l'ogive : z = {:.3} hors de [{raccord:.3}, {pointe:.3}]",
+                rep.pos.z
+            );
+            // Cote dos : dos au ventre.
+            let radial = vec3(rep.pos.x, rep.pos.y, 0.0).normalize();
+            assert!(
+                radial.dot(ventre) < -0.7,
+                "un hublot est du cote tuile : {radial:?} contre un ventre {ventre:?}"
+            );
+        }
+        assert!(h[0].1.pos.distance(h[1].1.pos) > 1e-3, "les deux hublots sont au meme endroit");
+    }
+
+    // ⚠️ **Le vitrage epouse la peau de l'ogive.**
+    //
+    // Deux choses qu'un placement radial rate sur un nez : le hublot se pose au
+    // rayon de la **courbe** (et non a celui du fut, ou il flotterait), et sa
+    // normale s'incline vers la pointe au lieu de sortir a plat. Les deux sont
+    // relues sur `ogive_rayon`, la fonction que la coque dessine.
+    #[test]
+    fn les_hublots_epousent_la_peau_de_logive() {
+        let r_base = STARSHIP_RAYON.rayon();
+        let raccord = starship_cul() + STARSHIP_HAUTEUR - STARSHIP_NEZ;
+        for (_, rep) in starship_hublots() {
+            let dh = rep.pos.z - raccord;
+            let attendu = ogive_rayon(r_base, STARSHIP_NEZ, STARSHIP_NEZ - dh);
+            // ⚠️ **Projection sur l'azimut**, pas distance a l'axe. Les deux
+            // hublots sont ecartes tangentiellement, ce qui eloigne de l'axe
+            // sans rien dire du rayon ; tolerer cet ecart rendait le test
+            // aveugle -- poser le hublot au rayon du fut (2,000 au lieu de
+            // 1,865) passait au vert. La composante radiale, elle, est exacte :
+            // le decalage tangentiel lui est perpendiculaire.
+            let a = STARSHIP_VENTRE + PI;
+            let dir = vec3(a.cos(), a.sin(), 0.0);
+            let radiale = rep.pos.truncate().extend(0.0).dot(dir);
+            assert!(
+                (radiale - attendu).abs() < 1e-3,
+                "hublot a {radiale:.3} de l'axe pour une peau a {attendu:.3}"
+            );
+            assert!(
+                attendu < r_base,
+                "a cette hauteur l'ogive devrait etre plus etroite que le fut"
+            );
+            // ⚠️ **Et assez large pour les porter.** Plus haut sur le nez, la
+            // peau se retrecit vite : vers 90 % de la fleche elle ne fait plus
+            // que 0,44 U, moins que la demi-paire (0,53). Les hublots
+            // s'enrouleraient autour de la pointe. La hauteur exacte reste un
+            // choix -- ceci n'en fixe que la limite physique.
+            let demi_paire = HUBLOT_ECART * 0.5 + HUBLOT_RAYON;
+            assert!(
+                demi_paire < attendu * 0.9,
+                "l'ogive n'a que {attendu:.3} de rayon pour une paire large de {demi_paire:.3}"
+            );
+            // La normale sort **et** penche vers la pointe.
+            let n = rep.rot * Vec3::Z;
+            let radial = vec3(rep.pos.x, rep.pos.y, 0.0).normalize();
+            assert!(n.dot(radial) > 0.5, "le vitrage ne regarde pas dehors : {n:?}");
+            assert!(
+                n.z > 0.05,
+                "le vitrage ne suit pas la pente de l'ogive : {n:?}"
+            );
+        }
+    }
+
+    // Les volets tiennent dans la **hauteur du vaisseau** : un volet avant qui
+    // depasserait la pointe serait visible de tres loin.
+    #[test]
+    fn les_volets_restent_dans_la_hauteur_du_vaisseau() {
+        let cul = starship_cul();
+        let pointe = cul + STARSHIP_HAUTEUR;
+        for (c, rep) in starship_volets() {
+            let Composant::Volet { longueur, corde, braquage } = c else { unreachable!() };
+            // Etendue **reelle** : les huit coins du caisson, tournes comme la
+            // piece l'est. Mesurer `pos.z ± corde/2` reviendrait a supposer
+            // l'orientation au lieu de la lire.
+            let bout = crate::vaisseau::volet_bout(longueur, braquage);
+            let r = crate::vaisseau::volet_rayon_capsule(corde);
+            let mut bas = f32::MAX;
+            let mut haut = f32::MIN;
+            for pied in [Vec3::ZERO, bout] {
+                for dx in [-r, r] {
+                    for dz in [-r, r] {
+                        let z = (rep.pos + rep.rot * (pied + vec3(dx, 0.0, dz))).z;
+                        bas = bas.min(z);
+                        haut = haut.max(z);
+                    }
+                }
+            }
+            assert!(bas >= cul, "un volet descend sous le cul ({bas:.3} < {cul:.3})");
+            assert!(haut <= pointe, "un volet depasse la pointe ({haut:.3} > {pointe:.3})");
+        }
+    }
+
+    // Le preset **pose vraiment** les six moteurs : la coque plus six pieces.
+    // Sans ce test, `starship_moteurs` pourrait etre juste et n'etre appelee
+    // par personne.
+    #[test]
+    fn le_preset_starship_assemble_coque_et_moteurs() {
+        let etat = preset_starship();
+        assert_eq!(nb(&etat), 15, "coque, jupe, 6 moteurs, 4 volets, 2 hublots et le bardage");
     }
 
     #[test]

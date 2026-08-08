@@ -29,7 +29,7 @@ pub use inventaire::{fils, Fil, GenreFil};
 // le `cfg`, le binaire les compte comme inutilisées et ajoute trois
 // avertissements de bruit.
 #[cfg(test)]
-pub use composant::hexagone_ceinture;
+pub use composant::{hexagone_ceinture, jupe_rayon_interieur, volet_bout, volet_rayon_capsule};
 #[cfg(test)]
 pub use mesure::{a_des_mailles, mesurer, silhouette};
 // Réexporté pour la désignation de l'assembleur (`ecran::designation`), qui
@@ -43,7 +43,7 @@ pub use composant::{
     // depuis `ecran/catalogue.rs` : la réexportation est bien utilisée.
     echantillons,
     Composant, VariantePanneauMega, VarianteRaptor, DonneesSousEnsemble, FamillePropulsion, PiedHexa, Sorties, StyleTreillis, VarianteAntenne,
-    BOUCLIER_ELANCEMENT,
+    ogive_rayon, BARDAGE_ARC, BOUCLIER_ELANCEMENT, JUPE_COUVERTURE,
     VarianteCaisson, VarianteCharge, VarianteCoiffe, VarianteModule, VariantePanneau,
     VariantePropulseur, VarianteRadiateur,
 };
@@ -105,6 +105,7 @@ pub(crate) fn cylindre(a: Vec3, b: Vec3, rayon: f32, couleur: Color) {
 
 /// Panneau solaire nervuré : le parallélogramme plein, son contour et
 /// `cellules-1` nervures parallèles à `e1` réparties le long de `e2`.
+#[allow(dead_code)] // Voile (nappe de cellules) : dessinee nulle part depuis la refonte des panneaux.
 pub(crate) fn voile(coin: Vec3, e1: Vec3, e2: Vec3, couleur: Color, cellules: usize) {
     let bord = Color::new(couleur.r * 0.5, couleur.g * 0.5, couleur.b * 0.5, 1.0);
     panneau(coin, e1, e2, couleur);

@@ -228,6 +228,7 @@ impl Apparence {
         self.crateres = densite;
         self
     }
+    #[allow(dead_code)] // Constructeur de la famille `avec_*` : l'API est uniforme, celui-ci n'a pas encore de client.
     pub fn avec_eyeball(mut self, intensite: f32) -> Self {
         self.eyeball = intensite;
         self
@@ -241,6 +242,7 @@ impl Apparence {
         self.eye_ring = ring;
         self
     }
+    #[allow(dead_code)] // Constructeur de la famille `avec_*` : l'API est uniforme, celui-ci n'a pas encore de client.
     pub fn avec_cryo(mut self, intensite: f32) -> Self {
         self.cryo = intensite;
         self

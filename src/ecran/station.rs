@@ -84,6 +84,7 @@ impl Categorie {
 
     /// Nombre d'items à cycler. Le `max(1)` ne sert qu'au générateur, dont
     /// l'unique item n'est dans aucune table.
+    #[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
     fn nb(self) -> usize {
         self.liste().len().max(1)
     }
@@ -327,7 +328,7 @@ impl VueStation {
         let n = self.items.len();
         draw_rectangle(col.x - 4.0, col.y - 4.0, col.w + 8.0, col.h + 8.0, Color::new(0.02, 0.03, 0.12, 0.92));
         let h = liste::hauteur_ligne(col, n);
-        let taille = (h * 0.52).clamp(9.0, 14.0);
+        let taille = (h * 0.52).clamp(crate::police::TAILLE_MIN, 14.0);
         for (i, item) in self.items.iter().enumerate() {
             let r = liste::ligne(col, n, i);
             if r.y + r.h > col.y + col.h {

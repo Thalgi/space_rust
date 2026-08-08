@@ -210,6 +210,9 @@ fn au_moyeu(v: Vec3, r_moyeu: f32) -> Vec3 {
 /// tons donne son dos facetté. Le regroupement **par teinte** est ce qui garde
 /// le nombre de lots bas : une lame par appel ferait trente-six `draw_mesh` pour
 /// une seule face.
+// Geometrie d'une nappe : les huit parametres sont tous des dimensions ou des
+// choix de peinture, aucun n'est redondant.
+#[allow(clippy::too_many_arguments)]
 fn nappe<P: Peintre>(
     p: &mut P,
     c: &[Vec3],
@@ -496,6 +499,7 @@ fn assombrir(c: Color, k: f32) -> Color {
 /// sache **où** chercher les triangles de nappe : les reconnaître à leur cote
 /// est le seul moyen de les isoler des cônes et des tubes une fois tout cuit
 /// dans le même tas.
+#[allow(dead_code)] // Mesure de geometrie tenue par ses tests ; aucun dessin ne l'appelle aujourd'hui.
 pub(super) fn demi_epaisseur(rayon: f32) -> f32 {
     rayon * PEAU
 }

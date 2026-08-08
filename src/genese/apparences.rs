@@ -11,7 +11,10 @@ pub fn apparence_tellurique(t: f32) -> (f32, f32, Apparence) {
     let mut lave = 0.0;
     let mut eau = 0.0;
     let mut eau_motif = 1.0; // continents
-    let mut grad_lat = 0.3;
+    // Sans valeur initiale : chaque groupe climatique DOIT fixer son dégradé
+    // latitudinal, et le compilateur refuse de compiler s'il en oublie un. Une
+    // valeur par défaut ici laisserait un monde passer en 0,3 sans le dire.
+    let grad_lat;
     let mut calotte = 1.0; // pas de banquise
     let mut veg_couv = 0.0;
     let mut veg_couleur = vec3(0.2, 0.5, 0.2);

@@ -11,6 +11,7 @@ const SOUS_PAS: usize = 4; // sous-pas de physique par frame (stabilité)
 /// Mode de propagation des **planètes**.
 /// - `SurRails` (défaut) : orbites de Kepler analytiques — stable, déterministe.
 /// - `NCorps` : intégration gravitationnelle — dynamique émergente « bac à sable ».
+///
 /// Les étoiles et les lunes restent toujours analytiques, quel que soit le mode.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ModePhysique {
@@ -83,6 +84,7 @@ impl Systeme {
     }
 
     /// Mode de propagation courant.
+    #[allow(dead_code)] // Lecture du mode de physique : le bouton n-corps n'est pas encore a l'ecran.
     pub fn mode(&self) -> ModePhysique {
         self.mode
     }
@@ -191,6 +193,7 @@ impl Systeme {
 
     /// Nombre d'étoiles du système. Décide de la forme de l'arbre : à une seule
     /// étoile, tout se range sous elle et le barycentre n'a pas lieu d'être.
+    #[allow(dead_code)] // Interrogation gardee par les tests du selecteur ; aucune vue ne la lit.
     pub fn nb_etoiles(&self) -> usize {
         self.astres.iter().filter(|a| a.categorie() == Categorie::Etoile).count()
     }

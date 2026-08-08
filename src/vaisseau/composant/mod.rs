@@ -50,12 +50,19 @@ mod tore;
 #[allow(unused_imports)]
 pub(crate) use thermique::section as section_bardage;
 pub use bouclier::ELANCEMENT as BOUCLIER_ELANCEMENT;
+pub use coque::{ogive_rayon, BARDAGE_ARC, JUPE_COUVERTURE};
+// Test seulement, comme les reexportations jumelles de `vaisseau/mod.rs`.
+#[cfg(test)]
+pub use coque::{jupe_rayon_interieur, volet_bout, volet_rayon_capsule};
 mod cargo;
 mod reservoir;
 mod treillis;
 pub use panneau_mega::VariantePanneauMega;
 pub use raptor::VarianteRaptor;
-pub use treillis::{hexagone_ceinture, PiedHexa, StyleTreillis};
+pub use treillis::{PiedHexa, StyleTreillis};
+// Test seulement, comme la réexportation jumelle dans `vaisseau/mod.rs`.
+#[cfg(test)]
+pub use treillis::hexagone_ceinture;
 use commun::*;
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 use std::rc::Rc;
@@ -133,9 +140,9 @@ pub enum Composant {
     /// **décroît vers la pointe** : un radiateur se refroidit sur sa longueur,
     /// c'est même toute sa fonction.
     RadiateurMega { profil: Profil, longueur: f32, largeur: f32, ailettes: usize, chaleur: f32 },
-    /// **Nacelle moteur de l'ISV** : nœud d'attache + hub + 4 sphères d'hydrogène
-    /// + **deux moteurs jumeaux inclinés de ±1,5°** (corps magnétique, anneaux de
-    /// confinement, tuyère évasée, boucliers anti-radiation, radiateurs).
+    /// **Nacelle moteur de l'ISV** : nœud d'attache, hub, 4 sphères d'hydrogène,
+    /// et **deux moteurs jumeaux inclinés de ±1,5°** (corps magnétique, anneaux
+    /// de confinement, tuyère évasée, boucliers anti-radiation, radiateurs).
     /// `echelle` met le tout à l'échelle. Écoutille axiale au nœud d'attache.
     Motrice { profil: Profil, echelle: f32 },
     /// **Brique de base du bloc propulsion** (repartie de zéro) : un
@@ -314,6 +321,34 @@ pub enum Composant {
     ///
     /// `longueur` est le fut seul, `nez` la fleche de l'ogive : la hauteur
     /// hors-tout est leur somme (`coque::hauteur`), jamais recopiee.
+    /// **Jupe moteur** : la virole arriere qui enferme la grappe de propulsion.
+    ///
+    /// Ouverte aux deux bouts, et c'est le point : les cloches restent visibles
+    /// dedans. Un cylindre plein les cacherait, autant ne pas les avoir
+    /// modelees. Elle couvre au moins [`coque::JUPE_COUVERTURE`] de la hauteur
+    /// de chaque moteur -- un lanceur ne montre pas ses moteurs a nu.
+    JupeMoteur { profil: Profil, longueur: f32 },
+    /// **Volet de rentree** : le panneau articule du Starship, et la seule piece
+    /// du vaisseau qui bouge. `longueur` est l'envergure (charniere -> bout),
+    /// `corde` la dimension le long de l'axe du vaisseau, `braquage` va de 0
+    /// (volet **droit**, perpendiculaire a la coque) a 1 (braque a fond vers le
+    /// ventre). Ce n'est pas un repli : c'est l'angle de la gouverne.
+    ///
+    /// Ce n'est pas une aile : un volet de Starship **traine**, il ne porte pas.
+    /// D'ou son epaisseur de caisson la ou une aile serait fine.
+    Volet { longueur: f32, corde: f32, braquage: f32 },
+    /// **Bardage de tuiles** : la face au vent d'un vaisseau de rentree, sur
+    /// l'arc `arc` centre sur `+X` de son repere.
+    ///
+    /// `+X` fixe et non reglable : le ventre est une direction unique, la donner
+    /// en parametre inviterait a poser deux boucliers qui ne regardent pas au
+    /// meme endroit. C'est **cette convention qui definit le ventre**, et les
+    /// volets s'y alignent.
+    BardageTuiles { profil: Profil, longueur: f32, nez: f32, arc: f32 },
+    /// **Hublot** : un vitrage encadre, regardant `+Z` de son repere. La seule
+    /// tache froide d'un engin qui n'est qu'inox et tuiles -- et la seule chose
+    /// qui donne son echelle humaine a une coque de 50 m.
+    Hublot { rayon: f32 },
     CoqueOgive {
         profil: Profil,
         longueur: f32,
@@ -397,6 +432,7 @@ pub struct DonneesSousEnsemble {
 /// s'écartent de `√3·(D − r_nu)` quand on écarte les centres de `D`, d'où
 /// `D = r_nu + 2ρ/√3`, soit `D = r·(1 − f + 2f/√3)` avec `f` la fraction de
 /// congé. Le facteur `JEU` ajoute par-dessus un vrai jour visible.
+#[allow(dead_code)] // Mesure de geometrie tenue par ses tests ; aucun dessin ne l'appelle aujourd'hui.
 fn grappe_cargo(rayon: f32, nacelles: usize, nacelle: f32) -> (f32, Vec<(Vec3, f32)>) {
     let n = nacelles.max(3);
     let dir = |a: f32| vec3(a.cos(), a.sin(), 0.0);
@@ -502,6 +538,10 @@ impl Composant {
             Composant::PanneauMega { .. } => "PANNEAU MEGA",
             Composant::Tore { .. } => "TORE",
             Composant::CoqueOgive { .. } => "COQUE OGIVE",
+            Composant::JupeMoteur { .. } => "JUPE MOTEUR",
+            Composant::Volet { .. } => "VOLET",
+            Composant::BardageTuiles { .. } => "BARDAGE TUILES",
+            Composant::Hublot { .. } => "HUBLOT",
             Composant::Raptor { .. } => "RAPTOR",
             Composant::CollierRotatif { .. } => "COLLIER ROTATIF",
             Composant::Charniere { .. } => "CHARNIERE",
@@ -544,6 +584,10 @@ impl Composant {
             Composant::PanneauMega { profil, .. } => panneau_mega::ports(*profil),
             Composant::Tore { .. } => vec![],
             Composant::CoqueOgive { profil, longueur, nez } => coque::ports(*profil, *longueur, *nez),
+            Composant::JupeMoteur { profil, longueur } => coque::jupe_ports(*profil, *longueur),
+            Composant::Volet { .. } => coque::volet_ports(),
+            Composant::BardageTuiles { .. } => coque::bardage_ports(),
+            Composant::Hublot { .. } => coque::hublot_ports(),
             Composant::Raptor { profil, variante, rayon } => raptor::ports(*profil, *variante, *rayon),
             // Bardage de surface enfilé sur l'épine, posé à la main : pas de port.
             Composant::BouclierThermique { .. } => vec![],
@@ -597,6 +641,10 @@ impl Composant {
                 tore::dessiner(p, *rayon_majeur, *rayon_mineur, *segments, *anneaux, *jonctions, *phase)
             }
             Composant::CoqueOgive { profil, longueur, nez } => coque::dessiner(p, *profil, *longueur, *nez),
+            Composant::JupeMoteur { profil, longueur } => coque::jupe_dessiner(p, *profil, *longueur),
+            Composant::Volet { longueur, corde, braquage } => coque::volet_dessiner(p, *longueur, *corde, *braquage),
+            Composant::BardageTuiles { profil, longueur, nez, arc } => coque::bardage_dessiner(p, *profil, *longueur, *nez, *arc),
+            Composant::Hublot { rayon } => coque::hublot_dessiner(p, *rayon),
             Composant::Raptor { variante, rayon, .. } => raptor::dessiner(p, *variante, *rayon),
             Composant::BouclierThermique { rayon_pied, rayon_bout, courbure, longueur, rangs } => {
                 thermique::dessiner(p, *rayon_pied, *rayon_bout, *courbure, *longueur, *rangs)
@@ -666,6 +714,10 @@ impl Composant {
             Composant::PanneauMega { longueur, largeur, .. } => panneau_mega::cout(*longueur, *largeur),
             Composant::Tore { rayon_majeur, .. } => tore::cout(*rayon_majeur),
             Composant::CoqueOgive { longueur, nez, .. } => coque::cout(*longueur, *nez),
+            Composant::JupeMoteur { longueur, .. } => coque::jupe_cout(*longueur),
+            Composant::Volet { longueur, corde, .. } => coque::volet_cout(*longueur, *corde),
+            Composant::BardageTuiles { longueur, arc, .. } => coque::bardage_cout(*longueur, *arc),
+            Composant::Hublot { rayon } => coque::hublot_cout(*rayon),
             Composant::Raptor { variante, rayon, .. } => raptor::cout(*variante, *rayon),
             Composant::BouclierThermique { .. } => thermique::cout(),
             Composant::CollierRotatif { .. } => equipage::collier_cout(),
@@ -755,6 +807,10 @@ impl Composant {
             Composant::PanneauMega { longueur, largeur, .. } => panneau_mega::rayon_local(*longueur, *largeur),
             Composant::Tore { rayon_majeur, rayon_mineur, .. } => tore::rayon_local(*rayon_majeur, *rayon_mineur),
             Composant::CoqueOgive { profil, longueur, nez } => coque::rayon_local(*profil, *longueur, *nez),
+            Composant::JupeMoteur { profil, longueur } => coque::jupe_rayon_local(*profil, *longueur),
+            Composant::Volet { longueur, corde, .. } => coque::volet_rayon_local(*longueur, *corde),
+            Composant::BardageTuiles { profil, longueur, nez, .. } => coque::bardage_rayon_local(*profil, *longueur, *nez),
+            Composant::Hublot { rayon } => coque::hublot_rayon_local(*rayon),
             Composant::Raptor { variante, rayon, .. } => raptor::rayon_local(*variante, *rayon),
             Composant::BouclierThermique { rayon_pied, rayon_bout, longueur, .. } => thermique::rayon_local(*rayon_pied, *rayon_bout, *longueur),
             Composant::CollierRotatif { rayon, longueur, .. } => equipage::collier_rayon_local(*rayon, *longueur),
@@ -888,6 +944,31 @@ impl Composant {
             // s'arrete net (mesure : 0,85 hors d'une enveloppe de 2,03). Le
             // demi-axe doit donc valoir `hypot(demi_hauteur, rayon)` — ce que
             // `rayon_local` calcule deja, et c'est l'idiome de `ModuleAxial`.
+            // Le volet part de sa **charniere** et s'ecarte selon le braquage :
+            // sa capsule n'est donc pas centree, elle va de l'origine au bout.
+            // Les deux cotes sont lues a la source (`coque`), sans quoi
+            // l'enveloppe mentirait des qu'on retoucherait l'arc.
+            Composant::Volet { longueur, corde, braquage } => Enveloppe::capsule(
+                Vec3::ZERO,
+                coque::volet_bout(*longueur, *braquage),
+                coque::volet_rayon_capsule(*corde),
+            ),
+            // Le bardage epouse le fut : meme capsule d'axe.
+            Composant::Hublot { rayon } => Enveloppe::sphere(Vec3::ZERO, coque::hublot_rayon_local(*rayon)),
+            // La nappe deborde de `nez` vers +Z : le noyau est donc **decale**,
+            // il ne part pas du centre du fut.
+            Composant::BardageTuiles { profil, longueur, nez, .. } => Enveloppe::axe(
+                Vec3::Z * (*nez * 0.5),
+                Vec3::Z,
+                (*longueur + *nez) * 0.5,
+                coque::rayon_hors_tout(*profil),
+            ),
+            Composant::JupeMoteur { profil, longueur } => Enveloppe::axe(
+                Vec3::ZERO,
+                Vec3::Z,
+                *longueur * 0.5,
+                coque::rayon_hors_tout(*profil),
+            ),
             Composant::CoqueOgive { profil, longueur, nez } => Enveloppe::axe(
                 Vec3::ZERO,
                 Vec3::Z,
@@ -999,7 +1080,11 @@ fn suivante(c: &Composant) -> Option<Composant> {
         },
         Composant::PanneauMega { .. } => Composant::Tore { rayon_majeur: 12.0, rayon_mineur: 1.5, segments: 48, anneaux: 12, jonctions: 3, phase: 0.5 },
         Composant::Tore { .. } => Composant::CoqueOgive { profil: Profil::P2, longueur: 8.0, nez: 3.0 },
-        Composant::CoqueOgive { .. } => Composant::Raptor {
+        Composant::CoqueOgive { .. } => Composant::JupeMoteur { profil: Profil::P2, longueur: 2.0 },
+        Composant::JupeMoteur { .. } => Composant::Volet { longueur: 3.0, corde: 2.0, braquage: 0.6 },
+        Composant::Volet { .. } => Composant::BardageTuiles { profil: Profil::P2, longueur: 6.0, nez: 2.0, arc: coque::BARDAGE_ARC },
+        Composant::BardageTuiles { .. } => Composant::Hublot { rayon: 0.35 },
+        Composant::Hublot { .. } => Composant::Raptor {
             profil: Profil::P0,
             variante: VarianteRaptor::Vide,
             rayon: VarianteRaptor::Vide.rayon_nominal(),
@@ -1047,6 +1132,7 @@ pub fn echantillons() -> Vec<Composant> {
 /// prises »). Pure organisation de menu : ne change rien à ce qui se pose où,
 /// seul [`Composant::ports`] en décide.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
 pub enum Categorie {
     Structure,
     Habitat,
@@ -1065,6 +1151,7 @@ pub enum Categorie {
 }
 
 impl Categorie {
+    #[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
     pub const TOUTES: [Categorie; 10] = [
         Categorie::Structure,
         Categorie::Habitat,
@@ -1078,6 +1165,7 @@ impl Categorie {
         Categorie::Effet,
     ];
 
+    #[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
     pub fn nom(self) -> &'static str {
         match self {
             Categorie::Structure => "STRUCTURE",
@@ -1098,6 +1186,7 @@ impl Categorie {
 /// d'échantillons ci-dessus : ajouter une variante à `Composant` casse la
 /// compilation ici — la couverture de la palette est une propriété du
 /// compilateur, pas une discipline à se rappeler.
+#[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
 pub fn categorie(c: &Composant) -> Categorie {
     match c {
         Composant::ModuleAxial { .. }
@@ -1108,7 +1197,11 @@ pub fn categorie(c: &Composant) -> Categorie {
         | Composant::Adaptateur { .. }
         | Composant::Coiffe { .. }
         | Composant::BlocMoteur { .. }
-        | Composant::CoqueOgive { .. } => Categorie::Structure,
+        | Composant::CoqueOgive { .. }
+        | Composant::JupeMoteur { .. }
+        | Composant::Volet { .. }
+        | Composant::BardageTuiles { .. }
+        | Composant::Hublot { .. } => Categorie::Structure,
         Composant::ModuleHabitat { .. } | Composant::ModuleEquipage { .. } | Composant::CollierRotatif { .. } => {
             Categorie::Habitat
         }
@@ -1150,6 +1243,7 @@ pub fn categorie(c: &Composant) -> Categorie {
 ///
 /// Chaque entrée est un échantillon représentatif ([`echantillons`]) et
 /// l'indice de son port de montage — le premier compatible, s'il y en a un.
+#[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
 pub fn posables(genre: GenrePort, profil: Profil) -> Vec<(Composant, usize)> {
     echantillons()
         .into_iter()
@@ -3387,8 +3481,7 @@ mod tests {
 ",
             );
         }
-        t.push_str("
-");
+        t.push('\n');
         if f.is_empty() {
             t.push_str("*(aucun fil : la pièce est faite de mailles brutes, ou ne dessine rien)*
 ");
@@ -3577,7 +3670,7 @@ mod tests {
         // développeur est alors déjà dans ce fichier (le `match` de `suivante`
         // ne compile plus sans lui), et bumper ce nombre est la confirmation
         // qu'il a bien recousu la chaîne au lieu de la court-circuiter.
-        assert_eq!(ech.len(), 35, "la chaîne ne visite pas les 35 variantes");
+        assert_eq!(ech.len(), 39, "la chaîne ne visite pas les 39 variantes");
     }
 
     // ================================================================
@@ -3652,7 +3745,7 @@ mod tests {
             for (l, lot) in b.terminer().iter().enumerate() {
                 let n = lot.vertices.len();
                 for (i, v) in lot.vertices.iter().enumerate() {
-                    let p = Vec3::from(v.position);
+                    let p = v.position;
                     assert!(
                         p.is_finite(),
                         "{} lot {l} sommet {i} : position non finie {p:?}",
@@ -3705,7 +3798,7 @@ mod tests {
             let pts: Vec<Vec3> = b
                 .terminer()
                 .iter()
-                .flat_map(|l| l.vertices.iter().map(|v| Vec3::from(v.position)))
+                .flat_map(|l| l.vertices.iter().map(|v| v.position))
                 .collect();
             // Le panache ne dessine rien : les deux rayons valent 0 et le
             // contiennent trivialement (cf. `toute_variante_dessine_sauf_le_panache`).

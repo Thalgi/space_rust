@@ -61,6 +61,7 @@ pub fn cuire(corps: Repere, comp: &Composant) -> Piece {
 /// renvoie des `Mat4` qui peuvent porter une **réflexion** (déterminant −1),
 /// impossible à encoder dans le `Repere`/`Quat` de la couche construction — d'où
 /// la cuisson en `Mat4`. La première copie est toujours l'originale.
+#[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
 pub fn cuire_symetrie(
     corps: Repere,
     comp: &Composant,

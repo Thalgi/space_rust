@@ -85,6 +85,20 @@ pub(crate) const MASSES_TERRESTRES: [(&str, f32); 6] = [
     ("Neptune", 17.15),
 ];
 
+/// Masse d'une planete en masses terrestres, lue dans [`MASSES_TERRESTRES`].
+///
+/// Pendant de [`rayon_monde`]. Sans elle, la table etait **morte** et chaque
+/// masse etait recopiee a la main dans le preset ET dans les tests : la table
+/// annoncait une source unique qu'elle n'etait pas, et corriger une masse a un
+/// endroit laissait les deux autres mentir.
+pub(crate) fn masse_monde(nom: &str) -> f32 {
+    MASSES_TERRESTRES
+        .iter()
+        .find(|(n, _)| *n == nom)
+        .unwrap_or_else(|| panic!("masse inconnue : {nom}"))
+        .1
+}
+
 /// Vitesse angulaire d'une lune, par la 3e loi de Kepler.
 ///
 /// La constante cale la periode de **notre** Lune sur 27,32 jours pour une annee
@@ -203,14 +217,20 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
     // Japet garde "Carbone" (son hemisphere sombre) et n'est donc plus un doublon.
     // Une lune, a sa VRAIE distance et sa vraie taille. `i` sert seulement a
     // decaler les phases pour que les lunes ne s'alignent pas au demarrage.
-    let mut poser = |sys: &mut Systeme, parent: usize, nom: &'static str,
-                     masse_parent: f32, i: usize, app: Apparence| {
+    //
+    // `parent` porte l'indice ET le nom : la masse se **lit dans la table**
+    // (`masse_monde`) au lieu d'etre recopiee a chaque appel. Une masse ecrite a
+    // la main ici, une autre dans la table, une troisieme dans les tests : les
+    // trois derivaient sans que rien ne rougisse.
+    let poser = |sys: &mut Systeme, parent: (usize, &str), nom: &'static str,
+                     i: usize, app: Apparence| {
+        let (idx, parent_nom) = parent;
         let (_, _, a_km, retro) = LUNES.iter().find(|(n, _, _, _)| *n == nom).expect("lune inconnue");
         let r = distance_lune(*a_km);
         let phase = i as f32 * 1.7;
         ajouter_lune_reelle(
-            sys, parent, rayon_monde(nom), r,
-            omega_lune(masse_parent, r, *retro),
+            sys, idx, rayon_monde(nom), r,
+            omega_lune(masse_monde(parent_nom), r, *retro),
             (i as f32 * 0.031) - 0.05, phase, app, nom,
         );
     };
@@ -220,9 +240,11 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
     let rayon_saturne = rayon_monde("Saturne");
     let rayon_uranus = rayon_monde("Uranus");
     let rayon_neptune = rayon_monde("Neptune");
-    let mercure = ajouter_planete(&mut sys, 0.39, 0.205, 7.0 * deg, rayon_monde("Mercure"), 0.3,
+    // Mercure, Venus et Pluton ne portent pas de lune : leur indice ne sert a
+    // rien, on ne le nomme pas.
+    ajouter_planete(&mut sys, 0.39, 0.205, 7.0 * deg, rayon_monde("Mercure"), 0.3,
         preset_tellurique("Fer (Mercure)"), Some("Mercure"));
-    let venus = ajouter_planete(&mut sys, 0.72, 0.007, 3.4 * deg, rayon_monde("Venus"), 1.0,
+    ajouter_planete(&mut sys, 0.72, 0.007, 3.4 * deg, rayon_monde("Venus"), 1.0,
         preset_tellurique("Venus (etuve)"), Some("Venus"));
     // Rayon de la Terre : nomme parce que l'ISS s'en sert pour son orbite et son
     // envergure. Recopie, il ferait deriver la station le jour ou la planete
@@ -230,37 +252,37 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
     let rayon_terre = rayon_monde("Terre");
     let terre = ajouter_planete(&mut sys, 1.0, 0.017, 0.0, rayon_terre, 1.0,
         preset_tellurique("Terre"), Some("Terre"));
-    poser(&mut sys, terre, "Lune", 1.0, 0, fige(preset_tellurique("Lune"), "Lune"));
+    poser(&mut sys, (terre, "Terre"), "Lune", 0, fige(preset_tellurique("Lune"), "Lune"));
     let mars = ajouter_planete(&mut sys, 1.52, 0.093, 1.85 * deg, rayon_mars, 0.4,
         preset_tellurique("Mars"), Some("Mars"));
     // Phobos + Deimos : deux petits corps sombres captures.
-    poser(&mut sys, mars, "Phobos", 0.107, 0, fige(preset_tellurique("Carbone"), "Phobos"));
-    poser(&mut sys, mars, "Deimos", 0.107, 1, fige(preset_tellurique("Carbone"), "Deimos"));
+    poser(&mut sys, (mars, "Mars"), "Phobos", 0, fige(preset_tellurique("Carbone"), "Phobos"));
+    poser(&mut sys, (mars, "Mars"), "Deimos", 1, fige(preset_tellurique("Carbone"), "Deimos"));
     let jupiter = ajouter_planete(&mut sys, 5.2, 0.049, 1.3 * deg, rayon_jupiter, 20.0,
         preset_gazeuse("Jupiter"), Some("Jupiter"));
     // 4 lunes galileennes (interne -> externe), aspects distincts.
-    poser(&mut sys, jupiter, "Io", 317.8, 0, preset_tellurique("Io (soufre)"));
-    poser(&mut sys, jupiter, "Europe", 317.8, 1, preset_tellurique("Subglaciaire"));
-    poser(&mut sys, jupiter, "Ganymede", 317.8, 2, preset_tellurique("Crevasse"));
-    poser(&mut sys, jupiter, "Callisto", 317.8, 3, fige(preset_tellurique("Lune"), "Callisto"));
+    poser(&mut sys, (jupiter, "Jupiter"), "Io", 0, preset_tellurique("Io (soufre)"));
+    poser(&mut sys, (jupiter, "Jupiter"), "Europe", 1, preset_tellurique("Subglaciaire"));
+    poser(&mut sys, (jupiter, "Jupiter"), "Ganymede", 2, preset_tellurique("Crevasse"));
+    poser(&mut sys, (jupiter, "Jupiter"), "Callisto", 3, fige(preset_tellurique("Lune"), "Callisto"));
     let saturne = ajouter_planete(&mut sys, 9.58, 0.056, 2.49 * deg, rayon_saturne, 12.0,
         preset_gazeuse("Saturne"), Some("Saturne"));
     // Encelade, Rhea, Titan (le plus gros), Japet (interne -> externe).
-    poser(&mut sys, saturne, "Encelade", 95.16, 0, preset_tellurique("Pics de glace"));
-    poser(&mut sys, saturne, "Rhea", 95.16, 1, preset_tellurique("Boule de neige"));
-    poser(&mut sys, saturne, "Titan", 95.16, 2, preset_tellurique("Titan"));
-    poser(&mut sys, saturne, "Japet", 95.16, 3, fige(preset_tellurique("Carbone"), "Japet"));
+    poser(&mut sys, (saturne, "Saturne"), "Encelade", 0, preset_tellurique("Pics de glace"));
+    poser(&mut sys, (saturne, "Saturne"), "Rhea", 1, preset_tellurique("Boule de neige"));
+    poser(&mut sys, (saturne, "Saturne"), "Titan", 2, preset_tellurique("Titan"));
+    poser(&mut sys, (saturne, "Saturne"), "Japet", 3, fige(preset_tellurique("Carbone"), "Japet"));
     let uranus = ajouter_planete(&mut sys, 19.2, 0.046, 0.77 * deg, rayon_uranus, 6.0,
         preset_gazeuse("Uranus"), Some("Uranus"));
     // Ariel, Umbriel, Titania, Oberon (interne -> externe).
-    poser(&mut sys, uranus, "Ariel", 14.54, 0, preset_tellurique("Supraglacial"));
-    poser(&mut sys, uranus, "Umbriel", 14.54, 1, fige(preset_tellurique("Carbone"), "Umbriel"));
-    poser(&mut sys, uranus, "Titania", 14.54, 2, fige(preset_tellurique("Subglaciaire"), "Titania"));
-    poser(&mut sys, uranus, "Oberon", 14.54, 3, fige(preset_tellurique("Lune"), "Oberon"));
+    poser(&mut sys, (uranus, "Uranus"), "Ariel", 0, preset_tellurique("Supraglacial"));
+    poser(&mut sys, (uranus, "Uranus"), "Umbriel", 1, fige(preset_tellurique("Carbone"), "Umbriel"));
+    poser(&mut sys, (uranus, "Uranus"), "Titania", 2, fige(preset_tellurique("Subglaciaire"), "Titania"));
+    poser(&mut sys, (uranus, "Uranus"), "Oberon", 3, fige(preset_tellurique("Lune"), "Oberon"));
     let neptune = ajouter_planete(&mut sys, 30.05, 0.010, 1.77 * deg, rayon_neptune, 6.0,
         preset_gazeuse("Neptune"), Some("Neptune"));
-    poser(&mut sys, neptune, "Triton", 17.15, 0, preset_tellurique("Cryovolcan"));
-    let pluton = ajouter_planete(&mut sys, 39.5, 0.249, 17.1 * deg, rayon_monde("Pluton"), 0.1,
+    poser(&mut sys, (neptune, "Neptune"), "Triton", 0, preset_tellurique("Cryovolcan"));
+    ajouter_planete(&mut sys, 39.5, 0.249, 17.1 * deg, rayon_monde("Pluton"), 0.1,
         preset_tellurique("Ice Dunes"), Some("Pluton")); // nain glace
 
     // ===== Population de petits corps, du plus proche au plus lointain =====
@@ -620,6 +642,11 @@ pub fn construire_preset_quadruple() -> (Systeme, String) {
 }
 
 #[cfg(test)]
+// Ces tests affirment des choses sur des CONSTANTES, et clippy y voit une
+// condition toujours vraie. Elle l'est -- aujourd'hui. Le jour ou quelqu'un
+// abaisse la constante, l'assertion devient fausse et le test tombe : c'est
+// precisement son role, garder la valeur ET dire pourquoi elle compte.
+#[allow(clippy::assertions_on_constants)]
 mod tests {
     use super::*;
 
@@ -636,14 +663,17 @@ mod tests {
     ];
 
     /// Parent de chaque lune, pour les tests d'orbite.
-    fn parent_de(nom: &str) -> (&'static str, f32) {
+    // Ne rend que le NOM du parent : la masse se lit dans `MASSES_TERRESTRES`
+    // via `masse_monde`. Une copie ici rendrait le test aveugle a une masse
+    // fausse dans la table -- il verifierait sa propre copie.
+    fn parent_de(nom: &str) -> &'static str {
         match nom {
-            "Lune" => ("Terre", 1.0),
-            "Phobos" | "Deimos" => ("Mars", 0.107),
-            "Io" | "Europe" | "Ganymede" | "Callisto" => ("Jupiter", 317.8),
-            "Encelade" | "Rhea" | "Titan" | "Japet" => ("Saturne", 95.16),
-            "Ariel" | "Umbriel" | "Titania" | "Oberon" => ("Uranus", 14.54),
-            "Triton" => ("Neptune", 17.15),
+            "Lune" => "Terre",
+            "Phobos" | "Deimos" => "Mars",
+            "Io" | "Europe" | "Ganymede" | "Callisto" => "Jupiter",
+            "Encelade" | "Rhea" | "Titan" | "Japet" => "Saturne",
+            "Ariel" | "Umbriel" | "Titania" | "Oberon" => "Uranus",
+            "Triton" => "Neptune",
             _ => panic!("lune sans parent : {nom}"),
         }
     }
@@ -656,7 +686,7 @@ mod tests {
     #[test]
     fn les_lunes_orbitent_hors_de_leur_planete() {
         for (nom, _, a_km, _) in LUNES {
-            let (parent, _) = parent_de(nom);
+            let parent = parent_de(nom);
             let r = distance_lune(a_km);
             let roche = rayon_monde(parent) * 2.4;
             assert!(
@@ -694,9 +724,8 @@ mod tests {
     fn les_periodes_de_lunes_suivent_kepler() {
         let periode = |nom: &str| {
             let (_, _, a_km, retro) = *LUNES.iter().find(|(n, _, _, _)| *n == nom).unwrap();
-            let (_, masse) = parent_de(nom);
             let r = distance_lune(a_km);
-            std::f32::consts::TAU / omega_lune(masse, r, retro).abs()
+            std::f32::consts::TAU / omega_lune(masse_monde(parent_de(nom)), r, retro).abs()
         };
         // Rapport des periodes Lune / Io : 27,32 / 1,769 = 15,4.
         let rapport = periode("Lune") / periode("Io");
@@ -710,7 +739,10 @@ mod tests {
         // Triton est retrograde : son omega est negatif.
         let (_, _, a, retro) = *LUNES.iter().find(|(n, _, _, _)| *n == "Triton").unwrap();
         assert!(retro, "Triton devrait etre retrograde");
-        assert!(omega_lune(17.15, distance_lune(a), retro) < 0.0, "Triton tourne a l'endroit");
+        assert!(
+            omega_lune(masse_monde("Neptune"), distance_lune(a), retro) < 0.0,
+            "Triton tourne a l'endroit"
+        );
     }
 
     // **Plus aucune exageration : l'echelle est vraie.**

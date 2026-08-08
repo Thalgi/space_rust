@@ -111,6 +111,7 @@ impl VariantePanneauMega {
         VariantePanneauMega::PlisseDeployable,
     ];
 
+    #[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
     pub fn nom(self) -> &'static str {
         match self {
             VariantePanneauMega::FermeModulaire => "FERME MODULAIRE A CASSETTES",

@@ -87,6 +87,7 @@ pub trait Peintre {
 
     /// Panneau nervuré : le parallélogramme, son contour et `cellules-1`
     /// nervures parallèles à `e1`.
+    #[allow(dead_code)] // Idem : methode de trait sans appelant depuis la refonte des panneaux.
     fn voile(&mut self, coin: Vec3, e1: Vec3, e2: Vec3, couleur: Color, cellules: usize) {
         let bord = Color::new(couleur.r * 0.5, couleur.g * 0.5, couleur.b * 0.5, 1.0);
         let ep = 0.02;

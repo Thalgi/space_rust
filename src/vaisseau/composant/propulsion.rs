@@ -21,12 +21,14 @@ pub enum FamillePropulsion {
 }
 
 impl FamillePropulsion {
+    #[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
     pub const TOUTES: [FamillePropulsion; 3] = [
         FamillePropulsion::Chimique,
         FamillePropulsion::Electrique,
         FamillePropulsion::Nucleaire,
     ];
 
+    #[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
     pub fn nom(self) -> &'static str {
         match self {
             FamillePropulsion::Chimique => "CHIMIQUE",
@@ -98,6 +100,7 @@ impl VariantePropulseur {
         )
     }
 
+    #[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
     pub fn nom(self) -> &'static str {
         match self {
             VariantePropulseur::TuyereCloche => "TUYERE CLOCHE (ERGOLS LIQUIDES)",

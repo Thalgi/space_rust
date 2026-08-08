@@ -112,6 +112,7 @@ impl Ressource {
 
     /// Libellé court, pour une infobulle ou un panneau détaillé. La barre, elle,
     /// n'affiche que l'icône et le nombre.
+    #[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
     pub fn nom(self) -> &'static str {
         match self {
             Ressource::Minerai => "MINERAI",
@@ -211,6 +212,7 @@ pub fn dessiner(r: Ressource, x: f32, y: f32, cote: f32) {
 
 /// L'icône de `r` est-elle disponible ? Sert aux tests et à la mise en page,
 /// qui peut vouloir réserver la place même sans sprite.
+#[allow(dead_code)] // Interrogation d'inventaire : l'ecran qui l'affichera n'existe pas (D-INT-2).
 pub fn presente(r: Ressource) -> bool {
     ICONES.with(|i| matches!(i.borrow().get(indice(r)), Some(Some(_))))
 }

@@ -22,10 +22,101 @@ scratchpad **avant** de le toucher (red-checks compris).
 
 État vérifié : **411 tests verts**, **`cargo clippy` : 0 erreur**.
 
-## Chantier courant : l'interface de jeu
+## Chantier courant : finir les planètes et la vue système
 
-**Les six étapes I.0 à I.5 sont faites** — reste à juger le tout à l'écran, et à
-solder les bouche-trous ci-dessous.
+**Décidé le 2026-08-06, avant D-INT-2** : l'économie attendra que la vue système
+soit finie. On ne conçoit pas une économie par-dessus un décor qu'on va encore
+remuer.
+
+| # | Chantier | Nature | État |
+|---|---|---|---|
+| **P.1** | **Atmosphère planétaire** | vrai manque, confirmé dans le code | ⏳ |
+| **P.2** | **Ceintures : finition + optimisation** | mesurer d'abord | ⏳ |
+| **P.3** | **Étoiles : éjections et motifs de surface** | ⚠️ **existent déjà** — enquête avant travaux | ⏳ |
+| **P.4** | Finitions planétaires (rotation propre, nuages, ombres d'anneaux) | liste ancienne | ⏳ |
+
+### P.1 — Il n'y a pas d'atmosphère, et voici pourquoi
+
+`planete.frag.glsl` ligne 863 : `if (rr > 1.0) discard;`
+
+Tout ce qui dépasse la sphère est **jeté**. L'impostor est pourtant un disque de
+`DISC = 1.05`, donc **5 % de marge autour du corps ne servent à rien**. Ce que le
+shader appelle « halo atmosphérique » (ligne 1046) n'est qu'un éclaircissement du
+limbe **sur la surface elle-même** :
+
+```glsl
+float rim = pow(1.0 - z, 3.0);
+col += atmo * rim * (0.35 + 0.65 * diff);
+```
+
+Rien ne brille **au-delà de la silhouette**. C'est exactement ce qui manque : une
+atmosphère se voit d'abord parce qu'elle déborde du disque, et parce qu'elle
+s'allume en croissant du côté du soleil.
+
+**Travail** : rendre la coquille dans la marge (rayon 1,0 → 1,05), épaisseur
+optique en fonction de l'angle de vue, teinte par diffusion, croissant au
+terminateur. ⚠️ Toucher à `DISC` touche au LOD `px_rayon` et au cadrage : à
+mesurer avant.
+
+### P.2 — Ceintures : mesurer avant d'optimiser
+
+Ce qui est **déjà bien** : les buffers sont **figés** (`construire_lots`) et
+l'orbite est calculée **dans le vertex shader**
+(`omega = sqrt(gm/r³)`, `theta = graine·τ + omega·time`). Rien ne remonte au CPU
+par frame.
+
+Le préset solaire tire **6 400 particules** en 4 ceintures (900 astéroïdes,
+2 000 Kuiper, 900 épars, 2 600 Oort), soit ~16 `draw_mesh` par frame plus les
+voiles.
+
+**Le vrai gisement est le culling** : le nuage de Oort s'étend de 2 000 à
+20 000 UA et il est dessiné **même quand la caméra est à 1 UA**, où ses
+particules font moins d'un pixel. Aucun test de visibilité n'existe
+(`disque/mod.rs`).
+
+⚠️ **Mesurer d'abord** : le compteur de FPS est déjà à l'écran en galerie. Sans
+chiffre avant/après, « optimiser » est une opinion.
+
+### P.3 — ⚠️ Les éjections stellaires existent déjà
+
+**Vérifié dans le code avant d'ouvrir le chantier**, et c'est important :
+
+| Ce qu'on croyait manquant | Réalité |
+|---|---|
+| Éjections coronales | `soleil/eruptions.rs` : `Boucle` avec cycle complet **Montée → Tenue → Rupture → Retombée**, corde de flux (`apex_vel`), rendue en billboards additifs (`soleil/rendu.rs`) |
+| Taches | `Tache` avec durée de vie, poussées dans `spots[8]` |
+| Motif de surface | granulation `fbm` (`soleil.frag.glsl` l. 87), champ magnétique (l. 97) |
+| Couronne | trois types : halo, jets bipolaires, vent stellaire |
+
+Et `Astre::update` **est bien appelé** en vue système (`systeme/mod.rs:393`).
+
+**Donc le défaut n'est pas l'absence : c'est que ça n'arrive pas à l'écran.**
+L'hypothèse la plus probable est l'**échelle** — à distances réelles le Soleil
+fait 1,1 U de rayon quand Neptune orbite à 1 440 U, si bien que boucles et
+granulation tombent sous le pixel. C'est le **cinquième** défaut de ce type dans
+le projet (calotte, villes, atmo de Titan, texture zonale, ventre) : *la donnée
+est juste, la plomberie ou l'échelle ne suit pas*.
+
+**Travail** : d'abord **constater** (galerie d'étoiles contre vue système), puis
+décider — LOD sur `px_rayon` comme les géantes, ou exagération d'échelle assumée.
+Ne **pas** réécrire ce qui existe.
+
+Reste ensuite un vrai manque possible : la **variété d'une étoile à l'autre**
+(même graine de granulation partout ?), à vérifier en galerie.
+
+**479 tests, 0 avertissement clippy.**
+
+### Ce qui vient d'être fait (2026-08-05 → 06)
+
+| Chantier | Résultat |
+|---|---|
+| **Revue P1** | 117 → **0** avertissement. 90 éléments morts triés, dont **77 exercés par les tests** — la mesure précédente était fausse. A révélé un vrai défaut : `MASSES_TERRESTRES` était documentée « source unique » et **personne ne la lisait**. |
+| **Réglages persistés** | `reglages.json`, GAMMA au curseur, tramage retiré. |
+| **Zoom** | Plancher à `0,01` (×128 000), plans de coupe suivant la distance. |
+| **Texte** | Deux défauts distincts : glyphes absents de la police (157 caractères), puis **tuiles noires** dues au repaquetage de l'atlas. |
+| **Starship 1/5 → 5/5** | Coque, 6 Raptor, jupe moteur, 4 volets, bardage de tuiles, hublots, exposé debout. |
+
+## L'interface de jeu (I.0 à I.5 — faites)
 
 Conception écrite le 2026-08-04 :
 **[`docs/conception/interface.md`](docs/conception/interface.md)**. À lire avant
@@ -82,6 +173,145 @@ elle ferait 9 × 10⁻⁶ unité de monde — mille fois moins qu'un pixel. Les 
 sont **nommés** (`ORBITE_ISS`, `ECHELLE_ISS`) plutôt que noyés dans un calcul :
 un mensonge d'échelle assumé vaut mieux qu'un mensonge implicite.
 
+## ⚠️ La police ne couvre que 157 caractères
+
+`assets/minitel.ttf` fait 12 Ko. Relevé sur sa table `cmap` : il porte les
+accents **minuscules** (à â ä ç è é ê ë î ï ô ö ù û ü) — l'essentiel du look
+Minitel — mais **pas leurs majuscules**, ni la ponctuation typographique
+(`…` `—` `«` `»` `·` `×`). Un caractère sans glyphe ne se dessine pas : l'écran
+montre un blanc, ce que l'œil lit comme un texte corrompu.
+
+Deux cas se produisaient pour de bon, tous deux dans la **vue système** :
+
+1. `skymap.rs` titre par `to_uppercase()`. « Système généré » devient
+   « SYSTÈME GÉNÉRÉ » — `È` et `É` disparaissent.
+2. `liste::tronquer` ajoute une **ellipse** `…` à tout libellé trop long, donc à
+   toutes les entrées coupées du sélecteur d'astres.
+
+Corrigé par `police::assainir`, appliquée au **point de passage unique** de tout
+le texte du jeu. La table des remplacements est relevée sur la police, pas
+devinée. Les accents minuscules sont **laissés intacts** : la police les a, et
+les aplatir abîmerait le rendu là où il est juste.
+
+⚠️ **Ce n'était pas une régression de la revue P1** — le défaut est aussi vieux
+que la police. Vérifié : les seules retouches de la passe sur `skymap.rs` et
+`selecteur.rs` étaient des retraits de `mut`.
+
+⚠️ **`texte` et `mesure` doivent traiter la chaîne à l'identique.** Sinon
+`tronquer` mesure une ellipse d'un caractère et en dessine trois : il déborde de
+la colonne qu'il vient d'ajuster. Le désaccord **n'est pas testable** — `mesure`
+exige un contexte GL — il est donc rendu difficile à écrire : les deux fonctions
+ne sont plus que des enveloppes de `preparer`, qui est seule à décider, et qui
+est testée. C'est le sabotage qui l'a imposé : « `mesure` n'assainit plus »
+passait au vert.
+
+## ⚠️ Carrés noirs à la place du texte (atlas de police)
+
+**Symptôme** : en ouvrant la fiche d'un astre dans la vue système, *tous* les
+caractères déjà dessinés dans la frame sortent en rectangles noirs pleins.
+
+**Cause, dans macroquad** (`src/text/atlas.rs`, `Atlas::texture`) : les glyphes
+vivent dans un atlas qui grandit à la demande, et quand il grandit macroquad
+**détruit l'ancienne texture** pour en créer une plus grande :
+
+```rust
+ctx.delete_texture(self.texture);
+self.texture = ctx.new_texture_from_rgba8(...);
+```
+
+Or macroquad ne dessine pas tout de suite : il **empile**. Tout le texte déjà
+empilé dans la frame pointe alors sur une texture détruite — et sort en noir.
+
+Le déclencheur était la fiche : c'est le seul endroit de la vue système à
+demander les tailles de glyphe **10 et 12**. Premier emploi ⇒ l'atlas grandit
+⇒ toute la frame noircit. D'où « ça noircit quand je clique sur une planète ».
+
+#### ⚠️ Ce n'est pas la taille de l'atlas, c'est son **repaquetage**
+
+Première correction insuffisante. Le vrai mécanisme est pire que la simple
+recréation de texture : quand l'atlas déborde, macroquad **vide et repaquette
+tous les glyphes** à de nouvelles positions (`Atlas::cache_sprite`) —
+
+```rust
+let sprites = self.sprites.drain().collect::<Vec<_>>();
+self.image = Image::gen_image_color(new_width, new_height, ...);
+for (key, sprite) in sprites { self.cache_sprite(key, image); }
+```
+
+— si bien que les quads **déjà empilés dans la frame** gardent des coordonnées
+de texture qui ne désignent plus rien. D'où des tuiles noires sur *tout* le
+texte de la frame, et pas seulement sur le caractère fautif.
+
+**Correction définitive** : `precharger()`, appelée juste après le chargement de
+la police et **avant la première frame**. Elle grave tout l'alphabet pour toutes
+les tailles de `TAILLES_PRECHARGEES` (6..=26, le jeu en demande 8 à 22). Tout
+débordement a donc lieu hors frame, là où il ne peut rien casser.
+
+⚠️ **Un défaut de ma première correction** : `graver` insérait la taille dans
+`TAILLES_GRAVEES` **avant** de vérifier que la police était chargée. Police
+absente, la taille était réputée gravée pour toujours et plus rien ne la
+rattrapait — précisément le cas du repli sur la police par défaut de macroquad,
+qui a son propre atlas jamais préparé. Corrigé : on ne marque qu'après avoir
+gravé.
+
+#### La taille qui manquait : 5
+
+`station.rs` bornait la taille de sa liste d'items à **9,0** (`clamp(9.0, 14.0)`).
+Or `preparer` rend `round(9,0 × 0,6) = 5`, et la plage préchargée commençait à
+**6**. La vue des vaisseaux — celle-là même où l'on regarde le Starship —
+gravait donc la taille 5 **en pleine frame**, l'atlas se repaquetait, et tout le
+texte de la frame passait en noir.
+
+Une seule vue, une seule taille, tout le texte.
+
+**Corrigé à la racine** : `police::TAILLE_MIN` / `TAILLE_MAX` sont déclarées
+**dans `police`**, et ce sont les écrans qui s'y bornent — au lieu de trois
+nombres posés à l'œil dans trois fichiers, dont un seul suffisait à rouvrir le
+trou. La plage préchargée (4..=24) les couvre, et le test les vérifie *toutes
+les deux* au lieu des seules tailles littérales.
+
+⚠️ **Le test rougit sur l'ancienne plage `6..=26`** : c'est la garantie qu'il
+attrape le défaut réel, et pas seulement qu'il décrit le correctif.
+
+⚠️ **Fausse piste écartée en chemin** : je soupçonnais le `flush()` de
+`planete::draw` de dessiner le texte en attente avec le matériau de planète.
+`quad_gl.rs` dit le contraire — chaque `DrawCall` **mémorise son propre
+pipeline** au moment de l'empilement (`geometry`, ligne 886) et `draw` le rejoue
+tel quel. Un vidage ne peut pas appliquer le mauvais shader.
+
+⚠️ **Autre piste écartée** : le binaire périmé. L'exe était bien postérieur à la
+correction et contenait les symboles de `precharger` — donc le préchargement
+tournait, et ne suffisait pas.
+
+⚠️ **Piste laissée pour la prochaine fois.** Je n'ai pas pu prouver quel appel
+déclenchait encore le repaquetage : l'analyse statique dit que `graver` couvre
+tout. `graver` **écrit donc maintenant dans la console** quand une taille est
+gravée en pleine frame, avec son numéro. Si les tuiles noires reviennent, cette
+ligne nomme la coupable ; le test `les_tailles_du_jeu_sont_toutes_prechargees`
+tient l'autre bout.
+
+⚠️ Vérifié et **écarté** : le DPI. macroquad calcule `ceil(taille × dpi_scale)`
+avant de mettre en cache (`text.rs`), ce qui aurait décalé toutes mes gravures —
+mais `window_conf` ne demande pas `high_dpi`, donc `window_scale` reste à 1, et
+l'écran est à 96 ppp. Fausse piste, mais elle valait la vérification.
+
+**Première correction (conservée)** : `police::graver`, appelée depuis `texte` **et** `mesure`, à la
+première demande de chaque taille. Elle vide le lot (plus rien n'attend), puis
+grave **tout l'alphabet** d'un coup pour cette taille. L'atlas ne grandit donc
+plus jamais en cours de frame, et une taille inventée par un futur appelant est
+prise en charge d'elle-même.
+
+⚠️ **`assainir` et `graver` forment une paire.** `graver` prépare `ALPHABET` et
+rien d'autre ; `assainir` garantit que rien d'autre n'en sort — tout caractère
+inconnu (€, ✓, un emoji) devient `?`. Si l'une des deux lâche, l'atlas
+regrandit et les carrés noirs reviennent. C'est ce que tient
+`assainir_ne_sort_jamais_de_lalphabet`, red-checké dans les deux sens.
+
+⚠️ **Le défaut n'était pas dans la police mais dans le moment.** Les glyphes
+manquants (section précédente) et les carrés noirs se ressemblent à l'œil et
+n'ont rien à voir : les premiers touchent *certains* caractères, les seconds
+*tous* ceux de la frame. C'est cette différence qui a désigné l'atlas.
+
 ## Paramètres du jeu
 
 Écran **PARAMETRES** depuis l'accueil (`src/ecran/parametres.rs`), modèle dans
@@ -129,17 +359,29 @@ voyait trop. C'était le remède aux **marches de la palette** (basculement de
 bandes entières décrit plus bas) — elles redeviennent donc franches. La
 saturation et l'écrêtage restent.
 
+**La ligne PALETTE se grise à une seule palette installée.** Cycler la
+ramènerait sur elle-même : le libellé ne bougerait pas, ce qui se lit exactement
+comme un bouton cassé. La règle est dans `palette_reglable(rendu, nb_palettes)`,
+à qui le nombre est **donné** — pas lu dans `palette::toutes()`.
+
+⚠️ **C'est le sabotage qui a imposé cette forme.** Écrite d'abord en lisant le
+global, la règle n'était testable que dans le cas installé : « griser toujours »
+passait au **vert**, la branche « on rallume à partir de deux » n'ayant aucune
+garde. En paramétrant, les quatre sabotages (griser toujours, ignorer le nombre,
+ignorer le mode, seuil à 0) rougissent tous.
+
 ### Rendu pixel art (PARAMETRES → RENDU / PALETTE / TRAMAGE)
 
 Trois états de rendu : `NET`, `PIXEL ART` (gros pixels, ce qui existait déjà sous
 la touche **P**), `PIXEL ART + PALETTE` (quantification CIELAB). Trois réglages
-s'ajoutent en mode palette, grisés sinon : **palette**, **tramage** et
+s'ajoutent en mode palette, grisés sinon : **palette**, **gamma** et
 **saturation**. Conception complète, corrections apportées au guide d'origine et
 dettes : [`docs/conception/pixel_art.md`](docs/conception/pixel_art.md).
 
 **Ajouter une palette** : déposer un `.hex` (format Lospec, un hexa par ligne)
 dans [`assets/palettes/`](assets/palettes/) — ramassé au démarrage, aucun code à
-toucher. Trois palettes intégrées : Resurrect 64, Sweetie 16, PICO-8.
+toucher. **Une seule embarquée : Lospec 2000** — les trois premières (Resurrect 64,
+Sweetie 16, PICO-8) ont été retirées le 2026-08-05.
 
 **Rien n'est refusé en silence.** Un `.hex` que le jeu n'a pas pu charger est
 listé **à l'écran**, dans PARAMETRES, en ambre, avec son nom de fichier et la
@@ -158,27 +400,27 @@ une ligne de console. Le coût de rendu monte avec le nombre de couleurs : la
 recherche parcourt toute la palette **par pixel**.
 
 ⚠️ **Une palette d'artiste n'est pas une rampe de dégradé.** Mesuré sur
-Resurrect 64 : un dégradé de gris ne tombe que sur **8 couleurs**, avec une
+Mesuré alors sur Resurrect 64 : un dégradé de gris ne tombait que sur **8 couleurs**, avec une
 marche de L=49 à L=69, et tout ce qui dépasse 89 % s'écrase sur le blanc. Trois
 défauts constatés à l'écran en découlent, chacun avec son remède mesuré :
 
 | Défaut vu | Cause mesurée | Remède |
 |---|---|---|
-| Bandes qui basculent d'un bloc | marche de 0,18 en gris | **tramage de Bayer**, `FORT` = 0,18 |
+| Bandes qui basculent d'un bloc | marche de 0,18 en gris | ~~tramage de Bayer~~ — **retiré** le 2026-08-05 (motif trop visible). Les marches redeviennent franches : dette assumée. |
 | Reflet en aplat blanc | spéculaire additif > 1,0 | **écrêtage** (cœur blanc, halo non) |
 | Couleurs ternes, océans gris-violet | les **neutres** de la palette attirent les couleurs peu saturées | **saturation** ×1,9 à luminance constante (+53 % de chroma) |
 
 Deux fausses pistes écartées par la mesure, à ne pas re-explorer : la recherche
 CIELAB garde déjà 85 % de la chroma (pondérer L n'y change rien), et le tramage
-ne désature pas.
+ne désaturait pas — mesuré du temps où il existait.
 
 ⚠️ L'écrêtage n'agit **que dans la passe pixel art** : le spéculaire de
 `planete.frag.glsl` n'est pas touché, le modifier changerait le rendu `NET` et
 donc la galerie, les presets et les captures de non-régression.
 
 Le mode est **global** (`reglages::etat_rendu`), pas par vue : les touches P et
-le menu pilotent le même état, et P ne change que le mode (ni la palette ni le
-tramage). `ecran/pixel.rs` est devenu la **source unique du blit** — les quatre
+le menu pilotent le même état, et P ne change que le mode (ni la palette, ni le
+gamma, ni la saturation). `ecran/pixel.rs` est devenu la **source unique du blit** — les quatre
 vues y passent, ainsi que le facteur `PIX` et la création de cible qui étaient
 recopiés trois fois.
 
@@ -284,37 +526,86 @@ avant, il exigeait le contexte graphique.
 | 4 | Géantes gazeuses avec `villes = 1` et `relief = 0,35` — inertes (gardées par `type_p`), latentes | ✅ corrigé |
 | 5 | `large_enum_variant` sur `ecran/objet.rs:14` — `Apparence` (376 o) contre 48 o pour la variante étoile : toute copie de `Specimen` traînait les 376 o. Boxée. | ✅ corrigé |
 
-### P1 — le bruit qui cache les vrais défauts
+### P1 — le bruit qui cache les vrais défauts ✅ TERMINÉ
 
-C'est **la leçon de la session** : la palette Lospec était refusée avec une ligne
-de console, invisible au milieu du bruit. Tant que `clippy` sort 117
-avertissements, le 118ᵉ ne se voit pas.
+C'était **la leçon de la session** : la palette Lospec était refusée avec une
+ligne de console, invisible au milieu du bruit. Tant que `clippy` sortait 117
+avertissements, le 118ᵉ ne se voyait pas.
+
+**117 → 0.** `cargo clippy --all-targets` est propre.
 
 | # | Quoi | Volume | État |
 |---|---|---|---|
 | 6 | Imports inutilisés | 9 | ✅ |
-| 7 | Code mort (méthodes, fonctions, constantes jamais utilisées), surtout dans `vaisseau/` | **55** | ⏳ |
-| 8 | `assertions_on_constants` — **légitimes** : elles gardent une constante, l'abaisser fait échouer le test. `#[allow]` commenté sur les 4 modules de test concernés | 7 | ✅ |
-| 9 | `field_reassign_with_default` (tests), `needless_range_loop`, `useless_conversion`, `needless_update` | ~15 | ⏳ |
+| 7 | Code mort | **59** | ✅ trié |
+| 8 | `assertions_on_constants` — légitimes, elles gardent une constante | 12 | ✅ `#[allow]` commenté sur les 6 modules de test |
+| 9 | Style : `field_reassign_with_default`, `needless_range_loop`, `doc_lazy_continuation`, `too_many_arguments`, `type_complexity`, `useless_conversion`, `needless_update`, `clone_on_copy`, `manual_checked_ops`, `single_char_add_str`, `wrong_self_convention`, `unused_*` | ~50 | ✅ |
 
-**Avertissements : 117 → 105.**
+#### ⚠️ La mesure précédente était fausse
 
-⚠️ **Le code mort n'est PAS un artefact de test.** Mesuré : 55 éléments morts
-pour la cible binaire, 57 avec les tests — donc il est bien inutilisé, pas
-seulement « utilisé ailleurs ». Le supprimer demande du **jugement**, pas un
-passage automatique : une partie est de l'API posée d'avance pour l'assembleur
-(Lot 4), et l'effacer coûterait plus cher que le bruit qu'elle fait. À trier
-élément par élément, pas en masse.
+STATE.md disait : « 55 éléments morts pour la cible binaire, 57 avec les tests —
+donc il est bien inutilisé ». **Non.** En comparant vraiment les deux cibles :
 
-⚠️ **Trois réexportations étaient utilisées par les seuls tests** (`mesurer`,
-`silhouette`, `a_des_mailles`, plus `hexagone_ceinture`) : appelées par chemin
-complet depuis `composant/mod.rs`, donc invisibles au binaire. Elles sont
-désormais `#[cfg(test)]` plutôt que supprimées — les retirer cassait la
-compilation des tests.
+```
+morts pour le binaire ................ 90
+morts pour le binaire ET les tests ... 13
+```
+
+**77 des 90 sont exercés par les tests** — ils ne sont pas morts, ils sont
+*écrits avant leur consommateur*. `dead_code` n'a aucune notion de « utilisé par
+les tests » : il compte sur la cible binaire, et tout ce que seuls les tests
+appellent y ressort mort. La conclusion inverse aurait mené à supprimer du code
+testé et qui marche.
+
+#### Ce qui a été fait, par groupe
+
+- **`chantier.rs` et `symetrie.rs`** : `#![allow(dead_code)]` **au module**, avec
+  la raison en tête de fichier (l'écran d'assemblage du Lot 4 est le
+  consommateur). 27 éléments.
+- **Le reste** : `#[allow(dead_code)]` **par élément**, chacun avec sa raison sur
+  la même ligne — catalogue de l'assembleur, économie du chantier (D-INT-2),
+  interaction/désignation, mesures de géométrie tenues par leurs tests.
+- **Supprimé** : `Camera::zoom_max()`, sans aucun appelant, et intestable
+  (`Camera::new` exige un contexte GL). Ajoutée la session d'avant, jamais
+  branchée.
+- **`Palette::depuis_hex`** passée en `#[cfg(test)]` : le jeu lit des fichiers.
+
+L'autorisation est **volontairement locale**. Contrôle rouge : une fonction morte
+neuve ajoutée dans `orbite.rs` sort **un** avertissement, seul et visible. C'est
+tout l'objet de la manœuvre.
+
+#### 🔴 Un vrai défaut trouvé sous le bruit : `MASSES_TERRESTRES`
+
+La table des masses planétaires se documentait comme la **source unique** — et
+**personne ne la lisait**. Les masses étaient écrites à la main à **trois**
+endroits : la table, chaque appel `poser(...)` du preset, et `parent_de` dans les
+tests. C'est exactement le défaut que la table existait pour empêcher, et le test
+de Kepler ne pouvait pas le voir : il vérifiait **sa propre copie**.
+
+Corrigé par `masse_monde(nom)` — le pendant de `rayon_monde` — que le preset et
+les tests appellent tous les deux. Contrôle rouge : mettre Jupiter à 31,78 au
+lieu de 317,8 fait tomber `les_periodes_de_lunes_suivent_kepler` (Lune/Io = 4,91
+au lieu de 15,44). Avant, cette même corruption passait au vert.
+
+C'est la justification de la revue en une ligne : **le défaut était visible
+depuis le début, noyé dans 117 avertissements.**
+
+#### Deux choix assumés
+
+- **`too_many_arguments` (7 sites) : autorisés, pas refactorés.** Ce sont des
+  listes cohérentes — éléments orbitaux, uniforms de shader, dimensions d'une
+  poutre. Un type `ElementsOrbitaux` serait plus propre et touche **tous** les
+  presets : c'est un chantier à part, pas un à-côté de passe de nettoyage.
+- **Ce qui reste candidat à la suppression** (mort dans les deux cibles, gardé
+  faute d'une décision qui n'est pas la mienne) : `police::mesure`,
+  `sprites::presente`, `Systeme::mode`, `Apparence::avec_eyeball` (remplacée par
+  `avec_eyeball_zones`), `Apparence::avec_cryo`, `generateur::preset_isv`
+  (remplacée par `preset_isv_fixe` + `preset_isv_equipage`), `vaisseau::voile` et
+  `Peintre::voile`. Chacune porte sa raison en commentaire.
 
 ### P2 — dettes déjà inscrites
 
-D-PARAM-1 (réglages non sauvegardés), D-PIX-1/3/4/5, `briques.rs`/`vaisseaux.rs`
+~~D-PARAM-1~~ (soldée), D-PIX-1/3/4 (D-PIX-5 sans objet), `briques.rs`/`vaisseaux.rs`
 non déclarés dans `ecran/mod.rs`, hash CPU/GPU dupliqué dans 4 fichiers.
 
 ### Ce que la revue a appris
@@ -412,6 +703,27 @@ pas d'abord, et ×5 a mis **Phobos à l'intérieur de Mars** : il n'orbite qu'à
 aucun réglage. J'avais estimé le plafond à ×25 en regardant la Lune (60 rayons
 terrestres) au lieu de la lune la **plus serrée**. C'est le test qui l'a dit.
 
+### Zoom et plans de coupe
+
+`DIST_MIN` (dans `camera.rs`) est passé de `2.0` à **`0.01`** : le plafond de
+zoom monte de ×640 à **×128 000** pour un cadrage de référence de 1280. À
+`ECHELLE_CORPS = 5`, la Terre mesure 0,010 unité — sans ce plancher, on ne
+pouvait pas l'approcher assez pour qu'elle remplisse l'écran.
+
+⚠️ **Baisser le plancher seul n'aurait rien donné.** La caméra prenait
+`..Default::default()`, donc les valeurs de macroquad : `z_near = 0.01`,
+`z_far = 10000`. Les deux tombaient à côté :
+
+- `z_near` valait **exactement** le nouveau plancher → au zoom maximal la
+  planète se posait sur le plan de coupe et disparaissait ;
+- `z_far` coupait à 10 000 alors que `DIST_MAX` vaut 30 000 et que le nuage de
+  Oort est à 96 000.
+
+Les deux suivent maintenant la distance : `z_near = dist × 0.01`,
+`z_far = dist × 1000`. Le **rapport** near/far reste donc constant — un near
+minuscule avec un far énorme est ce qui fait clignoter les surfaces.
+`les_plans_de_coupe_encadrent_la_cible` tient les deux marges.
+
 ### Palette
 
 **Une seule, Lospec 2000**, embarquée par `include_str!` depuis
@@ -460,7 +772,7 @@ source** (`include_str!`). Inhabituel, mais c'est le seul garde possible ici.
 | Chantier | Où on en est | Reprendre par |
 |---|---|---|
 | **Assembleur** (Lot 4) | Lots 1–3 clos, Lot 4 conçu, pas commencé | `conception/assembleur.md` §10, puis L4.1 |
-| **Starship** (2/5) | Coque et Raptor faits et validés | Poser les 6 moteurs (3 RSL sur 0,489 U, 3 RVac sur 1,378 U), puis volets, bouclier, hublot |
+| **Starship** ✅ **5/5** | Coque, 6 Raptor, jupe, 4 volets droits, bardage de tuiles (fût **et** ogive) et 2 hublots. Exposé **debout**, moteurs en bas. | Vaisseau **mobile** (transferts entre astres) |
 | **Endurance** | Rien | `conception/stations.md` Partie D bis |
 
 ## L'assembleur, en résumé
@@ -534,6 +846,20 @@ Régénérer le catalogue de fils : `FILS=1 cargo test --release le_catalogue_de
   vu quatre fois. Réponse : mise à l'échelle **géométrique**, ou rester sur la
   grille et s'arrêter au cran qui tient (§F.4).
 - **Brique d'abord, assemblage ensuite.** Jugée seule avant d'être posée.
+- ⚠️ **La tolérance d'un test doit être plus petite que l'erreur qu'il cherche.**
+  Vu le 2026-08-06 : le placement d'un hublot était borné par l'écart tangentiel
+  de la paire (0,62) alors que l'erreur à détecter valait 0,14 — poser le vitrage
+  au mauvais rayon passait au vert. La parade : mesurer sur un axe où le bruit
+  n'existe pas (ici, la projection sur l'azimut), pas élargir la borne.
+- ⚠️ **Comparer une copie à une copie ne prouve rien.** Quatre fois dans la même
+  session : masses recopiées dans le test, corde *supposée* axiale au lieu d'être
+  lue, ventre auto-référent (bardage comparé aux volets, jamais à une référence),
+  commentaire de `braquage` que rien ne vérifiait. Toujours comparer à **la
+  source**.
+- ⚠️ **`dead_code` ne sait pas ce qu'est un test.** Il compte sur la cible
+  binaire : tout ce que seuls les tests appellent y ressort mort. Mesuré le
+  2026-08-05 — 90 morts pour le binaire, **13** pour les deux cibles. Conclure
+  sans faire la différence mène à supprimer du code testé et qui marche.
 - **Mesurer avant d'affirmer.**
 - **Mettre à jour les `.md`** à chaque étape — consigne debout de l'utilisateur.
 
@@ -564,10 +890,13 @@ chantier de conception à part entière.
   sans aucun signal. Constante nommée + `allow` avec l'explication.
   **Dette restante** : la même valeur vit dans 4 fichiers (1 Rust + 3 GLSL) et
   rien ne les tient d'accord → `docs/suivi/planetes.md` §7.
-- Les 86 avertissements clippy ne contiennent **aucun défaut réel** : l'essentiel
-  est du `dead_code` en attente d'un consommateur (l'API de `Chantier`,
-  `ecran::designation`, les `nom()` de variantes utilisés en test seulement), le
-  reste est du style.
+- ⚠️ **Cette entrée disait « les 86 avertissements clippy ne contiennent aucun
+  défaut réel ». C'était faux**, et la revue P1 (2026-08-05) l'a montré :
+  `MASSES_TERRESTRES` se documentait comme la source unique des masses
+  planétaires et **personne ne la lisait** — les masses étaient recopiées à trois
+  endroits, et le test de Kepler vérifiait *sa propre copie*. Le défaut était
+  visible depuis le début, noyé dans le bruit. **`clippy` est à 0 aujourd'hui**,
+  et c'est ce qui rend le prochain visible.
 - **`src/ecran/briques.rs` et `src/ecran/vaisseaux.rs` sont commités mais pas
   déclarés** dans `ecran/mod.rs` : ils ne compilent pas. À supprimer ou à
   rebrancher.

@@ -101,3 +101,34 @@ Sources :
 5. [ ] **Pulsation** (céphéides/Mira) + **granulation paramétrée** + **taux d'activité** par type.
 6. [ ] Intégrer ces types au tirage `ProfilEtoile::aleatoire` (skymap) + axe de rotation 3D des jets.
 7. [ ] Gros morceaux à part : **trou noir** (disque + lentille), **naine blanche pulsante**.
+
+## ⚠️ Éjections et motifs de surface : ils existent déjà (2026-08-06)
+
+Relevé **avant** d'ouvrir le chantier, parce que la demande était « les étoiles
+manquent d'éjections coronales et de motifs de surface » :
+
+| Supposé manquant | Ce que le code contient |
+|---|---|
+| Éjections coronales | `soleil/eruptions.rs` — `Boucle` ancrée par deux pieds, cycle **Montée → Tenue → Rupture → Retombée**, corde de flux (`apex_vel`), rendue en billboards additifs par `soleil/rendu.rs` |
+| Taches | `Tache` avec durée de vie et intensité, poussées dans `spots[8]` |
+| Motif de surface | granulation `fbm` (`soleil.frag.glsl` l. 87) + champ magnétique (l. 97) |
+| Couronne | trois types : halo, jets bipolaires (pulsar), vent stellaire (WR) |
+
+Et `Astre::update` est bien appelé en vue système (`systeme/mod.rs:393`) : la
+simulation tourne.
+
+**Le défaut n'est donc pas l'absence, mais le fait que ça n'atteint pas l'œil.**
+Hypothèse la plus probable : l'**échelle**. À distances réelles, le Soleil fait
+1,1 U de rayon quand Neptune orbite à 1 440 U — boucles et granulation tombent
+sous le pixel dans la vue système.
+
+C'est le **cinquième** défaut de cette forme dans le projet (calotte, villes,
+atmo de Titan, texture zonale, ventre du Starship) : *la donnée est juste, c'est
+la plomberie ou l'échelle qui ne suit pas.*
+
+**Ordre de travail** : constater d'abord (galerie d'étoiles **contre** vue
+système), puis décider — LOD sur `px_rayon` comme les géantes gazeuses, ou
+exagération d'échelle assumée. **Ne pas réécrire ce qui existe.**
+
+Reste un manque possible et non vérifié : la **variété d'une étoile à l'autre**
+— toutes partagent-elles la même graine de granulation ? À regarder en galerie.

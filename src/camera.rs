@@ -65,6 +65,7 @@ pub fn rayon_ecran(souris: Vec2, ecran: Vec2, cam: &CameraInfo, aspect: f32) -> 
 /// fantôme désignerait un port dans le dos de l'observateur. C'est le piège
 /// classique de la projection, et il ne se voit pas à l'œil : le port fautif
 /// est simplement celui qu'on n'a pas visé.
+#[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
 pub fn projeter_ecran(p: Vec3, ecran: Vec2, cam: &CameraInfo, aspect: f32) -> Option<Vec2> {
     let rel = p - cam.pos;
     let profondeur = rel.dot(cam.forward);
@@ -124,10 +125,9 @@ impl Camera {
         self.dist_ref / self.dist
     }
 
-    /// Zoom maximal atteignable depuis le cadrage de reference courant.
-    pub fn zoom_max(&self) -> f32 {
-        self.dist_ref / DIST_MIN
-    }
+    // `zoom_max()` a ete supprimee : elle n'avait aucun appelant, et son test ne
+    // pouvait pas passer par elle (`Camera::new` exige un contexte GL). Le
+    // plafond se lit `dist_ref / DIST_MIN`, comme le fait `le_zoom_monte_...`.
 
     /// Rotation (glisser) + zoom (molette), sauf si la souris est sur l'UI.
     pub fn input_orbite(&mut self, sur_ui: bool) {
@@ -212,6 +212,11 @@ impl Camera {
 }
 
 #[cfg(test)]
+// Ces tests affirment des choses sur des CONSTANTES, et clippy y voit une
+// condition toujours vraie. Elle l'est -- aujourd'hui. Le jour ou quelqu'un
+// abaisse la constante, l'assertion devient fausse et le test tombe : c'est
+// precisement son role, garder la valeur ET dire pourquoi elle compte.
+#[allow(clippy::assertions_on_constants)]
 mod tests {
     use super::*;
 

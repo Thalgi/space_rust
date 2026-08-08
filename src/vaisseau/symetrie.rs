@@ -7,6 +7,18 @@
 //! du parent) à appliquer à l'enfant de base pour obtenir toutes ses copies. La
 //! première transformation est toujours l'identité : l'enfant d'origine fait
 //! partie du groupe symétrique.
+//!
+//! ## Ce qui sert deja, et ce qui attend
+//!
+//! `Radiale` est **en service** : les deux couronnes de trois Raptor du Starship
+//! en sortent (`generateur::starship_moteurs`). Poser un moteur et laisser la
+//! symetrie faire les deux autres vaut mieux que recopier trois angles -- une
+//! couronne ne peut pas devenir irreguliere sans qu'on l'ait voulu.
+//!
+//! `Miroir` attend encore son consommateur (l'ecran d'assemblage, Lot 4) : seuls
+//! ses tests l'exercent. L'autorisation `dead_code` est donc posee **sur les
+//! deux elements concernes**, et non plus sur tout le module -- sans quoi un
+//! futur element mort s'y cacherait sans un mot.
 
 use macroquad::prelude::*;
 use std::f32::consts::TAU;
@@ -16,6 +28,7 @@ const EPS: f32 = 1e-6;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Symetrie {
     /// Original + sa réflexion à travers le plan de symétrie du parent.
+    #[allow(dead_code)] // Attend l'ecran d'assemblage (Lot 4) ; teste en attendant.
     Miroir,
     /// `n` copies réparties tous les 360°/n autour de l'axe du parent.
     Radiale(u8),
@@ -24,6 +37,7 @@ pub enum Symetrie {
 impl Symetrie {
     /// Nombre **nominal** de copies. (Sur entrée dégénérée — axe ou normale nuls
     /// — [`transformations`](Self::transformations) peut en renvoyer moins.)
+    #[allow(dead_code)] // Idem : l'ecran d'assemblage annoncera le nombre de copies.
     pub fn nb_copies(self) -> usize {
         match self {
             Symetrie::Miroir => 2,

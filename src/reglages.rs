@@ -486,12 +486,17 @@ mod tests {
     // remarque qu'un reglage ne tient pas.
     #[test]
     fn les_reglages_survivent_a_un_aller_retour_json() {
-        let mut r = Reglages::default();
-        r.mode = ModeAffichage::SansBordure;
-        r.resolution = Resolution::TOUTES[3];
-        r.rendu = ModeRendu::Palette;
-        r.saturation = Saturation::Moyen;
-        r.gamma = 1.73;
+        let r = Reglages {
+            mode: ModeAffichage::SansBordure,
+            resolution: Resolution::TOUTES[3],
+            rendu: ModeRendu::Palette,
+            saturation: Saturation::Moyen,
+            gamma: 1.73,
+            // Litteral **exhaustif**, sans `..Default::default()` : ajouter un
+            // champ casse la compilation ICI, ce qui force a se demander s'il
+            // doit etre serialise. C'est tout l'objet du test.
+            palette: 0,
+        };
         let txt = serde_json::to_string(&r).expect("serialisation");
         let relu: Reglages = serde_json::from_str(&txt).expect("deserialisation");
         assert_eq!(relu, r, "un reglage s'est perdu dans le JSON");
@@ -512,8 +517,7 @@ mod tests {
     // indice de palette hors liste sortiraient un ecran noir sans rien dire.
     #[test]
     fn assainir_ramene_les_valeurs_dans_leurs_bornes() {
-        let mut r = Reglages::default();
-        r.gamma = 0.0;
+        let mut r = Reglages { gamma: 0.0, ..Default::default() };
         r.assainir();
         assert!(r.gamma >= GAMMA_MIN, "gamma {} sous la borne", r.gamma);
         r.gamma = f32::NAN;

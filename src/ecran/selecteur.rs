@@ -47,6 +47,7 @@ pub struct Entree {
 
 impl Entree {
     /// Une entrée sélectionnable pointe un astre ; le barycentre, non.
+    #[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
     pub fn selectionnable(&self) -> bool {
         self.idx.is_some()
     }
@@ -102,7 +103,7 @@ pub fn entrees(sys: &Systeme) -> Vec<Entree> {
         v
     };
 
-    let mut pousser = |v: &mut Vec<Entree>, idx: Option<usize>, libelle: String,
+    let pousser = |v: &mut Vec<Entree>, idx: Option<usize>, libelle: String,
                        profondeur: usize, branche: Branche, cat: Categorie| {
         v.push(Entree { idx, libelle, profondeur, branche, categorie: cat });
     };

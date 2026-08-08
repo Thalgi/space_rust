@@ -71,7 +71,7 @@ fn batir(spec: &Specimen) -> Systeme {
             sys.ajouter(Box::new(s));
         }
         Specimen::Planete { rayon, app } => {
-            sys.ajouter(Box::new(Planete::new(Vec3::ZERO, Vec3::ZERO, *rayon, 1.0, (**app).clone(), Vec::new())));
+            sys.ajouter(Box::new(Planete::new(Vec3::ZERO, Vec3::ZERO, *rayon, 1.0, **app, Vec::new())));
             // Pas d'étoile : lumière latérale de secours pour modeler le relief.
             sys.set_lumiere(vec3(6.0, 3.0, 6.0), Vec3::ONE);
         }

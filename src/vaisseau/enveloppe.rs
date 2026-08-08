@@ -164,6 +164,7 @@ impl Enveloppe {
     }
 
     /// Écart entre les deux **surfaces** : négatif si elles s'interpénètrent.
+    #[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
     pub fn ecart(&self, autre: &Enveloppe) -> f32 {
         self.distance_axes(autre) - (self.rayon + autre.rayon)
     }
@@ -179,6 +180,7 @@ impl Enveloppe {
         d - self.rayon
     }
 
+    #[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
     pub fn contient(&self, p: Vec3) -> bool {
         self.profondeur(p) <= 0.0
     }
@@ -407,9 +409,9 @@ fn bords(centre: Vec3, eu: Vec3, ev: Vec3, hu: f32, hv: f32) -> [(Vec3, Vec3); 4
 /// que si les deux plans sont parallèles). Donc balayer les quatre bords de
 /// chaque rectangle contre la face **entière** de l'autre — via
 /// [`distance_segment_rectangle`], qui résout déjà exactement « point de ce
-/// segment contre tout le rectangle » — couvre tous les cas : les huit bords (4
-/// + 4) contiennent forcément celui qui porte le point le plus proche, quel que
-/// soit celui des deux rectangles auquel il appartient. Aucun besoin d'un test
+/// segment contre tout le rectangle » — couvre tous les cas : les huit bords
+/// (4 + 4) contiennent forcément celui qui porte le point le plus proche, quel
+/// que soit celui des deux rectangles auquel il appartient. Aucun besoin d'un test
 /// d'intersection séparé : si les rectangles se transpercent, le bord qui
 /// traverse le plan de l'autre passe par le point de contact et y rend une
 /// distance nulle.
@@ -707,7 +709,11 @@ mod tests {
     // minimum échantillonné sur une grille de chacun, et proche de lui.
     #[test]
     fn distance_rectangles_vaut_le_minimum_echantillonne() {
-        let cas: Vec<(Vec3, Vec3, Vec3, f32, f32, Vec3, Vec3, Vec3, f32, f32)> = vec![
+        // Un cas = deux rectangles a la suite, chacun decrit par
+        // (centre, eu, ev, demi-u, demi-v). Le tuple reste **plat** : c'est ce
+        // que `distance_rectangles` prend en arguments, dans cet ordre.
+        type DeuxRects = (Vec3, Vec3, Vec3, f32, f32, Vec3, Vec3, Vec3, f32, f32);
+        let cas: Vec<DeuxRects> = vec![
             // Parallèles, décalées et translatées dans le plan.
             (
                 Vec3::ZERO, Vec3::X, Vec3::Y, 5.0, 3.0,

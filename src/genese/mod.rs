@@ -382,6 +382,10 @@ fn placer_planetes(sys: &mut Systeme, plan: &Plan) {
 ///
 /// `None` est le cas de la **generation procedurale** : ses systemes retombent
 /// sur la numerotation orbitale, par decision de conception (2.2a).
+// Elements orbitaux + apparence : une liste coherente, pas un fourre-tout. Un
+// type `ElementsOrbitaux` serait plus propre et touche TOUS les presets ; note
+// en dette plutot que fait a la va-vite au milieu d'une passe de nettoyage.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn ajouter_planete_autour(
     sys: &mut Systeme,
     foyer: Foyer,
@@ -417,6 +421,8 @@ pub(crate) fn ajouter_planete_autour(
 }
 
 /// Planète autour de l'étoile unique à l'origine (cas mono-étoile).
+// Meme liste que `ajouter_planete_autour`, foyer en moins.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn ajouter_planete(
     sys: &mut Systeme,
     a_au: f32,

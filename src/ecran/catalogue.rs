@@ -180,6 +180,7 @@ impl Item {
     /// d'équipage de l'ISV), et les deux capacités étaient confondues par
     /// coïncidence. Un anneau tourne **sans rien replier** — sa rotation est une
     /// matrice de vue, elle ne recuit aucune géométrie.
+    #[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
     pub fn repli(&self) -> bool {
         matches!(self.fabrique, Fabrique::Repli(_) | Fabrique::Isv(_))
     }

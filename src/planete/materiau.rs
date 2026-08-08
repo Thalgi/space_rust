@@ -13,10 +13,13 @@ enum Val {
     F3(Vec3),
 }
 
+/// Une entrée de [`TABLE`] : nom GLSL, type, et comment la lire dans l'apparence.
+type Entree = (&'static str, UniformType, fn(&Apparence) -> Val);
+
 /// Table déclarative des uniforms pilotés par l'`Apparence`. Source unique : sert
 /// à la fois à déclarer les uniforms (descripteurs) et à les pousser chaque frame.
 /// Ajouter un paramètre visuel = une seule ligne ici (puis l'utiliser dans le .glsl).
-const TABLE: &[(&str, UniformType, fn(&Apparence) -> Val)] = &[
+const TABLE: &[Entree] = &[
     ("couleur", UniformType::Float3, |a| Val::F3(a.couleur)),
     ("couleur2", UniformType::Float3, |a| Val::F3(a.couleur2)),
     ("couleur3", UniformType::Float3, |a| Val::F3(a.couleur3)),
@@ -121,6 +124,11 @@ fn tex_vide() -> Texture2D {
 
 /// Pousse tous les uniforms : communs (socle) + dynamiques (caméra/corps) + table.
 /// `terrain` : atlas cube-sphere précalculé + niveau de mer (telluriques).
+///
+/// Huit arguments — matériau, apparence, caméra, pose, et les trois textures
+/// optionnelles : la liste est **imposée par le shader**, la regrouper ne ferait
+/// que la déplacer d'un cran.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn appliquer_uniforms(
     mat: &Material,
     a: &Apparence,
@@ -230,7 +238,6 @@ fn charger_corps() -> Material {
                 depth_write: true,
                 ..Default::default()
             },
-            ..Default::default()
         },
     )
     .unwrap()

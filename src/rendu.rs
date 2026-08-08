@@ -7,6 +7,10 @@ use macroquad::prelude::*;
 /// Contrôleur de rendu : sépare la stratégie d'affichage du reste du jeu.
 /// On peut fournir une autre implémentation pour changer de pipeline.
 pub trait Rendu {
+    /// Huit arguments : caméra 3D, caméra logique, fond, système, et les trois
+    /// interrupteurs de calques. C'est **l'interface** du pipeline ; y glisser
+    /// une structure figerait ce que chaque implémentation a le droit de lire.
+    #[allow(clippy::too_many_arguments)]
     fn rendre(
         &mut self,
         cam3d: Camera3D,

@@ -629,12 +629,8 @@ pub fn hydrologie(t: &mut Terrain, eau: f32, sources: &[usize], debit: f32, font
     // 5) Encodage log du flux (§ 10.1) : cours d'eau dans [0, 0.9], lacs = 1.
     let fmax = t.flux.iter().cloned().fold(1.0f32, f32::max);
     let ln_max = (1.0 + fmax).ln();
-    for i in 0..total {
-        t.flux[i] = if lac[i] {
-            1.0
-        } else {
-            ((1.0 + t.flux[i]).ln() / ln_max * 0.9).min(0.9)
-        };
+    for (f, &est_lac) in t.flux.iter_mut().zip(lac.iter()) {
+        *f = if est_lac { 1.0 } else { ((1.0 + *f).ln() / ln_max * 0.9).min(0.9) };
     }
 
     // 6) HUMIDITÉ finale : proximité de l'eau (mer/lac/rivière) mêlée au bruit
@@ -679,9 +675,9 @@ fn humidite_finale(t: &mut Terrain, sea: f32, lac: &[bool]) {
         }
         // Décroissance ~40 texels : l'intérieur des grands continents est sec
         // (déserts continentaux émergents, conception § 12).
-        for i in 0..total {
-            let prox = (-dist[i] / 40.0).exp();
-            t.hum[i] = 0.55 * prox + 0.45 * t.hum[i];
+        for (h, &d) in t.hum.iter_mut().zip(dist.iter()) {
+            let prox = (-d / 40.0).exp();
+            *h = 0.55 * prox + 0.45 * *h;
         }
     }
     // Rang 0..1 : hum = « plus humide que X % de la planète ».

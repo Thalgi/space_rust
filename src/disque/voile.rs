@@ -68,6 +68,9 @@ pub(super) fn construire_annulus(c: &DisqueConfig) -> Vec<Mesh> {
 
 /// Pousse tous les uniforms du voile. `moitie` : -1 arrière / +1 avant / 0 tout
 /// (le fragment shader discard l'autre moitié via dot(pos, tocam)).
+// Douze arguments, mais ce sont les UNIFORMS du shader : les grouper dans une
+// structure ne ferait que deplacer la liste d'un cran, sans rien simplifier.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn uniforms_voile(
     mat: &Material,
     c: &DisqueConfig,

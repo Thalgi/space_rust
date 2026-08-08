@@ -370,6 +370,7 @@ pub(super) fn charpente_hexa_pied(grand: Profil, pied: PiedHexa) -> f32 {
 
 /// Hauteur de la seule **corolle**, sans la tour : c'est là que se trouve le plan
 /// de l'embouchure, donc le repère de tout ce qui s'y raccorde.
+#[allow(dead_code)] // Mesure de geometrie tenue par ses tests ; aucun dessin ne l'appelle aujourd'hui.
 pub(super) fn charpente_hexa_embouchure(grand: Profil) -> f32 {
     hexa_rayons(grand, grand).0 * PAVILLON_HAUTEUR
 }
@@ -413,6 +414,11 @@ pub(super) fn hexagone_rayon(profil: Profil) -> f32 {
 /// À ne pas confondre avec [`hexagone_rayon`], qui mesure jusqu'aux **sommets**
 /// et vaut 15 % de plus : comparer une pièce à celui-là la déclarerait contenue
 /// alors qu'elle ressort déjà au milieu de chaque face.
+///
+/// **Test seulement** : aucun dessin n'en a besoin, seuls les tests d'enveloppe
+/// s'en servent pour vérifier qu'une pièce reste ceinturée. Sans le `cfg`, le
+/// binaire la compte morte tout au long de la chaîne de réexport.
+#[cfg(test)]
 pub fn hexagone_ceinture(profil: Profil) -> f32 {
     let (cote, sec, _) = hexagone_cotes(profil);
     cote * 3.0_f32.sqrt() * 0.5 + sec

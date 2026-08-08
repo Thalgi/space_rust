@@ -1295,14 +1295,22 @@ interne) n'est pas visible et n'a pas à être modelé.
 
 Comme pour l'ISV : **brique d'abord, assemblage ensuite** (§C.29, leçon 1).
 
-1. **Starship en premier**, parce qu'il est petit, qu'il tombe sur la grille, et
+1. ✅ **Starship en premier**, parce qu'il est petit, qu'il tombe sur la grille, et
    qu'il n'a qu'une brique vraiment neuve (la coque à ogive). C'est le meilleur
    rapport apprentissage/risque pour ouvrir la vitrine.
-2. Volets articulés — la brique qui **bouge**, à traiter seule.
-3. Grappe de Raptors (deux diamètres de tuyère).
-4. Module en coin d'arc de l'Endurance, jugé seul.
-5. Assemblage de l'anneau à douze, avec l'alternance des familles.
-6. Propulsion et réservoirs arrière de l'Endurance.
+2. ✅ Grappe de Raptors (deux diamètres de tuyère) — **traitée avant** les volets,
+   contrairement au plan : c'est elle qui a révélé que le vaisseau mesurait 54 m
+   au lieu de 50, et cette cote conditionnait tout le reste.
+3. ✅ Volets articulés — la brique qui **bouge**, à traiter seule.
+4. ⏳ Module en coin d'arc de l'Endurance, jugé seul.
+5. ⏳ Assemblage de l'anneau à douze, avec l'alternance des familles.
+6. ⏳ Propulsion et réservoirs arrière de l'Endurance.
+
+**Le Starship est terminé** (2026-08-06). Deux briques se sont ajoutées au plan,
+parce que l'engin ne se lisait pas sans elles : la **jupe moteur** (sans quoi les
+six Raptor pendent à nu) et le **bardage de tuiles** (sans quoi il n'y a pas de
+ventre, donc rien pour orienter les volets). Journal en `suivi/stations.md` F.7
+à F.10.
 
 ### Sources
 - [Starship — SpaceX](https://www.spacex.com/vehicles/starship/)

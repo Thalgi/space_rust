@@ -8,7 +8,7 @@
 //! Le modèle vit dans [`crate::reglages`] et se teste ; ici il n'y a que « où
 //! le rectangle se pose ».
 
-use crate::reglages::Reglages;
+use crate::reglages::{ModeRendu, Reglages};
 use crate::ui::minitel_ligne;
 use macroquad::prelude::*;
 
@@ -45,6 +45,23 @@ const LARGEUR: f32 = 520.0;
 const HAUTEUR: f32 = 42.0;
 const ECART: f32 = 14.0;
 
+/// La ligne PALETTE est-elle réglable ?
+///
+/// Deux conditions, pour la même raison : ne pas offrir un clic sans effet.
+/// Hors du mode palette elle ne change rien à l'écran ; et avec **une seule
+/// palette installée**, cycler revient sur la même — le libellé ne bougerait
+/// pas, ce qui se lit exactement comme un bouton cassé.
+///
+/// `nb_palettes` est un **paramètre**, pas une lecture de
+/// [`crate::palette::toutes`], et c'est délibéré : le nombre de palettes dépend
+/// de ce qui traîne dans `assets/palettes` au démarrage. Un test qui lirait le
+/// global ne pourrait jamais exercer que le cas installé, et la branche « on
+/// rallume à partir de deux » resterait sans garde — ce qui est arrivé, et se
+/// voyait au sabotage : griser inconditionnellement passait au vert.
+pub fn palette_reglable(rendu: ModeRendu, nb_palettes: usize) -> bool {
+    rendu.quantifie() && nb_palettes > 1
+}
+
 /// Les lignes à afficher, dans l'ordre.
 ///
 /// **Déduites de l'état**, jamais recopiées : le libellé du mode vient de
@@ -72,9 +89,7 @@ pub fn lignes(r: &Reglages) -> Vec<Ligne> {
         Ligne {
             libelle: format!("PALETTE : {}", crate::palette::palette(r.palette).nom),
             action: Action::CyclerPalette,
-            // Hors du mode palette, elle ne sert à rien : grisée plutôt
-            // qu'absente, pour ne pas faire sauter les lignes du dessous.
-            active: r.rendu.quantifie(),
+            active: palette_reglable(r.rendu, crate::palette::toutes().len()),
         },
         Ligne {
             libelle: format!("GAMMA : {:.2}", r.gamma),
@@ -179,12 +194,12 @@ impl Parametres {
 
         let l = lignes(reglages);
         let titre = "* PARAMETRES *";
-        let tw = crate::police::mesure(titre, 36);
+        let tw = crate::police::mesure(titre, crate::police::TAILLE_MAX as u16);
         crate::police::texte(
             titre,
             ecran.x * 0.5 - tw * 0.5,
             ecran.y * 0.16,
-            36.0,
+            crate::police::TAILLE_MAX,
             Color::new(0.0, 0.9, 0.9, 1.0),
         );
 
@@ -324,8 +339,7 @@ mod tests {
     // disparaître ferait sauter les lignes du dessous — mais il ne fait rien.
     #[test]
     fn la_ligne_de_taille_se_grise_en_plein_ecran() {
-        let mut r = Reglages::default();
-        r.mode = ModeAffichage::Fenetre;
+        let mut r = Reglages { mode: ModeAffichage::Fenetre, ..Default::default() };
         assert!(lignes(&r)[1].active, "en fenêtré, la taille doit être réglable");
         r.mode = ModeAffichage::SansBordure;
         let l = lignes(&r);
@@ -339,25 +353,26 @@ mod tests {
     #[test]
     fn le_rendu_est_reglable_dans_tous_les_modes_daffichage() {
         for mode in crate::reglages::ModeAffichage::TOUS {
-            let mut r = Reglages::default();
-            r.mode = mode;
+            let r = Reglages { mode, ..Default::default() };
             let l = lignes(&r);
             let i = l.iter().position(|l| l.action == Action::CyclerRendu).expect("pas de ligne rendu");
             assert!(l[i].active, "{mode:?} : la ligne de rendu est grisée");
         }
     }
 
-    // **Palette et tramage ne se règlent que quand ils servent.** Hors du mode
-    // palette, ils ne changent rien à l'écran : les laisser actifs ferait croire
-    // à un réglage sans effet. Grisés, pas retirés — une ligne qui disparaît
-    // fait sauter celles du dessous.
+    // **Les réglages de palette ne se règlent que quand ils servent.** Hors du
+    // mode palette, ils ne changent rien à l'écran : les laisser actifs ferait
+    // croire à un réglage sans effet. Grisés, pas retirés — une ligne qui
+    // disparaît fait sauter celles du dessous.
+    //
+    // `CyclerPalette` n'est **pas** dans la liste : elle porte une condition de
+    // plus (le nombre de palettes installées), et son propre test juste en
+    // dessous. L'y remettre reviendrait à tester deux règles à la fois.
     #[test]
     fn les_reglages_de_palette_se_grisent_hors_du_mode_palette() {
-        let concernees =
-            [Action::CyclerPalette, Action::GlisserGamma, Action::CyclerSaturation];
+        let concernees = [Action::GlisserGamma, Action::CyclerSaturation];
         for rendu in ModeRendu::TOUS {
-            let mut r = Reglages::default();
-            r.rendu = rendu;
+            let r = Reglages { rendu, ..Default::default() };
             let l = lignes(&r);
             assert_eq!(l.len(), lignes(&Reglages::default()).len(), "{rendu:?} : ligne disparue");
             for a in concernees {
@@ -379,6 +394,67 @@ mod tests {
         }
     }
 
+    // **Une seule palette installée ⇒ la ligne PALETTE est grisée.**
+    //
+    // Le cycle la ramènerait sur elle-même : le libellé ne bougerait pas, ce qui
+    // se lit exactement comme un bouton cassé. C'est le cas courant depuis qu'il
+    // ne reste que Lospec 2000 dans `assets/palettes`.
+    //
+    // La règle se teste sur `palette_reglable`, à qui le nombre de palettes est
+    // **donné** : les deux branches sont donc exercées pour de bon. Passer par
+    // `lignes` ne pourrait montrer que le cas installé, et « griser toujours »
+    // resterait vert.
+    #[test]
+    fn la_ligne_de_palette_se_grise_quand_il_ny_a_quune_palette() {
+        assert!(
+            !palette_reglable(ModeRendu::Palette, 1),
+            "une seule palette : cycler ne changerait rien, il faut griser"
+        );
+        assert!(
+            palette_reglable(ModeRendu::Palette, 2),
+            "deux palettes : la ligne doit se rallumer"
+        );
+        assert!(
+            !palette_reglable(ModeRendu::Palette, 0),
+            "aucune palette : rien à cycler non plus"
+        );
+        // La condition de mode tient toujours, quel que soit le nombre.
+        for rendu in ModeRendu::TOUS {
+            assert_eq!(
+                palette_reglable(rendu, 8),
+                rendu.quantifie(),
+                "{rendu:?} : le mode décide encore, même avec 8 palettes"
+            );
+        }
+    }
+
+    // Et l'écran **applique** vraiment la règle, avec les palettes réellement
+    // installées : sans ce second test, `palette_reglable` pourrait être juste
+    // et n'être branchée nulle part.
+    #[test]
+    fn lecran_applique_la_regle_de_grisage_de_la_palette() {
+        let installees = crate::palette::toutes().len();
+        let r = Reglages { rendu: ModeRendu::Palette, ..Default::default() };
+        let l = lignes(&r);
+        let i = l.iter().position(|l| l.action == Action::CyclerPalette).expect("ligne absente");
+        assert_eq!(
+            l[i].active,
+            palette_reglable(ModeRendu::Palette, installees),
+            "{installees} palette(s) : la ligne ne suit pas la règle"
+        );
+        if !l[i].active {
+            // Grisée, elle ne répond pas au clic.
+            assert_eq!(
+                action_sous_curseur(ECRAN, &l, rectangle(ECRAN, i).center()),
+                None,
+                "PALETTE grisée mais cliquable"
+            );
+        }
+        // La ligne reste là : la griser ne doit pas faire remonter GAMMA et
+        // SATURATION d'un cran.
+        assert_eq!(l.len(), lignes(&Reglages::default()).len(), "une ligne a disparu");
+    }
+
     // Le libellé de la palette **suit le réglage** et nomme la palette courante :
     // sinon rien ne dirait laquelle est active.
     #[test]
@@ -386,9 +462,7 @@ mod tests {
         let n = crate::palette::toutes().len();
         let mut vus = std::collections::HashSet::new();
         for i in 0..n {
-            let mut r = Reglages::default();
-            r.rendu = ModeRendu::Palette;
-            r.palette = i;
+            let r = Reglages { rendu: ModeRendu::Palette, palette: i, ..Default::default() };
             let l = lignes(&r);
             let j = l.iter().position(|l| l.action == Action::CyclerPalette).unwrap();
             let nom = &crate::palette::palette(i).nom;
@@ -404,8 +478,7 @@ mod tests {
     fn le_libelle_du_rendu_distingue_les_trois_modes() {
         let mut vus = std::collections::HashSet::new();
         for rendu in ModeRendu::TOUS {
-            let mut r = Reglages::default();
-            r.rendu = rendu;
+            let r = Reglages { rendu, ..Default::default() };
             let l = lignes(&r);
             let i = l.iter().position(|l| l.action == Action::CyclerRendu).unwrap();
             assert!(l[i].libelle.contains(rendu.nom()), "{rendu:?} absent de « {} »", l[i].libelle);
@@ -418,8 +491,7 @@ mod tests {
     // que l'écran présente comme hors service.
     #[test]
     fn une_ligne_grisee_ne_repond_pas_au_clic() {
-        let mut r = Reglages::default();
-        r.mode = ModeAffichage::SansBordure;
+        let r = Reglages { mode: ModeAffichage::SansBordure, ..Default::default() };
         let l = lignes(&r);
         // Les lignes sont retrouvées par leur action, pas par un indice écrit en
         // dur : en insérer une nouvelle ne doit pas casser ce test.
@@ -555,9 +627,11 @@ mod tests {
     // serait du code mort, et l'inverse une ligne sans effet.
     #[test]
     fn chaque_action_est_portee_par_une_ligne() {
-        let mut r = Reglages::default();
-        r.mode = ModeAffichage::Fenetre;
-        r.resolution = Resolution::TOUTES[0];
+        let r = Reglages {
+            mode: ModeAffichage::Fenetre,
+            resolution: Resolution::TOUTES[0],
+            ..Default::default()
+        };
         let portees: Vec<Action> = lignes(&r).iter().map(|l| l.action).collect();
         for a in [
             Action::CyclerMode,

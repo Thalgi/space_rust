@@ -321,7 +321,7 @@ impl Galerie {
         // (masqué pendant une capture : il mordrait sur la dernière rangée)
         if self.capture.is_none() {
             let (nb, dernier, total) = crate::planete::terrain::stats();
-            let moyen = if nb > 0 { total / nb } else { 0 };
+            let moyen = total.checked_div(nb).unwrap_or(0);
             crate::police::texte(
                 &format!(
                     "{} FPS   rendu: {}   terrains: {}   dernier: {} ms   moyen: {} ms   (B -> bench_terrain.txt)",

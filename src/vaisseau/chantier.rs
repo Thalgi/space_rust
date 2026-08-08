@@ -10,6 +10,17 @@
 //!
 //! Les transformées sont cuites en `Mat4` dans les `Piece` (couche cuite), mais
 //! le chaînage garde le repère monde en `Repere` (couche construction).
+//!
+//! ## Pourquoi `dead_code` est autorise ici
+//!
+//! Ce module est **ecrit et teste avant son consommateur** : l'ecran
+//! d'assemblage (Lot 4) est ce qui l'appellera. Il n'est donc pas mort, il est
+//! en attente -- et ses tests le prouvent, ils l'exercent en entier.
+//!
+//! L'autorisation est **volontairement limitee a ce module** : partout ailleurs,
+//! un element mort reste un avertissement visible. C'est tout l'objet de la
+//! revue -- ramener le bruit a zero pour que le prochain vrai defaut se voie.
+#![allow(dead_code)]
 
 use super::{
     accoupler, cuire, Budget, Composant, DonneesSousEnsemble, EtatStation, GenrePort, Piece, Port,
@@ -1068,14 +1079,14 @@ mod tests {
             let n = etapes.len() - 1;
             assert!(n > 0, "graine {graine} : aucune opération n'a réussi, le test ne prouve rien");
 
-            for k in (0..n).rev() {
+            for (k, attendu) in etapes.iter().enumerate().take(n).rev() {
                 assert!(ch.annuler(), "graine {graine} : annulation {k} attendue mais refusée");
-                assert_eq!(empreinte(&ch), etapes[k], "graine {graine} : après annulation, l'état ne correspond pas à celui d'avant l'opération {}", k + 1);
+                assert_eq!(&empreinte(&ch), attendu, "graine {graine} : après annulation, l'état ne correspond pas à celui d'avant l'opération {}", k + 1);
             }
 
-            for k in 1..=n {
+            for (k, attendu) in etapes.iter().enumerate().take(n + 1).skip(1) {
                 assert!(ch.refaire(), "graine {graine} : refait {k} attendu mais refusé");
-                assert_eq!(empreinte(&ch), etapes[k], "graine {graine} : après refait, l'état ne correspond pas à celui d'après l'opération {k}");
+                assert_eq!(&empreinte(&ch), attendu, "graine {graine} : après refait, l'état ne correspond pas à celui d'après l'opération {k}");
             }
         }
     }

@@ -33,11 +33,13 @@ impl Repere {
     pub fn haut(&self) -> Vec3 {
         self.rot * Vec3::Y
     }
+    #[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
     pub fn droite(&self) -> Vec3 {
         self.rot * Vec3::X
     }
 
     /// Transforme un point du repère local vers le repère parent.
+    #[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
     pub fn transforme_point(&self, p: Vec3) -> Vec3 {
         self.rot * p + self.pos
     }
@@ -53,7 +55,7 @@ impl Repere {
     }
 
     /// Matrice modèle pour le rendu (`push_model_matrix`).
-    pub fn to_mat4(&self) -> Mat4 {
+    pub fn to_mat4(self) -> Mat4 {
         Mat4::from_rotation_translation(self.rot, self.pos)
     }
 }
@@ -103,6 +105,7 @@ impl Port {
 
     /// Deux ports s'accouplent si leurs **genres** sont compatibles **et** leurs
     /// **profils** identiques.
+    #[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
     pub fn compatible(&self, autre: &Port) -> bool {
         self.genre.compatible(autre.genre) && self.profil.compatible(autre.profil)
     }

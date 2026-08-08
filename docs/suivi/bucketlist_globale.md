@@ -87,7 +87,13 @@ exactement le même système (reproductible, partageable).
       Champ graine éditable : toujours à faire.
 - [x] Gestion correcte de la **transparence/profondeur** des anneaux (rendu en 2 passes).
 - [x] **Material partagé** (un seul pipeline par type, cloné) -> corrige « Pipelines amount exceeded », gros gain init/mémoire GPU.
-- [ ] **LOD / culling** si la ceinture d'astéroïdes devient lourde.
+- [ ] **LOD / culling des ceintures** — ⏳ **chantier P.2**, décidé le 2026-08-06.
+      Ce qui est déjà bon : buffers **figés**, orbite calculée **dans le vertex shader**
+      (rien ne remonte au CPU par frame). Le gisement est ailleurs : le préset solaire tire
+      **6 400 particules** en 4 ceintures, et le nuage de Oort (2 600 corps, 2 000 → 20 000 UA)
+      est dessiné **même quand la caméra est à 1 UA**, où il fait moins d'un pixel. Aucun test
+      de visibilité dans `disque/mod.rs`.
+      ⚠️ **Mesurer avant** : sans chiffre avant/après, « optimiser » est une opinion.
 
 ## 7. Refacto en cours (objectif : fichiers ≤ ~100 lignes)
 
@@ -110,6 +116,14 @@ exactement le même système (reproductible, partageable).
 
 - [ ] **Telluriques** : vraie carte de relief (height/normal map procédurale) pour ombrer montagnes/cratères.
 - [x] **Mondes de lave** (>600 K) : croûte sombre + fissures incandescentes émissives (brillent de nuit).
+- [ ] **⚠️ ATMOSPHÈRE PLANÉTAIRE** — ⏳ **chantier P.1**, le manque le plus visible.
+      `planete.frag.glsl` l. 863 fait `if (rr > 1.0) discard;` : tout ce qui dépasse la sphère
+      est **jeté**, si bien que les 5 % de marge de l'impostor (`DISC = 1.05`) ne servent à
+      rien. Ce que le shader appelle « halo » n'éclaircit que le **limbe de la surface** —
+      rien ne brille **au-delà de la silhouette**, et c'est précisément ce qui fait lire une
+      atmosphère. Reste à faire : coquille rendue dans la marge, épaisseur optique selon
+      l'angle de vue, croissant au terminateur.
+      ⚠️ Toucher à `DISC` touche au LOD `px_rayon` et au cadrage caméra.
 - [ ] **Couche de nuages** séparée et animée sur les telluriques (et ombre portée au sol).
 - [x] **Côté nuit** : lumières de villes (amas dorés sur les terres, face non éclairée) sur les mondes à océans.
 - [ ] **Côté nuit** : reflet spéculaire de l'océan au terminateur.
@@ -159,6 +173,8 @@ Presets `binaire`, `trinaire`, `quadruple`, plus Alpha Centauri (A+B réels).
       basse » : à l'échelle réelle l'ISS fait 9 × 10⁻⁶ unité de monde. Facteurs nommés
       (`ORBITE_ISS`, `ECHELLE_ISS`).
 - [ ] Vaisseaux **mobiles** (transferts entre astres), et l'ISV / le Starship en orbite.
+      Le Starship est **terminé** depuis le 2026-08-06 : c'est un objet fini qui n'a nulle part
+      où aller.
 
 ## 10 ter. Paramètres du jeu — ✅ premier jet
 
@@ -170,11 +186,14 @@ Presets `binaire`, `trinaire`, `quadruple`, plus Alpha Centauri (A+B réels).
 - [x] **Taille de fenêtre** : 9 entrées en 4:3, 16:10 et 16:9, jusqu'à 1920 × 1200. Pas de 4K.
       Grisée en plein écran, où c'est l'écran qui décide.
 - [x] **Pipeline de rendu** : `NET` / `PIXEL ART` / `PIXEL ART + PALETTE 64` — voir §10 quater.
-      Plus palette, tramage et saturation, grisés hors du mode palette.
+      Plus palette, gamma et saturation, grisés hors du mode palette (le tramage a été retiré).
 - [x] **Bouton QUITTER** sur l'accueil, sous PARAMETRES. Sort de la boucle de jeu, sans
       `process::exit`, pour que miniquad ferme sa fenêtre proprement.
-- [ ] **Sauvegarde des réglages** (dette D-PARAM-1) : ils repartent aux valeurs par défaut
-      à chaque lancement. `genese/persistance.rs` sait déjà écrire du JSON.
+- [x] **Sauvegarde des réglages** (dette D-PARAM-1 — **soldée**) : `reglages.json` à côté du
+      jeu, relu au démarrage, `assainir` bornant ce qui en sort. Tout échec de lecture
+      retombe sur les défauts — un jeu qui refuse de démarrer pour un fichier de confort
+      serait absurde.
+- [x] **GAMMA au curseur** (0,5 → 2,5), appliqué **avant** la quantification.
 - [ ] Autres réglages à venir : volume, langue, taille des pixels (dette D-PIX-4 : `PIX = 2`
       est figé).
 
@@ -186,15 +205,18 @@ Le sous-échantillonnage existait depuis longtemps (touche P) ; ce qui manquait
 était la **quantification vers une palette fixe**, sans quoi l'éclairage 3D
 produit des dégradés continus — de la 3D basse résolution, pas du pixel art.
 
-- [x] **Palettes** (`src/palette.rs`), l'hexadécimal comme source unique. Trois intégrées
-      (Resurrect 64, Sweetie 16, PICO-8) **de longueurs différentes**, plus tout `.hex` déposé
-      dans `assets/palettes/` — format Lospec, ramassé au démarrage, aucun code à toucher.
+- [x] **Palettes** (`src/palette.rs`), l'hexadécimal comme source unique. **Une seule
+      embarquée aujourd'hui — Lospec 2000** (les trois premières ont été retirées) — plus tout
+      `.hex` déposé dans `assets/palettes/` : format Lospec, ramassé au démarrage, aucun code
+      à toucher. `MAX = 256`, et les fichiers refusés sont **affichés à l'écran** au lieu de
+      partir dans une ligne de console. La ligne PALETTE se grise quand il n'y en a qu'une.
 - [x] **Conversion sRGB → CIELAB** côté CPU, une fois par couleur : le shader ne convertit
       que le pixel courant, une fois au lieu de N+1.
 - [x] **Quantification GPU** (`src/shaders/palette.frag.glsl`), distance au carré, `discard`
       des pixels transparents (l'espace est majoritairement vide).
-- [x] **Tramage ordonné de Bayer 8×8** — le remède au basculement de bandes. Réglable
-      (NON / LEGER / FORT), `FORT` par défaut car calé sur la pire marche mesurée (0,18).
+- [~] **Tramage ordonné de Bayer 8×8** — écrit, mesuré, puis **retiré** le 2026-08-05 sur
+      jugement visuel : le motif se voyait trop. C'était le remède au basculement de bandes,
+      qui redevient donc franc. Le code, le réglage et la matrice ont été supprimés.
 - [x] **Écrêtage des hautes lumières** — le remède au reflet spéculaire en aplat blanc.
       Le cœur du reflet reste blanc, son halo ne l'est plus.
 - [x] **Saturation avant quantification** — le remède aux couleurs ternes (océans gris-violet).
@@ -205,10 +227,10 @@ produit des dégradés continus — de la 3D basse résolution, pas du pixel art
 - [x] **Réglage global** : les touches P et le menu pilotent le même état ; les trois booléens
       `pixelise` séparés ont disparu.
 - [ ] **D-PIX-1** : le miroir CPU testable et le shader sont deux écritures du même algorithme ;
-      aucun test ne compile de GLSL. La surface de divergence a grandi (écrêtage, tramage).
+      aucun test ne compile de GLSL. La surface de divergence a grandi (écrêtage, saturation, gamma).
 - [ ] **D-PIX-3** : pas de contour (passe Sobel / profondeur).
 - [ ] **D-PIX-4** : `PIX = 2` figé — une ligne de menu de plus.
-- [ ] **D-PIX-5** : tramage en espace écran, donc fixe pendant que les objets bougent.
+- [~] **D-PIX-5** : sans objet depuis le retrait du tramage (2026-08-05).
 - [ ] **Quantifier toute l'interface** : aujourd'hui seule la couche 3D l'est, les textes et le
       fond stellaire restent nets. Décision assumée, pas un oubli.
 
