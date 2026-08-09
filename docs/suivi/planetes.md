@@ -190,7 +190,17 @@ sur `atmo` **et** `voile`. Voir `conception/planetes.md` § 14.
 
 **Reste (optionnel, non bloquant)** :
 
-- [ ] Rotation à **vitesse variable** par planète (la rotation existe déjà, vitesse uniforme).
+- [x] Rotation à **vitesse variable** par planète : `ROTATIONS_JOURS` (vraies périodes
+      sidérales, Terre = référence), rétrogrades comprises (Vénus, Uranus). Bornée en haut
+      et en bas — à l'échelle littérale Vénus paraîtrait figée, ce qui se lit comme un bug.
+- [x] **Couche de nuages séparée** : repère propre qui super-tourne (×1,35 + dérive), donc
+      les nuages glissent au-dessus du relief au lieu d'y être collés ; ombre portée
+      échantillonnée dans le même repère. Conditionnée à la présence d'air (`atmo`/`voile`),
+      et hors de portée des géantes gazeuses (leur branche rend la main plus haut).
+- [x] **Reflet spéculaire de l'océan au terminateur** : il était éteint par `diff` là où il
+      est le plus fort. Extinction géométrique + renfort de Fresnel au rasant.
+- [x] **Ombre de l'anneau sur la planète** (la réciproque existait seule) : intersection
+      exacte du rayon lumineux avec le plan de l'anneau, cas rasant écarté.
 - [ ] Faire **piocher le générateur** (skymap/objet) dans le catalogue de presets nommés.
 - [ ] Sélecteur de variante en mode Objet.
 - [ ] Passe **planètes gazeuses** (Hot/Cold/Cloudless Gas Giant) — type séparé.

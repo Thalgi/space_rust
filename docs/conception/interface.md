@@ -86,6 +86,26 @@ adaptative, l'item sous le curseur, et il sait dire si le curseur est sur la
 colonne. C'est exactement le contrat de ⓒ. **À réutiliser, pas à réécrire** —
 et s'il manque quelque chose (le bouton `«`), c'est à lui qu'on l'ajoute.
 
+### Calques de lecture de la vue système
+
+Quatre bascules à deux étages (RING/PLANET, RING/STAR, RING/MOONS,
+ZONE/HABITABLE), l'état porté par la **couleur du fond** et non par un « : ON »
+qu'il faut lire. Rouge sombre éteint, vert néon allumé — un couple choisi pour sa
+**différence de luminance**, seul canal qui reste à qui ne distingue pas le rouge
+du vert (~8 % des hommes). Deux tests tiennent le contraste.
+
+Les traces sont des **semis de points** à espacement écran constant (~22 px) :
+un pas fixe donnerait un trait plein vu de loin et deux marques perdues vu de
+près. Les quatre teintes de calque sont tenues distinctes **en Lab**, où la
+distance approche la différence perçue.
+
+**Désigner un corps efface à 10 % ce qui ne le concerne pas** : on garde sa
+trace, celle de ce autour de quoi il tourne, et celles de ce qui tourne autour de
+lui — plus, si c'est une étoile, tout son système planétaire. Cette dernière
+règle est **séparée** et nécessaire : les planètes sont posées sur
+`Foyer::Barycentre`, donc aucun lien d'orbite ne les rattache nominalement à leur
+étoile.
+
 Troisième vue à s'en servir depuis : la **galerie des ceintures** (2026-08-08),
 où dérouler la molette pour atteindre le treizième cas était pénible. Ce qui lui
 manquait, et qui a donc été ajouté au module plutôt qu'à la vue : `bord_droit`,

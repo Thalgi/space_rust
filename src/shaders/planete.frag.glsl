@@ -26,6 +26,12 @@ uniform vec3 tache_col;
 uniform vec4 vortex[8];
 uniform vec4 vortex2[8];
 uniform vec3 axe;
+uniform float rot_vitesse;   // rotation propre (rad/s de jeu) ; < 0 = rétrograde
+// Géométrie de l'anneau, pour son OMBRE portée sur la planète (Saturne).
+uniform float anneau;        // 0 = aucun anneau
+uniform float anneau_in;     // rayon interne (× rayon planète)
+uniform float anneau_out;    // rayon externe
+uniform vec3 anneau_normal;  // normale du plan de l'anneau
 uniform float warp_amt;
 uniform float seed;
 uniform float poly_cotes; // 0 = pas de vortex polaire, sinon nb de côtés
@@ -52,6 +58,10 @@ uniform float px_rayon;   // rayon apparent en pixels -> LOD du micro-détail (p
 // 64 px : en dessous, le grain fin des reseaux urbains ne se resout plus et
 // devient du scintillement. Voir le bloc « Lumieres de villes » plus bas.
 #define VILLES_PX_MIN 64.0
+// Super-rotation de la couche nuageuse, en multiple de la rotation du sol, et
+// dérive minimale ajoutée par-dessus (rad/s). Voir le calcul du repère en `main`.
+#define NUAGES_SUPER 1.35
+#define NUAGES_DERIVE 0.004
 uniform vec3 atmo;        // halo atmosphérique (0 = aucun)
 uniform float lave;       // monde de lave : fissures incandescentes (0 = aucun)
 uniform float eau_motif;  // topologie de l'eau : 0 océan global,1 continents,2 mers,3 marais
@@ -234,7 +244,9 @@ float champ_cyclones(vec3 d, vec3 k, float t, inout vec3 dn, inout float clair) 
     return clamp(acc, 0.0, 1.0);
 }
 
-vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
+/// `dnu`/`ldn` : direction de surface et direction de lumière dans le repère
+/// **des nuages**, qui n'est pas celui du sol (voir la super-rotation en `main`).
+vec3 surface(vec3 d, vec3 k, vec3 ld, vec3 dnu_base, vec3 ldn, out float wet) {
     wet = 0.0; // surface d'eau (pour le reflet spéculaire) ; mise à 1 sur l'océan
     if (type_p > 1.5) {
         // Glacée.
@@ -799,25 +811,37 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
             wet *= 1.0 - gel; // la glace est solide : plus de reflet d'eau libre
         }
 
-        // Couche de nuages : un bruit qui dérive au-dessus de la surface (par-dessus tout).
-        if (nuages > 0.0) {
+        // COUCHE DE NUAGES — une couche à part, dans SON repère.
+        //
+        // Elle était échantillonnée dans le repère du SOL : elle dérivait un peu
+        // (décalages de temps sur le bruit) mais restait soudée au relief, si
+        // bien qu'un continent gardait éternellement la même couverture. Une
+        // atmosphère ne tourne pas à la vitesse de sa surface — celle de Vénus
+        // fait un tour en 4 jours quand son sol en met 243.
+        //
+        // **Pas d'air, pas de nuages.** Un caillou nu (Lune, Mercure) n'en porte
+        // aucun, et un `nuages` resté à sa valeur par défaut ne doit pas en
+        // inventer. Les géantes gazeuses, elles, ne passent jamais ici : leur
+        // branche a rendu la main bien plus haut.
+        float a_air_nu = step(0.02, atmo.r + atmo.g + atmo.b + voile);
+        if (nuages > 0.0 && a_air_nu > 0.5) {
             // Deux couches qui dérivent à des vitesses/échelles différentes -> ciel vivant.
             float t1 = time * 0.015;
             float t2 = time * 0.032;
             // Cyclones (nuages_type 2) : calculés AVANT le fond, car ils tordent
             // la direction d'échantillonnage -> la couverture est aspirée dedans.
-            vec3 dnu = d;
+            vec3 dnu = dnu_base;
             float cyc = 0.0;
             float oeil = 0.0;
-            if (nuages_type > 1.5) { cyc = champ_cyclones(d, k, time, dnu, oeil); }
+            if (nuages_type > 1.5) { cyc = champ_cyclones(dnu_base, k, time, dnu, oeil); }
             float c1 = fbm(dnu * 2.2 + sd + vec3(t1, 0.0, t1 * 0.7));
             float c2 = fbm(dnu * 4.8 + sd + vec3(t2, 0.0, -t2 * 0.6));
             float cov = c1 * 0.65 + c2 * 0.35;
             // EYEBALL : capuchon de tempête permanent au-dessus du point
             // subsolaire (la zone chaude évapore en continu), bord effiloché.
             if (eyeball > 0.0) {
-                float sub = smoothstep(0.5, 0.92, dot(d, ld));
-                cov = max(cov, sub * (0.55 + 0.30 * fbm(d * 6.0 + sd + vec3(time * 0.02, 0.0, 0.0))));
+                float sub = smoothstep(0.5, 0.92, dot(dnu_base, ldn));
+                cov = max(cov, sub * (0.55 + 0.30 * fbm(dnu_base * 6.0 + sd + vec3(time * 0.02, 0.0, 0.0))));
             }
             float seuil_bas = 0.50;
             float seuil_haut = 0.78;
@@ -837,10 +861,15 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, out float wet) {
                 seuil_bas = 0.42;
                 seuil_haut = 0.72;
             }
-            // OMBRES PORTÉES des nuages au sol : même champ échantillonné
-            // décalé vers le soleil -> le sol s'assombrit sous les nuages.
-            vec3 lt = ld - d * dot(ld, d);
-            vec3 dsh = normalize(d + normalize(lt + vec3(1e-5)) * 0.05);
+            // OMBRES PORTÉES des nuages au sol : le MÊME champ, décalé vers le
+            // soleil -> le sol s'assombrit sous les nuages.
+            //
+            // Échantillonné dans le repère des nuages, et décalé selon la
+            // lumière exprimée dans CE repère (`ldn`). Mélanger les deux ferait
+            // dériver l'ombre loin de son nuage à mesure que les repères
+            // s'écartent — et ils s'écartent d'un tour complet.
+            vec3 lt = ldn - dnu_base * dot(ldn, dnu_base);
+            vec3 dsh = normalize(dnu_base + normalize(lt + vec3(1e-5)) * 0.05);
             float o1 = fbm(dsh * 2.2 + sd + vec3(t1, 0.0, t1 * 0.7));
             float o2 = fbm(dsh * 4.8 + sd + vec3(t2, 0.0, -t2 * 0.6));
             float ombre = smoothstep(seuil_bas, seuil_haut, o1 * 0.65 + o2 * 0.35);
@@ -871,15 +900,32 @@ void main() {
 
     // Rotation propre autour de l'axe (Rodrigues) -> bandes/pôles suivent l'inclinaison.
     vec3 k = normalize(axe);
-    float a = time * 0.01;
+    float a = time * rot_vitesse;
     float ca = cos(a); float sa = sin(a);
     vec3 d = n * ca + cross(k, n) * sa + k * dot(k, n) * (1.0 - ca);
 
     // Lumière exprimée dans le repère TOURNÉ de la surface (même rotation que
     // n -> d) : nécessaire aux ombres de nuages calculées dans surface().
     vec3 ld = L * ca + cross(k, L) * sa + k * dot(k, L) * (1.0 - ca);
+    // REPÈRE DES NUAGES : l'atmosphère SUPER-TOURNE.
+    //
+    // Elle ne tourne pas à la vitesse du sol. Le cas extrême est Vénus, dont
+    // l'atmosphère boucle en 4 jours quand sa surface en met 243 — soixante fois
+    // plus vite. Deux termes, et il faut les deux :
+    //
+    // - un facteur MULTIPLICATIF, qui garde le sens de rotation (les rétrogrades
+    //   ont une atmosphère rétrograde) ;
+    // - une dérive ADDITIVE, sans quoi un rotateur très lent aurait des nuages
+    //   aussi figés que son sol, et la couche cesserait de se lire comme une
+    //   couche.
+    float sens = rot_vitesse >= 0.0 ? 1.0 : -1.0;
+    float an = time * (rot_vitesse * NUAGES_SUPER + sens * NUAGES_DERIVE);
+    float can = cos(an); float san = sin(an);
+    vec3 dnu = n * can + cross(k, n) * san + k * dot(k, n) * (1.0 - can);
+    vec3 ldn = L * can + cross(k, L) * san + k * dot(k, L) * (1.0 - can);
+
     float wet;
-    vec3 albedo = surface(d, k, ld, wet);
+    vec3 albedo = surface(d, k, ld, dnu, ldn, wet);
     // Verrouillage de marée (eyeball) : la surface de base fait le "jour" ; on ajoute une
     // calotte glaciaire irrégulière côté nuit, un anneau de forêt au terminateur (option),
     // et une zone lave/obsidienne au point subsolaire (option, émissif plus bas).
@@ -947,11 +993,24 @@ void main() {
         float lum = dot(col, vec3(0.299, 0.587, 0.114));
         col = mix(vec3(lum), col, mix(0.5, 1.0, z)); // désaturation progressive vers les bords
     }
-    // Reflet spéculaire du soleil sur l'eau (glint océanique, côté jour).
+    // REFLET SPÉCULAIRE DE L'OCÉAN — et il doit survivre au terminateur.
+    //
+    // Il était multiplié par `diff`, le diffus lambertien : le glint s'éteignait
+    // donc exactement là où il est le plus beau. C'est l'inverse de la physique —
+    // un reflet spéculaire est **d'autant plus fort que l'angle est rasant**
+    // (Fresnel), et sur Terre les images satellite les plus spectaculaires du
+    // glint sont prises près du terminateur.
+    //
+    // On garde une extinction, mais posée sur la géométrie plutôt que sur le
+    // diffus : pleine puissance jusqu'au terminateur, éteinte peu après. Un
+    // reflet qui déborderait franchement sur la nuit serait, lui, une lampe.
     if (wet > 0.0) {
         vec3 refl = reflect(-L, n);
         float spec = pow(max(dot(refl, to_cam), 0.0), 60.0);
-        col += vec3(1.0, 0.97, 0.9) * spec * wet * diff;
+        float jour = smoothstep(-0.08, 0.10, dot(n, L));
+        // Renfort de Fresnel : le rasant renvoie plus que le zénith.
+        float rasant = mix(1.0, 2.2, pow(1.0 - max(dot(n, to_cam), 0.0), 3.0));
+        col += vec3(1.0, 0.97, 0.9) * spec * wet * jour * rasant;
     }
     // Mondes de lave : réseau de fissures incandescentes, émissif (brille de nuit).
     if (lave > 0.0) {
@@ -1043,6 +1102,45 @@ void main() {
         float nuit = 1.0 - smoothstep(0.0, 0.22, diff); // strictement côté nuit
         col += aurore_couleur * (ring * flick * nuit * aurore);
     }
+    // OMBRE DE L'ANNEAU SUR LA PLANÈTE — la signature de Saturne.
+    //
+    // La réciproque existait déjà (la planète assombrit son anneau, via
+    // `ombre_rayon` dans le shader du voile) ; celle-ci manquait, alors que
+    // c'est la plus visible des deux : une large bande sombre en travers des
+    // nuages, dont la position raconte la saison.
+    //
+    // Géométrie exacte, et elle tient en quatre lignes. On travaille en rayons
+    // planétaires, où le point de surface est simplement `n` (norme 1). Depuis
+    // ce point, on remonte le rayon lumineux et on cherche où il perce le plan
+    // de l'anneau :
+    //
+    //     dot(n + t·L, rn) = 0   ->   t = -dot(n, rn) / dot(L, rn)
+    //
+    // `t > 0` veut dire que l'anneau est bien ENTRE la surface et l'étoile — un
+    // t négatif désignerait le plan derrière la planète, qui n'ombre rien. Reste
+    // à voir si le point percé tombe dans la couronne [interne, externe].
+    if (anneau > 0.5) {
+        vec3 rn = normalize(anneau_normal);
+        float denom = dot(L, rn);
+        // Lumière rasante au plan de l'anneau : l'ombre part à l'infini et
+        // n'a plus de sens. C'est l'équinoxe, l'anneau ne projette qu'un fil.
+        if (abs(denom) > 0.02) {
+            float t = -dot(n, rn) / denom;
+            if (t > 0.0) {
+                float rq = length(n + L * t);
+                // Bords adoucis : l'anneau n'a pas d'arête franche, et une
+                // marche dure scintillerait au bord de l'ombre.
+                float bord = 0.04;
+                float dans = smoothstep(anneau_in - bord, anneau_in + bord, rq)
+                           * (1.0 - smoothstep(anneau_out - bord, anneau_out + bord, rq));
+                // 0.45 : une ombre franche mais pas un trou noir — l'anneau
+                // est translucide, et la lumière diffusée par l'atmosphère
+                // remplit toujours un peu la bande.
+                col *= mix(1.0, 0.45, dans);
+            }
+        }
+    }
+
     // L'atmosphère n'est PLUS peinte ici. Ce bloc appliquait un `pow(1-z, 3)`
     // sur la surface : un limbe qui s'éclaircit, mais rien au-delà de la
     // silhouette — c'est-à-dire tout sauf ce qui fait lire une atmosphère.

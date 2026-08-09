@@ -104,6 +104,46 @@ pub mod verif {
         noms
     }
 
+    /// Uniforms **déclarés dans le GLSL mais jamais lus** par le code du shader.
+    ///
+    /// Un uniform déclaré et ignoré est un réglage qui ne fait rien : la valeur
+    /// part bien du Rust, arrive bien au GPU, et n'a aucun effet. C'est le
+    /// travers le plus tenace de ce projet — la donnée est juste, la plomberie
+    /// ne suit pas — et il ne se voit à la lecture ni d'un côté ni de l'autre.
+    ///
+    /// Une occurrence hors de sa ligne de déclaration et hors commentaires suffit
+    /// à le dire utilisé.
+    pub fn uniforms_inutilises(sources: &[&str]) -> BTreeSet<String> {
+        let mut morts = BTreeSet::new();
+        for src in sources {
+            for nom in uniforms_glsl(&[src]) {
+                let lu = src.lines().any(|l| {
+                    let t = l.trim();
+                    !t.starts_with("//") && !t.starts_with("uniform ") && contient_identifiant(l, &nom)
+                });
+                if !lu {
+                    morts.insert(nom);
+                }
+            }
+        }
+        morts
+    }
+
+    /// `nom` apparaît-il dans `ligne` comme un identifiant entier ?
+    ///
+    /// Une recherche de sous-chaîne dirait que `atmo` est lu par `atmo_densite`,
+    /// et masquerait donc l'uniform mort derrière son homonyme plus long.
+    fn contient_identifiant(ligne: &str, nom: &str) -> bool {
+        let mot = |c: char| c.is_alphanumeric() || c == '_';
+        let bytes = ligne.as_bytes();
+        ligne.match_indices(nom).any(|(i, _)| {
+            let avant = i == 0 || !mot(bytes[i - 1] as char);
+            let j = i + nom.len();
+            let apres = j >= bytes.len() || !mot(bytes[j] as char);
+            avant && apres
+        })
+    }
+
     /// Noms des uniforms **déclarés côté Rust**.
     pub fn uniforms_rust(descs: &[UniformDesc]) -> BTreeSet<String> {
         descs.iter().map(|d| d.name.clone()).collect()

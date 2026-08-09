@@ -26,7 +26,7 @@ exactement le même système (reproductible, partageable).
 - [x] Shader planète étendu : **bandes** horizontales (gazeuses), océans/continents +
       calottes (telluriques), taches bleutées (glacées).
 - [x] Paramètres procéduraux par planète : rayon, masse, 2 couleurs, phase orbitale.
-      (inclinaison d'axe + vitesse de rotation : à venir)
+      (inclinaison d'axe **et** vitesse de rotation par planète : faites, cf. § 8)
 - [x] **Nombre variable** (3–6), placement géométrique (type Titius-Bode), type selon distance.
 
 ## 3. Orbites réalistes
@@ -132,13 +132,36 @@ exactement le même système (reproductible, partageable).
       silhouette — d'où le liseré net du limbe), raréfaction en altitude, terminateur qui
       déborde sur la nuit, diffusion vers l'avant à contre-jour. Additive, sans écriture de
       profondeur, sautée sous 0,75 px d'épaisseur. Voir STATE.md § P.1.
-- [ ] **Couche de nuages** séparée et animée sur les telluriques (et ombre portée au sol).
+- [x] **Orbites des lunes** tracées (elles ne l'étaient pas du tout : les lunes naissent
+      sans polyligne, et les dessiner avec les planètes les aurait centrées sur le barycentre
+      du système au lieu de leur planète).
+- [x] **Calques de lecture** : trajectoires en semis de points à espacement écran constant,
+      quatre teintes tenues distinctes en Lab, bascules à deux étages rouge/vert néon
+      (contraste de luminance testé), et **effacement à 10 % de ce qui n'est pas lié au corps
+      désigné**.
+- [x] **Couche de nuages** séparée et animée sur les telluriques (et ombre portée au sol).
+      Elle était échantillonnée dans le repère du SOL : elle dérivait un peu, mais restait
+      soudée au relief — un continent gardait éternellement sa couverture. Elle a désormais
+      son repère propre, qui **super-tourne** (facteur multiplicatif, qui garde le sens de
+      rotation, plus une dérive additive pour que les rotateurs lents gardent un ciel vivant).
+      L'ombre portée suit le même repère, lumière comprise. Conditionnée à la présence d'air ;
+      les géantes gazeuses n'y passent jamais (leur branche rend la main plus haut).
 - [x] **Côté nuit** : lumières de villes (amas dorés sur les terres, face non éclairée) sur les mondes à océans.
-- [ ] **Côté nuit** : reflet spéculaire de l'océan au terminateur.
+- [x] **Côté nuit** : reflet spéculaire de l'océan au terminateur. Il était multiplié par le
+      diffus lambertien, donc éteint exactement là où il est le plus fort — un spéculaire
+      croît aux angles rasants (Fresnel). Extinction géométrique + renfort au rasant.
 - [x] **Gazeuses** : advection par champ de flux façon curl-noise (champ sans divergence) + bandes organiques (double-offset fbm).
 - [x] **Géantes de glace** (Uranus/Neptune) distinctes : Uranus voilée + anneau monobande bleu ciel, Neptune contrastée navy→cyan + Grande Tache Sombre.
 - [ ] **Anneaux** : ombre de la planète sur l'anneau + ombre de l'anneau sur la planète.
-- [ ] **Rotation propre** : axe d'inclinaison + vitesse de rotation par planète.
+- [x] **Rotation propre** : axe d'inclinaison (déjà là) **et vitesse par planète**, tirée des
+      vraies périodes sidérales (`ROTATIONS_JOURS`), rétrogrades comprises (Vénus, Uranus).
+      Elle était codée en dur dans le shader : neuf planètes, une seule cadence. Bornée en
+      haut et en bas — à l'échelle littérale, Vénus paraîtrait figée, ce qui se lit comme un
+      bug plutôt que comme un fait.
+- [x] **Ombre de l'anneau sur la planète** : la réciproque existait seule (la planète
+      assombrissait son anneau), alors que celle-ci est la plus visible des deux — la bande
+      sombre en travers des nuages de Saturne. Intersection exacte du rayon lumineux avec le
+      plan de l'anneau ; cas rasant écarté (à l'équinoxe, l'anneau ne projette qu'un fil).
 - [ ] **Calottes/biomes** liés à la température (banquise étendue si froid, désert si chaud).
 
 ## 9. Types d'étoiles — manques

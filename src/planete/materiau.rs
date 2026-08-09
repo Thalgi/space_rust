@@ -43,6 +43,13 @@ const TABLE: &[Entree] = &[
     ("eau", UniformType::Float1, |a| Val::F1(a.eau)),
     ("tache_col", UniformType::Float3, |a| Val::F3(a.tache_couleur)),
     ("axe", UniformType::Float3, |a| Val::F3(a.axe)),
+    ("rot_vitesse", UniformType::Float1, |a| Val::F1(a.rot_vitesse)),
+    // Géométrie de l'anneau : sert à projeter son OMBRE sur la planète. Elle
+    // servait déjà à construire le disque, mais n'atteignait pas ce shader-ci.
+    ("anneau", UniformType::Float1, |a| Val::F1(if a.anneau { 1.0 } else { 0.0 })),
+    ("anneau_in", UniformType::Float1, |a| Val::F1(a.anneau_in)),
+    ("anneau_out", UniformType::Float1, |a| Val::F1(a.anneau_out)),
+    ("anneau_normal", UniformType::Float3, |a| Val::F3(a.anneau_normal)),
     ("warp_amt", UniformType::Float1, |a| Val::F1(a.warp_amt)),
     ("seed", UniformType::Float1, |a| Val::F1(a.seed)),
     ("poly_cotes", UniformType::Float1, |a| Val::F1(a.poly_cotes)),
@@ -374,7 +381,7 @@ const FRAG_ATMO: &str = include_str!("../shaders/atmosphere.frag.glsl");
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::impostor::verif::{uniforms_glsl, uniforms_rust};
+    use crate::impostor::verif::{uniforms_glsl, uniforms_inutilises, uniforms_rust};
 
     /// Un uniform lu par le `.glsl` mais absent de la déclaration Rust vaut
     /// silencieusement zéro : le shader s'exécute, aucun message n'apparaît, et
@@ -393,6 +400,42 @@ mod tests {
         let glsl = uniforms_glsl(&[impostor::VERT_IMPOSTOR, FRAG]);
         let rust = uniforms_rust(&uniforms_corps());
         assert_eq!(glsl, rust, "corps planétaire : GLSL (gauche) vs Rust (droite)");
+    }
+
+    /// **Un uniform déclaré doit être LU.**
+    ///
+    /// Déclaré des deux côtés mais ignoré par le shader, c'est un réglage qui ne
+    /// fait rien : la valeur part du Rust, arrive au GPU, et n'a aucun effet. Le
+    /// test de correspondance ne le voit pas — il ne compare que des listes de
+    /// déclarations.
+    ///
+    /// C'est le travers le plus tenace de ce projet (calotte, villes, atmo de
+    /// Titan, texture zonale, ventre du Starship, éruptions stellaires) : *la
+    /// donnée est juste, la plomberie ne suit pas*. Il ne se lit ni d'un côté ni
+    /// de l'autre — seulement en croisant les deux.
+    ///
+    /// ⚠️ **Portée exacte**, mesurée au red-check : il attrape « déclaré et
+    /// jamais mentionné ». Il n'attrape PAS « mentionné dans du code mort » —
+    /// débrancher le bloc de l'ombre d'anneau le laisse vert, puisque ses
+    /// uniforms restent cités à l'intérieur. Le distinguer demanderait d'analyser
+    /// l'atteignabilité du GLSL, hors de proportion ; le cas utile — un réglage
+    /// branché sur rien — est bien couvert.
+    #[test]
+    fn aucun_uniform_du_corps_n_est_ignore() {
+        let morts = uniforms_inutilises(&[FRAG]);
+        assert!(morts.is_empty(), "déclarés mais jamais lus par le shader : {morts:?}");
+    }
+
+    /// Idem pour la coquille atmosphérique.
+    ///
+    /// `time` y est **volontairement** inutilisé : `impostor::uniforms_standard`
+    /// le pose pour tous les corps impostor, et la coquille n'anime rien. On le
+    /// tolère nommément plutôt que d'ouvrir une exception muette.
+    #[test]
+    fn aucun_uniform_de_la_coquille_n_est_ignore() {
+        let mut morts = uniforms_inutilises(&[FRAG_ATMO]);
+        morts.remove("time");
+        assert!(morts.is_empty(), "déclarés mais jamais lus par la coquille : {morts:?}");
     }
 
     /// Le quad et l'uniform `disc` lisent la MÊME constante : sans quoi la

@@ -34,6 +34,23 @@ impl Systeme {
 
     /// Décor « net » (jamais pixelisé) : zones habitables + trajectoires.
     /// Dessiné en pleine résolution, sous les corps célestes.
+    /// **Autour de quoi l'astre `i` tourne**, s'il tourne autour de quelque chose.
+    ///
+    /// Une lune tient à sa planète par `parent` ; une planète tient à son étoile
+    /// par son `foyer`. Les deux disent la même chose — « ce corps est en orbite
+    /// autour de celui-là » — et les confondre ici évite d'avoir à s'en souvenir
+    /// partout ailleurs. Un foyer barycentrique ne désigne aucun astre : rien.
+    pub(super) fn attache(&self, i: usize) -> Option<usize> {
+        let a = self.astres.get(i)?;
+        if let Some(p) = a.parent() {
+            return Some(p);
+        }
+        match a.foyer() {
+            Some(Foyer::Etoile(s)) => Some(s),
+            _ => None,
+        }
+    }
+
     /// `cam` : position de l'œil — les traces en points y règlent leur
     /// espacement (voir `dessiner_points`).
     pub fn draw_orbites(&self, c: Calques, cam: Vec3) {
@@ -47,8 +64,8 @@ impl Systeme {
         // Opacité d'une trace appartenant à `idx`, selon l'astre focalisé.
         let opacite = |idx: usize| {
             let Some(f) = focus else { return 1.0 };
-            let parent = |i: usize| self.astres.get(i).and_then(|a| a.parent());
-            if liee_au_focus(f, idx, parent) { 1.0 } else { ATTENUATION }
+            let cat = |i: usize| self.astres.get(i).map(|a| a.categorie());
+            if trace_en_avant(f, idx, |i| self.attache(i), cat) { 1.0 } else { ATTENUATION }
         };
         let (light, _) = self.lumiere_principale();
 
@@ -225,15 +242,48 @@ const ATTENUATION: f32 = 0.10;
 
 /// Une trace appartenant à `idx` est-elle **liée** à l'astre focalisé `focus` ?
 ///
-/// Lié veut dire : lui-même, son parent, ou l'un de ses enfants. Désigner une
-/// planète garde donc sa trajectoire **et** les orbites de ses lunes ; désigner
-/// une lune garde la sienne **et** celle de sa planète — on veut voir ce à quoi
-/// le corps est accroché, pas seulement lui.
+/// Lié veut dire : lui-même, ce autour de quoi il tourne, ou ce qui tourne
+/// autour de lui. Désigner une étoile garde donc **toutes les trajectoires de
+/// ses planètes** — sans quoi on ne voit plus le système du tout ; désigner une
+/// planète garde sa trace et celles de ses lunes ; désigner une lune garde la
+/// sienne et celle de sa planète.
 ///
-/// `parent` est passé en argument plutôt que lu sur le système : la règle est
-/// une question de parenté, pas de rendu, et se teste sans écran.
-fn liee_au_focus(focus: usize, idx: usize, parent: impl Fn(usize) -> Option<usize>) -> bool {
-    idx == focus || parent(idx) == Some(focus) || parent(focus) == Some(idx)
+/// ⚠️ **`attache` n'est pas `Astre::parent`.** `parent` n'est renseigné que pour
+/// les lunes ; une planète tient à son étoile par son `foyer`. La première
+/// version ne regardait que `parent`, si bien que désigner une étoile effaçait
+/// toutes les planètes — exactement ce qu'on voulait éviter. La règle porte donc
+/// sur « autour de quoi ce corps tourne », les deux cas confondus.
+///
+/// `attache` est passée en argument plutôt que lue sur le système : la règle est
+/// une question d'appartenance, pas de rendu, et se teste sans écran.
+fn liee_au_focus(focus: usize, idx: usize, attache: impl Fn(usize) -> Option<usize>) -> bool {
+    idx == focus || attache(idx) == Some(focus) || attache(focus) == Some(idx)
+}
+
+/// Faut-il garder la trace de `idx` en pleine opacité, l'astre `focus` étant
+/// désigné ?
+///
+/// Deux raisons de la garder, et il faut les deux :
+///
+/// 1. le **lien d'orbite** ([`liee_au_focus`]) — planète et ses lunes, lune et sa
+///    planète ;
+/// 2. **une étoile désignée met en avant tout son système planétaire.**
+///
+/// ⚠️ Le point 2 n'est pas une redite du point 1. Le lien fin passe par le foyer,
+/// or `genese::ajouter_planete` pose TOUTES les planètes sur `Foyer::Barycentre`
+/// — l'étoile étant à l'origine, barycentre et étoile se confondent, mais
+/// `attache` n'y voit aucun astre. Sans cette seconde règle, désigner l'étoile
+/// effaçait le système entier : plus rien pour le lire. Les lunes, elles,
+/// s'effacent — elles sont un cran plus bas et nombreuses.
+fn trace_en_avant(
+    focus: usize,
+    idx: usize,
+    attache: impl Fn(usize) -> Option<usize>,
+    categorie: impl Fn(usize) -> Option<Categorie>,
+) -> bool {
+    liee_au_focus(focus, idx, attache)
+        || (categorie(focus) == Some(Categorie::Etoile)
+            && categorie(idx) == Some(Categorie::Planete))
 }
 
 /// Applique un facteur d'opacité à une teinte de calque.
@@ -247,9 +297,14 @@ fn attenue(c: Color, k: f32) -> Color {
 /// « poignée de marques » : un semis régulier, quelle que soit la distance.
 const ESPACEMENT_PX: f32 = 22.0;
 
-/// Longueur d'un point, en fraction de l'espacement. Assez court pour lire un
-/// point, assez long pour survivre à l'arrondi du rasterizer.
-const LONGUEUR_POINT: f32 = 0.30;
+/// **Longueur d'un point, en pixels écran.**
+///
+/// En PIXELS et non en fraction de l'espacement : les deux réglages deviennent
+/// indépendants, si bien qu'espacer les points ne les allonge plus. C'est aussi
+/// la seule façon de dire « des petits points » et que ça reste vrai à tous les
+/// zooms — `draw_line_3d` rend un pixel de large, donc 3 px de long donne bien
+/// un point et non un tiret.
+const LONGUEUR_POINT_PX: f32 = 3.0;
 
 /// Nombre de pixels que couvre une unité monde à la distance `dist`.
 /// Même petit angle que partout ailleurs (fov vertical de 45°).
@@ -302,11 +357,15 @@ fn dessiner_points(poly: &[Vec3], centre: Vec3, col: Color, cam: Vec3) {
     // le mieux l'espacement visé.
     let pas = pas_points((poly[1 % n] - poly[0]).length() * px, n);
 
+    // Demi-longueur du point, en unités monde : la taille écran voulue divisée
+    // par l'échelle. Les points de l'arc lointain sortent donc plus courts —
+    // c'est la perspective, et c'est juste.
+    let demi_monde = LONGUEUR_POINT_PX / px.max(1e-6) * 0.5;
     let mut i = 0;
     while i < n {
         let a = centre + poly[i];
         let b = centre + poly[(i + pas) % n];
-        let demi = (b - a) * (LONGUEUR_POINT * 0.5);
+        let demi = (b - a).normalize_or_zero() * demi_monde;
         draw_line_3d(a - demi, a + demi, col);
         i += pas;
     }
@@ -442,6 +501,36 @@ mod tests_calques {
         for loin in [4, 0, 2] {
             assert!(!liee_au_focus(3, loin, parent), "{loin} ne devrait pas rester");
         }
+    }
+
+    /// **Désigner l'étoile montre tout le système planétaire.**
+    ///
+    /// Le lien fin ne suffit pas : `genese::ajouter_planete` pose les planètes
+    /// sur `Foyer::Barycentre`, donc `attache` ne les rattache à aucun astre.
+    /// Sans la règle « étoile désignée ⇒ planètes en avant », désigner l'étoile
+    /// effaçait tout, et il ne restait rien pour lire le système. C'est
+    /// exactement ce qui a été signalé à l'écran.
+    #[test]
+    fn designer_l_etoile_montre_tout_le_systeme() {
+        // Ni parent ni foyer : le cas réel du préset solaire.
+        let sans_attache = |_: usize| None;
+        let cat = |i: usize| {
+            Some(match i {
+                0 => Categorie::Etoile,
+                1 | 2 => Categorie::Planete,
+                _ => Categorie::Lune,
+            })
+        };
+        for planete in [1, 2] {
+            assert!(
+                trace_en_avant(0, planete, sans_attache, cat),
+                "planète {planete} effacée alors que son étoile est désignée"
+            );
+        }
+        // Les lunes, elles, restent en retrait : un cran plus bas, et nombreuses.
+        assert!(!trace_en_avant(0, 3, sans_attache, cat));
+        // Et l'inverse ne vaut pas : désigner une planète ne rallume pas ses sœurs.
+        assert!(!trace_en_avant(1, 2, sans_attache, cat));
     }
 
     /// L'atténuation efface sans supprimer : le reste du système doit rester

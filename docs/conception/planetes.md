@@ -836,9 +836,14 @@ réglables en hot-reload) : `eau` + `eau_motif` (océan/continents/mers/marais),
 strates), `pics` (glace), `recifs`, `basalt` (Worley), `lave`, `seed` (géographie unique).
 Surface bâtie sur un champ d'altitude par **domain warping** + étagement.
 
-**Restant** : voile atmosphérique opaque (Vénus/Titan), verrouillage de marée (eyeball),
-cryovolcan/bioluminescence émissifs, reflet spéculaire océan, rotation visible, mondes
-soufre/Titan, combinaison de deux features, et bascule du générateur sur le catalogue.
+**Faits depuis** : voile atmosphérique opaque (Vénus/Titan), verrouillage de marée
+(eyeball), cryovolcan/bioluminescence émissifs, mondes soufre/Titan, **reflet spéculaire
+de l'océan** (et qui survit au terminateur, là où il est le plus fort), **rotation propre
+à vitesse par planète**, **couche de nuages en repère propre**, **ombre de l'anneau sur la
+planète**, coquille atmosphérique rendue au-delà de la silhouette (§ 14).
+
+**Restant** : combinaison de deux features sur un même monde, et bascule du générateur
+aléatoire sur le catalogue nommé.
 
 ### 2. Les axes du modèle (ce qu'une planète doit pouvoir exprimer)
 

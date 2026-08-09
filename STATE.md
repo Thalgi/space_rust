@@ -20,7 +20,7 @@ sur un fichier contenant du travail non commité. Pour annuler ses propres
 modifications : ré-éditer les lignes, ou sauvegarder le fichier dans le
 scratchpad **avant** de le toucher (red-checks compris).
 
-État vérifié : **485 tests verts**, **`cargo clippy --all-targets` : 0 avertissement**.
+État vérifié : **522 tests verts**, **`cargo clippy --all-targets` : 0 avertissement**.
 
 ## Chantier courant : finir les planètes et la vue système
 
@@ -314,6 +314,133 @@ pas sur l'appel de dessin. Deux red-checks.
 ne se voit qu'en **comparant deux vues** — d'où le test, qui fait exactement
 cette comparaison.
 
+### P.4 — Finitions planétaires : deux items déjà faits, deux vrais manques
+
+**Vérifié avant d'ouvrir le chantier**, comme pour P.3 — et la liste était à
+moitié périmée :
+
+| item | état réel |
+|---|---|
+| ombres portées des nuages au sol | **déjà fait** (`planete.frag.glsl` l. 840-847) |
+| inclinaison d'axe | **déjà fait** (`axe`, par planète) |
+| **vitesse** de rotation | ✗ codée en dur : `time * 0.01`, la même pour les neuf |
+| ombre de l'anneau **sur la planète** | ✗ seule la réciproque existait |
+
+#### Rotation propre : neuf planètes, une seule cadence
+
+`rot_vitesse` par planète, alimentée par `ROTATIONS_JOURS` — les **vraies**
+périodes sidérales, la Terre pour référence (un tour en ~10 min réelles). Jupiter
+boucle en 10 h et sort donc 2,4 fois plus vite ; Vénus et Uranus tournent **à
+l'envers**, ce qui ne coûte qu'un signe et se voit.
+
+⚠️ **Bornée**, et c'est un choix : à l'échelle littérale, Vénus mettrait 42 h de
+jeu pour un tour — indiscernable d'une planète figée, donc lu comme un bug plutôt
+que comme un fait. Plancher à 1/40 de la Terre, plafond à ×4.
+
+La table est posée dans `fige()`, là où les autres données réelles d'un corps
+atterrissent déjà (rayons, masses) — pas une nouvelle voie d'alimentation.
+
+#### Ombre de l'anneau sur la planète
+
+La réciproque existait (la planète assombrit son anneau, via `ombre_rayon`), pas
+celle-ci — pourtant la plus visible des deux : une large bande sombre en travers
+des nuages de Saturne, dont la position raconte la saison.
+
+Géométrie exacte, en quatre lignes. En rayons planétaires, le point de surface
+est `n` (norme 1) ; on remonte le rayon lumineux jusqu'au plan de l'anneau :
+
+```
+dot(n + t·L, rn) = 0   ->   t = -dot(n, rn) / dot(L, rn)
+```
+
+`t > 0` dit que l'anneau est bien **entre** la surface et l'étoile ; reste à voir
+si le point percé tombe dans la couronne. Le cas rasant (`|dot(L, rn)| < 0.02`)
+est écarté : c'est l'équinoxe, l'anneau ne projette qu'un fil. La géométrie de
+l'anneau vivait déjà dans `Apparence` — elle n'atteignait simplement pas ce
+shader.
+
+#### Un test nouveau, né d'un red-check resté vert
+
+Saboter le shader pour revenir à la cadence codée en dur laissait tout vert : la
+correspondance uniforms ↔ GLSL ne compare que des **listes de déclarations**, pas
+les usages. Un uniform déclaré des deux côtés et ignoré est pourtant un réglage
+qui ne fait rien — *la donnée est juste, la plomberie ne suit pas*, le travers le
+plus tenace de ce projet.
+
+D'où `uniforms_inutilises` : tout uniform déclaré doit être **lu** quelque part.
+Comparaison d'identifiants entiers, pour qu'`atmo` ne passe pas pour lu à cause
+d'`atmo_densite`.
+
+⚠️ **Portée mesurée, pas supposée** : il attrape « déclaré et jamais mentionné »,
+pas « mentionné dans du code mort » — débrancher le bloc de l'ombre d'anneau le
+laisse vert. Le distinguer demanderait d'analyser l'atteignabilité du GLSL, hors
+de proportion.
+
+Deuxième red-check vert corrigé au passage : le garde-fou « période nulle »
+était **redondant** — `clamp` ramène l'infini au plafond. Redondant mais pas
+équivalent : sans lui, une période absurde donnait la planète la **plus rapide**.
+L'assertion « fini et positif » ne distinguait pas les deux ; elle nomme
+désormais la valeur attendue.
+
+### P.4 bis — Nuages en couche propre, et le glint qui survit au terminateur
+
+#### Une couche, pas une peinture sur le sol
+
+Les nuages étaient échantillonnés dans le repère du **sol**. Ils dérivaient un
+peu (décalages de temps sur le bruit) mais restaient soudés au relief : un
+continent gardait éternellement la même couverture. Ce n'était pas une couche,
+c'était une texture de plus.
+
+Ils ont désormais leur **propre repère**, qui super-tourne. Deux termes, et il
+faut les deux :
+
+- un facteur **multiplicatif** (×1,35), qui garde le sens de rotation — une
+  planète rétrograde a une atmosphère rétrograde ;
+- une dérive **additive**, sans quoi un rotateur très lent aurait des nuages
+  aussi figés que son sol, et la couche cesserait de se lire comme une couche.
+
+Le cas d'école est Vénus : son atmosphère boucle en 4 jours quand sa surface en
+met 243, soixante fois plus vite.
+
+**L'ombre portée suit.** Elle échantillonne le même champ, décalé vers le soleil
+— donc dans le repère des nuages, avec la lumière exprimée dans **ce** repère.
+Mélanger les deux ferait dériver l'ombre loin de son nuage à mesure que les
+repères s'écartent, et ils s'écartent d'un tour complet.
+
+#### Pas d'air, pas de nuages
+
+Condition ajoutée dans le shader (`atmo + voile`), et **les géantes gazeuses ne
+passent jamais là** : leur branche rend la main bien plus haut dans `surface()`.
+Vérifié avant d'ajouter quoi que ce soit, plutôt que supposé.
+
+L'invariant existait déjà côté **catalogue** (`la_vie_et_les_nuages_ont_leurs_conditions`).
+Il manquait pour les mondes **tirés** — or la skymap n'utilise pas les presets,
+elle tire avec `apparence_tellurique`. Un caillou sans air qui en sortirait
+nuageux n'était attrapé par rien, et le garde-fou du shader l'aurait rendu
+**invisible** au lieu de le corriger. D'où
+`les_mondes_tires_n_ont_pas_de_nuages_sans_air`, qui balaie cinq graines sur tout
+le spectre de températures.
+
+#### Le reflet de l'océan éteint là où il est le plus beau
+
+Il était multiplié par `diff`, le diffus lambertien : le glint s'éteignait donc
+exactement au terminateur. C'est l'inverse de la physique — un reflet spéculaire
+est **d'autant plus fort que l'angle est rasant** (Fresnel), et les images
+satellite les plus spectaculaires du glint terrestre sont prises près du
+terminateur.
+
+L'extinction est désormais posée sur la **géométrie** (pleine puissance jusqu'au
+terminateur, éteinte peu après) plus un renfort de Fresnel au rasant. Un reflet
+qui déborderait franchement sur la nuit serait, lui, une lampe.
+
+⚠️ **Ce qui est testé, et ce qui ne l'est pas.** La règle « pas de nuages sans
+air » est tenue côté **données** (catalogue et générateur). Le comportement du
+**shader** ne l'est pas : les deux sabotages — retirer la condition d'air,
+recoller les nuages au repère du sol — restent verts. `uniforms_inutilises` ne
+voit que « déclaré et jamais mentionné », et ces uniforms restent mentionnés
+ailleurs. Vérifier ça demanderait un banc de rendu GPU ; en attendant, cette
+moitié tient à la lecture et à l'œil.
+
 ### Interface — Bascules de calques en « doubles carrés »
 
 Quatre bascules à deux étages, un mot par case, l'état porté par la **couleur du
@@ -420,12 +547,30 @@ Sur un système garni, une douzaine de cercles superposés empêchent de voir le
 appartient au corps qu'on vient de désigner. Un clic met donc à **10 %** tout ce
 qui ne lui est pas lié.
 
-**« Lié » veut dire : lui-même, son parent, ou ses enfants.**
+**« Lié » veut dire : lui-même, ce autour de quoi il tourne, ou ce qui tourne
+autour de lui.**
 
-- désigner une planète garde sa trajectoire **et** les orbites de ses lunes ;
-- désigner une lune garde la sienne **et** celle de sa planète — on veut voir à
-  quoi le corps est accroché, pas seulement lui ;
+- désigner une **étoile** garde **toutes les trajectoires de ses planètes** —
+  sans quoi on ne voit plus le système du tout ;
+- désigner une planète garde sa trace **et** les orbites de ses lunes ;
+- désigner une lune garde la sienne **et** celle de sa planète ;
 - la planète sœur, elle, s'efface : c'est tout l'objet du filtre.
+
+⚠️ **Deux erreurs successives sur cette règle, et la seconde n'a été trouvée
+qu'à l'écran.**
+
+1. La première version ne regardait que `Astre::parent` — renseigné pour les
+   seules **lunes**. D'où `Systeme::attache`, qui réunit `parent` et `foyer` sous
+   une idée : « ce corps tourne autour de celui-là ».
+2. **Insuffisant, et désigner l'étoile effaçait toujours tout.** Le lien fin
+   passe par le foyer, or `genese::ajouter_planete` — que le préset solaire
+   utilise pour **toutes** ses planètes — les pose sur `Foyer::Barycentre`.
+   L'étoile étant à l'origine, barycentre et étoile se confondent à l'œil, mais
+   `attache` n'y voit aucun astre.
+
+D'où une **seconde règle, assumée comme telle** : une étoile désignée met en
+avant tout son système planétaire, indépendamment du foyer. Les lunes restent en
+retrait — un cran plus bas, et nombreuses.
 
 Effacé et non supprimé : le reste du système doit rester lisible en filigrane,
 sinon désigner une planète donne l'impression que les autres ont disparu. Et
@@ -441,8 +586,24 @@ sous forme de polylignes **sans index d'astre**, impossible à lier une à une. 
 les garde donc entières quand c'est une étoile qu'on regarde, et on les efface
 sinon.
 
-Six red-checks : filtre supprimé, enfants délaissés, parent délaissé, atténuation
-nulle, atténuation imperceptible, atténuation qui déteint sur la teinte.
+⚠️ **Et le test de la première version est resté vert pendant que la
+fonctionnalité était cassée.** Il modélisait `parent` comme rendant déjà
+l'étoile d'une planète — ce que le vrai système ne fait pas. Il vérifiait donc
+mon hypothèse, pas le système. Le double d'essai n'avait même pas de `foyer` :
+la distinction ne pouvait pas être exercée.
+
+Corrigé en donnant un `foyer` au double et en testant `attache` sur de vrais
+astres. Le sabotage qui compte — revenir à `parent` seul — rougit maintenant.
+
+Red-checks : filtre supprimé, enfants délaissés, parent délaissé, atténuation
+nulle, imperceptible, ou qui déteint sur la teinte ; puis `attache` réduite à
+`parent`, `attache` ignorant `parent`, et foyer barycentrique pris pour un astre.
+
+**Taille des points** : elle se règle désormais en **pixels écran**
+(`LONGUEUR_POINT_PX = 3`) et non plus en fraction de l'espacement. Les deux
+réglages deviennent indépendants — espacer les points ne les allonge plus — et
+« des petits points » reste vrai à tous les zooms. Les points de l'arc lointain
+sortent plus courts : c'est la perspective, et c'est juste.
 
 ### P.3 — Étoiles : deux causes, chiffrées. Une corrigée, une à décider
 

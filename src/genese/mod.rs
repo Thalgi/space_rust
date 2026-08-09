@@ -1475,6 +1475,32 @@ mod tests_coherence_3 {
     // **Ce qui pousse a besoin d'eau, ce qui flotte a besoin d'air.** Deux
     // incohérences visibles à l'écran : de la végétation sur un monde sec, des
     // nuages sur un monde sans atmosphère.
+    /// **La règle « pas de nuages sans air » vaut aussi pour les mondes TIRÉS.**
+    ///
+    /// L'invariant du catalogue ne couvre que les presets écrits à la main. Or la
+    /// skymap ne les utilise pas : elle tire ses planètes avec
+    /// `apparence_tellurique`. Un caillou sans air qui en sortirait nuageux ne
+    /// serait attrapé par rien — et le shader, lui, refuse désormais de les
+    /// peindre, si bien que le défaut serait devenu **invisible** au lieu d'être
+    /// corrigé. On vérifie donc la source, pas seulement le rendu.
+    #[test]
+    fn les_mondes_tires_n_ont_pas_de_nuages_sans_air() {
+        for graine in [1u64, 7, 42, 1234, 99999] {
+            srand(graine);
+            // Tout le spectre de températures d'équilibre, du brûlant au gelé.
+            for i in 0..=40 {
+                let t = i as f32 / 40.0;
+                let (_, _, a) = crate::genese::apparences::apparence_tellurique(t);
+                if a.nuages > 0.0 {
+                    assert!(
+                        a.atmo != Vec3::ZERO || a.voile > 0.0,
+                        "graine {graine}, t={t:.2} : des nuages sur un monde sans air"
+                    );
+                }
+            }
+        }
+    }
+
     // ⚠️ Deuxième fois que la règle candidate était **trop stricte** et que le
     // catalogue avait raison. « Pas de végétation sans eau » mordait sur
     // `Lichen` : un lichen pousse sur la roche nue et prend son humidité dans

@@ -38,6 +38,13 @@ pub struct Apparence {
     pub anneau_out: f32,     // rayon externe (× rayon planète)
     pub anneau_style: f32,   // 0 = dense+lacunes (Saturne), 1 = fins (Uranus), 2 = arcs (Neptune), 3 = débris
     pub axe: Vec3,           // axe de rotation (bandes/pôles s'alignent dessus)
+    /// **Vitesse de rotation propre**, en radians par seconde de jeu.
+    ///
+    /// Elle était codée en dur dans le shader (`time * 0.01`) : toutes les
+    /// planètes tournaient donc au même rythme, ce qui gomme une différence bien
+    /// visible — Jupiter boucle un tour en 10 h quand Vénus en met 243 jours.
+    /// Négative = rotation rétrograde (Vénus, Uranus).
+    pub rot_vitesse: f32,
     // Variabilité atmosphérique (gazeuses) — profil zonal précalculé (zonal.rs).
     pub nb_bandes: f32,  // paires de jets par hémisphère (2..9) -> nombre de bandes lisible
     pub jets_force: f32, // amplitude du profil zonal (0 = calme type Uranus, 1 = Jupiter)
@@ -113,6 +120,7 @@ impl Apparence {
             anneau_out: 2.2,
             anneau_style: 0.0,
             axe: Vec3::Y,
+            rot_vitesse: 0.01, // rythme historique : le défaut ne change rien à l'existant
             nb_bandes: 5.0,
             jets_force: 0.6,
             zonal_asym: 0.35,

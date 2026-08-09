@@ -176,9 +176,53 @@ fn graine_nom(nom: &str) -> f32 {
     super::graine_de_nom(nom)
 }
 
+/// **Périodes de rotation sidérale**, en jours terrestres. Négatif = rétrograde.
+///
+/// Vénus et Uranus tournent bel et bien à l'envers — c'est une singularité
+/// qu'on peut voir, et qui ne coûte qu'un signe.
+pub(crate) const ROTATIONS_JOURS: [(&str, f32); 9] = [
+    ("Mercure", 58.646),
+    ("Venus", -243.025),
+    ("Terre", 1.0),
+    ("Mars", 1.026),
+    ("Jupiter", 0.4135),
+    ("Saturne", 0.4440),
+    ("Uranus", -0.7183),
+    ("Neptune", 0.6713),
+    ("Pluton", -6.387),
+];
+
+/// Vitesse de rotation propre (rad/s de jeu) pour une période en jours.
+///
+/// La Terre sert de référence : un tour en ~10 min de temps réel. Le reste suit
+/// le **rapport des vraies périodes** — Jupiter boucle en 10 h, donc 2,4 fois
+/// plus vite qu'ici.
+///
+/// ⚠️ **Bornée.** À l'échelle littérale, Vénus mettrait 42 heures de jeu pour un
+/// tour : indiscernable d'une planète figée, ce qui se lit comme un bug plutôt
+/// que comme un fait. Le plancher la garde très lente sans la bloquer, et le
+/// plafond évite qu'un rotateur rapide ne devienne une toupie.
+pub(crate) fn vitesse_rotation(jours: f32) -> f32 {
+    const BASE: f32 = 0.01; // Terre
+    const RALENTI_MAX: f32 = 40.0;
+    const ACCEL_MAX: f32 = 4.0;
+    if jours == 0.0 {
+        return BASE;
+    }
+    let v = BASE / jours.abs();
+    v.clamp(BASE / RALENTI_MAX, BASE * ACCEL_MAX) * jours.signum()
+}
+
 /// Apparence du catalogue, **géographie figée** par le nom du corps.
+///
+/// C'est aussi le point où les **données réelles** propres à un corps se posent
+/// — comme `rayon_monde` le fait pour les tailles. La rotation en fait partie :
+/// elle était codée en dur dans le shader, donc identique pour tout le monde.
 fn fige(mut app: Apparence, corps: &str) -> Apparence {
     app.seed = graine_nom(corps);
+    if let Some((_, j)) = ROTATIONS_JOURS.iter().find(|(n, _)| *n == corps) {
+        app.rot_vitesse = vitesse_rotation(*j);
+    }
     app
 }
 
@@ -908,5 +952,69 @@ mod tests {
         let max = CORPS.iter().map(|c| graine_nom(c)).fold(0.0_f32, f32::max);
         let min = CORPS.iter().map(|c| graine_nom(c)).fold(1000.0_f32, f32::min);
         assert!(max > 700.0 && min < 300.0, "graines tassées entre {min} et {max}");
+    }
+
+    /// **Chaque planète tourne à SON rythme.**
+    ///
+    /// La vitesse était codée en dur dans le shader (`time * 0.01`) : neuf
+    /// planètes, une seule cadence. Or Jupiter boucle en 10 h et Vénus en 243
+    /// jours — une différence qui se voit à l'œil dès qu'on regarde deux corps
+    /// côte à côte.
+    #[test]
+    fn les_planetes_ne_tournent_pas_toutes_au_meme_rythme() {
+        let v = |n: &str| {
+            let (_, j) = ROTATIONS_JOURS.iter().find(|(x, _)| *x == n).expect(n);
+            vitesse_rotation(*j)
+        };
+        // Jupiter tourne franchement plus vite que la Terre.
+        assert!(v("Jupiter") > v("Terre") * 2.0, "Jupiter devrait filer");
+        // Et les traînards sont loin derrière.
+        assert!(v("Venus").abs() < v("Terre") * 0.1, "Vénus devrait ramper");
+        assert!(v("Mercure").abs() < v("Terre") * 0.1, "Mercure devrait ramper");
+
+        // Deux corps au moins doivent tourner à l'ENVERS : Vénus et Uranus.
+        let retro: Vec<&str> = ROTATIONS_JOURS
+            .iter()
+            .filter(|(_, j)| vitesse_rotation(*j) < 0.0)
+            .map(|(n, _)| *n)
+            .collect();
+        assert!(retro.contains(&"Venus"), "Vénus tourne à l'envers : {retro:?}");
+        assert!(retro.contains(&"Uranus"), "Uranus tourne à l'envers : {retro:?}");
+
+        // Et l'ensemble reste étalé : sans écart, autant garder une constante.
+        let vitesses: Vec<f32> = ROTATIONS_JOURS.iter().map(|(_, j)| vitesse_rotation(*j).abs()).collect();
+        let (mn, mx) = vitesses.iter().fold((f32::MAX, 0.0f32), |(a, b), v| (a.min(*v), b.max(*v)));
+        assert!(mx / mn > 8.0, "rythmes trop resserrés : {mn} à {mx}");
+    }
+
+    /// Les bornes de [`vitesse_rotation`], chacune contre un travers précis.
+    #[test]
+    fn la_vitesse_de_rotation_reste_dans_le_lisible() {
+        // Le plancher : à l'échelle littérale, Vénus mettrait 42 h de jeu pour
+        // un tour, ce qui se lit comme une planète cassée et non comme un fait.
+        assert!(vitesse_rotation(-243.0).abs() >= 0.01 / 40.0 - 1e-9);
+        // Le plafond : un rotateur très rapide ne doit pas devenir une toupie.
+        assert!(vitesse_rotation(0.001) <= 0.01 * 4.0 + 1e-9);
+        // Le signe passe : c'est lui qui dit le sens.
+        assert!(vitesse_rotation(-1.0) < 0.0 && vitesse_rotation(1.0) > 0.0);
+        // Une période nulle n'a pas de sens : on retombe sur la RÉFÉRENCE (la
+        // Terre), et non sur la vitesse maximale.
+        //
+        // ⚠️ Sans le garde-fou, `BASE / 0.0` vaut l'infini, que `clamp` ramène
+        // sagement au plafond — donc la planète la plus rapide du système. Le
+        // résultat restait fini et positif : une assertion qui se contentait de
+        // ça laissait passer le défaut. Il faut nommer la valeur attendue.
+        assert!((vitesse_rotation(0.0) - vitesse_rotation(1.0)).abs() < 1e-9);
+    }
+
+    /// La table de rotation ne parle que de corps que le catalogue connaît.
+    #[test]
+    fn les_corps_qui_tournent_ont_un_rayon() {
+        for (n, _) in ROTATIONS_JOURS {
+            assert!(
+                RAYONS_TERRESTRES.iter().any(|(r, _)| *r == n),
+                "{n} a une rotation mais aucun rayon : une des deux tables ment"
+            );
+        }
     }
 }

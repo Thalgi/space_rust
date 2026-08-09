@@ -508,6 +508,10 @@ mod tests_designation {
         base: CorpsBase,
         cat: Categorie,
         parent: Option<usize>,
+        /// Foyer d'orbite. Distinct de `parent` : une lune tient à sa planète
+        /// par `parent`, une planète à son étoile par son foyer — c'est
+        /// exactement la distinction qu'`attache` doit réconcilier.
+        foyer: Option<Foyer>,
         /// Cumul des `dt` reçus par `Astre::update` — l'horloge d'animation.
         /// Partagé avec le test, qui ne peut pas lire à travers `Box<dyn Astre>`.
         dt_anim_recu: std::rc::Rc<std::cell::Cell<f32>>,
@@ -530,6 +534,7 @@ mod tests_designation {
                 base: CorpsBase::new(vec3(x, 0.0, 0.0), 1.0, 1.0),
                 cat,
                 parent,
+                foyer: None,
                 dt_anim_recu: mouchard.clone(),
             }));
             (idx, mouchard)
@@ -549,12 +554,68 @@ mod tests_designation {
         fn parent(&self) -> Option<usize> {
             self.parent
         }
+        fn foyer(&self) -> Option<Foyer> {
+            self.foyer
+        }
         /// Enregistre le `dt` reçu : c'est ce qui permet de vérifier quelle
         /// horloge alimente l'animation propre des astres.
         fn update(&mut self, dt: f32) {
             self.dt_anim_recu.set(self.dt_anim_recu.get() + dt);
         }
         fn draw(&mut self, _cam: &CameraInfo) {}
+    }
+
+    /// **`attache` réconcilie deux façons d'être en orbite.**
+    ///
+    /// Une lune tient à sa planète par `parent`, une planète à son étoile par son
+    /// `foyer`. Deux champs, une seule idée — « ce corps tourne autour de
+    /// celui-là ».
+    ///
+    /// ⚠️ Ce test existe parce que le précédent ne l'attrapait pas : il modélisait
+    /// `parent` comme rendant déjà l'étoile d'une planète, ce que le vrai système
+    /// ne fait pas. Il est donc resté **vert** alors que désigner une étoile
+    /// effaçait toutes ses planètes. Un test qui postule ce qu'il devrait
+    /// vérifier ne vérifie rien.
+    #[test]
+    fn l_attache_couvre_la_lune_par_parent_et_la_planete_par_foyer() {
+        let mut sys = Systeme::new();
+        let etoile = CorpsEssai::poser(&mut sys, Categorie::Etoile, 0.0, None);
+        let planete = CorpsEssai::poser(&mut sys, Categorie::Planete, 10.0, None);
+        let lune = CorpsEssai::poser(&mut sys, Categorie::Lune, 11.0, Some(planete));
+        let errante = CorpsEssai::poser(&mut sys, Categorie::Planete, 50.0, None);
+
+        // La planète ne tient à son étoile QUE par son foyer : `parent` est vide.
+        assert_eq!(sys.astres[planete].parent(), None, "une planète n'a pas de parent");
+
+        // Sans foyer posé, elle n'est encore rattachée à rien.
+        assert_eq!(sys.attache(planete), None);
+
+        // Avec le foyer stellaire, elle l'est — c'est le cas que la version
+        // fautive manquait.
+        poser_foyer(&mut sys, planete, Foyer::Etoile(etoile));
+        assert_eq!(sys.attache(planete), Some(etoile));
+
+        // La lune, elle, passe par `parent`.
+        assert_eq!(sys.attache(lune), Some(planete));
+
+        // Un foyer barycentrique ne désigne aucun astre.
+        poser_foyer(&mut sys, errante, Foyer::Barycentre);
+        assert_eq!(sys.attache(errante), None);
+
+        // Et l'étoile n'est accrochée à rien.
+        assert_eq!(sys.attache(etoile), None);
+    }
+
+    /// Pose un foyer sur un `CorpsEssai` déjà rangé dans le système.
+    fn poser_foyer(sys: &mut Systeme, idx: usize, f: Foyer) {
+        let c = CorpsEssai {
+            base: CorpsBase::new(sys.position(idx), 1.0, 1.0),
+            cat: sys.astres[idx].categorie(),
+            parent: sys.astres[idx].parent(),
+            foyer: Some(f),
+            dt_anim_recu: std::rc::Rc::new(std::cell::Cell::new(0.0)),
+        };
+        sys.astres[idx] = Box::new(c);
     }
 
     /// **L'animation des astres ne suit pas l'horloge orbitale.**
