@@ -1,6 +1,6 @@
 mod apparences;
 mod persistance;
-mod presets;
+pub(crate) mod presets;
 mod taille;
 
 pub use taille::ClasseTaille;
@@ -408,7 +408,13 @@ pub(crate) fn ajouter_planete_autour(
     let mu = systeme::G * masse_centrale;
     let orb = crate::orbite::Orbite::new(a_monde, e, a1, q, mu, 0.0);
     let (pos, vel) = orb.etat(0.0);
-    let orbite = orb.polyligne(96);
+    // Résolution de la trace : elle est dessinée en POINTS, et c'est le nombre
+    // d'échantillons qui plafonne leur densité. À 96, un zoom serré ne montrait
+    // plus qu'une poignée de points sur tout l'écran — impossible d'y lire un
+    // cercle. Le tracé en saute ensuite selon la distance (`dessiner_points`),
+    // donc une réserve haute ne coûte rien de loin ; elle sert de près.
+    // 512 points = 6 Ko par planète, et rien à l'écran qu'on ne veuille voir.
+    let orbite = orb.polyligne(crate::orbite::Orbite::N_TRACE);
     let idx = sys.ajouter(Box::new(
         Planete::new(pos, vel, rayon, masse, app, orbite)
             .avec_orbite(orb)
@@ -759,7 +765,18 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
     // (butterscotch, pas rouge brique) et regions sombres basaltiques. Ce
     // CONTRASTE entre les deux est ce qui fait lire Mars ; une planete d'une
     // seule rouille uniforme paraît terne, surtout apres quantification.
-    push("Mars", tellurique(vec3(0.80, 0.44, 0.24), vec3(0.46, 0.26, 0.19), z, 0.0, 1.0, 0.35, 0.90, vec3(0.85, 0.5, 0.35) * 0.10)
+    // Son atmosphere valait `* 0.10` -- la plus faible du catalogue hors zero,
+    // sous meme la constante des mondes secs. Ce chiffre reglait l'ANCIEN halo,
+    // qui se peignait SUR la surface : le monter aurait delave le contraste
+    // clair/sombre travaille juste au-dessus. La coquille, elle, vit surtout
+    // DEHORS -- au centre du disque elle ne laisse que ~4 %.
+    //
+    // 0.40 n'est pas le rapport des pressions (Mars fait 0,6 % de la Terre :
+    // a ce compte elle serait nue). C'est ce que Mars *montre* : une brume
+    // chargee de poussiere, franchement visible au limbe depuis l'orbite, et
+    // dont l'echelle de hauteur vaut 2,4 fois celle de la Terre rapportee au
+    // rayon. Mince en densite, haute en geometrie.
+    push("Mars", tellurique(vec3(0.80, 0.44, 0.24), vec3(0.46, 0.26, 0.19), z, 0.0, 1.0, 0.35, 0.90, vec3(0.85, 0.5, 0.35) * 0.40)
         .avec_relief(0.45)
         .avec_mesa(0.45)      // Valles Marineris, plateaux etages
         .avec_dunes(0.35)     // ergs polaires
@@ -1403,6 +1420,45 @@ mod tests_coherence_3 {
         assert!(m.grad_lat > 0.0 && m.calotte < 1.0, "Mars sans calotte polaire");
         // Et pas d'eau libre.
         assert_eq!(m.eau, 0.0, "Mars avec de l'eau de surface");
+    }
+
+    // **Mars a une brume, et elle doit se voir.** Depuis que l'atmosphère est une
+    // coquille rendue au-delà de la silhouette (`shaders/atmosphere.frag.glsl`),
+    // `atmo` ne règle plus l'éclat d'un liseré : il règle la **densité** de l'air.
+    // Mars valait 0,10 sous l'ancien sens — moins que le monde sec générique — et
+    // sortait sans atmosphère visible.
+    //
+    // Le test se garde d'écrire la formule de densité : elle vit dans le GLSL, et
+    // la recopier ici ne prouverait que la recopie. Il **encadre** Mars entre deux
+    // autres entrées du catalogue, écrites indépendamment d'elle.
+    #[test]
+    fn mars_a_une_brume_visible_mais_tenue() {
+        let cat = catalogue_telluriques();
+        let air = |nom: &str| {
+            cat.iter()
+                .find(|(n, _)| n == nom)
+                .unwrap_or_else(|| panic!("preset absent : {nom}"))
+                .1
+                .atmo
+        };
+        let (mars, terre, sec) = (air("Mars"), air("Terre"), air("Badlands"));
+
+        // Plus dense que le caillou sec générique, sinon la brume ne se lit pas.
+        assert!(
+            mars.length() > sec.length() * 1.5,
+            "Mars pas plus embrumée qu'un monde sec quelconque : {} vs {}",
+            mars.length(),
+            sec.length()
+        );
+        // Mais nettement en deçà de la Terre : c'est une brume, pas un ciel.
+        assert!(
+            mars.length() < terre.length() * 0.6,
+            "Mars aussi dense que la Terre : {} vs {}",
+            mars.length(),
+            terre.length()
+        );
+        // Et la brume est rousse : la poussière la teinte, elle ne diffuse pas bleu.
+        assert!(mars.x > mars.z * 1.5, "brume martienne pas assez chaude : {mars:?}");
     }
 
     // Et le catalogue gazeux n'est pas vide : sans ça, la boucle ci-dessus ne

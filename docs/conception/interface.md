@@ -86,6 +86,14 @@ adaptative, l'item sous le curseur, et il sait dire si le curseur est sur la
 colonne. C'est exactement le contrat de ⓒ. **À réutiliser, pas à réécrire** —
 et s'il manque quelque chose (le bouton `«`), c'est à lui qu'on l'ajoute.
 
+Troisième vue à s'en servir depuis : la **galerie des ceintures** (2026-08-08),
+où dérouler la molette pour atteindre le treizième cas était pénible. Ce qui lui
+manquait, et qui a donc été ajouté au module plutôt qu'à la vue : `bord_droit`,
+l'abscisse à partir de laquelle dessiner **sans passer sous la colonne**. Une
+galerie occupe tout l'écran et doit rétrécir son viewport 3D d'autant, sinon la
+colonne masque une bande de l'image au lieu de la côtoyer. Repliée, elle rend
+toute la largeur — sans quoi le repli ne servirait à rien.
+
 **« PLANÈTE HABITABLE » se déduit, ne se stocke pas.** `zone_habitable` rend les
 bornes en UA à partir de la luminosité ; comparer le demi-grand axe de la
 planète à ces bornes donne la réponse. Un booléen `habitable` posé sur la

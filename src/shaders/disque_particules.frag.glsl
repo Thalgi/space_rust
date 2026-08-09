@@ -23,11 +23,12 @@ void main() {
     vec3 col = vcol.rgb;
     float g   = vforme.x;
     float irr = vforme.y;
-    float px  = vforme.z;
 
-    // En dessous de ~2.5 px la forme n'existe pas : point carré simple
-    // (le discard découperait l'unique fragment -> scintillement).
-    if (px > 2.5) {
+    // Le SIGNE de vforme.z dit si le caillou est assez gros pour mériter une
+    // silhouette (seuil décidé dans le vertex shader, source unique).
+    // Négatif = trop petit : point carré, sans découpe — le discard mangerait
+    // l'unique fragment et ferait scintiller.
+    if (vforme.z > 0.0) {
         float ang = atan(vp.y, vp.x);
         // Rayon patatoïde : 3 lobes doux, phases par graine, amplitude = irr.
         float rad = 0.78

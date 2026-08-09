@@ -10,6 +10,7 @@ uniform float couronne;        // extension de la couronne (× rayon)
 uniform float couronne_irreg;  // irrégularité (rayons/spicules)
 uniform float couronne_type;   // 0 = halo, 1 = jets bipolaires (pulsar), 2 = vent stellaire (WR)
 uniform vec4 spots[8]; // xyz = direction (repère surface), w = rayon effectif
+uniform float zone;    // 0 = disque de l'étoile (opaque), 1 = couronne (translucide)
 
 float hash(vec3 p) {
     p = fract(p * 0.3183099 + 0.1);
@@ -39,6 +40,23 @@ float fbm(vec3 p) {
 void main() {
     float rr = length(v_q);
     if (rr > couronne) discard;
+
+    // DEUX PASSES, une seule source.
+    //
+    // Le disque de l'étoile (rr <= 1) est OPAQUE : il doit écrire la profondeur,
+    // sinon un corps passé derrière lui se dessinerait par-dessus. La couronne
+    // (rr > 1) est TRANSLUCIDE : elle ne doit surtout PAS en écrire — sinon son
+    // quad, plat et face caméra, pose un plan de profondeur jusqu'à 2,1 rayons
+    // et rejette tout ce qui passe derrière. Sur un disque protosolaire, dont la
+    // matière commence à 0,1 UA, ce plan coupait le voile le long de son
+    // intersection avec le plan du disque : une **barre sombre en travers de
+    // l'étoile**.
+    //
+    // GLSL ES 100 ne sait pas couper l'écriture de profondeur par fragment, d'où
+    // deux pipelines (`zone`) sur le même shader. Même remède que pour les
+    // planètes : corps opaque d'un côté, halo sans profondeur de l'autre.
+    if (zone > 0.5 && rr <= 1.0) discard; // passe couronne
+    if (zone < 0.5 && rr > 1.0) discard;  // passe corps
 
     if (couronne_type > 4.5) {
         // ===== TROU NOIR (stylisé, sans lentille gravitationnelle) =====

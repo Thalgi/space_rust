@@ -97,9 +97,143 @@ pub fn minitel_ligne(r: Rect, label: &str, souris: Vec2) {
     crate::police::texte(label, r.x + 10.0, r.y + r.h * 0.5 + 6.0, 20.0, fg);
 }
 
+/// **Bascule à deux étages** : un mot au-dessus d'un filet, un mot dessous.
+///
+/// « ORB PLAN: ON » disait l'état dans le libellé — il fallait donc LIRE pour
+/// savoir. Ici l'état est la **couleur du fond**, et le libellé ne dit plus que
+/// le sujet.
+///
+/// Voir [`COULEUR_ACTIF`] pour le choix des deux couleurs, qui n'est pas libre.
+pub fn bascule_double(r: Rect, haut: &str, bas: &str, actif: bool, souris: Vec2) {
+    let survol = r.contains(souris);
+    let fond = if actif { COULEUR_ACTIF } else { COULEUR_INACTIF };
+    // Le survol éclaircit sans changer de camp : on doit toujours lire l'état.
+    let fond = if survol {
+        Color::new(
+            (fond.r + 0.14).min(1.0),
+            (fond.g + 0.14).min(1.0),
+            (fond.b + 0.14).min(1.0),
+            1.0,
+        )
+    } else {
+        fond
+    };
+    let texte = if actif { TEXTE_ACTIF } else { TEXTE_INACTIF };
+
+    draw_rectangle(r.x, r.y, r.w, r.h, fond);
+    draw_rectangle_lines(r.x, r.y, r.w, r.h, 1.0, texte);
+
+    // Deux cases égales, séparées par le filet : c'est le « double carré ».
+    let mi = r.y + r.h * 0.5;
+    draw_line(r.x + 5.0, mi, r.x + r.w - 5.0, mi, 1.0, texte);
+
+    let taille = taille_tenant_dans(&[haut, bas], r.w - 8.0);
+    for (mot, cy) in [(haut, r.y + r.h * 0.25), (bas, r.y + r.h * 0.75)] {
+        let l = crate::police::mesure(mot, taille as u16);
+        crate::police::texte(mot, r.x + (r.w - l) * 0.5, cy + taille * 0.36, taille, texte);
+    }
+}
+
+/// La plus grande taille de police, parmi les tailles préchargées, où **tous**
+/// les mots tiennent dans `largeur`.
+///
+/// Mesurée avec la vraie police et non estimée : « HABITABLE » et « PLANET »
+/// n'ont ni la même longueur ni la même chasse, et c'est le plus large qui
+/// commande — sinon un seul libellé déborde et lui seul.
+fn taille_tenant_dans(mots: &[&str], largeur: f32) -> f32 {
+    taille_tenant_dans_avec(mots, largeur, crate::police::mesure)
+}
+
+/// Le calcul seul, sa règle de mesure passée en argument.
+///
+/// Séparé pour être **testable sans fenêtre** : `police::mesure` lit la police
+/// chargée, donc exige un contexte graphique. La logique — descendre tant que le
+/// plus large déborde, sans passer sous le plancher lisible — n'en a pas besoin.
+fn taille_tenant_dans_avec(mots: &[&str], largeur: f32, mesure: impl Fn(&str, u16) -> f32) -> f32 {
+    let mut t = 16.0_f32;
+    while t > crate::police::TAILLE_MIN && mots.iter().any(|m| mesure(m, t as u16) > largeur) {
+        t -= 1.0;
+    }
+    t
+}
+
+/// **Vert néon « daltonien »** : bascule active.
+///
+/// Rouge contre vert est le pire couple pour une vision deutéranope ou
+/// protanope — les deux teintes se confondent. Ce qui les sépare quand la
+/// TEINTE ne le fait pas, c'est la **luminance** : un rouge sombre et un vert
+/// néon tiennent à ~8 fois d'écart, lisible même sans percevoir aucune des deux
+/// couleurs. Le vert est en outre tiré vers le jaune, où un protanope le voit
+/// encore clair.
+///
+/// L'écart est **tenu par un test** (`les_deux_etats_se_distinguent_sans_la_teinte`) :
+/// une retouche esthétique qui rapprocherait les luminances casserait
+/// l'accessibilité sans que rien ne le dise à l'œil d'un voyant trichromate.
+pub const COULEUR_ACTIF: Color = Color::new(0.44, 1.0, 0.28, 1.0);
+/// Rouge sombre : bascule inactive. Voir [`COULEUR_ACTIF`].
+pub const COULEUR_INACTIF: Color = Color::new(0.30, 0.045, 0.07, 1.0);
+const TEXTE_ACTIF: Color = Color::new(0.03, 0.10, 0.02, 1.0);
+const TEXTE_INACTIF: Color = Color::new(0.92, 0.66, 0.62, 1.0);
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn lum(c: Color) -> f32 {
+        crate::palette::luminance(vec3(c.r, c.g, c.b))
+    }
+
+    /// **Les deux états doivent se distinguer SANS la teinte.**
+    ///
+    /// Rouge/vert est le couple que ne séparent ni un deutéranope ni un
+    /// protanope — soit ~8 % des hommes. Le seul canal qui leur reste est la
+    /// luminance. On exige donc un rapport franc, du même ordre que ce que le
+    /// WCAG demande entre un texte et son fond.
+    #[test]
+    fn les_deux_etats_se_distinguent_sans_la_teinte() {
+        let (a, i) = (lum(COULEUR_ACTIF), lum(COULEUR_INACTIF));
+        let rapport = (a + 0.05) / (i + 0.05);
+        assert!(
+            rapport >= 4.5,
+            "actif {a:.3} contre inactif {i:.3} : rapport de contraste {rapport:.2},              insuffisant pour qui ne distingue pas le rouge du vert"
+        );
+    }
+
+    /// Et le texte doit rester lisible **sur les deux fonds**.
+    #[test]
+    fn le_texte_contraste_avec_son_fond() {
+        for (nom, fond, texte) in [
+            ("actif", COULEUR_ACTIF, TEXTE_ACTIF),
+            ("inactif", COULEUR_INACTIF, TEXTE_INACTIF),
+        ] {
+            let (f, t) = (lum(fond), lum(texte));
+            let (haut, bas) = if f > t { (f, t) } else { (t, f) };
+            let rapport = (haut + 0.05) / (bas + 0.05);
+            assert!(rapport >= 4.5, "{nom} : contraste texte/fond de {rapport:.2}");
+        }
+    }
+
+    /// La taille de police descend jusqu'à ce que le PLUS LARGE des mots tienne.
+    ///
+    /// Règle de mesure factice — une chasse constante par caractère : le test
+    /// porte sur la **descente**, pas sur les métriques de la police.
+    #[test]
+    fn la_taille_sadapte_au_mot_le_plus_large() {
+        let chasse = |m: &str, t: u16| m.chars().count() as f32 * t as f32 * 0.6;
+        let taille = |mots: &[&str], l: f32| taille_tenant_dans_avec(mots, l, chasse);
+
+        // Large : rien à réduire.
+        assert_eq!(taille(&["ZONE", "HABITABLE"], 400.0), 16.0);
+        // Étroit : la taille tombe, et reste au-dessus du plancher lisible.
+        let t = taille(&["ZONE", "HABITABLE"], 46.0);
+        assert!(t < 16.0, "la taille n'a pas été réduite ({t})");
+        assert!(t >= crate::police::TAILLE_MIN, "sous le plancher lisible ({t})");
+        // C'est bien le mot le plus large qui commande : ajouter un mot court
+        // ne change rien.
+        assert_eq!(taille(&["ZONE", "HABITABLE"], 60.0), taille(&["HABITABLE"], 60.0));
+        // Et un cas impossible s'arrête au plancher au lieu de boucler.
+        assert_eq!(taille(&["HABITABLE"], 1.0), crate::police::TAILLE_MIN);
+    }
 
     // Caméra au repos (yaw 0, pitch 0) : on regarde vers −Z. La boussole doit
     // alors montrer **X à droite** et **Y vers le haut**.

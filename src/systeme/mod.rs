@@ -36,6 +36,44 @@ pub struct Systeme {
     vue: Option<(usize, f32)>,
 }
 
+/// **Les calques d'aide à la lecture** de la vue système : ce qu'on superpose
+/// aux corps pour comprendre le système sans le survoler.
+///
+/// Regroupés plutôt que passés en quatre booléens de suite : quatre `bool`
+/// positionnels du même type s'intervertissent sans que le compilateur bronche,
+/// et c'est le défaut qu'on venait de corriger sur les deux horloges. Nommés,
+/// ils se lisent à l'appel.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Calques {
+    /// Trajectoires des planètes, centrées sur leur foyer stellaire.
+    pub planetes: bool,
+    /// Orbites des étoiles entre elles (systèmes multiples).
+    pub etoiles: bool,
+    /// Orbites des lunes, centrées sur leur planète.
+    pub lunes: bool,
+    /// Anneaux de la zone habitable.
+    pub zone: bool,
+    /// Astre focalisé par la caméra, s'il y en a un.
+    ///
+    /// Les traces qui ne lui sont **pas liées** s'effacent presque : sur un
+    /// système garni, une douzaine de cercles superposés empêchent de voir
+    /// lequel appartient au corps qu'on vient de désigner. Voir
+    /// `rendu::liee_au_focus` pour ce que « lié » veut dire.
+    pub focus: Option<usize>,
+}
+
+/// **Horloge de spectacle** : le temps qui fait vivre l'animation propre des
+/// astres (éruptions solaires, taches, rotation du voile des anneaux).
+///
+/// C'est un type à part, et pas un `f32`, pour une raison éprouvée : les deux
+/// horloges de `Systeme::update` sont des durées en secondes, donc
+/// interchangeables à l'œil du compilateur. Passer la cadence orbitale aux deux
+/// compilait sans un mot — et c'est précisément le défaut qu'on corrige ici. Un
+/// test ne peut pas garder ça : il vérifie le contrat de `update`, pas le
+/// câblage de chaque vue. Le type, lui, le refuse à la compilation.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DtAnimation(pub f32);
+
 impl Systeme {
     pub fn new() -> Self {
         Self {
@@ -352,7 +390,19 @@ impl Systeme {
         best.map(|(_, i)| i)
     }
 
-    pub fn update(&mut self, dt: f32) {
+    /// Avance le système. **Deux horloges, et elles ne mesurent pas la même chose.**
+    ///
+    /// - `dt` : temps **orbital**. Multiplié par la vitesse de jeu, parce qu'une
+    ///   période de Kepler se compte en années et qu'il faut bien la voir tourner.
+    /// - `dt_anim` : temps de l'**animation propre** des astres — éruptions
+    ///   solaires, taches, rotation du voile des anneaux.
+    ///
+    /// Les deux étaient confondues. Les rythmes d'éruption sont pourtant réglés
+    /// à la main (une tache vit 8 à 16 s, une boucle monte en ~2 s) : ce sont des
+    /// durées **de spectacle**, pas de physique. Passées au multiplicateur
+    /// orbital, à ×16 une tache naît et meurt en une demi-seconde et les boucles
+    /// stroboscopent — on ne lit plus une protubérance, on lit du bruit.
+    pub fn update(&mut self, dt: f32, dt_anim: DtAnimation) {
         self.temps += dt as f64;
         let t = self.temps;
 
@@ -388,9 +438,10 @@ impl Systeme {
             }
         }
 
-        // Animation propre de chaque astre (éruptions du soleil, etc.).
+        // Animation propre de chaque astre (éruptions du soleil, etc.) : horloge
+        // de spectacle, pas l'horloge orbitale (voir la doc de cette fonction).
         for a in &mut self.astres {
-            a.update(dt);
+            a.update(dt_anim.0);
         }
 
         // Lunes : orbite analytique autour de leur parent (positions courantes).
@@ -457,15 +508,31 @@ mod tests_designation {
         base: CorpsBase,
         cat: Categorie,
         parent: Option<usize>,
+        /// Cumul des `dt` reçus par `Astre::update` — l'horloge d'animation.
+        /// Partagé avec le test, qui ne peut pas lire à travers `Box<dyn Astre>`.
+        dt_anim_recu: std::rc::Rc<std::cell::Cell<f32>>,
     }
 
     impl CorpsEssai {
         fn poser(sys: &mut Systeme, cat: Categorie, x: f32, parent: Option<usize>) -> usize {
-            sys.ajouter(Box::new(CorpsEssai {
+            Self::poser_mouchard(sys, cat, x, parent).0
+        }
+
+        /// Idem, en rendant le mouchard d'horloge d'animation.
+        fn poser_mouchard(
+            sys: &mut Systeme,
+            cat: Categorie,
+            x: f32,
+            parent: Option<usize>,
+        ) -> (usize, std::rc::Rc<std::cell::Cell<f32>>) {
+            let mouchard = std::rc::Rc::new(std::cell::Cell::new(0.0));
+            let idx = sys.ajouter(Box::new(CorpsEssai {
                 base: CorpsBase::new(vec3(x, 0.0, 0.0), 1.0, 1.0),
                 cat,
                 parent,
-            }))
+                dt_anim_recu: mouchard.clone(),
+            }));
+            (idx, mouchard)
         }
     }
 
@@ -482,8 +549,42 @@ mod tests_designation {
         fn parent(&self) -> Option<usize> {
             self.parent
         }
-        fn update(&mut self, _dt: f32) {}
+        /// Enregistre le `dt` reçu : c'est ce qui permet de vérifier quelle
+        /// horloge alimente l'animation propre des astres.
+        fn update(&mut self, dt: f32) {
+            self.dt_anim_recu.set(self.dt_anim_recu.get() + dt);
+        }
         fn draw(&mut self, _cam: &CameraInfo) {}
+    }
+
+    /// **L'animation des astres ne suit pas l'horloge orbitale.**
+    ///
+    /// Le multiplicateur de vitesse existe pour faire tourner les orbites : une
+    /// période de Kepler se compte en années. Les rythmes d'éruption solaire,
+    /// eux, sont réglés à la main comme un spectacle — une tache vit 8 à 16 s,
+    /// une boucle monte en ~2 s. Les passer au même multiplicateur les rend
+    /// illisibles : à ×16 une tache naît et meurt en une demi-seconde.
+    ///
+    /// Le test tient la séparation : l'animation reçoit `dt_anim`, jamais `dt`.
+    #[test]
+    fn l_animation_des_astres_ignore_le_multiplicateur_orbital() {
+        let mut sys = Systeme::new();
+        let (_, mouchard) = CorpsEssai::poser_mouchard(&mut sys, Categorie::Planete, 10.0, None);
+
+        // Une frame de 1/60 s, jouée à ×16 : l'orbite avance de 16 fois plus,
+        // l'animation d'une seule.
+        let dt = 1.0 / 60.0;
+        sys.update(dt * 16.0, DtAnimation(dt));
+        assert!(
+            (mouchard.get() - dt).abs() < 1e-6,
+            "l'animation a reçu {} au lieu de {dt} : elle suit l'horloge orbitale",
+            mouchard.get()
+        );
+
+        // Et la pause fige l'animation comme le reste.
+        mouchard.set(0.0);
+        sys.update(0.0, DtAnimation(0.0));
+        assert_eq!(mouchard.get(), 0.0, "en pause, l'animation continue");
     }
 
     // Les chiffres romains, sur les cas qui cassent une implementation naive :

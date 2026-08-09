@@ -134,6 +134,11 @@ impl Skymap {
             if is_key_pressed(KeyCode::P) {
                 self.rendu.toggle_pixel();
             }
+            // V : couche voile des anneaux on/off. Instrument de mesure (P.2 bis) :
+            // à cadrage identique, l'écart de FPS ne peut venir que d'elle.
+            if is_key_pressed(KeyCode::V) {
+                crate::disque::set_voiles(!crate::disque::voiles_actifs());
+            }
             if is_key_pressed(KeyCode::G) {
                 self.seed = nouvelle_graine(self.seed);
                 self.source = Source::Graine(self.seed);
@@ -218,7 +223,11 @@ impl Skymap {
             ModePhysique::NCorps
         });
         let dt_sim = if self.pause { 0.0 } else { dt * self.vitesse };
-        self.sys.update(dt_sim);
+        // L'animation des astres suit le temps RÉEL : le multiplicateur existe
+        // pour faire tourner les orbites, pas pour accélérer les éruptions, qui
+        // sont réglées comme un spectacle. La pause, elle, fige tout.
+        let dt_anim = crate::systeme::DtAnimation(if self.pause { 0.0 } else { dt });
+        self.sys.update(dt_sim, dt_anim);
 
         let aspect = screen_width() / screen_height();
         let target = self.cam.cible(&self.sys);
@@ -242,9 +251,13 @@ impl Skymap {
                 &cam_info,
                 &mut self.fond,
                 &mut self.sys,
-                self.menu.orbites,
-                self.menu.orbites_etoiles,
-                self.menu.zone,
+                crate::systeme::Calques {
+                    planetes: self.menu.orbites,
+                    etoiles: self.menu.orbites_etoiles,
+                    lunes: self.menu.orbites_lunes,
+                    zone: self.menu.zone,
+                    focus: self.cam.focus(),
+                },
             );
 
         let temps = if self.pause {
@@ -257,7 +270,7 @@ impl Skymap {
         // ressources, et les deux se recouvraient.
         crate::police::texte(
             &format!(
-                "{}   |   {} FPS   |   zoom x{:.2}   |   vitesse {}   clic: centrer   P: pixel   G: aleatoire   R: shaders   Espace: pause   Haut/Bas: vitesse   Echap: menu",
+                "{}   |   {} FPS   |   zoom x{:.2}   |   vitesse {}   clic: centrer   P: pixel   V: voiles   G: aleatoire   R: shaders   Espace: pause   Haut/Bas: vitesse   Echap: menu",
                 self.info,
                 get_fps(),
                 self.cam.zoom(),

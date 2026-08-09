@@ -23,7 +23,7 @@ use crate::impostor;
 use macroquad::models::{draw_mesh, Mesh, Vertex};
 use macroquad::prelude::*;
 use macroquad::rand::gen_range;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 // Hauteur (px) du viewport de rendu courant : sert au clamp de taille MINIMALE
 // des particules (une particule sub-pixel disparaît ; on la fige à ~1.5 px en
@@ -32,6 +32,68 @@ use std::cell::RefCell;
 thread_local! {
     static VIEWPORT_H: RefCell<f32> = const { RefCell::new(0.0) };
     static PX_MIN: RefCell<f32> = const { RefCell::new(0.0) };
+    // Materials partagés (créés une fois, clonés ensuite).
+    //
+    // **macroquad plafonne à 32 pipelines** (`quad_gl.rs`, `MAX_PIPELINES`), et
+    // `load_material` en consomme un à chaque appel. Chaque `Disque` en créait
+    // les siens : la galerie de débris en aligne douze, jusqu'à deux pipelines
+    // chacun — le plafond sautait, `Pipelines amount exceeded`.
+    //
+    // Un clone de `Material` partage le pipeline (c'est un `Arc`) : douze
+    // disques coûtent maintenant deux pipelines au lieu de vingt-quatre. En
+    // contrepartie ils partagent aussi **l'état des uniforms** — d'où le vidage
+    // de lot dans `draw_moitie`, sans quoi le dernier disque dessiné imposerait
+    // ses réglages à tous les précédents.
+    static TPL_PART: RefCell<Option<Material>> = const { RefCell::new(None) };
+    static TPL_VOILE: RefCell<Option<Material>> = const { RefCell::new(None) };
+    // Instrument de mesure (voir set_voiles) : allumé par défaut.
+    static VOILES: Cell<bool> = const { Cell::new(true) };
+}
+
+fn mat_particules() -> Material {
+    TPL_PART.with(|c| {
+        if c.borrow().is_none() {
+            *c.borrow_mut() = Some(material_particules());
+        }
+        c.borrow().as_ref().unwrap().clone()
+    })
+}
+
+fn mat_voile() -> Material {
+    TPL_VOILE.with(|c| {
+        if c.borrow().is_none() {
+            *c.borrow_mut() = Some(voile::material_voile());
+        }
+        c.borrow().as_ref().unwrap().clone()
+    })
+}
+
+/// **Interrupteur de la couche voile** — instrument de mesure, pas un réglage.
+///
+/// P.2 a chiffré la couche particules : 18 appels de dessin et 25 600 sommets
+/// pour les quatre ceintures solaires, du bruit pour un GPU. Le seul coût
+/// plausible restant est le **remplissage de pixels du voile** : 960 quads
+/// seulement, mais potentiellement plein écran, et chaque pixel paie
+/// `disque_voile.frag.glsl` — 155 lignes de bruit procédural.
+///
+/// Ça ne se compte pas en appels de dessin, ça se mesure au chronomètre. Et
+/// comparer « caméra serrée sur Saturne » à « caméra au large » ne l'isole pas :
+/// approcher change aussi le coût du corps, de son atmosphère, de ses lunes.
+/// Éteindre le voile **à cadrage identique** ne change qu'une chose.
+pub fn set_voiles(actifs: bool) {
+    VOILES.with(|v| v.set(actifs));
+}
+
+/// Vrai si la couche voile est dessinée (défaut).
+pub fn voiles_actifs() -> bool {
+    VOILES.with(|v| v.get())
+}
+
+/// Vide le cache de materials des disques -> la prochaine création recompile
+/// depuis les `.glsl` (hot-reload, touche R).
+pub fn vider_cache_materials() {
+    TPL_PART.with(|c| *c.borrow_mut() = None);
+    TPL_VOILE.with(|c| *c.borrow_mut() = None);
 }
 
 /// Hauteur du viewport courant (galerie : hauteur de cellule / facteur pixel).
@@ -39,10 +101,13 @@ pub fn set_viewport_h(h: f32) {
     VIEWPORT_H.with(|v| *v.borrow_mut() = h);
 }
 
-/// Demi-taille écran minimale d'une particule, en pixels DE RENDU.
-/// 0 = défaut (1.5). En mode pixel-art, passer ~1.15 : le plus petit débris
-/// vaut alors 1 pixel de la grille au lieu de 1.5 pixel de rendu (= 3 px
-/// écran après upscale), qui grossissait les champs de débris.
+/// Demi-taille écran minimale d'une particule, en pixels DE RENDU. 0 = défaut (1.5).
+///
+/// ⚠️ **C'est une DEMI-taille** : `px_min = 1.5` donne un caillou de **3 px de
+/// côté**, et l'ancienne marge de lobes le portait à 3,45. Le commentaire
+/// d'origine promettait « 1 pixel de la grille » pour 1.15 — faux d'un facteur
+/// ~2,3, et c'est une des raisons pour lesquelles les champs de débris
+/// paraissent gros. **Pour viser un débris de N px de côté, passer N/2.**
 pub fn set_px_min(p: f32) {
     PX_MIN.with(|v| *v.borrow_mut() = p);
 }
@@ -100,12 +165,12 @@ impl Disque {
         let v = n.cross(u);
 
         let (lots, mat) = if c.nb > 0 {
-            (construire_lots(&c), Some(material_particules()))
+            (construire_lots(&c), Some(mat_particules()))
         } else {
             (Vec::new(), None)
         };
         let (voile_lots, mat_voile) = if c.voile_alpha > 0.0 {
-            (voile::construire_annulus(&c), Some(voile::material_voile()))
+            (voile::construire_annulus(&c), Some(mat_voile()))
         } else {
             (Vec::new(), None)
         };
@@ -182,11 +247,12 @@ impl Disque {
                 for lot in &self.lots {
                     draw_mesh(lot);
                 }
+                vider_lot();
                 gl_use_default_material();
             }
         }
 
-        if let Some(mat) = &self.mat_voile {
+        if let Some(mat) = self.mat_voile.as_ref().filter(|_| voiles_actifs()) {
             let tocam = (cam.pos - p).normalize_or_zero();
             let phases = vec4(
                 self.phase_lacune(0),
@@ -212,8 +278,25 @@ impl Disque {
             for lot in &self.voile_lots {
                 draw_mesh(lot);
             }
+            vider_lot();
             gl_use_default_material();
         }
+    }
+}
+
+/// **Vide le lot de dessin maintenant.**
+///
+/// Tous les disques partagent deux materials (voir `TPL_PART`/`TPL_VOILE`), donc
+/// deux pipelines — et `set_uniform` écrit dans le pipeline, pas dans le clone.
+/// macroquad n'applique ces uniforms qu'au vidage du lot, et changer de material
+/// ne fait que poser `break_batching` : sans ce vidage, le **dernier** disque
+/// dessiné imposerait ses réglages (centre, axes, `gm`, moitié) à tous ceux
+/// d'avant — anneaux plaqués au mauvais endroit, moitiés inversées.
+///
+/// Même raison et même remède que pour les corps planétaires (`planete/mod.rs`).
+fn vider_lot() {
+    unsafe {
+        get_internal_gl().flush();
     }
 }
 
@@ -358,6 +441,7 @@ fn construire_lots(c: &DisqueConfig) -> Vec<Mesh> {
     lots
 }
 
+
 /// Material des particules : sommets orbitaux animés par le vertex shader,
 /// rendu opaque (depth write, pas de tri nécessaire). Hot-reload via R.
 fn material_particules() -> Material {
@@ -386,6 +470,13 @@ fn material_particules() -> Material {
             ],
             pipeline_params: PipelineParams {
                 depth_test: Comparison::LessOrEqual,
+                // Les cailloux sont OPAQUES : ils écrivent la profondeur, et
+                // c'est elle qui les ordonne entre eux et vis-à-vis des corps.
+                //
+                // (Essayé puis annulé : passer à `false` pour corriger la couture
+                // des disques proto*. Sans effet — la couture venait de l'ordre de
+                // peinture entre moitiés, pas de la profondeur. Le remède est en
+                // amont : plus de découpe en moitiés, voir `galerie_disques.rs`.)
                 depth_write: true,
                 ..Default::default()
             },
@@ -393,4 +484,100 @@ fn material_particules() -> Material {
         },
     )
     .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Relevé de charge d'un champ : ce que la carte graphique reçoit par frame.
+    /// Un lot = un `draw_mesh` = un appel de dessin.
+    struct Charge {
+        lots: usize,
+        quads: usize,
+        sommets: usize,
+    }
+
+    /// Mesure la couche particules d'une config, **en appelant le constructeur
+    /// de maillage réel** (`construire_lots`). Rien n'est recalculé de tête :
+    /// si le lotissement change, la mesure suit.
+    fn charge_particules(c: &DisqueConfig) -> Charge {
+        let lots = construire_lots(c);
+        Charge {
+            lots: lots.len(),
+            quads: lots.iter().map(|m| m.vertices.len() / 4).sum(),
+            sommets: lots.iter().map(|m| m.vertices.len()).sum(),
+        }
+    }
+
+    fn charge_voile(c: &DisqueConfig) -> Charge {
+        let lots = voile::construire_annulus(c);
+        Charge {
+            lots: lots.len(),
+            quads: lots.iter().map(|m| m.vertices.len() / 4).sum(),
+            sommets: lots.iter().map(|m| m.vertices.len()).sum(),
+        }
+    }
+
+    /// Le voile est **allumé par défaut**. C'est un instrument de mesure, pas un
+    /// réglage : l'éteindre par défaut ferait disparaître les anneaux de Saturne
+    /// du jeu entier, et le défaut d'un interrupteur de diagnostic ne se remarque
+    /// que le jour où on cherche pourquoi il ne reste plus rien à voir.
+    #[test]
+    fn les_voiles_sont_allumes_par_defaut() {
+        assert!(voiles_actifs(), "les anneaux ne se dessineraient plus");
+    }
+
+    /// **Le budget de dessin de la vue système, chiffré.**
+    ///
+    /// P.2 disait « mesurer avant d'optimiser ». Voici la mesure. Elle porte sur
+    /// ce qui est vérifiable sans écran : le nombre d'appels de dessin et de
+    /// sommets soumis par frame. Elle ne dit **rien** du temps GPU réel (fill
+    /// rate du voile, coût du fragment shader) — ça, seul le compteur de FPS le
+    /// dira.
+    ///
+    /// Le test existe pour qu'un effectif gonflé se voie ici, et non six mois
+    /// plus tard quand « ça rame ».
+    #[test]
+    fn budget_de_dessin_des_ceintures_solaires() {
+        let mut total = Charge { lots: 0, quads: 0, sommets: 0 };
+        for c in crate::genese::presets::ceintures_solaires() {
+            let ch = charge_particules(&c);
+            // Toutes les particules demandées sont bien dans un lot : le
+            // lotissement ne doit rien perdre en route.
+            assert_eq!(ch.quads, c.nb, "particules perdues au lotissement");
+            total.lots += ch.lots;
+            total.quads += ch.quads;
+            total.sommets += ch.sommets;
+            // Aucune des quatre familles ne porte de voile : ce sont des nuages
+            // de cailloux, pas des anneaux. Si l'une en gagne un, le fill rate
+            // change de nature et ce test doit être relu.
+            assert_eq!(c.voile_alpha, 0.0, "une ceinture solaire a gagné un voile");
+        }
+        assert_eq!(total.quads, 6400, "effectif total des petits corps");
+        assert_eq!(total.sommets, 25_600);
+
+        // 18 appels de dessin (lots de 400 quads). C'est **peu** : le goulot des
+        // ceintures n'est pas là, il est dans le remplissage de pixels.
+        assert_eq!(total.lots, 18, "appels de dessin des ceintures");
+        assert!(
+            total.lots <= 24,
+            "budget d'appels de dessin dépassé : {} (limite 24)",
+            total.lots
+        );
+    }
+
+    /// Un anneau planétaire, lui, est un **voile** : peu de sommets, mais il
+    /// peut couvrir tout l'écran, et chaque pixel paie un shader de 155 lignes.
+    /// C'est là qu'est le vrai coût, et il ne se compte pas en appels de dessin.
+    #[test]
+    fn un_anneau_est_peu_de_sommets_mais_beaucoup_de_pixels() {
+        let cfg = DisqueConfig::anneau_saturne(1.4, 2.2, vec3(0.8, 0.75, 0.6), 0.0);
+        let ch = charge_voile(&cfg);
+        assert_eq!(ch.quads, 960, "résolution de l'annulus (10 radial × 96 segments)");
+        // Dessiné en DEUX moitiés (avant/arrière du corps) -> le double.
+        assert!(ch.lots * 2 <= 8, "anneau trop découpé : {} lots", ch.lots);
+        // Et il n'a aucune particule : la parité des styles V1 passe par le voile.
+        assert_eq!(cfg.nb, 0, "l'anneau de Saturne ne tire pas de particules");
+    }
 }

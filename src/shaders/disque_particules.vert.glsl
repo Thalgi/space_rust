@@ -35,6 +35,17 @@ uniform vec3 light_pos;   // étoile primaire (éclairage + ombre)
 uniform vec3 cam_pos;     // position caméra
 uniform float ombre_rayon; // rayon du corps central (0 = pas d'ombre)
 
+// Seuil de SILHOUETTE, en DEMI-taille écran (px). Au-delà, le caillou reçoit un
+// contour et un éclairage de pseudo-sphère ; en deçà, c'est un point carré.
+//
+// ⚠️ **C'est une demi-taille.** `taille`, `taille_px`, `px_min` et ce seuil sont
+// tous des DEMI-tailles : un caillou à 1.25 fait **2,5 px de côté** à l'écran.
+// L'ancien seuil valait 2.5 — soit des carrés plats de 5 px de côté, encore
+// grossis de 15 % par la marge des lobes, jusqu'à ~5,75 px. C'est ce qui donnait
+// des « gros carrés » dès que la caméra approchait ou passait au-dessus du plan,
+// là où beaucoup de cailloux tombent d'un coup dans la même tranche de taille.
+#define SEUIL_FORME 1.25
+
 float hash(float x) {
     return fract(sin(x * 12.9898) * 43758.5453);
 }
@@ -75,6 +86,13 @@ void main() {
 
     // Moitié avant/arrière par rapport au corps central : rendu peintre
     // (arrière -> corps -> avant), fiable même sans depth buffer (mode pixel).
+    //
+    // Une valeur PAR PARTICULE, et ça ne peut pas être autrement : le plan de
+    // coupe a pour normale la direction de vue, or le billboard est justement
+    // perpendiculaire à cette direction. Le quad est donc **parallèle au plan de
+    // coupe** — il ne le traverse jamais, et l'y projeter ne changerait rien.
+    // (Essayé : recalculer `vside` après le décalage billboard est un no-op,
+    // `cam_right` et `cam_up` étant orthogonaux à la normale du plan.)
     vside = dot(pos - centre, normalize(cam_pos - centre));
 
     // Ombre du corps central (anneau de débris planétaire) : cylindre projeté.
@@ -92,11 +110,42 @@ void main() {
     // LOD sub-pixel (CONCEPTION §4.2) : une particule plus petite qu'un pixel
     // disparaît au rasterizer. On borne sa taille ÉCRAN à px_min en compensant
     // par un assombrissement (pipeline opaque : on fond vers le noir).
-    vec4 clip = Projection * Model * vec4(pos, 1.0);
-    float px_par_unite = Projection[1][1] * viewport_h * 0.5 / max(clip.w, 0.0001);
-    float taille_px = taille * px_par_unite;
-    if (taille_px < px_min && taille_px > 0.0) {
-        taille *= px_min / taille_px;
+    //
+    // ⚠️ **On MESURE la taille projetée, on ne la déduit pas de la matrice.**
+    //
+    // L'uniform `Projection` de macroquad n'est PAS la seule projection : c'est
+    // `perspective × look_at`, la matrice vue-projection combinée
+    // (`Camera3D::matrix`). Lire `Projection[1][1]` comme un `1/tan(fovy/2)` ne
+    // vaut donc que pour UNE orientation de caméra. En visant le long de Y, la
+    // vue envoie le Y du monde sur la profondeur, ce coefficient tend vers zéro,
+    // `taille_px` avec lui — et le facteur de correction `px_min / taille_px`
+    // part à l'infini. Les petits débris enflaient en gros carrés, et seulement
+    // près de cet axe.
+    //
+    // On mesure donc l'ÉCHELLE, pas une différence de positions.
+    //
+    // ⚠️ **Ne jamais soustraire deux points projetés.** La version précédente
+    // projetait le centre et un point décalé de `taille`, puis soustrayait leurs
+    // NDC. Sur les débris LOINTAINS (nuage de Oort à 20 000 UA, cailloux de
+    // 0,012 unité) ces deux NDC coïncident sur les ~7 chiffres significatifs
+    // d'un f32 : la soustraction ne rend plus que du bruit d'arrondi. Diviser
+    // `px_min` par ce bruit donnait un facteur d'agrandissement ALÉATOIRE,
+    // retiré à chaque frame — d'où des astéroïdes lointains qui enflaient
+    // brusquement et sans cesse. Annulation catastrophique, cas d'école.
+    //
+    // Le remède : projeter le vecteur `cam_up` **d'une unité monde** (une
+    // direction, `w = 0`), et appliquer la règle du quotient en UNE expression.
+    // `k` ne dépend alors plus de `taille` : ses termes restent d'ordre 1 quelle
+    // que soit la distance, et rien ne se soustrait de presque égal.
+    vec4 clip_c = Projection * Model * vec4(pos, 1.0);
+    vec4 dclip = Projection * Model * vec4(cam_up, 0.0);
+    float w2 = clip_c.w * clip_c.w;
+    // d(y/w) pour un déplacement d'une unité selon cam_up, en pixels.
+    float k = abs(dclip.y * clip_c.w - clip_c.y * dclip.w) / max(w2, 1e-12) * viewport_h * 0.5;
+    float taille_px = taille * k;
+    if (taille_px < px_min && k > 1e-9) {
+        // `px_min / k` directement : pas de rapport entre deux petits nombres.
+        taille = px_min / k;
         float fade = clamp(taille_px / px_min, 0.3, 1.0);
         vcol.rgb *= fade;
     }
@@ -106,16 +155,27 @@ void main() {
     vec3 to_light = normalize(light_pos - pos);
     vec3 to_cam = normalize(cam_pos - pos);
     vlum = vec3(dot(to_light, cam_right), dot(to_light, cam_up), dot(to_light, to_cam));
-    vforme = vec3(graine, irr, max(taille_px, px_min));
 
-    // Billboard : quad plein (marge 1.15 pour les lobes du patatoïde) ; la
-    // silhouette est sculptée par le fragment shader, plus par les coins.
+    // Sculpter, ou pas. Au-dessus du seuil le fragment shader taille un
+    // patatoïde ; en dessous il ne reste pas assez de fragments pour qu'un
+    // contour veuille dire quoi que ce soit, et le découper ferait scintiller —
+    // la particule est alors un simple point carré.
+    //
+    // Le SIGNE de vforme.z porte la décision jusqu'au fragment shader : le seuil
+    // n'est écrit qu'ICI, et les deux étages ne peuvent pas diverger.
+    float px = max(taille_px, px_min);
+    float sculpte = px > SEUIL_FORME ? 1.0 : -1.0;
+    vforme = vec3(graine, irr, px * sculpte);
+
+    // Billboard. La marge 1.15 loge les LOBES du patatoïde : un point carré n'en
+    // a pas, la lui appliquer ne faisait que le grossir de 15 % pour rien.
+    float marge = sculpte > 0.0 ? 1.15 : 1.0;
     vec2 base = vec2(
         (coin > 0.5 && coin < 2.5) ? 1.0 : -1.0,
         (coin > 1.5) ? 1.0 : -1.0
     );
     vp = base;
-    pos += cam_right * (base.x * taille * 1.15) + cam_up * (base.y * taille * 1.15);
+    pos += cam_right * (base.x * taille * marge) + cam_up * (base.y * taille * marge);
 
     gl_Position = Projection * Model * vec4(pos, 1.0);
 }

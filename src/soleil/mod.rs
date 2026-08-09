@@ -7,7 +7,7 @@ use eruptions::{Boucle, Tache};
 use macroquad::models::Vertex;
 use macroquad::prelude::*;
 use macroquad::rand::gen_range;
-use materiau::{mat_plasma_partage, mat_soleil};
+use materiau::{mat_plasma_partage, mats_soleil};
 use rendu::{texture_halo, TAILLE_HALO};
 
 const MAX_TACHES: usize = 8; // doit correspondre à spots[8] dans le shader
@@ -35,7 +35,7 @@ pub struct Soleil {
     couronne_irreg: f32, // irrégularité (rayons/spicules) de la couronne
     couronne_type: f32,  // 0 = halo, 1 = jets bipolaires (pulsar), 2 = vent (WR)
     zone_hab: bool,      // false = rémanent (pulsar/magnétar/étoile à neutrons) : pas de zone habitable
-    mat: Material,        // shader du corps
+    mats: Vec<Material>,  // un par passe de `PASSES` (disque, puis couronne)
     mat_plasma: Material, // billboards en blending additif (plasma lumineux)
     halo: Texture2D,
     verts: Vec<Vertex>,
@@ -45,7 +45,7 @@ pub struct Soleil {
 impl Soleil {
     pub fn new(position: Vec3, rayon: f32, couleur: Vec3, luminosite: f32) -> Self {
         // Materials partagés (clonés) -> un seul pipeline chacun, même en régénérant.
-        let mat = mat_soleil();
+        let mats = mats_soleil();
         let mat_plasma = mat_plasma_partage();
 
         Self {
@@ -66,7 +66,7 @@ impl Soleil {
             couronne_irreg: ((luminosite - 0.4) / 3.6).clamp(0.0, 1.0),
             couronne_type: 0.0,
             zone_hab: true,
-            mat,
+            mats,
             mat_plasma,
             halo: texture_halo(TAILLE_HALO),
             verts: Vec::new(),

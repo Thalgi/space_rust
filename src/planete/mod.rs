@@ -30,6 +30,9 @@ pub struct Planete {
     app: Apparence,
     orbite: Vec<Vec3>,
     mat: Material,
+    // Coquille atmosphérique : passe additive séparée, dessinée par-dessus le
+    // corps (voir `draw` et shaders/atmosphere.frag.glsl).
+    mat_atmo: Material,
     verts: Vec<Vertex>,
     inds: Vec<u16>,
     // Anneau : champ de débris (couche voile) qui suit la planète. Rendu en
@@ -47,6 +50,16 @@ pub struct Planete {
     vortex_unis: Option<([Vec4; vortex::N_VORTEX], [Vec4; vortex::N_VORTEX])>,
     // Lune : si parent défini, orbite analytique autour de l'astre `parent`.
     parent: Option<usize>,
+    // Trace de l'orbite lunaire, en coordonnées RELATIVES au parent.
+    //
+    // Rangée à part de `orbite` (qui est celle des planètes, relative au foyer
+    // stellaire) : la boucle des trajectoires planétaires centre sur `foyer()`,
+    // ce qui poserait l'orbite d'une lune autour du barycentre du système au
+    // lieu de sa planète. Deux traces, deux repères, deux boucles.
+    //
+    // Calculée UNE fois : elle ne dépend que des éléments orbitaux, qui ne
+    // bougent pas. La régénérer par frame allouerait pour rien.
+    orbite_lune: Vec<Vec3>,
     l_angle: f32,
     l_omega: f32,
     l_r: f32,
@@ -69,8 +82,9 @@ impl Planete {
         let mut base = CorpsBase::new(position, masse, rayon);
         base.vitesse = vitesse;
 
-        // Material partagé (cloné) -> un seul pipeline GPU pour toutes les planètes/lunes.
+        // Materials partagés (clonés) -> deux pipelines GPU pour toutes les planètes/lunes.
         let mat = mat_corps();
+        let mat_atmo = materiau::mat_atmo();
 
         // Construire l'anneau si nécessaire : traduction des champs anneau_*
         // d'Apparence vers le système unifié (style -> preset DisqueConfig).
@@ -94,6 +108,7 @@ impl Planete {
             app,
             orbite,
             mat,
+            mat_atmo,
             verts: Vec::new(),
             inds: Vec::new(),
             anneau,
@@ -102,6 +117,7 @@ impl Planete {
             zonal_tex,
             vortex_unis,
             parent: None,
+            orbite_lune: Vec::new(),
             l_angle: 0.0,
             l_omega: 0.0,
             l_r: 0.0,
@@ -171,6 +187,18 @@ impl Planete {
         self.l_angle = phase;
         self.l_a1 = a1;
         self.l_q = (a2 * incl.cos() + Vec3::Y * incl.sin()).normalize();
+        // Trace de l'orbite, dans le plan (a1, q) : le MÊME couple de vecteurs
+        // que `orbiter_autour`, pour que le trait passe exactement là où la lune
+        // passera. Une seconde formule dériverait sans que rien ne le dise.
+        // Même raison qu'en `genese` : la trace est dessinée en points, et le
+        // nombre d'échantillons plafonne leur densité de près.
+        const N: usize = 256;
+        self.orbite_lune = (0..N)
+            .map(|i| {
+                let t = i as f32 / N as f32 * std::f32::consts::TAU;
+                self.l_a1 * (self.l_r * t.cos()) + self.l_q * (self.l_r * t.sin())
+            })
+            .collect();
         self
     }
 
@@ -204,6 +232,9 @@ impl Astre for Planete {
     }
     fn parent(&self) -> Option<usize> {
         self.parent
+    }
+    fn orbite_lune(&self) -> &[Vec3] {
+        &self.orbite_lune
     }
     fn orbiter_autour(&mut self, centre: Vec3, dt: f32) {
         self.l_angle += self.l_omega * dt;
@@ -288,7 +319,8 @@ impl Astre for Planete {
         // --- Corps (impostor) ---
         self.verts.clear();
         self.inds.clear();
-        crate::impostor::push_quad(&mut self.verts, &mut self.inds, c, cam.right, cam.up, r * 1.05, WHITE);
+        let demi = r * materiau::DISC;
+        crate::impostor::push_quad(&mut self.verts, &mut self.inds, c, cam.right, cam.up, demi, WHITE);
 
         let terr = self.terrain_tex.as_ref().map(|(t, nm)| (t, *nm));
         appliquer_uniforms(
@@ -334,6 +366,33 @@ impl Astre for Planete {
         self.verts = quad.vertices;
         self.inds = quad.indices;
         gl_use_default_material();
+
+        // --- Coquille atmosphérique ---
+        //
+        // APRÈS le corps : elle se dépose sur le limbe et déborde de la
+        // silhouette, là où le corps a fait `discard`. AVANT la moitié avant de
+        // l'anneau, qui doit passer devant elle comme devant la planète.
+        if materiau::atmo_visible(&self.app, cam, c, r) {
+            self.verts.clear();
+            self.inds.clear();
+            crate::impostor::push_quad(&mut self.verts, &mut self.inds, c, cam.right, cam.up, demi, WHITE);
+            materiau::appliquer_uniforms_atmo(&self.mat_atmo, &self.app, cam, c, r);
+            gl_use_material(&self.mat_atmo);
+            let halo = Mesh {
+                vertices: std::mem::take(&mut self.verts),
+                indices: std::mem::take(&mut self.inds),
+                texture: None,
+            };
+            draw_mesh(&halo);
+            // Même raison que pour le corps : le material est partagé, les
+            // uniforms n'atteignent le GPU qu'au vidage du lot.
+            unsafe {
+                get_internal_gl().flush();
+            }
+            self.verts = halo.vertices;
+            self.inds = halo.indices;
+            gl_use_default_material();
+        }
 
         // Anneau : moitié avant APRÈS le corps (passe devant la planète).
         if let Some(a) = &mut self.anneau {

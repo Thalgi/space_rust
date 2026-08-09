@@ -134,6 +134,17 @@ pub trait Astre {
         &[]
     }
 
+    /// Polyligne de l'orbite d'une **lune**, relative à son parent. Vide pour
+    /// tout ce qui n'est pas une lune.
+    ///
+    /// Séparée d'[`Astre::orbite`] parce que le repère diffère : la trajectoire
+    /// d'une planète se centre sur son foyer stellaire, celle d'une lune sur la
+    /// planète — qui se déplace. Les confondre poserait les orbites lunaires
+    /// autour du barycentre du système.
+    fn orbite_lune(&self) -> &[Vec3] {
+        &[]
+    }
+
     /// Index de l'astre parent si c'est une lune (sinon None). Une lune n'est pas
     /// intégrée par la gravité N-corps : elle orbite analytiquement son parent.
     fn parent(&self) -> Option<usize> {

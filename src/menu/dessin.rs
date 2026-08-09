@@ -1,6 +1,6 @@
 use super::Menu;
 use crate::genese::PresetSauve;
-use crate::ui::{minitel_ligne, minitel_panel};
+use crate::ui::{bascule_double, minitel_ligne, minitel_panel};
 use macroquad::prelude::*;
 
 impl Menu {
@@ -33,11 +33,24 @@ impl Menu {
     }
 
     pub fn dessiner(&self, m: Vec2, presets: &[PresetSauve], focus: bool, outils: Rect, haut: f32) {
-        minitel_ligne(Self::btn(outils, 0), if self.orbites { "ORB PLAN: ON" } else { "ORB PLAN: OFF" }, m);
-        minitel_ligne(Self::btn(outils, 1), if self.orbites_etoiles { "ORB ETOI: ON" } else { "ORB ETOI: OFF" }, m);
-        minitel_ligne(Self::btn(outils, 2), if self.zone { "ZONE: ON" } else { "ZONE: OFF" }, m);
+        // Les quatre calques de lecture : un « double carré » chacun, le sujet
+        // écrit sur deux étages et l'état porté par la COULEUR DU FOND — plus
+        // besoin de lire « : ON » pour savoir (voir `ui::bascule_double`).
+        for (i, (haut_txt, bas_txt, actif)) in [
+            ("RING", "PLANET", self.orbites),
+            ("RING", "STAR", self.orbites_etoiles),
+            ("RING", "MOONS", self.orbites_lunes),
+            ("ZONE", "HABITABLE", self.zone),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            bascule_double(Self::btn(outils, i), haut_txt, bas_txt, actif, m);
+        }
+        // PHYS n'est pas un calque mais un mode de simulation : il garde la
+        // bascule à une ligne, et dit donc son état en toutes lettres.
         minitel_ligne(
-            Self::btn(outils, 3),
+            Self::btn(outils, Menu::N_CALQUES),
             if self.phys_rails { "PHYS: SUR RAILS" } else { "PHYS: N-CORPS" },
             m,
         );

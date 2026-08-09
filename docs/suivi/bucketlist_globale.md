@@ -52,7 +52,9 @@ exactement le même système (reproductible, partageable).
       quatre familles de petits corps au total.
 - [x] **Anneaux d'Uranus et de Neptune** au catalogue (la galerie et la vue système
       lisent la même apparence).
-- [x] **Atmosphères** : halo/rim lumineux (bleu sur mondes à océans, voile léger sinon, halo sur gazeuses/glacées).
+- [x] **Atmosphères** : coquille rendue **au-delà de la silhouette** (§ 8), teintée par
+      `atmo` et `voile`. Cette ligne a longtemps été cochée à tort pour un simple
+      éclaircissement du limbe — ce n'était pas une atmosphère, seulement un bord plus clair.
 - [x] **Fond étoilé** : champ d'étoiles lointaines autour de la caméra (effet infini).
 - [x] **Contrôle du temps** : Espace = pause, Haut/Bas = accélérer/ralentir (×0.125–×16).
 - [x] **Zone habitable** affichée (anneaux verts) + style des telluriques par température d'équilibre.
@@ -87,13 +89,18 @@ exactement le même système (reproductible, partageable).
       Champ graine éditable : toujours à faire.
 - [x] Gestion correcte de la **transparence/profondeur** des anneaux (rendu en 2 passes).
 - [x] **Material partagé** (un seul pipeline par type, cloné) -> corrige « Pipelines amount exceeded », gros gain init/mémoire GPU.
-- [ ] **LOD / culling des ceintures** — ⏳ **chantier P.2**, décidé le 2026-08-06.
-      Ce qui est déjà bon : buffers **figés**, orbite calculée **dans le vertex shader**
-      (rien ne remonte au CPU par frame). Le gisement est ailleurs : le préset solaire tire
-      **6 400 particules** en 4 ceintures, et le nuage de Oort (2 600 corps, 2 000 → 20 000 UA)
-      est dessiné **même quand la caméra est à 1 UA**, où il fait moins d'un pixel. Aucun test
-      de visibilité dans `disque/mod.rs`.
-      ⚠️ **Mesurer avant** : sans chiffre avant/après, « optimiser » est une opinion.
+- [x] **LOD / culling des ceintures** — chantier P.2, **mesuré le 2026-08-08 : sans objet.**
+      Les quatre ceintures solaires coûtent **18 `draw_mesh` et 25 600 sommets par frame**
+      (900 + 2 000 + 900 + 2 600 particules), buffers figés, orbite dans le vertex shader.
+      C'est du bruit pour un GPU. La ligne disait auparavant que « le gisement est le culling
+      du nuage de Oort » : faux — ce nuage coûte 7 appels de dessin. « 2 600 corps » sonnait
+      gros sans avoir jamais été rapporté à ce qu'un GPU avale.
+      Chiffres tenus par `budget_de_dessin_des_ceintures_solaires` (`disque/mod.rs`), qui
+      appelle les vrais constructeurs de maillage sur les vraies configs.
+- [ ] **Fill rate des voiles d'anneaux** — le seul coût plausible restant. 960 quads,
+      mais potentiellement plein écran, et chaque pixel paie 155 lignes de bruit
+      (`disque_voile.frag.glsl`), deux fois (moitié avant + arrière). ⚠️ **À mesurer à
+      l'écran** : FPS caméra serrée sur Saturne contre caméra au large.
 
 ## 7. Refacto en cours (objectif : fichiers ≤ ~100 lignes)
 
@@ -116,14 +123,15 @@ exactement le même système (reproductible, partageable).
 
 - [ ] **Telluriques** : vraie carte de relief (height/normal map procédurale) pour ombrer montagnes/cratères.
 - [x] **Mondes de lave** (>600 K) : croûte sombre + fissures incandescentes émissives (brillent de nuit).
-- [ ] **⚠️ ATMOSPHÈRE PLANÉTAIRE** — ⏳ **chantier P.1**, le manque le plus visible.
-      `planete.frag.glsl` l. 863 fait `if (rr > 1.0) discard;` : tout ce qui dépasse la sphère
-      est **jeté**, si bien que les 5 % de marge de l'impostor (`DISC = 1.05`) ne servent à
-      rien. Ce que le shader appelle « halo » n'éclaircit que le **limbe de la surface** —
-      rien ne brille **au-delà de la silhouette**, et c'est précisément ce qui fait lire une
-      atmosphère. Reste à faire : coquille rendue dans la marge, épaisseur optique selon
-      l'angle de vue, croissant au terminateur.
-      ⚠️ Toucher à `DISC` touche au LOD `px_rayon` et au cadrage caméra.
+- [x] **ATMOSPHÈRE PLANÉTAIRE** — chantier P.1, fait le 2026-08-08.
+      Le corps jetait tout ce qui dépasse la sphère (`if (rr > 1.0) discard;`) : la marge de
+      l'impostor (`DISC`, porté à 1,10) ne servait à rien, et le « halo » n'éclaircissait
+      que le **limbe de la surface**. L'atmosphère a désormais sa passe à elle,
+      `shaders/atmosphere.frag.glsl` : coquille creuse entre le sol et `disc`, épaisseur
+      optique = longueur de **corde** traversée (donc deux fois plus dès qu'on sort de la
+      silhouette — d'où le liseré net du limbe), raréfaction en altitude, terminateur qui
+      déborde sur la nuit, diffusion vers l'avant à contre-jour. Additive, sans écriture de
+      profondeur, sautée sous 0,75 px d'épaisseur. Voir STATE.md § P.1.
 - [ ] **Couche de nuages** séparée et animée sur les telluriques (et ombre portée au sol).
 - [x] **Côté nuit** : lumières de villes (amas dorés sur les terres, face non éclairée) sur les mondes à océans.
 - [ ] **Côté nuit** : reflet spéculaire de l'océan au terminateur.

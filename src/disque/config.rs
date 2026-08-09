@@ -1,6 +1,19 @@
 use crate::systeme::G;
 use macroquad::prelude::*;
 
+/// **Finesse des débris d'un anneau planétaire**, en fraction de la largeur de
+/// l'anneau (demi-tailles, comme partout dans le module — cf. `set_px_min`).
+///
+/// Exprimées ainsi, une tellurique et une géante rendent le même grain : c'est
+/// la largeur de l'anneau qui donne l'échelle, et le cadrage la suit déjà.
+///
+/// Les valeurs d'origine, absolues, valaient 0.015 et 0.09 en unités monde ; sur
+/// l'anneau de Neptune (largeur 1,80) elles faisaient 0,0083 et 0,0497 de la
+/// largeur. **Réduites de 40 %** ensuite, sur demande : le grain restait trop
+/// gros même une fois les deux vitrines accordées.
+const DEBRIS_MIN: f32 = 0.0050;
+const DEBRIS_MAX: f32 = 0.0298;
+
 /// Réglages d'un champ de débris (voir docs/conception/ceintures.md).
 /// Deux couches superposables :
 /// - **particules** (`nb > 0`) : corps discrets, orbites animées par le GPU ;
@@ -162,11 +175,25 @@ impl DisqueConfig {
     /// Vue de près, donc travaillée : essaim de petits cailloux + quelques
     /// gros fragments (bimodal), particules resserrées en annelets, et voile
     /// de POUSSIÈRE (plateau ténu + 2 bandes fines + granulation).
+    ///
+    /// **La taille des cailloux suit celle de l'anneau**, elle n'est pas absolue.
+    ///
+    /// Elle l'était (0.015 à 0.09 en unités monde) alors que TOUT le reste de la
+    /// géométrie s'exprime en rayons planétaires — bords de l'anneau, et jusqu'au
+    /// recul de la caméra. Résultat, la taille APPARENTE d'un caillou variait
+    /// comme l'inverse du rayon de la planète : autour d'une tellurique
+    /// (« Carbone », rayon 0,45) les débris sortaient **2,7 fois plus gros**
+    /// qu'autour d'une géante (« Neptune », rayon 1,20), pour une config
+    /// pourtant identique. Les deux vitrines de la galerie ne se ressemblaient
+    /// pas, sans qu'aucun réglage ne dise pourquoi.
+    ///
+    /// Rapportées à la largeur de l'anneau, les deux rendent pareil.
     pub fn debris_planetaire(nb: usize, interne: f32, externe: f32, masse: f32) -> Self {
+        let largeur = (externe - interne).max(1e-6);
         Self {
             epaisseur: 0.04,
-            taille_min: 0.015,
-            taille_max: 0.09,
+            taille_min: DEBRIS_MIN * largeur,
+            taille_max: DEBRIS_MAX * largeur,
             bimodal: 0.06,
             ringlets: 0.45,
             couleur: vec3(0.58, 0.54, 0.5),
@@ -349,5 +376,59 @@ impl DisqueConfig {
     pub fn avec_normale(mut self, n: Vec3) -> Self {
         self.normale = n;
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Les deux vitrines de la galerie, aux rayons réels du catalogue.
+    const R_TELLURIQUE: f32 = 0.451; // « Carbone »
+    const R_GEANTE: f32 = 1.202; // « Neptune »
+
+    /// L'anneau de débris de la galerie : de 1,9 à 3,4 rayons planétaires.
+    fn anneau_de(r: f32) -> DisqueConfig {
+        DisqueConfig::debris_planetaire(1000, r * 1.9, r * 3.4, 1.0)
+    }
+
+    /// **Un caillou doit avoir le même grain APPARENT autour de n'importe quelle
+    /// planète.**
+    ///
+    /// La caméra recule proportionnellement au rayon (`cam_pos = ext * 2`), donc
+    /// la taille à l'écran vaut `taille / rayon`. Avec des tailles absolues, ce
+    /// rapport variait comme l'inverse du rayon : les débris d'une tellurique
+    /// sortaient 2,7 fois plus gros que ceux d'une géante, **à config
+    /// identique**. Rien ne le disait — il fallait comparer les deux vitrines.
+    #[test]
+    fn le_grain_des_debris_ne_depend_pas_de_la_taille_de_la_planete() {
+        let (t, g) = (anneau_de(R_TELLURIQUE), anneau_de(R_GEANTE));
+        for (nom, a, b) in [
+            ("taille_min", t.taille_min / R_TELLURIQUE, g.taille_min / R_GEANTE),
+            ("taille_max", t.taille_max / R_TELLURIQUE, g.taille_max / R_GEANTE),
+        ] {
+            let ecart = (a - b).abs() / b.max(1e-9);
+            assert!(
+                ecart < 0.01,
+                "{nom} : grain apparent {a:.5} (tellurique) contre {b:.5} (géante), \
+                 soit {:.0} % d'écart",
+                ecart * 100.0
+            );
+        }
+    }
+
+    /// Et il reste **fin** : un caillou ne doit pas peser une part visible de
+    /// l'anneau, sinon on ne lit plus une poussière mais des rochers.
+    #[test]
+    fn les_debris_restent_fins_devant_l_anneau() {
+        let c = anneau_de(R_GEANTE);
+        let largeur = c.externe - c.interne;
+        assert!(
+            c.taille_max < largeur * 0.05,
+            "le plus gros caillou fait {:.1} % de la largeur de l'anneau",
+            c.taille_max / largeur * 100.0
+        );
+        assert!(c.taille_min > 0.0, "des cailloux de taille nulle ne se dessinent pas");
+        assert!(c.taille_min < c.taille_max, "min et max inversés");
     }
 }

@@ -81,6 +81,16 @@ impl Orbite {
     }
 
     /// Polyligne de l'ellipse (relative au foyer), pour tracer l'orbite.
+    /// **Nombre d'échantillons d'une trace d'orbite.**
+    ///
+    /// C'est le PLAFOND de densité du semis de points : le tracé peut en sauter
+    /// (`dessiner_points` règle l'espacement à l'écran), jamais en inventer. À 96
+    /// — la valeur d'origine — un zoom serré ne laissait qu'une poignée de marques
+    /// sur tout l'écran, et le cercle ne se lisait plus.
+    ///
+    /// 512 : ~6 Ko par orbite, et de quoi tenir un semis serré de très près.
+    pub const N_TRACE: usize = 512;
+
     pub fn polyligne(&self, n_pts: usize) -> Vec<Vec3> {
         let b = self.a * (1.0 - self.e * self.e).max(0.0).sqrt();
         (0..n_pts)
@@ -103,4 +113,27 @@ fn resoudre_kepler(m: f32, e: f32) -> f32 {
         ea -= f / fp;
     }
     ea
+}
+
+#[cfg(test)]
+mod tests_trace {
+    use super::*;
+
+    /// **La réserve d'échantillons doit rester haute.**
+    ///
+    /// Elle ne se voit pas de loin (le tracé en saute), mais elle plafonne la
+    /// densité de près — et c'est exactement là que le défaut s'était vu : « pas
+    /// assez de points pour visualiser le cercle ». Le seuil est posé comme une
+    /// borne, pas comme une copie de la valeur : baisser N_TRACE sous 256
+    /// ramènerait le défaut.
+    #[test]
+    fn la_trace_garde_de_quoi_faire_un_cercle_de_pres() {
+        const _: () = assert!(
+            Orbite::N_TRACE >= 256,
+            "N_TRACE trop bas : plus assez de points pour lire un cercle en zoom serré"
+        );
+        // Et le tirage rend bien ce qu'on lui demande.
+        let o = Orbite::new(10.0, 0.2, Vec3::X, Vec3::Z, 1.0, 0.0);
+        assert_eq!(o.polyligne(Orbite::N_TRACE).len(), Orbite::N_TRACE);
+    }
 }

@@ -17,9 +17,73 @@ pub struct GalerieDisques {
     index: usize,      // case affichée (le scroll converge vers index * ch)
     scroll: f32,
     vitesse: f32,      // multiplicateur temporel (Haut/Bas), comme en skymap
-    pixelise: bool,
     cible: Option<RenderTarget>,
     rt_dims: (u32, u32),
+    // Colonne de gauche : atteindre un cas d'un clic au lieu de dérouler la
+    // molette. Repliable — treize cas, c'est une liste courte, mais la colonne
+    // mange un dixième de la largeur du rendu.
+    liste_repliee: bool,
+}
+
+impl GalerieDisques {
+    /// Dessin de la colonne. **Passe interface uniquement** — le calcul
+    /// (colonne, lignes, item visé, troncature) vit dans `ecran::liste` et s'y
+    /// teste ; ici il ne reste que la pose des rectangles.
+    fn dessiner_liste(&self, ecran: Vec2, haut: f32, souris: Vec2) {
+        use crate::ecran::liste;
+        let cyan = Color::new(0.0, 0.85, 0.85, 1.0);
+
+        if !self.liste_repliee {
+            let col = liste::colonne_items_depuis(ecran, haut);
+            let n = self.cellules.len();
+            draw_rectangle(col.x, col.y, col.w, col.h, Color::new(0.02, 0.03, 0.12, 0.88));
+            draw_rectangle_lines(col.x, col.y, col.w, col.h, 1.0, Color::new(0.0, 0.5, 0.5, 0.9));
+
+            let h = liste::hauteur_ligne(col, n);
+            let taille = (h * 0.55).clamp(crate::police::TAILLE_MIN, 15.0);
+            for (i, cel) in self.cellules.iter().enumerate() {
+                let r = liste::ligne(col, n, i);
+                if r.y + r.h > col.y + col.h {
+                    break; // déborde : on n'écrit pas sous la colonne
+                }
+                let courant = i == self.index;
+                let survol = r.contains(souris);
+                let (fond, texte) = match (courant, survol) {
+                    (true, _) => (cyan, BLACK),
+                    (false, true) => (Color::new(0.0, 0.45, 0.45, 0.35), Color::new(0.8, 1.0, 1.0, 1.0)),
+                    _ => (Color::new(0.0, 0.0, 0.0, 0.0), Color::new(0.55, 0.8, 0.8, 1.0)),
+                };
+                draw_rectangle(r.x, r.y, r.w, r.h, fond);
+                // `abrege` coupe au deux-points, `tronquer` mesure avec la vraie
+                // police : « Ceinture d'asteroides (2.2 - 3.3 UA) » ne tient pas
+                // dans un dixième d'écran.
+                let t = liste::tronquer(liste::abrege(&cel.nom), r.w - 8.0, taille as u16);
+                crate::police::texte(&t, r.x + 4.0, r.y + r.h * 0.5 + taille * 0.34, taille, texte);
+            }
+        }
+
+        // Le bouton reste à la MÊME place repliée ou non : il faut pouvoir
+        // rouvrir sans aller le chercher.
+        let bouton = liste::bouton_repli(ecran);
+        let survol = bouton.contains(souris);
+        draw_rectangle(
+            bouton.x,
+            bouton.y,
+            bouton.w,
+            bouton.h,
+            if survol { Color::new(0.0, 0.45, 0.45, 0.9) } else { Color::new(0.02, 0.03, 0.12, 0.9) },
+        );
+        draw_rectangle_lines(bouton.x, bouton.y, bouton.w, bouton.h, 1.0, cyan);
+        let fleche = if self.liste_repliee { ">" } else { "<" };
+        let tw = crate::police::mesure(fleche, 14);
+        crate::police::texte(
+            fleche,
+            bouton.x + (bouton.w - tw) * 0.5,
+            bouton.y + bouton.h * 0.5 + 5.0,
+            14.0,
+            cyan,
+        );
+    }
 }
 
 /// Contenu d'une case : champ stellaire (étoile de référence + disque à
@@ -48,9 +112,9 @@ impl GalerieDisques {
             index: 0,
             scroll: 0.0,
             vitesse: 8.0, // les périodes réelles sont lentes (Kepler à l'UA)
-            pixelise: false,
             cible: None,
             rt_dims: (0, 0),
+            liste_repliee: false,
         };
         g.construire();
         g
@@ -302,10 +366,20 @@ impl GalerieDisques {
         if is_key_pressed(KeyCode::R) {
             crate::planete::vider_cache_materials();
             crate::soleil::vider_cache_materials();
+            crate::disque::vider_cache_materials();
             self.construire();
         }
         if is_key_pressed(KeyCode::P) {
-            self.pixelise = !self.pixelise;
+            // Cycle NET -> PIXEL -> PIXEL+PALETTE, sur le réglage global — le
+            // même que la galerie des planètes. Un interrupteur local n'aurait
+            // donné qu'un rendu de plus à tenir d'accord avec les autres.
+            crate::reglages::regler_rendu(crate::reglages::mode_rendu().suivant());
+        }
+        // V : couche voile on/off. **Instrument de mesure** (P.2 bis) — c'est le
+        // seul coût GPU plausible restant des disques, et il ne s'isole qu'en
+        // l'éteignant à cadrage identique.
+        if is_key_pressed(KeyCode::V) {
+            crate::disque::set_voiles(!crate::disque::voiles_actifs());
         }
         // Vitesse du temps (les périodes képlériennes réelles sont lentes).
         if is_key_pressed(KeyCode::Up) {
@@ -332,7 +406,25 @@ impl GalerieDisques {
         let ch = (screen_height() - top).max(120.0);
         let label_h = 30.0;
         let render_h = ch - label_h;
-        let cw = screen_width();
+
+        // --- Colonne de gauche : choisir un cas d'un clic ---
+        //
+        // Traitée AVANT le rendu 3D parce qu'elle en fixe la largeur : le
+        // viewport doit démarrer au bord de la colonne, sinon elle recouvre une
+        // bande de l'image au lieu de la côtoyer.
+        let ecran = vec2(screen_width(), screen_height());
+        let souris = Vec2::from(mouse_position());
+        let clic = is_mouse_button_pressed(MouseButton::Left);
+        if clic && crate::ecran::liste::bouton_repli(ecran).contains(souris) {
+            self.liste_repliee = !self.liste_repliee;
+        } else if clic && !self.liste_repliee {
+            let col = crate::ecran::liste::colonne_items_depuis(ecran, top);
+            if let Some(i) = crate::ecran::liste::item_sous_curseur(col, n, souris) {
+                self.index = i;
+            }
+        }
+        let gauche = crate::ecran::liste::bord_droit(ecran, self.liste_repliee);
+        let cw = (screen_width() - gauche).max(1.0);
 
         // Défilement doux vers la case visée (indépendant du framerate).
         let cible = self.index as f32 * ch;
@@ -342,22 +434,20 @@ impl GalerieDisques {
             self.scroll = cible;
         }
 
+        // Le mode vient des réglages — la vue n'a pas d'interrupteur à elle.
+        let pixelise = crate::reglages::mode_rendu().pixelise();
+
         // Filtre pixel : cible basse résolution (recréée si la fenêtre change).
-        const PIX: u32 = 2;
-        if self.pixelise {
-            let dims = (
-                (screen_width() as u32 / PIX).max(2),
-                (screen_height() as u32 / PIX).max(2),
-            );
+        //
+        // **Tout vient de `ecran::pixel`** — facteur de réduction, cible, et
+        // surtout le blit, qui est là où s'applique la quantification de
+        // palette. Cette vue en avait sa propre copie : elle pixelisait sans
+        // jamais quantifier, d'où des débris qui ne « faisaient pas pixel art »
+        // alors que les planètes, elles, passaient bien par la palette.
+        if pixelise {
+            let dims = super::pixel::dimensions();
             if self.rt_dims != dims || self.cible.is_none() {
-                // depth: true — indispensable pour l'occlusion en mode pixel.
-                let rt = render_target_ex(
-                    dims.0,
-                    dims.1,
-                    RenderTargetParams { sample_count: 1, depth: true },
-                );
-                rt.texture.set_filter(FilterMode::Nearest);
-                self.cible = Some(rt);
+                self.cible = Some(super::pixel::nouvelle_cible(dims.0, dims.1));
                 self.rt_dims = dims;
             }
             set_camera(&Camera2D {
@@ -387,18 +477,18 @@ impl GalerieDisques {
                 fovy: 45.0_f32.to_radians(),
                 aspect: Some(cw / render_h),
                 viewport: Some((
-                    0,
+                    gauche as i32,
                     (screen_height() - (cell_y + render_h)) as i32,
                     cw as i32,
                     render_h as i32,
                 )),
                 ..Default::default()
             };
-            if self.pixelise {
-                let p = PIX as f32;
+            if pixelise {
+                let p = super::pixel::PIX as f32;
                 cam3d.render_target = self.cible.clone();
                 cam3d.viewport = Some((
-                    0,
+                    (gauche / p) as i32,
                     ((screen_height() - (cell_y + render_h)) / p) as i32,
                     (cw / p) as i32,
                     (render_h / p) as i32,
@@ -406,9 +496,9 @@ impl GalerieDisques {
             }
             set_camera(&cam3d);
 
-            let forward = (Vec3::ZERO - pos).normalize();
-            let right = forward.cross(Vec3::Y).normalize();
-            let up = right.cross(forward).normalize();
+            // Même recette que la vue orbitale : les billboards s'appuient sur ce
+            // repère, et il se dégrade quand la visée frôle Y (voir base_camera).
+            let (right, up, forward) = crate::camera::base_camera(Vec3::ZERO - pos);
             let cam = CameraInfo {
                 pos,
                 right,
@@ -419,28 +509,48 @@ impl GalerieDisques {
                 lights_pos: [light_pos, Vec3::ZERO, Vec3::ZERO, Vec3::ZERO],
                 lights_color: [Vec3::ONE, Vec3::ZERO, Vec3::ZERO, Vec3::ZERO],
             };
-            let ech = if self.pixelise { PIX as f32 } else { 1.0 };
+            let ech = if pixelise { super::pixel::PIX as f32 } else { 1.0 };
             crate::planete::set_viewport_h(render_h / ech);
             crate::disque::set_viewport_h(render_h / ech); // clamp px des particules
             // Pixel-art : le plus petit débris = 1 pixel de la grille (sinon le
             // clamp de 1.5 px de rendu devient 3 px écran -> débris grossis).
-            crate::disque::set_px_min(if self.pixelise { 1.0 } else { 0.0 });
+            crate::disque::set_px_min(if pixelise { 1.0 } else { 0.0 });
             match &mut cel.contenu {
                 Contenu::EtoileEtDisque(so, dq, corps) => {
                     so.update(dt);
                     dq.update(dt);
-                    // Rendu peintre autour de l'étoile : moitié arrière ->
-                    // corps embarqués -> soleil (le halo se fond par-dessus la
-                    // matière lointaine) -> moitié avant (passe devant le halo).
-                    dq.draw_moitie(&cam, -1.0);
+                    // **Une seule passe, et le tampon de profondeur ordonne.**
+                    //
+                    // Le disque était dessiné en deux moitiés autour de l'étoile
+                    // (arrière -> étoile -> avant). Cette découpe ouvrait la
+                    // couture visible sur les disques proto* : dans chaque
+                    // moitié, les cailloux sont peints PUIS recouverts par le
+                    // voile de leur moitié. Un caillou de la moitié avant dont
+                    // le quad déborde à l'écran sur la moitié arrière est donc
+                    // peint APRÈS le voile arrière, et le voile avant ne va pas
+                    // le couvrir : il reste nu, opaque et sombre sur le voile
+                    // clair. Les cailloux traversant la couture au fil de leur
+                    // orbite, la ligne scintillait et changeait de côté.
+                    //
+                    // La découpe ne servait qu'à se passer de profondeur — or la
+                    // cible de rendu en a une (`depth: true`, plus haut), et la
+                    // vue système dessine déjà les ceintures en une passe, sans
+                    // couture. Elle dégénérait en prime vue de dessus : son plan
+                    // devient alors parallèle au disque, et « avant/arrière » ne
+                    // veut plus rien dire.
+                    //
+                    // L'étoile d'abord : son disque écrit la profondeur, donc la
+                    // matière passant derrière est rejetée, tandis que sa
+                    // couronne, elle, n'écrit rien (voir soleil/materiau.rs) et
+                    // laisse voir le disque au travers.
+                    so.draw(&cam);
                     for (idx, pl) in corps.iter_mut() {
                         if let Some(pos) = dq.position_lacune(*idx) {
                             pl.corps_mut().position = pos;
                             pl.draw(&cam);
                         }
                     }
-                    so.draw(&cam);
-                    dq.draw_moitie(&cam, 1.0);
+                    dq.draw_moitie(&cam, 0.0);
                 }
                 Contenu::Planete(pl) => {
                     pl.update(dt); // anime le voile de l'anneau
@@ -448,15 +558,12 @@ impl GalerieDisques {
                 }
                 Contenu::PlaneteEtDisques(pl, disques) => {
                     pl.update(dt);
-                    // Rendu peintre : moitiés arrière -> planète -> moitiés
-                    // avant. Fiable même sans depth buffer (mode pixel).
-                    for dq in disques.iter_mut() {
-                        dq.update(dt);
-                        dq.draw_moitie(&cam, -1.0);
-                    }
+                    // Même raison qu'au-dessus : la planète d'abord (elle écrit
+                    // la profondeur), puis l'anneau en une passe.
                     pl.draw(&cam);
                     for dq in disques.iter_mut() {
-                        dq.draw_moitie(&cam, 1.0);
+                        dq.update(dt);
+                        dq.draw_moitie(&cam, 0.0);
                     }
                 }
             }
@@ -468,31 +575,24 @@ impl GalerieDisques {
 
         // --- Phase 2D : blit pixelisé puis textes nets. ---
         set_default_camera();
-        if self.pixelise {
+        if pixelise {
             if let Some(rt) = &self.cible {
-                draw_texture_ex(
-                    &rt.texture,
-                    0.0,
-                    0.0,
-                    WHITE,
-                    DrawTextureParams {
-                        dest_size: Some(vec2(screen_width(), screen_height())),
-                        flip_y: true,
-                        ..Default::default()
-                    },
-                );
+                super::pixel::blit(&rt.texture);
             }
         }
         let nom_col = Color::new(0.7, 0.9, 0.8, 1.0);
         for (nom, y) in &labels {
             let tw = crate::police::mesure(nom, 18);
-            crate::police::texte(nom, (screen_width() - tw) * 0.5, *y, 18.0, nom_col);
+            // Centré sur la zone de rendu, pas sur l'écran : sinon le titre
+            // glisse sous la colonne quand elle est déployée.
+            crate::police::texte(nom, gauche + (cw - tw) * 0.5, *y, 18.0, nom_col);
         }
+        self.dessiner_liste(ecran, top, souris);
 
         // Barre de titre + état.
         draw_rectangle(0.0, 0.0, screen_width(), top, Color::new(0.02, 0.02, 0.05, 1.0));
         crate::police::texte(
-            "CEINTURES & DISQUES   molette: cas suivant/precedent   Haut/Bas: vitesse   G: regenerer   R: shaders   P: pixel   Echap: menu",
+            "CEINTURES & DISQUES   clic liste: aller au cas   molette: suivant/precedent   Haut/Bas: vitesse   G: regenerer   R: shaders   P: rendu (net/pixel/palette)   V: voiles   Echap: menu",
             12.0,
             26.0,
             16.0,
@@ -500,12 +600,13 @@ impl GalerieDisques {
         );
         crate::police::texte(
             &format!(
-                "cas {}/{}   x{:.2}   {} FPS   pixel: {}",
+                "cas {}/{}   x{:.2}   {} FPS   rendu: {}   voiles: {}",
                 self.index + 1,
                 n,
                 self.vitesse,
                 get_fps(),
-                if self.pixelise { "ON" } else { "off" }
+                crate::reglages::mode_rendu().nom(),
+                if crate::disque::voiles_actifs() { "ON" } else { "OFF" }
             ),
             12.0,
             screen_height() - 10.0,

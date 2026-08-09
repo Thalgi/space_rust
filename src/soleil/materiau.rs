@@ -4,15 +4,34 @@ use macroquad::prelude::*;
 use std::cell::RefCell;
 
 // Materials partagés : un seul pipeline chacun, clonés à chaque soleil.
+/// **Les deux passes de l'étoile** : `(zone, écrit la profondeur)`.
+///
+/// Le disque de l'étoile (`zone` 0) est opaque : il doit occulter ce qui passe
+/// derrière, sinon un corps caché par l'étoile se dessinerait par-dessus (la vue
+/// système ne trie pas ses astres). La couronne (`zone` 1) est translucide : elle
+/// ne doit RIEN occulter. Son quad est plat, face caméra, et s'étend jusqu'à 2,1
+/// rayons ; en écrivant la profondeur elle posait un plan qui rejetait tout ce
+/// qui passait derrière — d'où la barre sombre en travers des étoiles des disques
+/// protosolaires, là où ce plan coupait le voile.
+///
+/// GLSL ES 100 ne sait pas couper l'écriture de profondeur par fragment : il faut
+/// deux pipelines sur le même shader, que `zone` aiguille (`soleil.frag.glsl`).
+///
+/// **Source unique** : le nombre de materials, l'ordre de dessin (`rendu.rs`) et
+/// le test d'invariant lisent tous cette table.
+pub(super) const PASSES: [(f32, bool); 2] = [(0.0, true), (1.0, false)];
+
 thread_local! {
-    static TPL_SOLEIL: RefCell<Option<Material>> = const { RefCell::new(None) };
+    static TPL_PASSES: RefCell<Option<Vec<Material>>> = const { RefCell::new(None) };
     static TPL_PLASMA: RefCell<Option<Material>> = const { RefCell::new(None) };
 }
 
-pub(super) fn mat_soleil() -> Material {
-    TPL_SOLEIL.with(|c| {
+/// Les materials des passes de [`PASSES`], dans le même ordre.
+pub(super) fn mats_soleil() -> Vec<Material> {
+    TPL_PASSES.with(|c| {
         if c.borrow().is_none() {
-            *c.borrow_mut() = Some(charger_soleil());
+            let v = PASSES.iter().map(|(_, prof)| charger_soleil(*prof)).collect();
+            *c.borrow_mut() = Some(v);
         }
         c.borrow().as_ref().unwrap().clone()
     })
@@ -29,11 +48,13 @@ pub(super) fn mat_plasma_partage() -> Material {
 
 /// Vide le cache de materials -> recompilation depuis les .glsl (hot-reload).
 pub(super) fn vider_cache() {
-    TPL_SOLEIL.with(|c| *c.borrow_mut() = None);
+    TPL_PASSES.with(|c| *c.borrow_mut() = None);
     TPL_PLASMA.with(|c| *c.borrow_mut() = None);
 }
 
-fn charger_soleil() -> Material {
+/// Déclaration des uniforms du soleil. **Source unique** : sert à créer les deux
+/// materials, et de référence au test de correspondance avec le `.glsl`.
+fn uniforms_soleil() -> Vec<UniformDesc> {
     let mut uniforms = impostor::uniforms_communs();
     uniforms.extend([
         UniformDesc::new("teinte", UniformType::Float3),
@@ -41,17 +62,24 @@ fn charger_soleil() -> Material {
         UniformDesc::new("couronne_irreg", UniformType::Float1),
         UniformDesc::new("couronne_type", UniformType::Float1),
         UniformDesc::array(UniformDesc::new("spots", UniformType::Float4), super::MAX_TACHES),
+        UniformDesc::new("zone", UniformType::Float1),
     ]);
+    uniforms
+}
+
+/// `profondeur` : vrai pour la passe du disque (opaque, écrit la profondeur),
+/// faux pour la couronne (translucide, n'occulte rien).
+fn charger_soleil(profondeur: bool) -> Material {
     load_material(
         ShaderSource::Glsl {
             vertex: &impostor::source("impostor.vert.glsl", impostor::VERT_IMPOSTOR),
             fragment: &impostor::source("soleil.frag.glsl", FRAG),
         },
         MaterialParams {
-            uniforms,
+            uniforms: uniforms_soleil(),
             pipeline_params: PipelineParams {
                 depth_test: Comparison::LessOrEqual,
-                depth_write: true,
+                depth_write: profondeur,
                 color_blend: Some(BlendState::new(
                     Equation::Add,
                     BlendFactor::Value(BlendValue::SourceAlpha),
@@ -89,3 +117,65 @@ fn charger_plasma() -> Material {
 const VERT_PLASMA: &str = include_str!("../shaders/soleil_plasma.vert.glsl");
 const FRAG_PLASMA: &str = include_str!("../shaders/soleil_plasma.frag.glsl");
 const FRAG: &str = include_str!("../shaders/soleil.frag.glsl");
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::impostor::verif::{uniforms_glsl, uniforms_rust};
+
+    /// Un uniform lu par le `.glsl` mais absent de la déclaration Rust vaut
+    /// **silencieusement zéro** : aucun message, l'effet disparaît.
+    ///
+    /// Le cas concret, ici : `zone` sépare la passe du disque (opaque, écrit la
+    /// profondeur) de celle de la couronne (translucide, n'occulte rien). Oublié
+    /// côté Rust, il resterait à 0 dans les deux passes — le shader dessinerait
+    /// deux fois le disque et **la couronne disparaîtrait purement et simplement**.
+    #[test]
+    fn uniforms_soleil_correspondent_au_shader() {
+        let glsl = uniforms_glsl(&[impostor::VERT_IMPOSTOR, FRAG]);
+        let rust = uniforms_rust(&uniforms_soleil());
+        assert_eq!(glsl, rust, "soleil : GLSL (gauche) vs Rust (droite)");
+    }
+
+    /// **Le disque écrit la profondeur, la couronne non.**
+    ///
+    /// C'est tout l'objet de la séparation. La couronne est un quad plat, face
+    /// caméra, qui s'étend jusqu'à 2,1 rayons : en écrivant la profondeur elle
+    /// posait un plan qui rejetait tout ce qui passe derrière. Sur un disque
+    /// protosolaire (matière dès 0,1 UA), ce plan coupait le voile le long de
+    /// son intersection avec le plan du disque — **une barre sombre en travers
+    /// de l'étoile**. En vue système, il rognait aussi toute planète passant
+    /// derrière l'étoile.
+    ///
+    /// L'inverse compte autant : sans profondeur sur le disque, un corps situé
+    /// derrière l'étoile se dessinerait par-dessus (la vue système ne trie pas
+    /// ses astres, elle s'en remet au tampon de profondeur).
+    ///
+    /// Le test porte sur [`PASSES`], la donnée d'où sortent **et** les materials
+    /// **et** l'ordre de dessin — pas sur le texte du fichier.
+    #[test]
+    fn seul_le_disque_de_l_etoile_ecrit_la_profondeur() {
+        let opaque = PASSES.iter().filter(|(_, prof)| *prof).count();
+        assert_eq!(opaque, 1, "il faut exactement une passe opaque : {PASSES:?}");
+
+        let (zone_opaque, _) = PASSES.iter().find(|(_, prof)| *prof).unwrap();
+        let (zone_translucide, _) = PASSES.iter().find(|(_, prof)| !*prof).unwrap();
+        // `soleil.frag.glsl` : zone < 0.5 garde rr <= 1 (le disque), zone > 0.5
+        // garde rr > 1 (la couronne). L'opaque doit donc être la zone basse.
+        assert!(
+            *zone_opaque < 0.5,
+            "la passe opaque doit être le disque (zone basse), pas la couronne"
+        );
+        assert!(*zone_translucide > 0.5, "la couronne doit être la zone haute");
+    }
+
+    /// Les deux passes doivent couvrir le quad **sans trou ni recouvrement** :
+    /// le shader aiguille sur `rr <= 1` contre `rr > 1`, donc il faut exactement
+    /// deux zones, distinctes. Une zone en trop et le disque se dessinerait deux
+    /// fois ; une en moins et la couronne disparaîtrait.
+    #[test]
+    fn les_deux_passes_couvrent_le_quad_une_fois() {
+        assert_eq!(PASSES.len(), 2, "le shader n'aiguille que deux zones");
+        assert_ne!(PASSES[0].0, PASSES[1].0, "les deux passes tirent la même zone");
+    }
+}

@@ -182,6 +182,12 @@ Diversity sont couvertes, plus les non-habitables et les cas spéciaux.
 `mesa`, `pics`, `recifs`, `basalt`, `crateres`, `voile` (Vénus/Titan), `eyeball` (marée),
 `cryo`, `biolum`, `lave`, **reflet spéculaire océan**, `seed` (géographie unique).
 
+**Atmosphère** (2026-08-08) : elle n'est plus peinte par le shader du corps. Passe
+séparée `shaders/atmosphere.frag.glsl`, additive et sans écriture de profondeur, qui
+**déborde de la silhouette** — coquille creuse entre le sol et `disc`, opacité par
+longueur de corde, crépuscule au terminateur, embrasement à contre-jour. Teinte prise
+sur `atmo` **et** `voile`. Voir `conception/planetes.md` § 14.
+
 **Reste (optionnel, non bloquant)** :
 
 - [ ] Rotation à **vitesse variable** par planète (la rotation existe déjà, vitesse uniforme).

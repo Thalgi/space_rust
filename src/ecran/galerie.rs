@@ -114,6 +114,7 @@ impl Galerie {
         }
         if is_key_pressed(KeyCode::R) {
             crate::planete::vider_cache_materials();
+            crate::disque::vider_cache_materials();
             self.construire();
         }
         if is_key_pressed(KeyCode::P) {
@@ -252,9 +253,7 @@ impl Galerie {
             }
             set_camera(&cam3d);
 
-            let forward = (Vec3::ZERO - pos).normalize();
-            let right = forward.cross(Vec3::Y).normalize();
-            let up = right.cross(forward).normalize();
+            let (right, up, forward) = crate::camera::base_camera(Vec3::ZERO - pos);
             let cam = CameraInfo {
                 pos,
                 right,

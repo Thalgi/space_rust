@@ -134,18 +134,20 @@ impl Objet {
         }
         if is_key_pressed(KeyCode::R) {
             crate::planete::vider_cache_materials();
+            crate::disque::vider_cache_materials();
             crate::soleil::vider_cache_materials();
             self.sys = batir(&self.spec);
             self.fond.recharger_material();
         }
 
         self.cam.input_orbite(false);
-        self.sys.update(dt);
+        // Vue objet : pas de multiplicateur, les deux horloges coïncident.
+        self.sys.update(dt, crate::systeme::DtAnimation(dt));
 
         let aspect = screen_width() / screen_height();
         let (cam_info, cam3d) = self.cam.construire(Vec3::ZERO, aspect);
         self.rendu
-            .rendre(cam3d, &cam_info, &mut self.fond, &mut self.sys, false, false, false);
+            .rendre(cam3d, &cam_info, &mut self.fond, &mut self.sys, Default::default());
 
         crate::police::texte(
             &format!(

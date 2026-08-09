@@ -720,7 +720,75 @@ Deux garde-fous :
    (même graine = mêmes planètes, génération déterministe). Les captures sont
    la « mémoire de l'état de l'art » des types de planètes.
 
-### 14. Références
+### 14. Atmosphère : la coquille (implémenté, 2026-08-08)
+
+L'atmosphère n'est **pas** peinte par le shader du corps. Elle a sa passe :
+`shaders/atmosphere.frag.glsl`, même quad impostor, dessinée juste après le
+corps et **avant la moitié avant de l'anneau**.
+
+**Pourquoi une passe séparée.** Le corps s'arrête net à la silhouette
+(`if (rr > 1.0) discard;`) et **écrit la profondeur**. L'atmosphère, elle, doit
+déborder de la silhouette et n'occulter *rien* — la moitié avant d'un anneau
+continue de passer devant. Impossible dans la même passe : GLSL ES 100 ne permet
+pas de couper l'écriture de profondeur par fragment. D'où deux pipelines : le
+corps opaque avec `depth_write`, la coquille **additive sans écriture**.
+
+**Le modèle.** Coquille creuse entre le sol (rayon 1) et le sommet de l'air
+(rayon `disc`), en rayons planétaires. Pour un rayon visuel frappant l'image à
+la distance `b` du centre, on mesure la **corde** parcourue dans la coquille :
+c'est la quantité d'air traversée, donc la lumière diffusée vers l'œil.
+
+```
+b < 1 : corde = √(disc² − b²) − √(1 − b²)   le sol coupe le rayon
+b > 1 : corde = 2·√(disc² − b²)             la coquille est traversée deux fois
+```
+
+Le **facteur deux au franchissement de la silhouette** n'est pas une erreur de
+raccord : c'est ce qui fait du limbe d'une planète un liseré fin et lumineux
+plutôt qu'un dégradé mou. Profil pour `disc = 1.10` et une densité terrestre,
+aux constantes du shader (`CONTRASTE = 1.6`, `K = 4`, `ECHELLE = 0.35`) :
+
+| `b` | 0 | 0,9 | 0,99 | **1,0** | 1,02 | 1,04 | 1,06 | 1,08 |
+|---|---|---|---|---|---|---|---|---|
+| opacité | 11 % | 28 % | 55 % | **98 %** | 84 % | 57 % | 29 % | 11 % |
+
+Le voile de 11 % au centre du disque n'est pas un défaut : on regarde bien à
+travers de l'air, même à la verticale. C'est l'exposant `CONTRASTE` qui empêche
+ce voile de délaver la planète entière.
+
+**Ce que la coquille ajoute au-delà de la géométrie** : raréfaction en altitude
+(hauteur d'échelle `ECHELLE` = 35 % de l'épaisseur), opacité Beer-Lambert
+(`1 − exp(−K·ép)`), terminateur qui **déborde sur la nuit** (crépuscule : la
+haute couche voit encore l'étoile quand le sol est dans l'ombre), éclairage
+multi-source identique au corps, et **diffusion vers l'avant** — à contre-jour
+la lumière rase la coquille sans dévier et l'arc du limbe s'embrase.
+
+**Teinte et densité** viennent de `atmo` *et* de `voile` : sans le voile, le
+halo de Vénus serait bleu clair au lieu de jaune épais.
+
+**Coût.** La passe est sautée si `atmo == 0`, ou si la coquille tient dans moins
+de `ATMO_PX_MIN = 0.75` px — en vue système, des dizaines de corps de quelques
+pixels ne paient rien.
+
+**`DISC` est la source unique** du rayon du quad *et* de l'uniform `disc`. Les
+deux avaient divergé silencieusement (`r * 1.05` en dur dans `planete/mod.rs`) ;
+un quad trop petit tronquerait la coquille, un quad trop grand la dessinerait
+sur du vide. C'est cette unification qui a permis d'**épaisser la coquille de
+5 % à 10 % en changeant un seul chiffre**, après avoir vu le premier rendu.
+
+**Ce que l'épaisseur ne règle pas.** Élargir la coquille élargit la bande ; elle
+ne l'éclaircit pas. Un corps à atmosphère ténue reste pâle parce que son plafond
+est sa **densité** — Mars plafonne à 31 % au limbe avec `|atmo| = 0.105`, que la
+coquille fasse 5 % ou 10 %. Les deux réglages sont indépendants : `DISC` pour la
+largeur, `atmo`/`voile` pour l'éclat.
+
+**Bornes de l'épaisseur.** Le quad doit tenir dans le cadrage : galerie et
+vignettes regardent de 3 r avec un fov de 45°, soit 1,243 r de demi-hauteur de
+champ. À `DISC = 1.10` la coquille en occupe 89 % — il reste de la marge, mais
+pas beaucoup. Au-delà de ~1,20 elle serait rognée par le bord des cases ; le test
+`le_disque_laisse_de_la_place_a_la_coquille` tient cette borne.
+
+### 15. Références
 
 - Inigo Quilez — *Domain warping* (déjà utilisé dans le shader actuel)
 - Sebastian Lague — *Coding Adventure: Hydraulic Erosion* (modèle de gouttes)

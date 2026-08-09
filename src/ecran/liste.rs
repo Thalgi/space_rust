@@ -133,6 +133,22 @@ pub fn sur_la_liste(ecran: Vec2, souris: Vec2) -> bool {
     colonne(ecran).contains(souris)
 }
 
+/// Abscisse à partir de laquelle une vue peut dessiner **sans passer sous la
+/// colonne**.
+///
+/// Les vues qui occupent tout l'écran (galeries) doivent rétrécir leur viewport
+/// 3D d'autant, sinon la colonne masque une bande de l'image au lieu de la
+/// côtoyer. **Repliée, la colonne ne prend plus rien** : la vue récupère toute
+/// la largeur — c'est tout l'intérêt de pouvoir la replier.
+pub fn bord_droit(ecran: Vec2, repliee: bool) -> f32 {
+    if repliee {
+        0.0
+    } else {
+        let c = colonne(ecran);
+        c.x + c.w + MARGE
+    }
+}
+
 /// Ce qu'on **affiche** d'un libellé : ce qui précède le deux-points.
 ///
 /// Les libellés du catalogue disent la vitrine entière — « PANNEAUX :
@@ -182,6 +198,28 @@ mod tests {
     use super::*;
 
     const ECRAN: Vec2 = Vec2::new(1000.0, 700.0);
+
+    /// **Une vue plein écran doit pouvoir se ranger à côté de la colonne.**
+    ///
+    /// `bord_droit` donne l'abscisse à partir de laquelle dessiner sans passer
+    /// dessous. Déployée, elle doit laisser passer TOUTE la colonne ; repliée,
+    /// elle ne doit plus rien prendre — sinon replier ne servirait à rien.
+    #[test]
+    fn le_bord_droit_libere_la_place_de_la_colonne() {
+        for l in [640.0_f32, 1000.0, 1920.0] {
+            let ecran = vec2(l, 700.0);
+            let col = colonne(ecran);
+            let bord = bord_droit(ecran, false);
+            assert!(
+                bord >= col.x + col.w,
+                "largeur {l} : le rendu démarre à {bord}, la colonne finit à {}",
+                col.x + col.w
+            );
+            // Et elle ne mange pas plus que sa part : la vue garde l'essentiel.
+            assert!(bord <= l * PART_LARGEUR + 2.0 * MARGE, "largeur {l} : {bord} px mangés");
+            assert_eq!(bord_droit(ecran, true), 0.0, "repliée, la colonne doit tout rendre");
+        }
+    }
 
     // La contrainte de l'étape, et elle est chiffrée : **un dixième**, jamais
     // plus. Vérifiée sur plusieurs largeurs d'écran, pas seulement la nominale.

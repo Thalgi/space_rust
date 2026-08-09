@@ -244,3 +244,77 @@ impl FiltrePixel {
         }
     }
 }
+
+#[cfg(test)]
+mod tests_partage {
+    /// **Qui honore le mode pixel doit blitter par ce module.**
+    ///
+    /// Trois choses vivent ici : le facteur de réduction, la cible basse
+    /// résolution, et le **blit** — qui est là où s'applique la quantification de
+    /// palette, donc là où le pixel art devient du pixel art (des à-plats, cf.
+    /// `ModeRendu::Palette`).
+    ///
+    /// La galerie des ceintures s'en était fait une copie : son propre facteur,
+    /// sa propre cible, et un blit nu à la place de celui-ci. Elle pixelisait
+    /// donc **sans jamais quantifier** — les débris n'avaient pas l'aspect pixel
+    /// art alors que les planètes, passées par le module, l'avaient. Le défaut
+    /// ne se voit pas en lisant la vue fautive, où tout semble normal ; il ne se
+    /// voit qu'en comparant deux vues.
+    ///
+    /// La règle porte sur le **couplage réel** et non sur l'appel de dessin :
+    /// dessiner une texture est légitime ailleurs (la vignette d'astre pose une
+    /// miniature dans un panneau, sans rapport avec le filtre). Ce qui ne l'est
+    /// pas, c'est de lire le mode pixel et de finir la passe soi-même.
+    #[test]
+    fn qui_pixelise_passe_par_le_blit_partage() {
+        let racine = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+        // Aiguilles assemblées : ce fichier parle des deux, il ne doit pas se
+        // dénoncer lui-même.
+        let lit_le_mode = format!("{}()", "pixelise");
+        let blit = format!("{}::{}(", "pixel", "blit");
+        let mut consommateurs = 0;
+        let mut fautifs = Vec::new();
+
+        fn parcourir(d: &std::path::Path, f: &mut dyn FnMut(&str, &str)) {
+            let Ok(entrees) = std::fs::read_dir(d) else { return };
+            for e in entrees.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    parcourir(&p, f);
+                } else if p.extension().is_some_and(|x| x == "rs") {
+                    let nom = p.file_name().unwrap().to_string_lossy().to_string();
+                    f(&nom, &std::fs::read_to_string(&p).unwrap_or_default());
+                }
+            }
+        }
+
+        parcourir(std::path::Path::new(racine), &mut |nom, src| {
+            // Le module de blit et celui qui DÉFINIT le mode sont hors sujet.
+            if nom == "pixel.rs" || nom == "reglages.rs" {
+                return;
+            }
+            let code: String = src
+                .lines()
+                .filter(|l| !l.trim_start().starts_with("//"))
+                .collect::<Vec<_>>()
+                .join("
+");
+            if !code.contains(&lit_le_mode) {
+                return;
+            }
+            consommateurs += 1;
+            if !code.contains(&blit) {
+                fautifs.push(nom.to_string());
+            }
+        });
+
+        assert!(
+            consommateurs >= 3,
+            "seulement {consommateurs} vue(s) trouvée(s) : le parcours est cassé"
+        );
+        assert!(
+            fautifs.is_empty(),
+            "ces vues lisent le mode pixel mais terminent la passe elles-mêmes,              et perdent donc la quantification de palette : {fautifs:?}"
+        );
+    }
+}

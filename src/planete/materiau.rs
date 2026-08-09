@@ -1,11 +1,27 @@
 use super::apparence::Apparence;
 use crate::astre::CameraInfo;
 use crate::impostor;
+use macroquad::miniquad::{BlendFactor, BlendState, Equation};
 use macroquad::prelude::*;
 use std::cell::RefCell;
 
-/// Demi-étendue du disque impostor planète (marge sur le rayon pour l'atmosphère).
-const DISC: f32 = 1.05;
+/// Demi-étendue du disque impostor planète : le rayon du corps PLUS la coquille
+/// d'atmosphère. **Source unique** — le quad (`mod.rs`) et l'uniform `disc` lu
+/// par les shaders doivent valoir la même chose, sinon la coquille est ou bien
+/// coupée par le bord du quad, ou bien dessinée dans le vide.
+///
+/// 1.10 : la coquille fait 10 % du rayon. Portée à ce double après avoir vu le
+/// rendu — à 5 % le liseré était juste, mais trop mince pour se lire, surtout
+/// sur les corps à atmosphère ténue. Marge de cadrage : la galerie et les
+/// vignettes regardent de 3 r, où le champ fait 1,243 r de demi-hauteur ; la
+/// coquille en occupe 89 %, donc elle tient encore dans la case.
+pub(super) const DISC: f32 = 1.10;
+
+/// Épaisseur minimale (px) au-delà de laquelle la coquille atmosphérique mérite
+/// sa passe de rendu. Sous ce seuil elle tient dans moins d'un pixel : invisible,
+/// et une passe GPU gâchée — la vue système aligne des dizaines de corps qui ne
+/// font que quelques pixels.
+const ATMO_PX_MIN: f32 = 0.75;
 
 /// Une valeur d'uniform : on n'a besoin que de scalaires et de vec3.
 enum Val {
@@ -76,10 +92,16 @@ fn set_val(mat: &Material, nom: &str, v: Val) {
     }
 }
 
-// Materials partagés (créés une seule fois, clonés ensuite) : un clone partage le
-// pipeline GPU mais a ses propres uniforms -> évite « Pipelines amount exceeded ».
+// Materials partagés (créés une seule fois, clonés ensuite) : `Material` est un
+// `Arc` sur le pipeline, donc un clone n'en consomme pas un de plus. macroquad
+// en plafonne le nombre à 32 -> sans ce cache, « Pipelines amount exceeded ».
+//
+// ⚠️ Un clone partage AUSSI l'état des uniforms : `set_uniform` écrit dans le
+// pipeline, pas dans le clone. D'où le vidage de lot après chaque corps dessiné
+// (voir `mod.rs`), sans quoi le dernier dessiné impose ses réglages aux autres.
 thread_local! {
     static TPL_CORPS: RefCell<Option<Material>> = const { RefCell::new(None) };
+    static TPL_ATMO: RefCell<Option<Material>> = const { RefCell::new(None) };
     // Hauteur (px) du viewport de rendu courant : la galerie dessine dans des
     // cellules, pas plein écran -> nécessaire au LOD px_rayon. 0 = plein écran.
     static VIEWPORT_H: RefCell<f32> = const { RefCell::new(0.0) };
@@ -100,10 +122,44 @@ pub(super) fn mat_corps() -> Material {
     })
 }
 
+pub(super) fn mat_atmo() -> Material {
+    TPL_ATMO.with(|c| {
+        if c.borrow().is_none() {
+            *c.borrow_mut() = Some(charger_atmo());
+        }
+        c.borrow().as_ref().unwrap().clone()
+    })
+}
+
 /// Vide le cache de materials -> la prochaine création recompile depuis les .glsl
 /// (utilisé par le hot-reload).
 pub(super) fn vider_cache() {
     TPL_CORPS.with(|c| *c.borrow_mut() = None);
+    TPL_ATMO.with(|c| *c.borrow_mut() = None);
+}
+
+/// Rayon apparent du corps, en pixels — approximation petit angle pour un fov
+/// de ~45° : `px ≈ r/dist · h / (2·tan(22.5°))`. Pilote tous les LOD.
+fn px_rayon_pur(r: f32, dist: f32, vh: f32) -> f32 {
+    r / dist.max(1e-3) * vh * 1.2
+}
+
+/// Rayon apparent (px) du corps dans le viewport courant.
+pub(super) fn px_rayon(cam: &CameraInfo, c: Vec3, r: f32) -> f32 {
+    let vh = VIEWPORT_H.with(|v| *v.borrow());
+    let vh = if vh > 1.0 { vh } else { screen_height() };
+    px_rayon_pur(r, (cam.pos - c).length(), vh)
+}
+
+/// Vrai si la coquille atmosphérique mérite sa passe de rendu : le corps doit
+/// avoir une atmosphère, et celle-ci doit couvrir au moins un pixel à l'écran.
+fn atmo_visible_pur(atmo: Vec3, px_rayon: f32) -> bool {
+    atmo != Vec3::ZERO && px_rayon * (DISC - 1.0) >= ATMO_PX_MIN
+}
+
+/// Voir [`atmo_visible_pur`] : même décision, mesures prises sur la scène.
+pub(super) fn atmo_visible(a: &Apparence, cam: &CameraInfo, c: Vec3, r: f32) -> bool {
+    atmo_visible_pur(a.atmo, px_rayon(cam, c, r))
 }
 
 // Texture de secours (1×1) : corps sans terrain précalculé (gazeuses, glacées)
@@ -142,13 +198,9 @@ pub(super) fn appliquer_uniforms(
     impostor::uniforms_standard(mat, cam, get_time() as f32, DISC);
     mat.set_uniform("centre", (c.x, c.y, c.z));
     mat.set_uniform("rayon", r);
-    // LOD (phase 6) : rayon apparent approximatif en pixels (fov ~45°,
-    // px ≈ r/dist · h/(2·tan(22.5°))) -> le shader estompe le micro-détail
-    // des gazeuses sur les petites sphères (galerie, vues système).
-    let vh = VIEWPORT_H.with(|v| *v.borrow());
-    let vh = if vh > 1.0 { vh } else { screen_height() };
-    let dist = (cam.pos - c).length().max(1e-3);
-    mat.set_uniform("px_rayon", r / dist * vh * 1.2);
+    // LOD (phase 6) : le shader estompe le micro-détail des gazeuses sur les
+    // petites sphères (galerie, vues système).
+    mat.set_uniform("px_rayon", px_rayon(cam, c, r));
     mat.set_uniform("lumiere", (cam.light_pos.x, cam.light_pos.y, cam.light_pos.z));
     mat.set_uniform(
         "light_color",
@@ -197,8 +249,76 @@ pub(super) fn appliquer_uniforms(
     }
 }
 
-/// Crée le material du corps des planètes (appelé une seule fois, puis cloné).
-fn charger_corps() -> Material {
+/// Pousse les uniforms de la coquille atmosphérique. Beaucoup plus court que
+/// ceux du corps : la coquille ne connaît ni terrain, ni bandes, ni vortex —
+/// seulement sa géométrie, l'éclairage, et la couleur de l'air.
+pub(super) fn appliquer_uniforms_atmo(mat: &Material, a: &Apparence, cam: &CameraInfo, c: Vec3, r: f32) {
+    impostor::uniforms_standard(mat, cam, get_time() as f32, DISC);
+    mat.set_uniform("centre", (c.x, c.y, c.z));
+    mat.set_uniform("rayon", r);
+    mat.set_uniform("lumiere", (cam.light_pos.x, cam.light_pos.y, cam.light_pos.z));
+    mat.set_uniform(
+        "light_color",
+        (cam.light_color.x, cam.light_color.y, cam.light_color.z),
+    );
+    mat.set_uniform_array("lights_pos", &cam.lights_pos[..]);
+    mat.set_uniform_array("lights_color", &cam.lights_color[..]);
+    mat.set_uniform("atmo", (a.atmo.x, a.atmo.y, a.atmo.z));
+    mat.set_uniform("voile", a.voile);
+    mat.set_uniform(
+        "voile_couleur",
+        (a.voile_couleur.x, a.voile_couleur.y, a.voile_couleur.z),
+    );
+}
+
+/// Déclaration des uniforms de la coquille atmosphérique. **Source unique** :
+/// sert à créer le material, et de référence au test de correspondance avec le
+/// `.glsl` — un uniform lu par le shader mais absent d'ici vaut silencieusement
+/// zéro, et la coquille disparaît sans le moindre message d'erreur.
+fn uniforms_atmo() -> Vec<UniformDesc> {
+    let mut u = impostor::uniforms_communs();
+    u.extend([
+        UniformDesc::new("centre", UniformType::Float3),
+        UniformDesc::new("rayon", UniformType::Float1),
+        UniformDesc::new("lumiere", UniformType::Float3),
+        UniformDesc::new("light_color", UniformType::Float3),
+        UniformDesc::array(UniformDesc::new("lights_pos", UniformType::Float3), 4),
+        UniformDesc::array(UniformDesc::new("lights_color", UniformType::Float3), 4),
+        UniformDesc::new("atmo", UniformType::Float3),
+        UniformDesc::new("voile", UniformType::Float1),
+        UniformDesc::new("voile_couleur", UniformType::Float3),
+    ]);
+    u
+}
+
+/// Crée le material de la coquille atmosphérique (une seule fois, puis cloné).
+///
+/// Additif et **sans écriture de profondeur** : l'atmosphère AJOUTE de la
+/// lumière au fond du ciel comme à la surface, et ne doit rien occulter — la
+/// moitié avant d'un anneau, dessinée juste après, passe devant elle.
+fn charger_atmo() -> Material {
+    load_material(
+        ShaderSource::Glsl {
+            vertex: &impostor::source("impostor.vert.glsl", impostor::VERT_IMPOSTOR),
+            fragment: &impostor::source("atmosphere.frag.glsl", FRAG_ATMO),
+        },
+        MaterialParams {
+            uniforms: uniforms_atmo(),
+            pipeline_params: PipelineParams {
+                depth_test: Comparison::LessOrEqual,
+                depth_write: false,
+                color_blend: Some(BlendState::new(Equation::Add, BlendFactor::One, BlendFactor::One)),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap()
+}
+
+/// Déclaration des uniforms du corps. Même rôle de source unique que
+/// [`uniforms_atmo`].
+fn uniforms_corps() -> Vec<UniformDesc> {
     let mut uniforms = impostor::uniforms_communs();
     uniforms.extend([
         UniformDesc::new("centre", UniformType::Float3),
@@ -225,13 +345,18 @@ fn charger_corps() -> Material {
         UniformDesc::new("px_rayon", UniformType::Float1),
     ]);
     uniforms.extend(TABLE.iter().map(|(nom, t, _)| UniformDesc::new(nom, *t)));
+    uniforms
+}
+
+/// Crée le material du corps des planètes (appelé une seule fois, puis cloné).
+fn charger_corps() -> Material {
     load_material(
         ShaderSource::Glsl {
             vertex: &impostor::source("impostor.vert.glsl", impostor::VERT_IMPOSTOR),
             fragment: &impostor::source("planete.frag.glsl", FRAG),
         },
         MaterialParams {
-            uniforms,
+            uniforms: uniforms_corps(),
             textures: vec!["terrain".to_string(), "zonal".to_string()],
             pipeline_params: PipelineParams {
                 depth_test: Comparison::LessOrEqual,
@@ -244,3 +369,74 @@ fn charger_corps() -> Material {
 }
 
 const FRAG: &str = include_str!("../shaders/planete.frag.glsl");
+const FRAG_ATMO: &str = include_str!("../shaders/atmosphere.frag.glsl");
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::impostor::verif::{uniforms_glsl, uniforms_rust};
+
+    /// Un uniform lu par le `.glsl` mais absent de la déclaration Rust vaut
+    /// silencieusement zéro : le shader s'exécute, aucun message n'apparaît, et
+    /// l'effet disparaît. La réciproque (déclaré mais jamais lu) est du poids
+    /// mort qui laisse croire qu'un réglage agit. Les deux listes sont écrites
+    /// séparément — c'est ce qui donne sa valeur à la comparaison.
+    #[test]
+    fn uniforms_atmo_correspondent_au_shader() {
+        let glsl = uniforms_glsl(&[impostor::VERT_IMPOSTOR, FRAG_ATMO]);
+        let rust = uniforms_rust(&uniforms_atmo());
+        assert_eq!(glsl, rust, "coquille atmosphérique : GLSL (gauche) vs Rust (droite)");
+    }
+
+    #[test]
+    fn uniforms_corps_correspondent_au_shader() {
+        let glsl = uniforms_glsl(&[impostor::VERT_IMPOSTOR, FRAG]);
+        let rust = uniforms_rust(&uniforms_corps());
+        assert_eq!(glsl, rust, "corps planétaire : GLSL (gauche) vs Rust (droite)");
+    }
+
+    /// Le quad et l'uniform `disc` lisent la MÊME constante : sans quoi la
+    /// coquille serait tronquée par le bord du quad (quad trop petit) ou
+    /// dessinée sur du vide (quad trop grand).
+    #[test]
+    fn le_disque_laisse_de_la_place_a_la_coquille() {
+        // Le quad doit dépasser le corps, sinon la coquille n'a nulle part où
+        // exister. Trop peu et elle ne se voit pas ; trop et le corps flotte
+        // dans un halo mou. Bornes du raisonnable, pas de la valeur choisie.
+        assert!(
+            (1.02..=1.20).contains(&DISC),
+            "marge atmosphérique déraisonnable : {DISC}"
+        );
+    }
+
+    #[test]
+    fn pas_de_coquille_sans_atmosphere() {
+        // Un corps sans air (Mercure, la Lune) ne doit jamais payer la passe,
+        // même occupant tout l'écran.
+        assert!(!atmo_visible_pur(Vec3::ZERO, 10_000.0));
+    }
+
+    #[test]
+    fn pas_de_coquille_sous_le_pixel() {
+        let air = vec3(0.35, 0.55, 1.0);
+        // Épaisseur = px_rayon × (DISC - 1). Le seuil est ATMO_PX_MIN pixels.
+        let juste_au_seuil = ATMO_PX_MIN / (DISC - 1.0);
+        assert!(atmo_visible_pur(air, juste_au_seuil * 1.01), "au seuil, la coquille se voit");
+        assert!(
+            !atmo_visible_pur(air, juste_au_seuil * 0.99),
+            "sous le seuil, la coquille tient dans moins d'un pixel : passe inutile"
+        );
+    }
+
+    /// Le LOD dépend de la hauteur du viewport, pas de celle de l'écran : la
+    /// galerie dessine dans des cellules, et un corps y est bien plus petit
+    /// qu'en plein écran à distance égale.
+    #[test]
+    fn le_rayon_apparent_suit_le_viewport_et_la_distance() {
+        let plein = px_rayon_pur(1.0, 10.0, 1000.0);
+        assert!((px_rayon_pur(1.0, 10.0, 250.0) - plein / 4.0).abs() < 1e-4);
+        assert!((px_rayon_pur(1.0, 40.0, 1000.0) - plein / 4.0).abs() < 1e-4);
+        // Caméra collée au corps : pas de division par zéro.
+        assert!(px_rayon_pur(1.0, 0.0, 1000.0).is_finite());
+    }
+}

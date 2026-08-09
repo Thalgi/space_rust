@@ -1043,8 +1043,11 @@ void main() {
         float nuit = 1.0 - smoothstep(0.0, 0.22, diff); // strictement côté nuit
         col += aurore_couleur * (ring * flick * nuit * aurore);
     }
-    // Halo atmosphérique : brille sur le limbe, surtout côté jour.
-    float rim = pow(1.0 - z, 3.0);
-    col += atmo * rim * (0.35 + 0.65 * diff);
+    // L'atmosphère n'est PLUS peinte ici. Ce bloc appliquait un `pow(1-z, 3)`
+    // sur la surface : un limbe qui s'éclaircit, mais rien au-delà de la
+    // silhouette — c'est-à-dire tout sauf ce qui fait lire une atmosphère.
+    // Elle a sa propre passe désormais (shaders/atmosphere.frag.glsl), qui
+    // couvre le disque ET le déborde. `atmo` reste déclaré : il sert encore de
+    // témoin « ce corps a de l'air » à d'autres blocs.
     gl_FragColor = vec4(col, 1.0);
 }

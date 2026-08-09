@@ -115,9 +115,7 @@ impl GalerieEtoiles {
             };
             set_camera(&cam3d);
 
-            let forward = (Vec3::ZERO - pos).normalize();
-            let right = forward.cross(Vec3::Y).normalize();
-            let up = right.cross(forward).normalize();
+            let (right, up, forward) = crate::camera::base_camera(Vec3::ZERO - pos);
             let cam = CameraInfo {
                 pos,
                 right,

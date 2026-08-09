@@ -17,9 +17,7 @@ pub trait Rendu {
         cam: &CameraInfo,
         fond: &mut Fond,
         sys: &mut Systeme,
-        orbites_planetes: bool,
-        orbites_etoiles: bool,
-        zone: bool,
+        calques: crate::systeme::Calques,
     );
     fn pixelise(&self) -> bool {
         false
@@ -62,15 +60,13 @@ impl Rendu for RenduStandard {
         cam: &CameraInfo,
         fond: &mut Fond,
         sys: &mut Systeme,
-        orbites_planetes: bool,
-        orbites_etoiles: bool,
-        zone: bool,
+        calques: crate::systeme::Calques,
     ) {
         // --- Couche NETTE (plein écran) : fond stellaire + trajectoires/zones ---
         set_camera(&cam3d);
         clear_background(BLACK);
         fond.draw(cam); // étoiles lointaines (derrière tout)
-        sys.draw_orbites(orbites_planetes, orbites_etoiles, zone);
+        sys.draw_orbites(calques, cam.pos);
         set_default_camera();
 
         if self.pixelise() {

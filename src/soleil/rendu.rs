@@ -19,30 +19,51 @@ impl Soleil {
         self.inds.clear();
         push_quad(&mut self.verts, &mut self.inds, c, cam.right, cam.up, r * self.couronne, WHITE);
 
-        // Uniforms communs (temps, repère caméra, échelle du disque = couronne).
-        crate::impostor::uniforms_standard(&self.mat, cam, self.temps, self.couronne);
-        self.mat
-            .set_uniform("teinte", (self.couleur.x, self.couleur.y, self.couleur.z));
-        self.mat.set_uniform("couronne", self.couronne);
-        self.mat.set_uniform("couronne_irreg", self.couronne_irreg);
-        self.mat.set_uniform("couronne_type", self.couronne_type);
-
         // Taches -> uniform array (xyz = direction surface, w = rayon effectif)
         let mut spots = [Vec4::ZERO; MAX_TACHES];
         for (i, t) in self.taches.iter().take(MAX_TACHES).enumerate() {
             spots[i] = vec4(t.dir.x, t.dir.y, t.dir.z, t.taille * t.intensite);
         }
-        self.mat.set_uniform_array("spots", &spots[..]);
 
-        gl_use_material(&self.mat);
-        let quad = Mesh {
-            vertices: std::mem::take(&mut self.verts),
-            indices: std::mem::take(&mut self.inds),
-            texture: None,
-        };
-        draw_mesh(&quad);
-        self.verts = quad.vertices;
-        self.inds = quad.indices;
+        // DEUX PASSES sur le même quad et le même shader (voir soleil.frag.glsl) :
+        // le disque de l'étoile écrit la profondeur, la couronne non. La couronne
+        // vient APRÈS : translucide, elle se dépose sur le disque déjà peint.
+        let passes = super::materiau::PASSES;
+        for (i, ((zone, _), mat)) in passes.iter().zip(&self.mats).enumerate() {
+            let zone = *zone;
+            // Uniforms communs (temps, repère caméra, échelle du disque = couronne).
+            crate::impostor::uniforms_standard(mat, cam, self.temps, self.couronne);
+            mat.set_uniform("teinte", (self.couleur.x, self.couleur.y, self.couleur.z));
+            mat.set_uniform("couronne", self.couronne);
+            mat.set_uniform("couronne_irreg", self.couronne_irreg);
+            mat.set_uniform("couronne_type", self.couronne_type);
+            mat.set_uniform("zone", zone);
+            mat.set_uniform_array("spots", &spots[..]);
+
+            gl_use_material(mat);
+            let quad = Mesh {
+                vertices: std::mem::take(&mut self.verts),
+                indices: std::mem::take(&mut self.inds),
+                texture: None,
+            };
+            draw_mesh(&quad);
+            // Les materials sont partagés entre toutes les étoiles : `set_uniform`
+            // écrit dans le pipeline, pas dans le clone. Sans ce vidage, la
+            // dernière étoile dessinée imposerait sa teinte et sa couronne aux
+            // autres — et ici, sa `zone` à la passe d'à côté.
+            unsafe {
+                get_internal_gl().flush();
+            }
+            self.verts = quad.vertices;
+            self.inds = quad.indices;
+            // Le quad est identique d'une passe à l'autre : on le reconstruit
+            // tant qu'il en reste une.
+            if i + 1 < passes.len() {
+                self.verts.clear();
+                self.inds.clear();
+                push_quad(&mut self.verts, &mut self.inds, c, cam.right, cam.up, r * self.couronne, WHITE);
+            }
+        }
         gl_use_default_material();
 
         // ---- 2) Boucles + particules : billboards en additif ----

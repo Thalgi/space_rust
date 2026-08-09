@@ -183,6 +183,36 @@ fn fige(mut app: Apparence, corps: &str) -> Apparence {
 }
 
 /// Preset reproduisant notre système solaire (Mercure → Pluton + ceintures).
+/// Les quatre familles de petits corps du système solaire, du plus proche au
+/// plus lointain. Toutes sont déjà modélisées par `DisqueConfig` ; les distances
+/// sont **réelles** (UA), seuls les effectifs sont réduits — un nuage de Oort
+/// compte ~10¹² corps.
+///
+/// **Source unique** : le preset les instancie, et le test de budget
+/// (`disque::tests`) mesure ces mêmes configs. Un effectif gonflé ici fait
+/// bouger le budget là-bas, au lieu de passer inaperçu jusqu'à ce que ça rame.
+pub fn ceintures_solaires() -> Vec<DisqueConfig> {
+    vec![
+        DisqueConfig::asteroides(900, 2.2 * etoile::UA, 3.3 * etoile::UA, MASSE_ETOILE),
+        DisqueConfig::kuiper(2000, 30.0 * etoile::UA, 48.0 * etoile::UA, MASSE_ETOILE),
+        // Disque epars : au-dela de Kuiper, orbites excentriques et tres
+        // inclinees (c'est de la que viennent les cometes de la famille de
+        // Jupiter). Il s'etend reellement jusque vers 1 000 UA -- Sedna monte a
+        // 937 a l'aphelie.
+        DisqueConfig::epars(900, 48.0 * etoile::UA, 1000.0 * etoile::UA, MASSE_ETOILE),
+        // Nuage de Oort : coquille **spherique**, pas un disque -- il enveloppe
+        // le systeme au lieu de le ceinturer.
+        //
+        // Distances REELLES depuis le 2026-08-05 : le nuage de Hills commence
+        // vers 2 000 UA. Le bord interne etait ramene a 300 pour rester
+        // cadrable ; c'est desormais la vraie valeur, au prix d'un zoom bien
+        // plus large pour l'apercevoir. Le nuage externe (jusqu'a ~100 000 UA)
+        // reste tronque a 20 000 : au-dela, meme le systeme entier tient dans
+        // un pixel.
+        DisqueConfig::oort(2600, 2000.0 * etoile::UA, 20000.0 * etoile::UA, MASSE_ETOILE),
+    ]
+}
+
 pub fn construire_preset_solaire() -> (Systeme, String) {
     srand(42);
     let deg = std::f32::consts::PI / 180.0;
@@ -290,29 +320,9 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
     // dont ce preset n'utilisait que les deux premieres. Les distances sont
     // reelles (UA) ; seuls les effectifs sont reduits, un nuage de Oort compte
     // ~10^12 corps.
-    sys.ajouter(Box::new(Disque::new(DisqueConfig::asteroides(
-        900, 2.2 * etoile::UA, 3.3 * etoile::UA, MASSE_ETOILE,
-    ))));
-    sys.ajouter(Box::new(Disque::new(DisqueConfig::kuiper(
-        2000, 30.0 * etoile::UA, 48.0 * etoile::UA, MASSE_ETOILE,
-    ))));
-    // Disque epars : au-dela de Kuiper, orbites excentriques et tres inclinees
-    // (c'est de la que viennent les cometes de la famille de Jupiter). Il s'etend
-    // reellement jusque vers 1 000 UA -- Sedna monte a 937 a l'aphelie.
-    sys.ajouter(Box::new(Disque::new(DisqueConfig::epars(
-        900, 48.0 * etoile::UA, 1000.0 * etoile::UA, MASSE_ETOILE,
-    ))));
-    // Nuage de Oort : coquille **spherique**, pas un disque -- il enveloppe le
-    // systeme au lieu de le ceinturer.
-    //
-    // Distances REELLES depuis le 2026-08-05 : le nuage de Hills commence vers
-    // 2 000 UA. Le bord interne etait ramene a 300 pour rester cadrable ; c'est
-    // desormais la vraie valeur, au prix d'un zoom bien plus large pour l'
-    // apercevoir. Le nuage externe (jusqu'a ~100 000 UA) reste tronque a 20 000 :
-    // au-dela, meme le systeme entier tient dans un pixel.
-    sys.ajouter(Box::new(Disque::new(DisqueConfig::oort(
-        2600, 2000.0 * etoile::UA, 20000.0 * etoile::UA, MASSE_ETOILE,
-    ))));
+    for cfg in ceintures_solaires() {
+        sys.ajouter(Box::new(Disque::new(cfg)));
+    }
 
     // ===== L'ISS, en orbite terrestre =====
     // Le pont entre les deux moities du projet : la station est **assemblee**

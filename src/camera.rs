@@ -28,10 +28,27 @@ pub fn base_orbite(yaw: f32, pitch: f32) -> (Vec3, Vec3, Vec3) {
     let cp = pitch.cos();
     // Direction cible → caméra, unitaire (cp²·sin² + sin²p + cp²·cos² = 1).
     let dir = vec3(cp * yaw.sin(), pitch.sin(), cp * yaw.cos());
-    let forward = -dir;
-    let right = forward.cross(Vec3::Y).normalize();
-    let up = right.cross(forward).normalize();
-    (right, up, forward)
+    base_camera(-dir)
+}
+
+/// Base caméra orthonormée à partir de la seule direction de visée.
+///
+/// **Source unique** : la vue orbitale et les galeries (qui placent leur caméra
+/// à la main) doivent construire leur repère de la même façon — les billboards
+/// s'appuient dessus, et deux recettes qui divergent donnent deux rendus.
+///
+/// ⚠️ **La verticale de référence est piégeuse.** `forward × Y` s'annule quand on
+/// vise **pile le long de Y**, et `normalize` d'un vecteur nul rend des NaN : le
+/// repère part en vrille, et avec lui tous les quads face-caméra qui en
+/// dépendent — champs de débris en tête. Près de l'axe, sans même l'atteindre,
+/// la norme du produit devient minuscule et amplifie le bruit de calcul. On
+/// bascule donc sur Z comme référence quand la visée frôle Y.
+pub fn base_camera(forward: Vec3) -> (Vec3, Vec3, Vec3) {
+    let f = forward.normalize_or(Vec3::NEG_Z);
+    let vertical = if f.dot(Vec3::Y).abs() > 0.999 { Vec3::Z } else { Vec3::Y };
+    let right = f.cross(vertical).normalize();
+    let up = right.cross(f).normalize();
+    (right, up, f)
 }
 
 /// Demi-angle vertical du tronc de vue, en radians — celui de `Camera3D` par
@@ -268,5 +285,66 @@ mod tests {
         // Et le plafond englobe le nuage de Oort (2 000 UA = 96 000 unites,
         // tronque a 20 000 UA ; on vise au moins de quoi cadrer Neptune a 30 UA).
         assert!(DIST_MAX > 30.0 * 48.0, "plafond trop bas pour cadrer Neptune");
+    }
+}
+
+#[cfg(test)]
+mod tests_base_camera {
+    use super::*;
+
+    fn orthonormee(nom: &str, r: Vec3, u: Vec3, f: Vec3) {
+        for (axe, v) in [("right", r), ("up", u), ("forward", f)] {
+            assert!(v.is_finite(), "{nom} : {axe} n'est pas fini ({v:?})");
+            assert!(
+                (v.length() - 1.0).abs() < 1e-4,
+                "{nom} : {axe} n'est pas unitaire (|{axe}| = {})",
+                v.length()
+            );
+        }
+        for (paire, d) in [("right·up", r.dot(u)), ("right·fwd", r.dot(f)), ("up·fwd", u.dot(f))] {
+            assert!(d.abs() < 1e-4, "{nom} : {paire} = {d}, la base n'est pas orthogonale");
+        }
+    }
+
+    /// **Viser le long de Y ne doit pas casser le repère caméra.**
+    ///
+    /// `forward × Y` s'annule quand la visée est colinéaire à Y, et
+    /// `normalize` d'un vecteur nul rend des NaN. Tout ce qui fait face à la
+    /// caméra s'appuie sur ce repère : un NaN ici et les quads des champs de
+    /// débris partent en vrille — ce qui ne se voit QUE près de cet axe, donc
+    /// jamais dans une vue de trois-quarts.
+    #[test]
+    fn le_repere_tient_meme_en_visant_pile_le_long_de_y() {
+        for (nom, dir) in [
+            ("plein bas", Vec3::NEG_Y),
+            ("plein haut", Vec3::Y),
+            ("quasi bas", vec3(1e-7, -1.0, 0.0)),
+            ("quasi haut", vec3(0.0, 1.0, 1e-7)),
+        ] {
+            let (r, u, f) = base_camera(dir);
+            orthonormee(nom, r, u, f);
+        }
+    }
+
+    /// Et il reste sain partout ailleurs — balayage complet de la sphère.
+    #[test]
+    fn le_repere_reste_orthonorme_dans_toutes_les_directions() {
+        for i in 0..64 {
+            let yaw = i as f32 / 64.0 * std::f32::consts::TAU;
+            for j in 0..33 {
+                // Latitude de -90° à +90°, pôles INCLUS.
+                let pitch = (j as f32 / 32.0 - 0.5) * std::f32::consts::PI;
+                let (r, u, f) = base_orbite(yaw, pitch);
+                orthonormee(&format!("yaw {yaw:.2} pitch {pitch:.2}"), r, u, f);
+            }
+        }
+    }
+
+    /// Une direction nulle ne doit pas non plus produire de NaN : la caméra
+    /// regarde alors devant elle, faute de mieux.
+    #[test]
+    fn une_visee_nulle_retombe_sur_une_base_valide() {
+        let (r, u, f) = base_camera(Vec3::ZERO);
+        orthonormee("visée nulle", r, u, f);
     }
 }
