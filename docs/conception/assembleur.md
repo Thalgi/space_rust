@@ -917,6 +917,7 @@ puisse construire un vaisseau à la main*, pas qu'il soit confortable.
 | L4.3 | Le clic : discrimination clic/glissé (§10.4), désignation branchée (L3.3), pose racine (§10.1) et pose sur port. | la discrimination, oui |
 | L4.4 | Fantôme (`pose_prevue`), les trois couleurs (§8.4) avec le **cache** de §10.3, cycle du montage (§10.5). | l'invalidation du cache, oui |
 | L4.5 | Sélection (`piece_sous_rayon`), surlignage du sous-arbre (`sous_arbre`), Suppr, undo/redo au bandeau. | non (branchement) |
+| L4.6 | **Déplacer une pièce déjà posée** (§10.10). Seule étape du lot qui demande une addition au *modèle*. | le déplacement, oui |
 
 Premier geste de L4.1 : réexporter `Chantier` depuis `vaisseau` — laissé de
 côté en L3.3 faute de consommateur.
@@ -938,6 +939,87 @@ réellement construit quelque chose avec l'écran :
 | L6.2 | **Composites** : figer la sélection en `SousEnsemble` (`Chantier::figer`), et la palette qui liste ceux qu'on a créés. C'est en assemblant à la main qu'on verra quels regroupements reviennent — donc ce qu'il vaut la peine de figer |
 | L6.3 | `GenrePort::PoutreBout`, posé sur aucun composant (trouvé en L2.4) : lui donner un usage ou le retirer |
 
+### 10.10 L4.6 — Déplacer une pièce déjà posée
+
+> Demandé par l'utilisateur le **2026-08-09**. C'est la seule étape du Lot 4 qui
+> ajoute quelque chose au **modèle** : tout le reste ne fait que brancher ce que
+> les Lots 1 à 3 avaient construit.
+
+**Le besoin.** On pose une pièce, on la voit en place, on veut la mettre trois
+ports plus loin. Sans déplacement il faut la retirer et la reposer — et
+`retirer` emporte **tout le sous-arbre** (§6.2). Déplacer un module chargé de
+panneaux et de radiateurs voudrait dire les reconstruire un par un.
+
+#### Pourquoi ce n'est pas `retirer` puis `poser`
+
+Trois raisons, chacune suffisante :
+
+1. **La descendance serait perdue.** `retirer` supprime le sous-arbre entier ;
+   reposer ne rend que la pièce.
+2. **L'annulation compterait deux coups.** Un déplacement est *un* geste : le
+   défaire doit le défaire en entier, pas à moitié.
+3. **Le port hôte rendu changerait d'identité.** Un port rendu à `libres`
+   reçoit un `id` neuf (§6.1) ; une UI qui gardait l'ancien viserait dans le
+   vide entre les deux opérations.
+
+#### Ce qui bouge, et ce qui ne bouge pas
+
+- **Le sous-arbre suit, rigidement.** La géométrie interne d'un sous-arbre ne
+  change pas : seule la transformée de sa racine bouge, les descendants
+  subissent le même delta. C'est ce qui rend l'opération bon marché et
+  prévisible — on ne « re-pose » rien, on translate-tourne un bloc.
+- **La racine du chantier ne se déplace pas.** Elle n'a pas de port hôte : elle
+  est à l'origine par définition. La déplacer ne ferait que translater tout le
+  vaisseau dans un chantier centré sur l'origine — un geste sans effet visible
+  et sans signification.
+- **On ne se déplace pas sur soi-même.** Le port cible doit être **hors** du
+  sous-arbre qui bouge, sinon la pièce s'accrocherait à sa propre descendance :
+  un cycle, que rien dans le modèle ne prévoit.
+
+#### Le point délicat : les ports libres portent une pose *monde*
+
+`PortLibre::repere` est en coordonnées **monde**. Déplacer un sous-arbre invalide
+donc les repères de tous les ports libres qu'il expose — ils doivent subir le
+même delta. C'est le seul endroit du modèle où une donnée dérivée survit à une
+mutation, et l'oublier donnerait des ports fantômes : dessinés à l'ancienne
+place, et accrochant à la nouvelle.
+
+#### L'anti-collision, à l'échelle du bloc
+
+Le sous-arbre déplacé doit être confronté aux pièces **restées en place**, et à
+elles seules : ses membres se chevauchent entre eux par construction (ils sont
+accouplés). Le contrôle est donc « chaque pièce qui bouge contre chaque pièce
+qui ne bouge pas », l'hôte de destination excepté comme dans `peut_poser`.
+
+#### Ce que ça ne change pas
+
+**Le format de sauvegarde.** `recette` (L2.5) lit l'état *courant* — chaque pièce
+et son `hote` — et non un journal d'opérations. Un déplacement qui met à jour
+`hote` correctement produit donc une recette juste, sans nouveau champ dans
+`Etape`. C'est la propriété qui rend cette étape possible dans le Lot 4 plutôt
+que dans un lot de modèle.
+
+#### L'interaction
+
+Depuis « pièce sélectionnée » (§8.3), une touche (**M**) lève le sous-arbre :
+l'écran retombe alors dans l'état « pièce en main », avec ses ports colorés et
+son fantôme — mais la pièce en main est **posée**, pas neuve. Clic sur un port
+valide : le déplacement se fait. Échap : on repose où c'était.
+
+Ce n'est donc **pas un quatrième état** : c'est « pièce en main » dont la source
+est le vaisseau au lieu de la palette. Les trois couleurs, le fantôme, le cycle
+de montage et la discrimination clic/glissé servent tels quels.
+
+#### Ce que L4.6 ne fera pas
+
+- **pas de déplacement à la souris** (glisser-déposer). Le glisser est déjà pris
+  par la caméra (§10.4) ; ajouter un troisième sens au même bouton demanderait
+  un mode explicite, ce que la touche M donne plus simplement.
+- **pas de ré-enracinement.** Faire d'une pièce quelconque la nouvelle racine
+  est un autre geste, et il n'a pas de client.
+
+---
+
 ### 10.9 La discipline de test, pour un lot majoritairement non testé
 
 §6.6 interdit les tests de rendu, et le Lot 4 est donc le premier lot dont
@@ -952,6 +1034,212 @@ Concrètement, sur ce lot, quatre choses sortent et se testent : le grisage de
 la palette (L4.2), la discrimination clic/glissé (L4.3), l'invalidation du cache
 d'état des ports (L4.4), et — déjà fait — la désignation (L3.3). Le reste est
 de la disposition, et se juge à l'œil, comme §6.6 le demande.
+
+---
+
+## 11. Les trois modes d'édition (Move / Rotate / Resize)
+
+> Demandés par l'utilisateur le **2026-08-09**, sur le modèle de la vue Edit de
+> Blockbench. Conception écrite **avant** tout code, à sa demande.
+
+### 11.1 Le point de départ : ce que l'assembleur n'est pas
+
+Blockbench est un éditeur **libre** : chaque élément flotte dans l'espace, on le
+translate, le tourne et le redimensionne en coordonnées monde. Rien ne le
+rattache à rien.
+
+Cet assembleur est un **graphe de ports**. Une pièce ne *se trouve* pas quelque
+part : elle est **accouplée** à un port, et sa pose en est *déduite* —
+`accoupler(hôte, montage)` fixe position et orientation, roulis compris. C'est
+ce qui fait exister tout le reste : la compatibilité genre/profil (§6.5),
+l'anti-collision qui exempte l'hôte (§5.3), le sous-arbre de `retirer` (§6.2), le
+format de sauvegarde qui ne sérialise **aucune** `Mat4` (§6.4), et le
+déplacement de bloc (§10.10).
+
+**Rendre les pièces libres jetterait tout ça.** Une pièce posée « quelque part »
+n'a plus d'hôte : plus de sous-arbre, plus de recette rejouable, plus de port
+consommé. Ce ne serait pas ajouter trois modes, ce serait remplacer les Lots 1
+à 5 par un autre logiciel.
+
+### 11.2 La lecture retenue : le port reste l'ancre, les modes ajoutent des libertés
+
+Chaque mode devient une **liberté bornée relative au port**, et non un
+déplacement absolu :
+
+| Mode | Ce que ça règle | Paramètre |
+|---|---|---|
+| **Move** | l'écart au port, le long de l'axe d'accostage | 1 scalaire `decalage` |
+| **Rotate** | le roulis autour de ce même axe | 1 scalaire `roulis` |
+| **Resize** | les **cotes propres** du composant | ses champs existants |
+
+C'est peu de degrés de liberté, et c'est délibéré : ce sont exactement ceux qui
+manquent aujourd'hui pour composer un vaisseau qu'on a en tête, sans qu'aucun
+détruise l'invariant « une pièce est accouplée à un port ».
+
+⚠️ **Ce que ça ne donnera pas** : poser une pièce à un point arbitraire de
+l'espace, ou l'orienter librement dans les trois axes. Une pièce restera
+toujours *accostée*. Si c'est bien du flottement libre qu'il faut, c'est une
+décision d'une autre nature (§11.8) et il faut la prendre comme telle.
+
+### 11.3 Move et Rotate : deux lignes dans `accoupler`
+
+`accoupler` construit aujourd'hui :
+
+```rust
+let face_a_face = hote.rot * Quat::from_rotation_y(PI);
+let rot = face_a_face * montage.rot.inverse();
+let pos = hote.pos - rot * montage.pos;
+```
+
+Les deux libertés s'y insèrent sans rien déplacer d'autre :
+
+- **roulis** : `face_a_face * Quat::from_rotation_z(roulis)` — Z est l'axe
+  d'accostage (`Repere::avant`), donc tourner autour de lui *est* le roulis ;
+- **décalage** : `pos + hote.avant() * decalage`.
+
+À zéro, les deux redonnent le comportement actuel **au bit près**. C'est la
+propriété qui rend la migration sûre, et elle doit être testée comme telle.
+
+§10.6 avait explicitement parqué le roulis libre : *« l'ajouter voudrait dire un
+paramètre de plus à `poser`, donc un champ de plus dans `Etape` — le format de
+sauvegarde. Ce n'est pas un réglage d'affichage, c'est une modification du modèle
+et de la persistance : à décider comme telle, pas en passant. »* La décision est
+prise ici, et c'est bien ce que ça coûte.
+
+**Format de sauvegarde** : `Etape` gagne `roulis: f32` et `decalage: f32`, tous
+deux `#[serde(default)]` — les fichiers écrits en L5.1 se rechargent donc sans
+conversion, avec des zéros qui signifient exactement le comportement d'avant.
+
+### 11.4 Resize : pas un facteur d'échelle, les cotes du composant
+
+La tentation est un `scale: Vec3`. **Ce serait faux ici.** Les composants portent
+déjà leurs cotes — `ModuleAxial { longueur }`, `PanneauSolaire { longueur,
+largeur }`, `Treillis { .. }` — et tout en découle : `ports()` les calcule,
+`enveloppe_locale()` aussi, `cout()` aussi. Un facteur d'échelle appliqué
+par-dessus ferait **mentir les trois** : ports au mauvais endroit, enveloppe
+fausse, coût inchangé pour une pièce deux fois plus grosse.
+
+Redimensionner, c'est donc **éditer les champs du composant**, et laisser tout le
+reste se recalculer. Trois conséquences heureuses :
+
+1. **aucun changement de format** — `Etape` porte déjà le `Composant` complet,
+   cotes comprises. Une recette sauvegardée après un redimensionnement est juste
+   sans qu'on touche à quoi que ce soit ;
+2. **les bornes existent déjà**, et sont testées : `unites::proportion`
+   (`longueur_module`, `demi_section_treillis`, `longueur_panneau`) borne chaque
+   cote à une plage réaliste. Ce module est marqué *« API prévue pour le
+   générateur (encore non câblée hors tests) »* depuis le Lot 1 : le
+   redimensionnement en est le **consommateur**, comme `recette` a trouvé le
+   sien en L5.1 ;
+3. **le coût suit**, donc le compteur du bandeau reste vrai.
+
+**Le prix** : il faut un accès *uniforme* aux cotes d'un `Composant`, alors que
+chaque variante a ses propres champs. C'est un `match` exhaustif de plus, de la
+même famille que `categorie()` et `echantillons()` — le compilateur casse la
+compilation quand une variante s'ajoute, donc la couverture est une propriété du
+compilateur et non une discipline à se rappeler. C'est le gros du Lot 9.
+
+### 11.5 ⚠️ Le sous-arbre : Move/Rotate sont rigides, Resize ne l'est pas
+
+C'est la différence structurante entre les deux premiers modes et le troisième.
+
+- **Move et Rotate** déplacent la pièce d'un bloc : tous ses ports subissent la
+  **même** transformation rigide, donc ses enfants aussi. C'est exactement la
+  machinerie de `Chantier::deplacer` (§10.10) — delta rigide appliqué au
+  sous-arbre, reperes des ports libres compris. **Rien de neuf à écrire.**
+- **Resize** déplace les ports **différemment les uns des autres** : allonger un
+  module éloigne son écoutille lointaine sans bouger la proche. Chaque enfant
+  doit donc être **ré-accouplé** à son port déplacé, et sa propre descendance
+  suivre. Ce n'est pas un delta, c'est un re-calcul en cascade de l'arbre.
+
+Et un redimensionnement peut faire **grossir** une pièce dans ses voisines : il
+faut le contrôle d'anti-collision sur tout le sous-arbre recalculé, comme
+`plan_deplacement` le fait pour un bloc.
+
+C'est pour cela que Resize est un lot à lui seul, et le dernier.
+
+### 11.6 ⚠️ L'annulation d'un geste continu
+
+**Le problème que rien dans le modèle ne sait faire aujourd'hui.** Un glissé de
+gizmo produit une valeur nouvelle à chaque image. Muter soixante fois par seconde
+empilerait soixante instantanés par seconde dans `pile_annuler` : l'historique
+deviendrait inutilisable, et la mémoire aussi.
+
+Un geste est **une** entrée d'historique — exactement l'argument qui a justifié
+`deplacer` plutôt que `retirer` + `poser` (§10.10).
+
+Il faut donc au `Chantier` une notion de **geste** : capturer l'instantané au
+*début* du glissé, muter librement pendant, empiler une seule fois à la fin.
+Quelque chose comme `debuter_geste()` / `finir_geste()`, ou une mutation qui
+n'enregistre pas doublée d'un « valide ce qui vient d'être fait ».
+
+⚠️ **À concevoir avant d'écrire le premier gizmo**, pas après : c'est le genre de
+chose qu'on retrofit mal, et le compteur `version` (L4.4) en dépend aussi — il
+doit avancer pendant le glissé (l'affichage change) sans que l'historique bouge.
+
+### 11.7 ⚠️ Le bouton gauche a déjà deux sens
+
+§10.4 a tranché entre **glisser = caméra** et **clic = poser**, avec une
+discrimination au seuil de 4 px. Un gizmo ajouterait un **troisième** sens au
+même bouton : glisser sur une poignée = éditer.
+
+La sortie n'est pas une nouvelle heuristique — elles se cumulent mal — mais un
+**mode**. Quand un mode d'édition est actif et qu'une poignée est sous le
+curseur, le glissé va à la poignée ; sinon il va à la caméra. La discrimination
+existante ne change pas, elle est simplement précédée d'un test de poignée.
+
+Ce qui suppose de **désigner une poignée**, et c'est le même problème que
+`port_sous_curseur` (L3.3) : viser en espace écran, en pixels, parce que c'est
+l'unité dans laquelle l'utilisateur perçoit sa visée. Le module `designation` est
+le bon endroit, et il ne dessine rien — donc ça se teste.
+
+### 11.8 L'autre branche, écrite pour qu'elle soit un choix et non un oubli
+
+Si l'usage montre que les libertés bornées ne suffisent pas — typiquement pour
+poser un détail décoratif là où aucun port n'existe —, la sortie **n'est pas**
+d'assouplir les trois modes jusqu'à ce que la pièce se détache. Ce serait obtenir
+le pire des deux modèles : un graphe de ports dont les arêtes ne veulent plus
+rien dire.
+
+La sortie propre serait une pièce explicitement **libre** : un `hote: None` qui
+n'est plus réservé à la racine, avec une pose absolue portée par l'`Etape`. Ça
+sérialise une transformation (ce que §6.4 s'est refusé), ça sort du sous-arbre,
+et ça demande de décider ce que `retirer` et `deplacer` en font.
+
+**À ne pas commencer avant d'avoir buté sur le manque en construisant.**
+
+### 11.9 Découpage retenu
+
+Les trois lots sont **très inégaux**, et il vaut mieux le savoir : le Lot 7 porte
+l'essentiel de la plomberie, le Lot 8 en profite presque gratuitement, le Lot 9
+est le seul qui touche au catalogue entier.
+
+| # | Étape | Testable ? |
+|---|---|---|
+| **L7.1** | Le **geste** dans `Chantier` (§11.6) : mutation continue, une seule entrée d'historique, `version` qui avance quand même. | oui, et c'est le cœur |
+| **L7.2** | `roulis` dans `accoupler`, `poser`, `Etape` (`serde(default)`). **Zéro = comportement actuel au bit près.** | oui |
+| **L7.3** | Désignation des poignées (§11.7) + gizmo d'anneau, mode ROTATE. Le sous-arbre suit par la machinerie de `deplacer`. | la désignation, oui |
+| **L8.1** | `decalage` dans `accoupler`, `poser`, `Etape`. Même forme que L7.2. | oui |
+| **L8.2** | Gizmo de flèche, mode MOVE. Réutilise L7.1 et L7.3. | non (dessin) |
+| **L9.1** | Accès **uniforme** aux cotes d'un `Composant` : `cotes()` / `avec_cotes()`, `match` exhaustif, bornes de `unites::proportion`. | oui, et largement |
+| **L9.2** | `Chantier::redimensionner` : ré-accouplement **en cascade** du sous-arbre (§11.5) + anti-collision. | oui |
+| **L9.3** | Gizmo de poignées, mode RESIZE. | non (dessin) |
+
+**Ordre imposé** : L7.1 avant tout le reste (l'annulation par geste conditionne
+les trois modes), et L9 en dernier (c'est le seul qui ne soit pas rigide).
+
+### 11.10 Ce que les trois lots ne feront pas
+
+- **pas de gizmo à trois axes libres.** Une pièce est accostée : il n'y a qu'un
+  axe qui ait un sens, celui du port. Un trièdre complet promettrait des
+  libertés qui n'existent pas.
+- **pas de symétrie.** Arbitrage déjà rendu (L1.6), inchangé.
+- **pas de redimensionnement en cascade sans contrôle** : si le recalcul produit
+  une collision, l'opération est refusée **en entier**, comme un déplacement.
+- **pas de saisie numérique des valeurs.** Le projet n'a de champ de saisie nulle
+  part ; le pas quantifié (15° pour le roulis, une fraction d'unité pour le
+  décalage) donne la précision sans écran de formulaire, avec un modificateur
+  pour le continu.
 
 ---
 

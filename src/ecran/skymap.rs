@@ -14,6 +14,8 @@ use crate::systeme::{ModePhysique, Systeme};
 use crate::{planete, soleil};
 use macroquad::prelude::*;
 
+use crate::camera::DIST_DEFAUT;
+
 /// D'où provient le système courant : graine procédurale ou preset écrit à la main.
 /// Sert à le reconstruire à l'identique lors du hot-reload des shaders.
 enum Source {
@@ -79,10 +81,7 @@ impl Skymap {
             sys,
             info,
             fond: Fond::new(900),
-            // Recul qui cadre le systeme solaire jusqu'a Neptune : la meme
-            // valeur que `ActionMenu::Solaire`, pour que le depart et le
-            // rechargement du preset donnent la meme vue.
-            cam: Camera::new(1280.0),
+            cam: Camera::new(DIST_DEFAUT),
             rendu: RenduStandard::new(),
             menu: Menu::new(),
             presets: charger_presets(),
@@ -486,7 +485,7 @@ impl Skymap {
                 self.sys = s;
                 self.info = i;
                 self.source = Source::Solaire;
-                self.cam.set_dist(1280.0);
+                self.cam.set_dist(DIST_DEFAUT);
                 self.cam.reset_focus();
             }
             ActionMenu::TauCeti => {

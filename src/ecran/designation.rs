@@ -19,13 +19,12 @@
 
 use crate::astre::CameraInfo;
 use crate::camera::projeter_ecran;
-use crate::vaisseau::PortLibre;
+use crate::vaisseau::{Chantier, Composant, PortLibre};
 use macroquad::prelude::*;
 
 /// Rayon d'accroche d'un port, en **pixels**. Généreux à dessein : un port est
 /// un point, viser au pixel près serait pénible, et les ports d'une station
 /// sont largement plus espacés que ça à l'écran dans les cadrages usuels.
-#[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
 pub const ACCROCHE_PIXELS: f32 = 18.0;
 
 /// Le port libre sous le curseur : le plus proche en **pixels**, dans la limite
@@ -40,7 +39,6 @@ pub const ACCROCHE_PIXELS: f32 = 18.0;
 /// et non un oubli — §8.4 allume les ports compatibles, donc l'utilisateur voit
 /// ceux qu'il peut viser, et un port caché reste visé délibérément quand on
 /// pointe dessus. À revoir seulement si l'usage montre que ça gêne.
-#[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
 pub fn port_sous_curseur(
     libres: &[PortLibre],
     souris: Vec2,
@@ -60,11 +58,88 @@ pub fn port_sous_curseur(
         .map(|(id, _)| id)
 }
 
+/// Montage à proposer quand on prend `comp` en main — **le premier qu'au moins
+/// un port libre accepte** (`docs/conception/assembleur.md` §10.5).
+///
+/// Une pièce a souvent plusieurs ports de montage : un `ModuleAxial` a deux
+/// écoutilles, et le choix décide de l'**orientation** de la pièce posée. §10.5
+/// tranche : le premier valide par défaut, et **Tab** pour cycler.
+///
+/// ⚠️ La question est posée à l'échelle du **vaisseau**, pas d'un port. Une
+/// première version résolvait le montage port par port, au moment du clic. Elle
+/// aurait fait mentir l'écran : les couleurs de §8.4 et le fantôme sont calculés
+/// pour *un* montage, et poser avec un autre aurait donné une orientation que
+/// rien n'avait montrée. Un seul montage courant, et c'est lui qu'on pose.
+///
+/// Rend 0 si aucun montage ne convient : la pièce n'a alors aucun port allumé,
+/// ce que l'écran montre déjà en les éteignant tous.
+pub fn premier_montage(chantier: &Chantier, comp: &Composant) -> usize {
+    (0..comp.ports().len())
+        .find(|&i| !chantier.compatibles(comp, i).is_empty())
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::camera::{base_orbite, rayon_ecran};
     use crate::vaisseau::{GenrePort, Profil, Repere};
+    use crate::vaisseau::{echantillons, VarianteModule, VariantePanneau};
+
+    fn module() -> Composant {
+        Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 2.0 }
+    }
+    fn panneau() -> Composant {
+        Composant::PanneauSolaire {
+            profil: Profil::P0,
+            variante: VariantePanneau::RigideUS,
+            longueur: 2.0,
+            largeur: 1.0,
+        }
+    }
+
+    /// **Le montage proposé mène quelque part, et c'est le premier tel.**
+    /// Vérifié auprès du moteur (`compatibles`), pas en recopiant la règle :
+    /// prendre une pièce en main et ne voir aucun port allumé alors qu'un autre
+    /// montage en aurait allumé serait une impasse muette.
+    #[test]
+    fn le_montage_propose_est_le_premier_qui_mene_quelque_part() {
+        let mut ch = Chantier::new();
+        ch.racine(module());
+        for comp in [module(), panneau()] {
+            let i = premier_montage(&ch, &comp);
+            if ch.compatibles(&comp, i).is_empty() {
+                // Aucun montage ne convient : alors AUCUN ne devait convenir.
+                for j in 0..comp.ports().len() {
+                    assert!(
+                        ch.compatibles(&comp, j).is_empty(),
+                        "{} : montage {i} proposé sans port, alors que {j} en avait",
+                        comp.nom()
+                    );
+                }
+                continue;
+            }
+            for j in 0..i {
+                assert!(
+                    ch.compatibles(&comp, j).is_empty(),
+                    "{} : le montage {j}, plus petit, menait aussi quelque part",
+                    comp.nom()
+                );
+            }
+        }
+    }
+
+    /// Un composant sans aucun port de montage ne fait pas déborder l'indice :
+    /// `premier_montage` rend 0, et le cycle de §10.5 n'a rien à parcourir.
+    #[test]
+    fn un_composant_sans_port_rend_un_indice_sur() {
+        let ch = Chantier::new();
+        let sans_port = echantillons()
+            .into_iter()
+            .find(|c| c.ports().is_empty())
+            .expect("aucun composant sans port : le cas limite a disparu");
+        assert_eq!(premier_montage(&ch, &sans_port), 0);
+    }
 
     const ECRAN: Vec2 = Vec2::new(1000.0, 700.0);
     const ASPECT: f32 = 1000.0 / 700.0;

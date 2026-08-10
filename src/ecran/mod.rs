@@ -3,8 +3,10 @@
 //! travailler le rendu d'un seul corps). `main` se contente d'alterner entre eux.
 
 mod accueil;
+mod assembleur;
 pub(crate) mod bandeau;
 mod catalogue;
+mod clic;
 mod designation;
 mod enveloppes;
 mod fiche;
@@ -14,8 +16,10 @@ mod galerie;
 mod galerie_disques;
 mod galerie_etoiles;
 mod objet;
+mod palette;
 mod panache;
 mod parametres;
+mod ports;
 pub(crate) mod pixel;
 mod selecteur;
 mod skymap;
@@ -24,6 +28,7 @@ mod station;
 mod vignette;
 
 pub use accueil::{Accueil, Cible};
+pub use assembleur::VueAssembleur;
 pub use galerie::Galerie;
 pub use galerie_disques::GalerieDisques;
 pub use galerie_etoiles::GalerieEtoiles;

@@ -372,7 +372,10 @@ impl Systeme {
                 continue;
             }
             let centre = a.corps().position;
-            let rayon = a.corps().rayon.max(0.3) * 1.4; // marge pour cliquer facilement
+            // Rayon DESSINÉ, pas physique : l'étoile est agrandie par un
+            // plancher en pixels, et une cible de clic restée sur son rayon vrai
+            // ne couvrirait qu'un cinquième du disque visible.
+            let rayon = a.rayon_dessine(origine).max(0.3) * 1.4; // marge pour cliquer facilement
             let oc = centre - origine;
             let tca = oc.dot(dir);
             if tca < 0.0 {

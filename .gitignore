@@ -1,1 +1,6 @@
 /target
+
+# Vaisseaux sauvegardes depuis l assembleur (L5.1) : donnees de l utilisateur,
+# pas du code. Meme raison que reglages.json.
+/vaisseaux/
+/reglages.json

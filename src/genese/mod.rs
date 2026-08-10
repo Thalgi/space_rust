@@ -687,7 +687,7 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
         // plus qu'un monde ni de lave ni voile : Mercure, la Lune, Callisto et
         // tous les cailloux morts s'allumaient de lumieres de ville cote nuit.
         // La condition est ici, dans la donnee, parce qu'elle se teste.
-        if app.atmo == Vec3::ZERO && app.eau <= 0.0 {
+        if app.atmo_densite <= 0.0 && app.eau <= 0.0 {
             app.villes = 0.0;
         }
         v.push((nom.to_string(), app));
@@ -700,7 +700,13 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
     // Océan PUR : aucune terre émergée (eau = 1.0 -> quantile au max), banquise polaire.
     push("Ocean pur", tellurique(vec3(0.2, 0.35, 0.4), vec3(0.18, 0.28, 0.36), vec3(0.04, 0.26, 0.58), 1.0, 0.0, 0.4, 0.85, bleu).avec_nuages(0.45, blanc));
     // Hycéan : océan global sous atmosphère épaisse de vapeur (candidat exoplanètes K2-18b).
-    push("Hycean", tellurique(vec3(0.2, 0.4, 0.45), vec3(0.16, 0.32, 0.4), vec3(0.05, 0.35, 0.55), 1.0, 0.0, 0.25, 1.0, vec3(0.5, 0.8, 0.9) * 0.45).avec_nuages(0.75, vec3(0.95, 0.97, 1.0)).avec_voile(0.22, vec3(0.7, 0.85, 0.92)));
+    // « Épaisse » est sa DÉFINITION — une enveloppe d'hydrogène et de vapeur de
+    // plusieurs dizaines de bars — et elle sortait à la moitié de la Terre, pour
+    // la même raison que Vénus : sa teinte pâle tirait sa densité vers le bas.
+    push("Hycean", tellurique(vec3(0.2, 0.4, 0.45), vec3(0.16, 0.32, 0.4), vec3(0.05, 0.35, 0.55), 1.0, 0.0, 0.25, 1.0, z)
+        .avec_air(vec3(0.55, 0.82, 0.92), 1.30)
+        .avec_nuages(0.75, vec3(0.95, 0.97, 1.0))
+        .avec_voile(0.22, vec3(0.7, 0.85, 0.92)));
     // Océan de MAGMA : mer de roche fondue globale (planète nouveau-née / ultra-chaude).
     // `lave` -> réseau de fissures émissives : la mer brûle aussi côté nuit.
     let mut magma = tellurique(vec3(0.3, 0.16, 0.1), vec3(0.22, 0.12, 0.08), vec3(1.0, 0.38, 0.06), 1.0, 0.0, 0.1, 1.0, vec3(1.0, 0.5, 0.2) * 0.35).avec_nuages(0.25, vec3(0.45, 0.3, 0.28));
@@ -751,12 +757,31 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
     lave.lave = 1.0;
     lave.relief = 0.0;
     push("Lave", lave);
-    push("Venus (etuve)", tellurique(vec3(0.7, 0.6, 0.4), vec3(0.5, 0.42, 0.28), z, 0.0, 1.0, 0.15, 1.0, vec3(0.8, 0.7, 0.3) * 0.25).avec_voile(0.93, vec3(0.93, 0.82, 0.5)));
+    // **Vénus était notée deux fois plus fine que la Terre.** Son air valait
+    // `* 0.25` : la plus basse densité du catalogue après les cailloux nus, pour
+    // 92 bars — l'atmosphère la plus lourde de tout le système solaire interne.
+    //
+    // Ce n'était pas une erreur de jugement mais une impossibilite d'ecriture :
+    // `atmo` portait la teinte ET la quantite dans un seul Vec3, si bien qu'un
+    // halo TERNE ne pouvait etre note que comme un halo MINCE. Vénus est
+    // précisément le monde « épais mais sombre » — sa brume d'acide sulfurique
+    // ne brille pas, elle étouffe. Elle n'était rattrapée que par le terme
+    // `voile` du shader, c'est-à-dire par un effet de bord.
+    //
+    // Densité et teinte séparées, elle passe au sommet de l'échelle.
+    push("Venus (etuve)", tellurique(vec3(0.7, 0.6, 0.4), vec3(0.5, 0.42, 0.28), z, 0.0, 1.0, 0.15, 1.0, z)
+        .avec_air(vec3(0.90, 0.78, 0.42), 1.45)
+        .avec_voile(0.93, vec3(0.93, 0.82, 0.5)));
     // Titan porte un voile orange epais -- c'est meme ce qui le caracterise --
     // mais son `atmo` etait a ZERO : le halo de limbe manquait, alors que le
     // voile, lui, etait bien la. Une lune a l'atmosphere la plus dense du
     // systeme solaire rendue sans halo.
-    push("Titan", tellurique(vec3(0.6, 0.45, 0.25), vec3(0.45, 0.32, 0.2), vec3(0.5, 0.35, 0.15), 0.25, 3.0, 0.2, 0.9, vec3(0.85, 0.55, 0.25) * 0.3).avec_voile(0.78, vec3(0.85, 0.55, 0.25)));
+    // Même correction, même cause : 1,5 bar, plus dense que l'air terrestre, et
+    // une brume orange qui monte à 600 km — la couche la plus haute du système.
+    // Notée `* 0.3`, elle sortait quatre fois plus fine que la Terre.
+    push("Titan", tellurique(vec3(0.6, 0.45, 0.25), vec3(0.45, 0.32, 0.2), vec3(0.5, 0.35, 0.15), 0.25, 3.0, 0.2, 0.9, z)
+        .avec_air(vec3(0.85, 0.55, 0.25), 1.20)
+        .avec_voile(0.78, vec3(0.85, 0.55, 0.25)));
     push("Fer (Mercure)", tellurique(vec3(0.5, 0.48, 0.45), vec3(0.32, 0.3, 0.28), z, 0.0, 1.0, 0.0, 1.0, z).avec_relief(0.4).avec_crateres(0.85));
     // Mars a son preset propre, comme Mercure et Venus -- il empruntait
     // « Badlands », dont la rouille est trop sourde et le mesa trop marque.
@@ -789,8 +814,20 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
     let mut chth = tellurique(vec3(0.32, 0.13, 0.1), vec3(0.18, 0.08, 0.07), z, 0.0, 1.0, 0.0, 1.0, z).avec_relief(0.6);
     chth.lave = 0.5;
     push("Chthonien", chth);
-    let mut ash = tellurique(vec3(0.3, 0.28, 0.27), vec3(0.16, 0.15, 0.14), z, 0.0, 1.0, 0.1, 1.0, z).avec_dunes(0.4);
+    // Ash portait `z` : aucune atmosphère. Or ce qui fait ce monde — ce qui lui
+    // donne son nom — ce sont les cendres EN SUSPENSION, et de la cendre en
+    // suspension est de l'air. La note à zéro venait du même amalgame : sa brume
+    // est grise et sombre, donc inécrivable tant que la teinte portait la
+    // quantité. Fine (entre le caillou sec et Mars), mais elle existe.
+    let mut ash = tellurique(vec3(0.3, 0.28, 0.27), vec3(0.16, 0.15, 0.14), z, 0.0, 1.0, 0.1, 1.0, z)
+        .avec_air(vec3(0.42, 0.38, 0.35), 0.32)
+        .avec_dunes(0.4);
     ash.lave = 0.3;
+    // Donner de l'air à Ash la fait passer la garde « ni air ni eau -> pas de
+    // villes » : un monde de cendre et de lave se serait mis à briller de
+    // lumières urbaines côté nuit. La cendre n'est pas respirable, et le shader
+    // ne bloque qu'au-delà de `lave >= 0.5`. Décision portée par la donnée.
+    ash.villes = 0.0;
     push("Ash (volcanique)", ash);
 
     // --- Première passe de variantes nommées (presets de paramètres) ---
@@ -1324,7 +1361,7 @@ mod tests_coherence_2 {
     #[test]
     fn un_monde_sans_air_ni_eau_na_pas_de_villes() {
         for (nom, app) in catalogue_telluriques() {
-            if app.atmo == Vec3::ZERO && app.eau <= 0.0 {
+            if app.atmo_densite <= 0.0 && app.eau <= 0.0 {
                 assert_eq!(app.villes, 0.0, "{nom} : ni air ni eau, mais des villes");
             }
         }
@@ -1338,7 +1375,7 @@ mod tests_coherence_2 {
         let cat = catalogue_telluriques();
         let habitables: Vec<_> = cat
             .iter()
-            .filter(|(_, a)| a.atmo != Vec3::ZERO && a.eau > 0.0)
+            .filter(|(_, a)| a.atmo_densite > 0.0 && a.eau > 0.0)
             .collect();
         assert!(habitables.len() > 20, "trop peu de mondes habitables : {}", habitables.len());
         for (nom, app) in habitables {
@@ -1434,31 +1471,125 @@ mod tests_coherence_3 {
     #[test]
     fn mars_a_une_brume_visible_mais_tenue() {
         let cat = catalogue_telluriques();
-        let air = |nom: &str| {
+        let app = |nom: &str| {
             cat.iter()
                 .find(|(n, _)| n == nom)
                 .unwrap_or_else(|| panic!("preset absent : {nom}"))
                 .1
-                .atmo
         };
-        let (mars, terre, sec) = (air("Mars"), air("Terre"), air("Badlands"));
+        let (mars, terre, sec) = (app("Mars"), app("Terre"), app("Badlands"));
 
         // Plus dense que le caillou sec générique, sinon la brume ne se lit pas.
         assert!(
-            mars.length() > sec.length() * 1.5,
+            mars.atmo_densite > sec.atmo_densite * 1.5,
             "Mars pas plus embrumée qu'un monde sec quelconque : {} vs {}",
-            mars.length(),
-            sec.length()
+            mars.atmo_densite,
+            sec.atmo_densite
         );
         // Mais nettement en deçà de la Terre : c'est une brume, pas un ciel.
         assert!(
-            mars.length() < terre.length() * 0.6,
+            mars.atmo_densite < terre.atmo_densite * 0.6,
             "Mars aussi dense que la Terre : {} vs {}",
-            mars.length(),
-            terre.length()
+            mars.atmo_densite,
+            terre.atmo_densite
         );
         // Et la brume est rousse : la poussière la teinte, elle ne diffuse pas bleu.
-        assert!(mars.x > mars.z * 1.5, "brume martienne pas assez chaude : {mars:?}");
+        let t = mars.atmo;
+        assert!(t.x > t.z * 1.5, "brume martienne pas assez chaude : {t:?}");
+    }
+
+    /// **La teinte de l'air est unitaire, partout.**
+    ///
+    /// Le shader la consomme telle quelle (`mix(atmo, voile_couleur, …)`) là où
+    /// il normalisait auparavant. Une entrée qui écrirait encore `teinte × force`
+    /// dans `atmo` peindrait un halo sombre — et rien ne le signalerait, puisque
+    /// la densité, elle, serait juste.
+    #[test]
+    fn la_teinte_de_lair_ne_porte_plus_la_densite() {
+        let mut avec_air = 0;
+        for (nom, a) in catalogue_telluriques().into_iter().chain(catalogue_gazeuses()) {
+            if a.atmo_densite <= 0.0 {
+                // Pas d'air -> pas de teinte résiduelle : « rien » ne doit avoir
+                // qu'une seule écriture, sinon les gardes ci-dessus divergent.
+                assert_eq!(a.atmo, Vec3::ZERO, "{nom} : densité nulle mais teinte non nulle");
+                continue;
+            }
+            avec_air += 1;
+            assert!(
+                (a.atmo.length() - 1.0).abs() < 1e-3,
+                "{nom} : teinte d'air non unitaire ({}) — la densité y est encore mêlée",
+                a.atmo.length()
+            );
+        }
+        assert!(avec_air > 30, "seulement {avec_air} mondes avec air : règle peu exercée");
+    }
+
+    /// **La scission ne change rien aux mondes qu'on n'a pas touchés.**
+    ///
+    /// La grande majorité du catalogue écrit encore `teinte × intensité` via
+    /// `avec_atmo`. La migration n'est honnête que si ces entrées-là ressortent
+    /// au bit près : teinte = direction, densité = longueur. Sans cette garantie,
+    /// séparer les deux champs aurait discrètement redessiné cent planètes.
+    ///
+    /// ⚠️ Une première version de ce test comparait la LUMINANCE des teintes
+    /// pour montrer qu'un air peut être « dense et terne ». Elle était fausse
+    /// dans sa prémisse : une teinte ramenée à la norme 1 voit sa luminance
+    /// dictée par sa TEINTE (le bleu pèse 0,07 en Rec. 709, le jaune 0,93), pas
+    /// par son épaisseur. Elle mesurait la couleur en croyant mesurer l'air.
+    #[test]
+    fn lecriture_historique_de_latmosphere_est_preservee() {
+        for v in [
+            vec3(0.35, 0.55, 1.0) * 0.9, // bleu océanique
+            vec3(0.6, 0.8, 1.0) * 0.2,   // voile glacé
+            vec3(0.8, 0.7, 0.5) * 0.12,  // atmosphère sèche
+            vec3(1.0, 0.5, 0.2) * 0.35,  // océan de magma
+        ] {
+            let a = Apparence::new(TypePlanete::Tellurique, Vec3::ONE, Vec3::ONE, Vec3::ZERO, 0.0)
+                .avec_atmo(v);
+            assert!(
+                (a.atmo_densite - v.length()).abs() < 1e-6,
+                "densité {} ≠ ancienne longueur {}",
+                a.atmo_densite,
+                v.length()
+            );
+            // teinte × densité doit reconstituer le vecteur d'origine.
+            assert!(
+                (a.atmo * a.atmo_densite - v).length() < 1e-5,
+                "teinte × densité ne redonne pas {v:?}"
+            );
+        }
+        // Et le cas nul reste nul dans les DEUX champs.
+        let nu = Apparence::new(TypePlanete::Tellurique, Vec3::ONE, Vec3::ONE, Vec3::ZERO, 0.0)
+            .avec_atmo(Vec3::ZERO);
+        assert_eq!(nu.atmo_densite, 0.0);
+        assert_eq!(nu.atmo, Vec3::ZERO);
+    }
+
+    /// Et le corollaire : **aucun monde nommé pour son atmosphère ne reste nu.**
+    /// Ash porte des cendres en suspension, ce qui EST une atmosphère ; elle
+    /// était notée à zéro parce que sa brume est grise et sombre.
+    #[test]
+    fn les_mondes_a_atmosphere_epaisse_le_sont_vraiment() {
+        let cat = catalogue_telluriques();
+        let densite = |nom: &str| {
+            cat.iter()
+                .find(|(n, _)| n == nom)
+                .unwrap_or_else(|| panic!("preset absent : {nom}"))
+                .1
+                .atmo_densite
+        };
+        let terre = densite("Terre");
+        // Trois mondes dont l'épaisseur est la caractéristique première.
+        for nom in ["Venus (etuve)", "Titan", "Hycean"] {
+            assert!(
+                densite(nom) > terre,
+                "{nom} : {} — annoncé plus épais que la Terre ({terre}), noté plus fin",
+                densite(nom)
+            );
+        }
+        // Ash : une brume ténue, mais pas rien.
+        let ash = densite("Ash (volcanique)");
+        assert!(ash > 0.0 && ash < terre, "Ash : {ash} — ni cendres en suspension, ni ciel");
     }
 
     // Et le catalogue gazeux n'est pas vide : sans ça, la boucle ci-dessus ne
@@ -1493,7 +1624,7 @@ mod tests_coherence_3 {
                 let (_, _, a) = crate::genese::apparences::apparence_tellurique(t);
                 if a.nuages > 0.0 {
                     assert!(
-                        a.atmo != Vec3::ZERO || a.voile > 0.0,
+                        a.atmo_densite > 0.0 || a.voile > 0.0,
                         "graine {graine}, t={t:.2} : des nuages sur un monde sans air"
                     );
                 }
@@ -1514,7 +1645,7 @@ mod tests_coherence_3 {
         for (nom, a) in catalogue_telluriques() {
             if a.veg_couv > 0.0 {
                 assert!(
-                    a.eau > 0.0 || a.atmo != Vec3::ZERO,
+                    a.eau > 0.0 || a.atmo_densite > 0.0,
                     "{nom} : de la végétation sans eau NI atmosphère"
                 );
                 if a.eau <= 0.0 {
@@ -1522,10 +1653,10 @@ mod tests_coherence_3 {
                 }
             }
             if a.nuages > 0.0 {
-                assert_ne!(a.atmo, Vec3::ZERO, "{nom} : des nuages sans atmosphère");
+                assert!(a.atmo_densite > 0.0, "{nom} : des nuages sans atmosphère");
             }
             if a.voile > 0.0 {
-                assert_ne!(a.atmo, Vec3::ZERO, "{nom} : un voile sans atmosphère");
+                assert!(a.atmo_densite > 0.0, "{nom} : un voile sans atmosphère");
             }
         }
         // Le cas « vie sans océan » existe vraiment : sans lui, la branche

@@ -44,6 +44,23 @@ impl Repere {
         self.rot * p + self.pos
     }
 
+    /// Repère équivalent à une matrice **rigide** (rotation + translation, sans
+    /// mise à l'échelle) — l'inverse de [`Self::to_mat4`].
+    ///
+    /// Sert au déplacement de sous-arbre (`Chantier::deplacer`, §10.10), où le
+    /// delta se calcule naturellement en matrices (produit de deux poses cuites)
+    /// mais doit s'appliquer à des `Repere` : ceux des ports libres, qui vivent
+    /// en coordonnées monde.
+    ///
+    /// ⚠️ Ne vaut que pour une matrice rigide. Toutes celles qui circulent ici
+    /// le sont — elles viennent de `Repere::to_mat4` ou d'un produit de
+    /// telles matrices, et le produit de deux transformations rigides l'est
+    /// aussi.
+    pub fn depuis_mat4(m: Mat4) -> Repere {
+        let (_, rot, pos) = m.to_scale_rotation_translation();
+        Repere { pos, rot }
+    }
+
     /// Compose un repère local exprimé dans *ce* repère → repère parent.
     /// (Sert à obtenir le repère monde d'un port à partir du repère monde du
     /// corps.)
@@ -118,7 +135,21 @@ impl Port {
 /// montage s'oppose à l'avant du port hôte (face à face), les **hauts** restant
 /// alignés. Le demi-tour se fait autour du haut de l'hôte.
 pub fn accoupler(hote: Repere, montage: Repere) -> Repere {
-    let face_a_face = hote.rot * Quat::from_rotation_y(PI);
+    accoupler_roule(hote, montage, 0.0)
+}
+
+/// Accouplement **avec roulis** : même chose, tournée de `roulis` radians autour
+/// de l'axe d'accostage (`conception/assembleur.md` §11.3).
+///
+/// Z est cet axe (`Repere::avant`) : tourner autour de lui *est* le roulis, et
+/// c'est la seule rotation qui laisse la pièce accostée. Les deux hauts cessent
+/// d'être alignés — c'est précisément ce qu'on veut pouvoir décider.
+///
+/// **À `roulis = 0`, rend exactement ce que rendait `accoupler`** : c'est la
+/// propriété qui rend la migration sûre, et [`accoupler`] n'est plus qu'un appel
+/// à zéro plutôt qu'un second calcul qui pourrait en diverger.
+pub fn accoupler_roule(hote: Repere, montage: Repere, roulis: f32) -> Repere {
+    let face_a_face = hote.rot * Quat::from_rotation_y(PI) * Quat::from_rotation_z(roulis);
     let rot = face_a_face * montage.rot.inverse();
     let pos = hote.pos - rot * montage.pos;
     Repere { pos, rot }
@@ -127,6 +158,82 @@ pub fn accoupler(hote: Repere, montage: Repere) -> Repere {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **Le roulis a zero ne change rien** — la garde de migration de §11.3.
+    /// Sans elle, ajouter un parametre pourrait deplacer silencieusement toutes
+    /// les pieces deja posees et toutes les recettes deja sauvegardees.
+    #[test]
+    fn le_roulis_nul_redonne_laccouplement_dorigine() {
+        for (h, m) in cas_accouplement() {
+            let a = accoupler(h, m);
+            let b = accoupler_roule(h, m, 0.0);
+            assert!(proche(a.pos, b.pos), "position deplacee a roulis nul");
+            assert!(a.rot.abs_diff_eq(b.rot, 1e-6), "orientation changee a roulis nul");
+        }
+    }
+
+    /// **Le roulis tourne autour de l'axe d'accostage, et de rien d'autre.**
+    /// La piece reste accostee : son point de montage ne bouge pas, et son axe
+    /// avant reste celui du port. Seul le *haut* tourne.
+    #[test]
+    fn le_roulis_tourne_autour_de_laxe_et_garde_le_contact() {
+        for (h, m) in cas_accouplement() {
+            let droit = accoupler(h, m);
+            for angle in [0.4_f32, 1.2, -2.0, std::f32::consts::PI] {
+                let roule = accoupler_roule(h, m, angle);
+                // Le port de montage reste au meme point du monde : la piece
+                // n'a pas decolle de son hote.
+                let p0 = droit.compose(m).pos;
+                let p1 = roule.compose(m).pos;
+                assert!(proche(p0, p1), "angle {angle} : la piece a decolle du port");
+                // Et son axe d'accostage est inchange.
+                let a0 = droit.compose(m).avant();
+                let a1 = roule.compose(m).avant();
+                assert!(proche(a0, a1), "angle {angle} : l'axe d'accostage a bouge");
+            }
+        }
+    }
+
+    /// Un tour complet revient au point de depart : le roulis est bien un angle.
+    #[test]
+    fn un_tour_complet_de_roulis_redonne_la_meme_pose() {
+        for (h, m) in cas_accouplement() {
+            let a = accoupler_roule(h, m, 0.0);
+            let b = accoupler_roule(h, m, std::f32::consts::TAU);
+            assert!(proche(a.pos, b.pos));
+            assert!(a.rot.abs_diff_eq(b.rot, 1e-5) || a.rot.abs_diff_eq(-b.rot, 1e-5));
+        }
+    }
+
+    /// **Et le roulis fait vraiment quelque chose.** Sans ce test, les trois
+    /// precedents passeraient sur une implementation qui ignore l'angle.
+    #[test]
+    fn un_roulis_non_nul_change_lorientation() {
+        let (h, m) = cas_accouplement()[0];
+        let droit = accoupler(h, m);
+        let roule = accoupler_roule(h, m, std::f32::consts::FRAC_PI_2);
+        assert!(
+            !droit.rot.abs_diff_eq(roule.rot, 1e-3),
+            "un quart de tour n'a rien change : le roulis est ignore"
+        );
+    }
+
+    /// Quelques couples (hote, montage) varies : axes canoniques et orientations
+    /// quelconques, pour que les gardes ne portent pas sur un seul cas facile.
+    fn cas_accouplement() -> Vec<(Repere, Repere)> {
+        vec![
+            (Repere::IDENTITE, Repere::IDENTITE),
+            (
+                Repere::new(vec3(1.0, 2.0, -3.0), Quat::from_rotation_x(0.7)),
+                Repere::new(vec3(0.0, 0.0, 0.5), Quat::IDENTITY),
+            ),
+            (
+                Repere::new(vec3(-2.0, 0.5, 1.0), Quat::from_euler(EulerRot::XYZ, 0.3, -1.1, 2.2)),
+                Repere::new(vec3(0.2, -0.4, 0.0), Quat::from_rotation_y(1.0)),
+            ),
+        ]
+    }
+
 
     fn proche(a: Vec3, b: Vec3) -> bool {
         (a - b).length() < 1e-5

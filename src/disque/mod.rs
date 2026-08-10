@@ -25,12 +25,11 @@ use macroquad::prelude::*;
 use macroquad::rand::gen_range;
 use std::cell::{Cell, RefCell};
 
-// Hauteur (px) du viewport de rendu courant : sert au clamp de taille MINIMALE
-// des particules (une particule sub-pixel disparaît ; on la fige à ~1.5 px en
-// l'assombrissant — Kuiper/Oort restent visibles aux échelles réelles).
-// 0 = plein écran. Même convention que planete::set_viewport_h.
+// La hauteur du viewport vit dans `impostor` (partagée avec corps et étoiles).
+// Elle sert ici au clamp de taille MINIMALE des particules : une particule
+// sub-pixel disparaît, on la fige à ~1.5 px en l'assombrissant — Kuiper/Oort
+// restent visibles aux échelles réelles.
 thread_local! {
-    static VIEWPORT_H: RefCell<f32> = const { RefCell::new(0.0) };
     static PX_MIN: RefCell<f32> = const { RefCell::new(0.0) };
     // Materials partagés (créés une fois, clonés ensuite).
     //
@@ -97,8 +96,9 @@ pub fn vider_cache_materials() {
 }
 
 /// Hauteur du viewport courant (galerie : hauteur de cellule / facteur pixel).
+/// La valeur est partagée avec les corps et les étoiles (voir `impostor`).
 pub fn set_viewport_h(h: f32) {
-    VIEWPORT_H.with(|v| *v.borrow_mut() = h);
+    crate::impostor::set_viewport_h(h);
 }
 
 /// Demi-taille écran minimale d'une particule, en pixels DE RENDU. 0 = défaut (1.5).
@@ -113,12 +113,7 @@ pub fn set_px_min(p: f32) {
 }
 
 fn viewport_h() -> f32 {
-    let h = VIEWPORT_H.with(|v| *v.borrow());
-    if h > 0.0 {
-        h
-    } else {
-        screen_height()
-    }
+    crate::impostor::viewport_h()
 }
 
 fn px_min() -> f32 {

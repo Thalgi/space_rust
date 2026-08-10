@@ -11,6 +11,7 @@ use super::{
     ogive_rayon, BARDAGE_ARC, BOUCLIER_ELANCEMENT, JUPE_COUVERTURE,
     VarianteAntenne, VarianteCaisson, VarianteCharge, VarianteCoiffe, VarianteModule,
     VariantePanneau, VariantePanneauMega, VariantePropulseur, VarianteRadiateur, VarianteRaptor,
+    rayon_pour_anneau, VarianteMiroir,
 };
 use macroquad::prelude::*;
 use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2, PI, TAU};
@@ -1594,15 +1595,96 @@ pub fn preset_elysium() -> EtatStation {
 /// coûteuse que la duplication qu'elle évite. Ce qui reste partagé
 /// (`moyeu_hexagonal`, `bras_et_tunnels`) l'est parce que c'est **encore**
 /// identique, pas parce que ça doit le rester.
+#[cfg(test)]
 pub fn preset_stanford() -> EtatStation {
+    // Vue d'un seul tenant : les deux moitiés versées dans le même assemblage.
+    // Sert au test de silhouette et à qui veut l'objet entier sans animation.
     let mut asm = Assembleur::new();
-    moyeu_hexagonal(&mut asm);
-    bras_et_tunnels(&mut asm, STANFORD_BRAS);
-    // Habitats bâtis à part, puis reversés **réduits** : la mise à l'échelle
-    // porte sur la géométrie, donc sur le diamètre autant que sur la longueur.
+    verser(&mut asm, preset_stanford_moyeu());
+    verser(&mut asm, preset_stanford_anneau());
+    asm.terminer()
+}
+
+/// **La moitié qui NE tourne PAS** : les deux gros cœurs d'habitat axiaux, et
+/// le miroir.
+///
+/// Un tore de Stanford ne tourne pas d'un bloc. L'anneau tourne — c'est lui qui
+/// fait la gravité —, et avec lui toute son ossature ; mais la **colonne
+/// d'habitat sur l'axe** reste immobile, pour que l'amarrage et les paliers se
+/// fassent sur une pièce qui ne tourne pas.
+///
+/// ⚠️ **Le miroir reste de ce côté-ci**, et ce n'est pas négociable : il doit
+/// garder le soleil dans le même axe. Solidaire de l'anneau, il ne renverrait la
+/// lumière qu'une fraction du temps — ce qui rendrait vaine l'inclinaison à 30°
+/// réglée juste avant.
+pub fn preset_stanford_moyeu() -> EtatStation {
+    let mut asm = Assembleur::new();
+    // **Les deux gros cœurs axiaux, et eux seuls.** C'est la section
+    // désolidarisée : la colonne d'habitat sur l'axe reste immobile pendant que
+    // tout le reste — ossature centrale comprise — tourne autour d'elle. C'est
+    // ainsi qu'un axe « despun » fonctionne : le manège tourne autour du moyeu,
+    // pas l'inverse.
+    //
+    // Bâtis à part, puis reversés **réduits** : la mise à l'échelle porte sur la
+    // géométrie, donc sur le diamètre autant que sur la longueur.
     let mut hab = Assembleur::new();
     habitats_accouples(&mut hab, ELYSIUM_HABITAT);
     verser_a_echelle(&mut asm, hab.terminer(), STANFORD_ECHELLE);
+    // Coiffes et flèches avec eux : **toute** la colonne axiale est immobile.
+    // Elles tournaient un temps — sans effet visible, ce sont des corps de
+    // révolution posés sur l'axe — mais les mettre du côté fixe dit ce qu'elles
+    // sont : la partie de la station où l'on ne pèse rien.
+    pilier_polaire(&mut asm);
+
+    // **Les deux miroirs primaires**, inclinés vers le soleil.
+    //
+    // Un de chaque côté de l'anneau : celui du haut lui renvoie la lumière vers
+    // le bas, celui du bas vers le haut. Un seul laissait une moitié du tore
+    // éclairée et l'autre non — or l'anneau est vitré sur tout son pourtour.
+    //
+    // ⚠️ **Les deux regardent le MÊME soleil**, et c'est tout l'enjeu du calcul
+    // ci-dessous. Chacun part de la normale qui fait face à l'anneau (−Y en
+    // haut, +Y en bas) puis s'incline **vers `SOLEIL`** — donc en sens opposés
+    // l'un de l'autre. Les incliner du même signe les ferait regarder deux
+    // directions différentes, et l'un des deux ne renverrait plus rien.
+    let r_tore = stanford_rayon_tore();
+    let miroir = Composant::Miroir {
+        profil: ELYSIUM_PROFIL,
+        variante: VarianteMiroir::Anneau,
+        rayon: rayon_pour_anneau(r_tore),
+        creux: 0.05,
+    };
+    for sens in [1.0_f32, -1.0] {
+        // La normale visée : d'abord **vers l'anneau** (−Y en haut, +Y en bas),
+        // puis penchée de `MIROIR_INCLINAISON` **vers le soleil**.
+        //
+        // L'axe du penchement se **déduit** de `SOLEIL` (`n × soleil`) au lieu
+        // d'être écrit en dur. Ce n'est pas un raffinement : la première version
+        // fixait un `rotation_z` de signe choisi à la main, et se trompait — le
+        // miroir du haut regardait à l'opposé du soleil. Un axe calculé ne peut
+        // pas se tromper de côté, quel que soit le pôle et quelle que soit la
+        // direction qu'on donne au soleil.
+        let vers_anneau_n = -sens * Vec3::Y;
+        let vers_anneau = Quat::from_rotation_arc(Vec3::Z, vers_anneau_n);
+        let axe = vers_anneau_n.cross(SOLEIL).normalize();
+        let penche = Quat::from_axis_angle(axe, MIROIR_INCLINAISON);
+        asm.ajouter(cuire(
+            Repere::new(vec3(0.0, sens * r_tore * MIROIR_HAUTEUR, 0.0), penche * vers_anneau),
+            &miroir,
+        ));
+    }
+    asm.terminer()
+}
+
+/// **La moitié qui tourne** : ossature centrale, bras, coiffes de pôle et
+/// anneau — tout sauf la colonne d'habitat axiale et le miroir.
+pub fn preset_stanford_anneau() -> EtatStation {
+    let mut asm = Assembleur::new();
+    // L'**ossature centrale** tourne avec l'anneau : c'est elle qui le porte,
+    // et une charpente qui resterait immobile pendant que sa jante tourne
+    // n'aurait rien à quoi se raccrocher.
+    moyeu_hexagonal(&mut asm);
+    bras_et_tunnels(&mut asm, STANFORD_BRAS);
 
     // Le tore boucle **au bout** des bras : son rayon majeur est la distance de
     // l'axe à leur pointe. Sa section vaut la hauteur du moyeu (donc son
@@ -1622,6 +1704,174 @@ pub fn preset_stanford() -> EtatStation {
     asm.ajouter(cuire(Repere::IDENTITE, &tore));
     asm.terminer()
 }
+
+/// **Pilier d'habitat polaire** : une colonne le long de l'axe, qui traverse le
+/// moyeu et sort **des deux côtés**, coiffée d'un cœur d'habitat à chaque pôle.
+///
+/// C'est la partie du tore où la gravité est nulle : docking, observation,
+/// industrie. Elle ne tourne pas — d'où sa place dans la moitié fixe.
+///
+/// ⚠️ **Le fût du pilier, c'est l'habitat axial du moyeu**, pas des segments à
+/// part. Une première version empilait trois modules de 3 par côté ; une sonde a
+/// montré qu'ils étaient **entièrement enfouis** dans l'habitat accouplé, qui
+/// couvre exactement la même tranche (y de 0 à 9) avec un rayon deux fois
+/// supérieur. Trois pièces par côté dessinées pour rien, et invisibles — c'est
+/// le genre de doublon qu'on ne voit qu'en mesurant.
+///
+/// Le pilier ne pose donc que ses **coiffes**, au-delà du fût existant.
+///
+/// Symétrique par construction : la boucle sur `[1, -1]` pose les deux bouts
+/// avec le même code, plutôt qu'un haut et un bas écrits séparément qui
+/// finiraient par diverger.
+fn pilier_polaire(asm: &mut Assembleur) {
+    // Bout du fût : l'habitat axial est centré sur l'origine et déployé de part
+    // et d'autre, à l'échelle de Stanford. Lire sa cote ici plutôt que d'écrire
+    // un nombre — le jour où l'échelle change, la coiffe suit.
+    let fut = ELYSIUM_HABITAT * STANFORD_ECHELLE;
+    for sens in [1.0_f32, -1.0] {
+        // **La coiffe de pôle** : le cœur d'habitat d'Elysium — un fût nu, sans
+        // hublot ni coupole. Ni nœud à six sorties ni à quatre : les deux ont
+        // été essayés et écartés à l'œil. Un nœud est une **croix**, et une
+        // croix au sommet d'une colonne se lit comme un embranchement, alors
+        // qu'il n'y a rien à embrancher là-haut. Le tube prolonge le pilier au
+        // lieu de le contredire — et c'est la pièce même qu'emploie le complexe
+        // Elysium pour ses habitats, donc un seul vocabulaire dans la famille.
+        asm.ajouter(cuire(
+            Repere::new(
+                vec3(0.0, sens * (fut + POLE_COEUR * 0.5), 0.0),
+                Quat::from_rotation_x(-sens * PI / 2.0),
+            ),
+            &Composant::ModuleAxial {
+                profil: HABITAT_PROFIL,
+                variante: VarianteModule::CoeurGris,
+                longueur: POLE_COEUR,
+            },
+        ));
+
+        // **La flèche polaire** : un second cœur, étiré cinq fois, posé bout à
+        // bout au-delà de la coiffe — et **deux fois plus fine**.
+        //
+        // `FLECHE_PROFIL` est deux crans sous celui de l'habitat : P0 contre
+        // P2, soit le quart du diamètre. La colonne s'effile donc franchement —
+        // gros cœur, coiffe, puis **tige** — au lieu de filer d'un seul gabarit
+        // sur toute sa longueur, ce qui la ferait lire comme un tube unique et
+        // non comme un mât.
+        let long = POLE_COEUR * POLE_ETIREMENT;
+        asm.ajouter(cuire(
+            Repere::new(
+                vec3(0.0, sens * (fut + POLE_COEUR + long * 0.5), 0.0),
+                Quat::from_rotation_x(-sens * PI / 2.0),
+            ),
+            &Composant::ModuleAxial {
+                profil: FLECHE_PROFIL,
+                variante: VarianteModule::CoeurGris,
+                longueur: long,
+            },
+        ));
+    }
+    charge_polaire_basse(asm, fut + POLE_COEUR + POLE_COEUR * POLE_ETIREMENT);
+}
+
+/// **Charge utile du mât bas** : la grappe d'habitat de l'ISV, puis les cuves,
+/// enfilées sur la flèche du pôle sud.
+///
+/// ⚠️ **C'est la seule chose qui rompt la symétrie des deux pôles**, et c'est
+/// voulu : le haut porte l'amarrage et l'observation, le bas porte ce qui se
+/// consomme. Une station symétrique jusqu'au bout n'aurait pas de haut ni de
+/// bas ; c'est le déséquilibre qui donne son sens à la colonne.
+///
+/// Les deux charges partagent la **même figure** — trois volumes en couronne
+/// autour d'un axe vide, où passe le mât. Ce n'est pas une coïncidence dont on
+/// profite : c'est ce qui fait qu'elles se lisent comme deux étages d'une même
+/// pile et non comme deux pièces sans rapport.
+///
+/// Tout est calé sur le **bout de la flèche** et remonte de là. Ancrer sur le
+/// haut aurait laissé la dernière cuve dépasser dans le vide dès qu'une cote
+/// change — or ce qui doit rester vrai, c'est que la pile **finit sur le mât**.
+fn charge_polaire_basse(asm: &mut Assembleur, bout: f32) {
+    let orient = Quat::from_rotation_arc(Vec3::Z, Vec3::Y);
+
+    // Les cuves d'abord : leur pied tombe au bout du mât. Elles se déploient
+    // vers +Z depuis leur origine, qu'on retourne donc vers le bas.
+    let haut_cuves = bout - super::grappe_hauteur(POLE_CUVE, POLE_RANGEES);
+    asm.ajouter(cuire(
+        Repere::new(vec3(0.0, -haut_cuves, 0.0), Quat::from_rotation_x(PI / 2.0)),
+        &Composant::GrappeReservoirs {
+            profil: FLECHE_PROFIL,
+            rayon_cuve: POLE_CUVE,
+            rangees: POLE_RANGEES,
+        },
+    ));
+
+    // L'habitat au-dessus, séparé par une longueur de mât nu. L'écart n'est pas
+    // du décor : accolées, les deux couronnes se lisent comme un seul bloc à six
+    // volumes, et l'on ne voit plus qu'il y a des gens d'un côté et des ergols
+    // de l'autre.
+    let centre_hab = haut_cuves - POLE_ECART - HAB_LONG * 0.5;
+    poser_grappe_habitat(asm, -centre_hab, orient, FLECHE_PROFIL.rayon());
+}
+
+/// Rayon d'une cuve du mât bas, et nombre de rangées.
+///
+/// Calé pour que la grappe reste **plus étroite** que la couronne d'habitat
+/// au-dessus : la pile s'affine en descendant, comme le mât lui-même s'affine
+/// sous les cœurs. L'inverse donnerait une massue.
+const POLE_CUVE: f32 = 1.6;
+const POLE_RANGEES: usize = 3;
+
+/// Longueur de mât nu entre l'habitat et les cuves.
+const POLE_ECART: f32 = 6.0;
+
+/// Écart des miroirs au plan de l'anneau, en fraction de son rayon.
+///
+/// Parti de 0,75, porté au triple (2,25) parce que de près le miroir coiffait le
+/// tore comme un couvercle ; ramené d'un tiers (1,5) une fois la paire en place,
+/// deux disques aussi lointains ne se lisant plus comme appartenant au même
+/// objet.
+///
+/// ⚠️ **Conséquence à connaître** : les miroirs pèsent sur le rayon englobant de
+/// la station, donc sur le recul de la caméra au cadrage automatique.
+const MIROIR_HAUTEUR: f32 = 1.5;
+
+/// Direction conventionnelle du soleil.
+///
+/// L'éclairage de la vue suit la caméra : il n'y a pas de vrai soleil à viser.
+/// Cette constante n'existe donc que pour que les **deux** miroirs regardent le
+/// même point — c'est leur accord qui compte, pas l'azimut choisi.
+const SOLEIL: Vec3 = Vec3::X;
+
+/// Inclinaison des miroirs, **30°** — réglé à l'œil.
+///
+/// La géométrie pure demanderait 45° : la lumière arrive perpendiculairement à
+/// l'axe de rotation, et c'est l'angle qui la renvoie exactement *le long* de
+/// cet axe. À plat (0°), le miroir la réfléchirait d'où elle vient — c'était le
+/// défaut d'origine.
+///
+/// 30° est un **arbitrage de lecture**, pas d'optique : à 45° le disque se
+/// présente trop de profil et sa surface disparaît sous les angles de caméra
+/// usuels. Moins incliné, il montre son reflet tout en restant manifestement
+/// de biais.
+const MIROIR_INCLINAISON: f32 = PI / 6.0;
+
+/// Longueur du cœur d'habitat qui coiffe chaque pôle.
+///
+/// **Pas d'antenne au-delà** : elle a été essayée et retirée. Le pilier se
+/// termine par son habitat, et une parabole en bout ajoutait un détail
+/// d'échelle incompatible avec une pièce longue de plusieurs unités.
+const POLE_COEUR: f32 = 5.0;
+
+/// Étirement de la **flèche polaire** — le second cœur, au-delà de la coiffe —
+/// en multiples de [`POLE_COEUR`].
+const POLE_ETIREMENT: f32 = 10.0;
+
+/// Profil de la flèche : **deux crans** sous `HABITAT_PROFIL`, soit le quart de
+/// son diamètre (P0 = 0,5 contre P2 = 2,0).
+///
+/// Halvée une première fois (P1), puis encore : à P1 la flèche restait un fût,
+/// et ce qu'il faut ici est une **tige**. La grille des profils fournit les deux
+/// moitiés successives sans qu'aucun facteur soit écrit à la main — P0 est le
+/// plus fin qu'elle porte, donc le bout de la course.
+const FLECHE_PROFIL: Profil = Profil::P0;
 
 /// Hauteur du moyeu, **et** côté de son hexagone : les faces latérales sont
 /// carrées. Lue par le tore, qui accorde son diamètre dessus.
@@ -2102,6 +2352,16 @@ pub fn preset_isv_equipage(epine: Epine, repli: f32) -> EtatStation {
 /// *Limite connue* : `rayon_local()` d'un composant ignore cette échelle, donc
 /// la sphère englobante de la station la sous-estime (~9 % ici). Sans
 /// conséquence — elle ne sert qu'au cadrage caméra, qui garde 35 % de marge.
+/// Verse un état publié dans un assemblage, **tel quel**.
+///
+/// Sert aux presets dissociés (moyeu fixe + anneau tournant) : la vue d'un seul
+/// tenant se compose de ses deux moitiés au lieu de les rebâtir, ce qui garantit
+/// que la vue animée et la vue statique montrent **exactement** le même objet.
+#[cfg(test)]
+fn verser(dest: &mut Assembleur, source: EtatStation) {
+    verser_a_echelle(dest, source, 1.0);
+}
+
 fn verser_a_echelle(dest: &mut Assembleur, source: EtatStation, k: f32) {
     let EtatStation::Prete(s) = source else {
         return;
@@ -2423,15 +2683,52 @@ const HAB_JEU: f32 = 0.25;
 const fn hab_rayon(epine: f32) -> f32 {
     epine + HAB_JEU + HAB_INSCRIT
 }
+/// Rayon de couronne **minimal** pour que les trois modules ne se croisent pas
+/// entre eux, indépendamment de l'épine qu'ils entourent.
+///
+/// Portée d'une section onigiri P2 dans la direction de sa voisine — à 60° d'un
+/// coin, donc `dv·cos 30° + ρ` — rapportée à la corde de la couronne
+/// (`2·R·sin 60°`). C'est le calcul que faisait déjà
+/// `la_charge_utile_suit_le_gabarit_de_lepine` pour **vérifier** le montage de
+/// l'ISV ; il **décide** désormais, ce qui est sa place (§10.9). Sur l'épine de
+/// l'ISV il ne change rien : le jeu y impose déjà une couronne plus large.
+fn hab_rayon_mini() -> f32 {
+    let r = Profil::P2.rayon();
+    let f = crate::vaisseau::pieces::ONIGIRI_FILET;
+    let portee = r * ((1.0 - f) * (PI / 6.0).cos() + f);
+    portee / (PI / 3.0).sin()
+}
+
 /// Le même, pour l'épine carrée (valeur historique, et calcul unique).
 #[allow(dead_code)] // Mesure de geometrie tenue par ses tests ; aucun dessin ne l'appelle aujourd'hui.
 const HAB_RAYON: f32 = hab_rayon(EPINE);
+/// **Rayon de couronne retenu** : la plus large des deux contraintes.
+///
+/// Le jeu voulu par rapport à l'épine, ou l'encombrement mutuel des trois
+/// modules. Sur l'épine de l'ISV c'est la première qui gagne et rien ne change ;
+/// sur un mât fin — la flèche polaire du tore, en P0 — c'est la seconde, et sans
+/// elle les trois fûts **se croisent**.
+fn hab_couronne(epine: f32) -> f32 {
+    hab_rayon(epine).max(hab_rayon_mini() + HAB_JEU)
+}
+
 /// Portée de la ferrure d'attache : du côté plat du module jusqu'à la surface
 /// de l'épine. Le module se pose **contre** la structure, il ne flotte pas à
 /// côté.
 ///
-/// Doublé, parce que les deux ferrures se posent à **mi-portée** de ce champ :
+/// Doublée, parce que les deux ferrures se posent à **mi-portée** de ce champ :
 /// c'est `attache/2` qui donne le déport réel des longerons.
+///
+/// C'est la **ferrure** qui absorbe l'écart quand la couronne s'élargit au-delà
+/// du jeu nominal, jamais la couronne qui se rapproche : le longeron doit
+/// tomber sur la surface de l'épine quoi qu'il arrive.
+fn hab_attache(epine: f32) -> f32 {
+    2.0 * (hab_couronne(epine) - HAB_INSCRIT - epine)
+}
+
+/// Portée nominale, celle du montage de l'ISV — où c'est le jeu qui commande.
+/// Sert de **repère de non-régression** : `hab_attache(EPINE)` doit la redonner.
+#[cfg(test)]
 const HAB_ATTACHE: f32 = 2.0 * HAB_JEU;
 /// Centre de la grappe d'habitat le long de l'épine (avant pivot). Posée juste
 /// au-dessus du fret (qui finit vers Y ≈ 57), en laissant le haut de l'épine
@@ -2449,14 +2746,15 @@ const HAB_CENTRE_Y: f32 = 63.0;
 /// Partagée par la vue Briques et par `preset_isv` : ce qu'on valide à l'écran
 /// est **exactement** ce qui part sur le vaisseau.
 fn poser_grappe_habitat(asm: &mut Assembleur, y_centre: f32, orient: Quat, epine: f32) {
-    let rayon = hab_rayon(epine);
+    let rayon = hab_couronne(epine);
+    let attache = hab_attache(epine);
     for k in 0..HAB_MODULES {
         let a = FRAC_PI_2 + TAU * k as f32 / HAB_MODULES as f32;
         let module = Composant::ModuleHabitat {
             profil: Profil::P2,
             longueur: HAB_LONG,
             spin: a,
-            attache: HAB_ATTACHE,
+            attache,
         };
         // Décalage radial exprimé dans le repère de la grappe, puis tourné avec
         // elle : la couronne reste perpendiculaire à l'épine quel que soit
@@ -5419,6 +5717,378 @@ mod tests {
     // Trois bras, à 120°, dans le plan du moyeu — et pas quatre ni coplanaires
     // par accident. Sondé sur la géométrie cuite, pas sur les constantes, et
     // sur les **deux** variantes : le moyeu ne doit pas dépendre du bras.
+    /// **Les deux miroirs sont inclinés, et regardent le même soleil.**
+    ///
+    /// À plat au-dessus de l'anneau, un miroir ne renvoie rien : la lumière
+    /// arrive perpendiculairement à l'axe de rotation, et un disque parallèle à
+    /// l'anneau la réfléchirait d'où elle vient. C'est le défaut que l'œil a vu.
+    ///
+    /// ⚠️ Et le second miroir a son propre piège : incliné du **même signe** que
+    /// le premier, il regarderait dans l'autre direction — les deux normales
+    /// partant de côtés opposés de l'anneau. Le test le vérifie par le produit
+    /// scalaire avec [`SOLEIL`], qui doit être positif **pour les deux**.
+    #[test]
+    fn les_deux_miroirs_sont_inclines_vers_le_meme_soleil() {
+        let EtatStation::Prete(st) = preset_stanford_moyeu() else { panic!("moyeu vide") };
+        let miroirs: Vec<&crate::vaisseau::Piece> = st
+            .pieces()
+            .iter()
+            .filter(|p| matches!(p.composant, Composant::Miroir { .. }))
+            .collect();
+        assert_eq!(miroirs.len(), 2, "il en faut un de chaque côté de l'anneau");
+
+        let mut cotes = Vec::new();
+        for m in &miroirs {
+            let n = m.transforme.transform_vector3(Vec3::Z).normalize();
+            let y = m.centre().y;
+            cotes.push(y);
+
+            // Ni parallèle à l'anneau (le défaut d'origine), ni couché dans son
+            // plan (il ne le verrait plus).
+            let cos = n.dot(Vec3::Y).abs();
+            assert!(cos < 0.95, "miroir quasi parallèle à l'anneau (cos = {cos})");
+            assert!(cos > 0.2, "miroir presque dans le plan de l'anneau (cos = {cos})");
+            // À l'angle déclaré. Comparer à la constante plutôt qu'à un nombre
+            // réécrit ici : l'inclinaison est un réglage à l'œil.
+            let attendu = MIROIR_INCLINAISON.cos();
+            assert!((cos - attendu).abs() < 0.05, "inclinaison {cos} au lieu de {attendu}");
+
+            // **Face au soleil.**
+            assert!(
+                n.dot(SOLEIL) > 0.1,
+                "miroir en y={y:.1} tourné à l'opposé du soleil (n·soleil = {})",
+                n.dot(SOLEIL)
+            );
+            // **Et face à l'anneau** : sa normale redescend vers le plan y = 0.
+            assert!(
+                n.y * y < 0.0,
+                "miroir en y={y:.1} tourné dos à l'anneau (n.y = {})",
+                n.y
+            );
+        }
+        // Un de chaque côté, à la même distance.
+        cotes.sort_by(f32::total_cmp);
+        assert!(cotes[0] < 0.0 && cotes[1] > 0.0, "les deux miroirs sont du même côté");
+        assert!((cotes[0] + cotes[1]).abs() < 1e-3, "paire asymétrique : {cotes:?}");
+    }
+
+    /// Les cœurs d'habitat (`CoeurGris`) d'un état, **triés du centre vers les
+    /// bouts**.
+    ///
+    /// Le tore en porte six, et il faut savoir lesquels : deux accouplés au
+    /// centre, deux coiffes, deux flèches. Même composant, même variante — seule
+    /// la distance à l'origine les distingue, et s'appuyer sur l'ordre de pose
+    /// serait s'appuyer sur un détail d'écriture.
+    fn coeurs_tries(e: EtatStation) -> Vec<crate::vaisseau::Piece> {
+        let EtatStation::Prete(st) = e else { panic!("station vide") };
+        let mut v: Vec<crate::vaisseau::Piece> = st
+            .pieces()
+            .iter()
+            .filter(|p| {
+                matches!(
+                    p.composant,
+                    Composant::ModuleAxial { variante: VarianteModule::CoeurGris, .. }
+                )
+            })
+            .cloned()
+            .collect();
+        v.sort_by(|a, b| a.centre().length().total_cmp(&b.centre().length()));
+        v
+    }
+
+    /// **Aucune pièce du pilier n'en enfouit une autre.**
+    ///
+    /// ⚠️ C'est le défaut que ce tore a réellement porté : trois segments de fût
+    /// par côté, **entièrement contenus** dans l'habitat axial qui couvrait la
+    /// même tranche avec un rayon deux fois supérieur. Six pièces dessinées pour
+    /// rien, invisibles, et qu'aucun test ne voyait — il a fallu sonder les
+    /// positions pour s'en apercevoir.
+    #[test]
+    fn le_pilier_n_enfouit_aucune_de_ses_pieces() {
+        let EtatStation::Prete(st) = preset_stanford() else { panic!("station vide") };
+        let mut plages: Vec<(f32, f32)> = st
+            .pieces()
+            .iter()
+            .filter_map(|p| {
+                let Composant::ModuleAxial { longueur, .. } = p.composant else { return None };
+                let k = p.transforme.x_axis.truncate().length();
+                let axe = p.transforme.transform_vector3(Vec3::Z).normalize();
+                // ⚠️ **Seuls les modules alignés sur l'axe.** Les tunnels des
+                // bras sont des `ModuleAxial` eux aussi, mais couchés à
+                // l'horizontale : c'est l'orientation qui définit la colonne,
+                // pas le type de composant.
+                if axe.y.abs() < 0.99 {
+                    return None;
+                }
+                let demi = longueur * 0.5 * k;
+                let y = p.centre().y;
+                Some((y - demi, y + demi))
+            })
+            .collect();
+        assert!(plages.len() >= 6, "moins de six modules axiaux : {}", plages.len());
+        plages.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for f in plages.windows(2) {
+            let (fin_precedent, debut_suivant) = (f[0].1, f[1].0);
+            assert!(
+                debut_suivant >= fin_precedent - 1e-3,
+                "deux modules se recouvrent : le précédent finit à {fin_precedent:.3},                  le suivant commence à {debut_suivant:.3}"
+            );
+        }
+    }
+
+    /// **Le pilier polaire sort des deux côtés, et porte un module à chaque
+    /// bout.** C'est la zone de gravité nulle du tore : amarrage, observation.
+    #[test]
+    fn le_pilier_polaire_est_symetrique_et_coiffe() {
+        // La colonne est à cheval sur les deux moitiés depuis que l'ossature
+        // tourne : c'est la station entière qu'il faut regarder.
+        let EtatStation::Prete(st) = preset_stanford() else { panic!("station vide") };
+        let hauts: Vec<f32> = st.pieces().iter().map(|p| p.centre().y).collect();
+        let plus_haut = hauts.iter().cloned().fold(f32::MIN, f32::max);
+        let plus_bas = hauts.iter().cloned().fold(f32::MAX, f32::min);
+        // Six cœurs, du centre vers les bouts : la paire accouplée au moyeu,
+        // les deux coiffes, puis les deux flèches. La symétrie se mesure sur les
+        // **flèches**, qui sont les extrémités de la colonne.
+        let coeurs = coeurs_tries(preset_stanford());
+        assert_eq!(coeurs.len(), 6, "deux cœurs au centre, deux coiffes, deux flèches");
+        let poles: Vec<f32> = coeurs[4..].iter().map(|p| p.centre().y).collect();
+        let haut = poles.iter().cloned().fold(f32::MIN, f32::max);
+        let bas = poles.iter().cloned().fold(f32::MAX, f32::min);
+        assert!(haut > 0.0 && bas < 0.0, "le pilier ne sort pas des deux côtés : {bas} .. {haut}");
+        assert!(
+            (haut + bas).abs() < 1e-3,
+            "pilier asymétrique : {bas} en bas, {haut} en haut"
+        );
+        // ⚠️ Il y avait ici deux assertions du genre « quelque chose dépasse le
+        // pôle » — vraies tant que le miroir était l'élément le plus haut. La
+        // flèche, doublée, culmine désormais au-dessus de lui : elles ne
+        // décrivaient pas une propriété mais l'ordre de grandeur du moment. Ce
+        // qui reste vrai, et qui compte, c'est que les extrémités de la colonne
+        // sont bien les points extrêmes de la station **sur son axe**.
+        assert!(
+            (plus_haut - haut).abs() < 1e-3 || plus_haut > haut,
+            "un élément dépasse la flèche par le haut sans être elle"
+        );
+        assert!((plus_bas - bas).abs() < 1e-3 || plus_bas < bas);
+    }
+
+    /// Le mât du pôle bas : sa plage en Y, mesurée sur la pièce et non
+    /// recalculée depuis les constantes — sinon les tests qui s'y adossent ne
+    /// diraient plus rien du montage réel.
+    fn mat_bas(st: &crate::vaisseau::Station) -> (f32, f32) {
+        let fleche = st
+            .pieces()
+            .iter()
+            .filter(|p| matches!(p.composant, Composant::ModuleAxial { .. }))
+            .filter(|p| p.transforme.transform_vector3(Vec3::Z).normalize().y.abs() > 0.99)
+            .min_by(|a, b| a.centre().y.total_cmp(&b.centre().y))
+            .expect("pas de mât polaire");
+        let Composant::ModuleAxial { longueur, .. } = fleche.composant else { unreachable!() };
+        let demi = longueur * 0.5 * fleche.transforme.x_axis.truncate().length();
+        (fleche.centre().y - demi, fleche.centre().y + demi)
+    }
+
+    /// **La charge du pôle bas est enfilée sur le mât** : les cuves finissent
+    /// exactement à son bout, l'habitat est au-dessus, et rien ne pend dans le
+    /// vide au-delà de la structure qui le porte.
+    ///
+    /// C'est le point d'ancrage du calcul : toute la pile se mesure **depuis le
+    /// bout**. Ancrée par le haut, la dernière rangée de cuves passerait dans le
+    /// vide dès qu'une cote bouge, et personne ne le verrait.
+    #[test]
+    fn la_charge_polaire_est_enfilee_sur_le_mat() {
+        let EtatStation::Prete(st) = preset_stanford() else { panic!("station vide") };
+        let (bas, haut) = mat_bas(&st);
+
+        let cuves = st
+            .pieces()
+            .iter()
+            .find(|p| matches!(p.composant, Composant::GrappeReservoirs { .. }))
+            .expect("pas de cuves au pôle bas");
+        let Composant::GrappeReservoirs { rayon_cuve, rangees, .. } = cuves.composant else {
+            unreachable!()
+        };
+        let axe = cuves.transforme.transform_vector3(Vec3::Z).normalize();
+        let bout = cuves.centre().y + axe.y * crate::vaisseau::grappe_hauteur(rayon_cuve, rangees);
+        let (cuves_bas, cuves_haut) = (cuves.centre().y.min(bout), cuves.centre().y.max(bout));
+        assert!(
+            (cuves_bas - bas).abs() < 1e-3,
+            "les cuves ne finissent pas au bout du mât : {cuves_bas:.3} contre {bas:.3}"
+        );
+
+        let hab: Vec<&crate::vaisseau::Piece> = st
+            .pieces()
+            .iter()
+            .filter(|p| matches!(p.composant, Composant::ModuleHabitat { .. }))
+            .collect();
+        assert_eq!(hab.len(), HAB_MODULES, "la couronne polaire n'a pas trois modules");
+        let y = hab[0].centre().y;
+        for m in &hab {
+            assert!((m.centre().y - y).abs() < 1e-3, "les trois modules ne sont pas au même niveau");
+        }
+        let (hab_bas, hab_haut) = (y - HAB_LONG * 0.5, y + HAB_LONG * 0.5);
+        assert!(
+            hab_bas >= bas - 1e-3 && hab_haut <= haut + 1e-3,
+            "l'habitat polaire déborde du mât : {hab_bas:.3}..{hab_haut:.3} pour un mât {bas:.3}..{haut:.3}"
+        );
+
+        // **L'écart demandé existe vraiment.** Accolées, les deux couronnes se
+        // liraient comme un seul bloc de six volumes.
+        let ecart = hab_bas - cuves_haut;
+        assert!(
+            ecart > 1e-3,
+            "habitat et cuves se touchent (ou se croisent) : écart {ecart:.3}"
+        );
+        assert!(
+            (ecart - POLE_ECART).abs() < 1e-3,
+            "l'écart posé ({ecart:.3}) n'est pas celui demandé ({POLE_ECART})"
+        );
+
+        // Et la pile **s'affine en descendant** : les cuves sont plus étroites
+        // que la couronne d'habitat au-dessus. L'inverse ferait une massue.
+        let large_hab = hab_couronne(FLECHE_PROFIL.rayon()) + Profil::P2.rayon();
+        let large_cuves = crate::vaisseau::grappe_rayon_hors_tout(rayon_cuve);
+        assert!(
+            large_cuves < large_hab,
+            "les cuves ({large_cuves:.3}) débordent l'habitat ({large_hab:.3})"
+        );
+    }
+
+    /// **Les trois modules polaires ne se croisent pas.** Le mât est en P0, cinq
+    /// fois plus fin que l'épine de l'ISV : au jeu nominal la couronne serait
+    /// trop serrée et les trois fûts s'interpénétreraient. C'est
+    /// [`hab_rayon_mini`] qui reprend la main — et sans lui rien ne le dirait,
+    /// puisque le montage resterait « valide ».
+    #[test]
+    fn les_modules_polaires_ne_se_croisent_pas() {
+        let g = FLECHE_PROFIL.rayon();
+        let entre_axes = 2.0 * hab_couronne(g) * (PI / 3.0).sin();
+        let f = crate::vaisseau::pieces::ONIGIRI_FILET;
+        let portee = Profil::P2.rayon() * ((1.0 - f) * (PI / 6.0).cos() + f);
+        assert!(
+            entre_axes > 2.0 * portee,
+            "modules polaires qui se croisent ({entre_axes:.3} <= {:.3})",
+            2.0 * portee
+        );
+        // Et la ferrure atteint quand même le mât : c'est elle qui s'allonge.
+        let rail = hab_couronne(g) - HAB_INSCRIT - hab_attache(g) * 0.5;
+        assert!((rail - g).abs() < 1e-3, "ferrure polaire à {rail:.3}, mât à {g:.3}");
+    }
+
+    /// **Le montage de l'ISV est inchangé.** Le calcul de couronne est devenu
+    /// général pour porter le mât polaire ; il doit redonner *exactement* les
+    /// cotes historiques là où c'est le jeu qui commande, sans quoi la
+    /// généralisation aurait déplacé l'habitat du vaisseau au passage.
+    #[test]
+    fn la_couronne_de_lisv_est_inchangee() {
+        for epine in [Epine::Carree, Epine::Hexagonale] {
+            let g = epine.hors_tout();
+            assert!(
+                (hab_couronne(g) - hab_rayon(g)).abs() < 1e-5,
+                "{} : couronne {:.4} au lieu de {:.4}",
+                epine.nom(),
+                hab_couronne(g),
+                hab_rayon(g)
+            );
+            assert!(
+                (hab_attache(g) - HAB_ATTACHE).abs() < 1e-5,
+                "{} : ferrure {:.4} au lieu de {HAB_ATTACHE}",
+                epine.nom(),
+                hab_attache(g)
+            );
+        }
+    }
+
+    /// **Aucune pièce de la charge polaire ne traverse un miroir.** Les deux
+    /// disques font plus de quarante unités de rayon et sont inclinés : ce que
+    /// l'on ajoute sur la colonne passe forcément dans leur voisinage. Une
+    /// pièce à cheval sur le plan d'un miroir ressortirait de l'autre côté.
+    ///
+    /// ⚠️ La marge la plus serrée vaut ~1,8 : c'est peu, et c'est mesuré. Toute
+    /// retouche à la hauteur des miroirs, à la longueur du mât ou à la taille
+    /// des cuves peut la consommer — d'où cette garde.
+    #[test]
+    fn la_charge_polaire_ne_traverse_aucun_miroir() {
+        let EtatStation::Prete(st) = preset_stanford() else { panic!("station vide") };
+        let miroirs: Vec<(Vec3, Vec3)> = st
+            .pieces()
+            .iter()
+            .filter(|p| matches!(p.composant, Composant::Miroir { .. }))
+            .map(|p| (p.centre(), p.transforme.transform_vector3(Vec3::Z).normalize()))
+            .collect();
+        assert_eq!(miroirs.len(), 2, "il n'y a plus deux miroirs");
+        for p in st.pieces() {
+            if !matches!(
+                p.composant,
+                Composant::ModuleHabitat { .. } | Composant::GrappeReservoirs { .. }
+            ) {
+                continue;
+            }
+            for (c, n) in &miroirs {
+                let d = (p.centre() - *c).dot(*n);
+                assert!(
+                    d.abs() > p.composant.rayon_local(),
+                    "{} est à cheval sur un miroir : {:.3} pour un rayon de {:.3}",
+                    p.composant.nom(),
+                    d.abs(),
+                    p.composant.rayon_local()
+                );
+            }
+        }
+    }
+
+    /// **L'anneau tourne, le moyeu non** — et les deux moitiés sont disjointes :
+    /// aucune pièce ne doit se retrouver dans les deux, sinon elle serait
+    /// dessinée deux fois et tournerait à moitié.
+    #[test]
+    fn les_deux_moities_du_tore_sont_disjointes_et_completes() {
+        let EtatStation::Prete(moyeu) = preset_stanford_moyeu() else { panic!("moyeu vide") };
+        let EtatStation::Prete(anneau) = preset_stanford_anneau() else { panic!("anneau vide") };
+        let EtatStation::Prete(tout) = preset_stanford() else { panic!("tout vide") };
+        assert_eq!(
+            moyeu.nb_pieces() + anneau.nb_pieces(),
+            tout.nb_pieces(),
+            "la vue d'un seul tenant ne recompose pas exactement les deux moitiés"
+        );
+        // Le tore lui-même est du côté tournant, le miroir du côté fixe.
+        assert!(
+            anneau.pieces().iter().any(|p| matches!(p.composant, Composant::Tore { .. })),
+            "le tore n'est pas dans la moitié tournante"
+        );
+        assert!(
+            moyeu.pieces().iter().any(|p| matches!(p.composant, Composant::Miroir { .. })),
+            "le miroir tournerait avec l'anneau"
+        );
+        // Et la colonne d'habitat axiale est bien du côté immobile : c'est elle
+        // que « despun » désigne.
+        assert!(
+            moyeu.pieces().iter().any(|p| matches!(
+                p.composant,
+                Composant::ModuleAxial { variante: VarianteModule::CoeurGris, .. }
+            )),
+            "les cœurs axiaux tourneraient avec l'anneau"
+        );
+        // L'ossature centrale, elle, tourne : elle porte l'anneau.
+        assert!(
+            anneau.pieces().iter().any(|p| matches!(p.composant, Composant::TreillisHexagone { .. })),
+            "l'ossature centrale ne tourne pas avec l'anneau qu'elle porte"
+        );
+        // **Toute** la colonne axiale est immobile : aucun cœur ne doit traîner
+        // du côté tournant. C'est la garde qui a manqué quand les coiffes y
+        // étaient encore.
+        assert!(
+            !anneau.pieces().iter().any(|p| matches!(
+                p.composant,
+                Composant::ModuleAxial { variante: VarianteModule::CoeurGris, .. }
+            )),
+            "un cœur d'habitat tourne avec l'anneau"
+        );
+        assert!(
+            !anneau.pieces().iter().any(|p| matches!(p.composant, Composant::Miroir { .. })),
+            "un miroir traîne dans la moitié tournante"
+        );
+    }
+
     #[test]
     fn elysium_porte_trois_bras_a_120_degres_dans_le_plan_du_moyeu() {
         for (nom, etat) in [("stanford", preset_stanford()), ("elysium", preset_elysium())] {
@@ -5455,24 +6125,16 @@ mod tests {
     // n'ayant pas la même taille — lire la cote annoncée ne verrait rien.
     #[test]
     fn les_deux_megastructures_nont_pas_le_meme_centre() {
-        // Écart entre les deux tambours accouplés = la taille réellement dessinée.
+        // Écart entre les deux tambours accouplés = la taille réellement
+        // dessinée. ⚠️ **La paire du moyeu**, c'est-à-dire les deux cœurs les
+        // plus proches du centre : depuis que le pilier polaire coiffe ses bouts
+        // du même composant, le tore en compte quatre.
         let taille = |e: EtatStation| -> f32 {
-            let EtatStation::Prete(st) = e else { panic!() };
-            let centres: Vec<Vec3> = st
-                .pieces()
-                .iter()
-                .filter(|p| {
-                    matches!(
-                        p.composant,
-                        Composant::ModuleAxial { variante: VarianteModule::CoeurGris, .. }
-                    )
-                })
-                .map(|p| p.transforme.w_axis.truncate())
-                .collect();
-            assert_eq!(centres.len(), 2, "deux habitats");
-            centres[0].distance(centres[1])
+            let c = coeurs_tries(e);
+            assert!(c.len() >= 2, "moins de deux habitats");
+            c[0].centre().distance(c[1].centre())
         };
-        let (s, e) = (taille(preset_stanford()), taille(preset_elysium()));
+        let (s, e) = (taille(preset_stanford_moyeu()), taille(preset_elysium()));
         assert!(s < e, "Stanford {s:.2} devrait être plus petit qu'Elysium {e:.2}");
         assert!((s / e - STANFORD_ECHELLE).abs() < 1e-4, "rapport {:.4}", s / e);
     }
@@ -5481,23 +6143,16 @@ mod tests {
     // pas seulement sur la longueur, ce qui aurait allongé la silhouette.
     #[test]
     fn lhabitat_de_stanford_est_reduit_en_diametre_aussi() {
+        // Même remarque que ci-dessus : le cœur du **moyeu**, donc le plus
+        // proche du centre.
         let rayon = |e: EtatStation| -> f32 {
-            let EtatStation::Prete(st) = e else { panic!() };
-            let p = st
-                .pieces()
-                .iter()
-                .find(|p| {
-                    matches!(
-                        p.composant,
-                        Composant::ModuleAxial { variante: VarianteModule::CoeurGris, .. }
-                    )
-                })
-                .expect("un habitat");
+            let c = coeurs_tries(e);
+            let p = c.first().expect("un habitat");
             // Une transformée rigide garde les longueurs ; ici l'échelle les
             // multiplie, et c'est exactement ce qu'on veut lire.
             p.transforme.x_axis.truncate().length() * p.composant.rayon_local()
         };
-        let (s, e) = (rayon(preset_stanford()), rayon(preset_elysium()));
+        let (s, e) = (rayon(preset_stanford_moyeu()), rayon(preset_elysium()));
         assert!(
             (s / e - STANFORD_ECHELLE).abs() < 1e-4,
             "diamètre non réduit : {s:.3} contre {e:.3} (rapport {:.4})",
@@ -5567,20 +6222,13 @@ mod tests {
     // donc leurs écoutilles regardent hors du plan de l'anneau.
     #[test]
     fn les_habitats_du_moyeu_sont_paralleles_a_laxe() {
-        let EtatStation::Prete(st) = preset_stanford() else { panic!() };
-        let habitats: Vec<&crate::vaisseau::Piece> = st
-            .pieces()
-            .iter()
-            .filter(|p| {
-                matches!(
-                    p.composant,
-                    Composant::ModuleAxial { variante: VarianteModule::CoeurGris, .. }
-                )
-            })
-            .collect();
-        assert_eq!(habitats.len(), 2, "deux habitats");
+        // ⚠️ **La paire du moyeu** : les deux cœurs les plus proches du centre.
+        // Les deux autres coiffent les pôles du pilier, et n'ont pas à
+        // s'accoupler par le tambour.
+        let coeurs = coeurs_tries(preset_stanford_moyeu());
+        assert!(coeurs.len() >= 2, "moins de deux habitats");
         let mut tambours = Vec::new();
-        for h in habitats {
+        for h in &coeurs[..2] {
             // L'axe local du module est +Z ; sa transformée doit l'amener sur Y.
             let axe = h.transforme.transform_vector3(Vec3::Z).normalize();
             assert!(axe.dot(Vec3::Y).abs() > 0.999, "habitat non parallèle à Y : {axe:?}");
@@ -5694,14 +6342,3 @@ mod tests {
     }
 
 }
-
-
-
-
-
-
-
-
-
-
-

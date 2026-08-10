@@ -62,7 +62,9 @@ uniform float px_rayon;   // rayon apparent en pixels -> LOD du micro-détail (p
 // dérive minimale ajoutée par-dessus (rad/s). Voir le calcul du repère en `main`.
 #define NUAGES_SUPER 1.35
 #define NUAGES_DERIVE 0.004
-uniform vec3 atmo;        // halo atmosphérique (0 = aucun)
+// Le corps ne peint plus l'atmosphère (elle a sa passe : atmosphere.frag.glsl)
+// et n'a donc plus besoin de sa TEINTE — seulement de savoir s'il y en a.
+uniform float atmo_densite; // quantité d'air (0 = aucune) : sert ici de PRÉSENCE
 uniform float lave;       // monde de lave : fissures incandescentes (0 = aucun)
 uniform float eau_motif;  // topologie de l'eau : 0 océan global,1 continents,2 mers,3 marais
 uniform float grad_lat;   // contraste de biome équateur->pôle (0 = uniforme)
@@ -731,7 +733,10 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, vec3 dnu_base, vec3 ldn, out float wet) {
             // Pas d'atmosphère ni de voile -> pas de liquide, JAMAIS (la Lune
             // ne doit pas avoir de flaques) ; air mais pas d'eau -> salines et
             // lits à sec ; riv_lave -> lave.
-            float a_air = step(0.02, atmo.r + atmo.g + atmo.b + voile);
+            // Somme des composantes de `atmo` autrefois : la teinte étant
+            // désormais unitaire, elle vaut ~1.7 même sur un caillou nu. C'est
+            // la densité qui répond à la question « y a-t-il de l'air ? ».
+            float a_air = step(0.02, atmo_densite + voile);
             float a_eau = step(0.0015, eau);
             // Régime lave : riv_lave explicite OU monde de lave (coulées § 11 bis).
             float regime_lave = max(riv_lave, step(0.3, lave));
@@ -823,7 +828,7 @@ vec3 surface(vec3 d, vec3 k, vec3 ld, vec3 dnu_base, vec3 ldn, out float wet) {
         // aucun, et un `nuages` resté à sa valeur par défaut ne doit pas en
         // inventer. Les géantes gazeuses, elles, ne passent jamais ici : leur
         // branche a rendu la main bien plus haut.
-        float a_air_nu = step(0.02, atmo.r + atmo.g + atmo.b + voile);
+        float a_air_nu = step(0.02, atmo_densite + voile);
         if (nuages > 0.0 && a_air_nu > 0.5) {
             // Deux couches qui dérivent à des vitesses/échelles différentes -> ciel vivant.
             float t1 = time * 0.015;
@@ -1145,7 +1150,7 @@ void main() {
     // sur la surface : un limbe qui s'éclaircit, mais rien au-delà de la
     // silhouette — c'est-à-dire tout sauf ce qui fait lire une atmosphère.
     // Elle a sa propre passe désormais (shaders/atmosphere.frag.glsl), qui
-    // couvre le disque ET le déborde. `atmo` reste déclaré : il sert encore de
-    // témoin « ce corps a de l'air » à d'autres blocs.
+    // couvre le disque ET le déborde. Seul `atmo_densite` reste ici : témoin
+    // « ce corps a de l'air » pour l'hydrologie et la couche de nuages.
     gl_FragColor = vec4(col, 1.0);
 }

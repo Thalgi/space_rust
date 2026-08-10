@@ -130,5 +130,19 @@ la plomberie ou l'échelle qui ne suit pas.*
 système), puis décider — LOD sur `px_rayon` comme les géantes gazeuses, ou
 exagération d'échelle assumée. **Ne pas réécrire ce qui existe.**
 
+**Constaté puis tranché** (2026-08-09, § P.3 et P.3 bis de STATE.md). L'hypothèse
+était juste, et rien n'a été réécrit. Deux causes distinctes :
+
+1. **L'horloge** — vrai défaut, corrigé : `Systeme::update` passait le
+   multiplicateur de vitesse ORBITAL à l'animation propre des astres. À ×16, une
+   protubérance réglée pour vivre 8 s tenait dans une demi-seconde. Deux horloges
+   séparées (`dt`, `DtAnimation`).
+2. **L'échelle** — pas un défaut, de la physique : 1,14 px de rayon au cadrage par
+   défaut. Plancher en pixels `soleil::PX_MIN = 8`, qui s'efface en approchant.
+   ⚠️ **Il ne rend pas les éruptions visibles** et ne le peut pas : leurs boucles
+   sont dessinées à `r × 0,05`, il faudrait 20 px de rayon stellaire pour qu'elles
+   atteignent le pixel et 60 pour qu'elles se lisent — soit un Soleil plus large
+   que l'orbite de Mercure. Elles sont, et restent, une récompense d'approche.
+
 Reste un manque possible et non vérifié : la **variété d'une étoile à l'autre**
 — toutes partagent-elles la même graine de granulation ? À regarder en galerie.

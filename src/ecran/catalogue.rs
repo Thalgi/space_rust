@@ -33,7 +33,7 @@ use crate::vaisseau::{
     demo_epine_pavillon, demo_equipage, demo_panneaux_mega, demo_raptor, demo_habitat_isv, demo_habitats, demo_moteur_antimatiere,
     demo_moteur_antimatiere_principal, demo_panneaux, demo_poutres, demo_propulsion,
     demo_radiateur_mega, demo_radiateurs, demo_reservoir, demo_station, demo_treillis,
-    preset_anneau, preset_elysium, preset_stanford, preset_starship, preset_comsat, preset_iss, preset_isv_equipage, preset_isv_fixe,
+    preset_anneau, preset_elysium, preset_stanford_anneau, preset_stanford_moyeu, preset_starship, preset_comsat, preset_iss, preset_isv_equipage, preset_isv_fixe,
     preset_isv_moteur, preset_mir, preset_sonde, preset_tiangong, Epine, EtatStation,
     FamillePropulsion, Station, ISV_AXE,
 };
@@ -90,11 +90,14 @@ pub enum Fabrique {
     /// **ISV complet** : le seul item en deux moitiés (coque fixe + section
     /// d'équipage), et le seul à porter une épine. Il lit les deux réglages.
     Isv(Epine),
-    /// Habitat **tournant d'un seul tenant** : un anneau qui tourne autour de
-    /// son axe pour faire de la gravité. Rien à replier ni à allumer — il n'a
-    /// qu'un degré de liberté, et il s'applique à la station **entière**, pas à
-    /// une moitié comme sur l'ISV.
-    Rotatif(fn() -> EtatStation),
+    /// **Moyeu désolidarisé** : un anneau qui tourne autour d'un centre qui,
+    /// lui, reste fixe (`fixe`, `tournant`).
+    ///
+    /// C'est le cas du tore de Stanford, et ce n'est pas un raffinement : le
+    /// moyeu est « despun » pour qu'on puisse s'y amarrer, et le miroir doit
+    /// garder le soleil dans le même axe — un miroir solidaire de l'anneau ne
+    /// renverrait la lumière qu'une fraction du temps.
+    Despun { fixe: fn() -> EtatStation, tournant: fn() -> EtatStation },
     /// **Une pièce seule**, telle quelle.
     ///
     /// C'est la fabrique des entrées **engendrées** : le catalogue en produit
@@ -108,7 +111,7 @@ impl Fabrique {
     fn batir(&self, r: Reglages) -> Bati {
         match self {
             Fabrique::Brique(f) => Bati::seul(EtatStation::Prete(f())),
-            Fabrique::Etat(f) | Fabrique::Rotatif(f) => Bati::seul(f()),
+            Fabrique::Etat(f) => Bati::seul(f()),
             Fabrique::Piece(c) => {
                 let mut asm = Assembleur::new();
                 asm.ajouter(cuire(Repere::IDENTITE, c));
@@ -125,6 +128,10 @@ impl Fabrique {
             // pour que le collier morde dans la flèche ou s'en détache
             // (`suivi/stations.md` §C.10). Les deux moitiés lisant `*e`, elles
             // ne peuvent plus diverger.
+            Fabrique::Despun { fixe, tournant } => Bati {
+                etat: fixe(),
+                tournant: Some(tournant()),
+            },
             Fabrique::Isv(e) => Bati {
                 etat: preset_isv_fixe(*e, r.regime),
                 tournant: Some(preset_isv_equipage(*e, r.repli)),
@@ -172,7 +179,10 @@ impl Item {
 
     /// L'item montre-t-il une section d'équipage à faire tourner ou à replier ?
     pub fn rotation(&self) -> bool {
-        matches!(self.fabrique, Fabrique::Repli(_) | Fabrique::Isv(_) | Fabrique::Rotatif(_))
+        matches!(
+            self.fabrique,
+            Fabrique::Repli(_) | Fabrique::Isv(_) | Fabrique::Despun { .. }
+        )
     }
 
     /// L'item lit-il le **repli** ? À distinguer de [`Self::rotation`] : jusqu'à
@@ -283,7 +293,10 @@ pub const PETITES_STATIONS: &[Item] = &[
 /// encore et des tests s'en servent — seule la vitrine disparaît.
 pub const MEGASTRUCTURES: &[Item] = &[
     Item::new("STATION A ANNEAU (ROUE)", Fabrique::Etat(preset_anneau)),
-    Item::new("TORE DE STANFORD", Fabrique::Rotatif(preset_stanford)),
+    Item::new(
+        "TORE DE STANFORD",
+        Fabrique::Despun { fixe: preset_stanford_moyeu, tournant: preset_stanford_anneau },
+    ),
     Item::new("COMPLEXE ELYSIUM", Fabrique::Etat(preset_elysium)),
 ];
 
@@ -536,22 +549,43 @@ mod tests {
         a.etat != b.etat || a.tournant != b.tournant
     }
 
-    // L'ISV est le **seul** item en deux moitiés, et le seul à porter une épine
-    // — les deux vont ensemble, puisque c'est l'épine qui règle l'alésage du
-    // collier de la section tournante.
+    // **Une épine implique deux moitiés**, et pas l'inverse.
+    //
+    // ⚠️ Ce test exigeait l'équivalence, et c'était une **coïncidence** : l'ISV
+    // était alors le seul item dissocié, donc « deux moitiés » et « porte une
+    // épine » désignaient le même item. Le tore de Stanford, désolidarisé à son
+    // tour (moyeu fixe + anneau tournant), n'a évidemment pas d'épine — et le
+    // test a rougi pour une bonne raison qui n'était pas la sienne.
+    //
+    // Le sens qui porte quelque chose est celui-ci : l'épine règle l'alésage du
+    // collier de la section tournante, donc un item qui en porte une **doit**
+    // avoir cette section. La réciproque ne dit rien.
     #[test]
-    fn seul_litem_a_deux_moities_porte_une_epine() {
+    fn une_epine_implique_une_moitie_tournante() {
+        let mut avec_epine = 0;
+        let mut dissocies_sans_epine = 0;
         for (cat, table) in TOUTES {
             for item in table {
                 let bati = item.batir(Reglages::default());
-                assert_eq!(
-                    bati.tournant.is_some(),
-                    item.epine().is_some(),
-                    "{cat} « {} » : moitié tournante et épine doivent aller ensemble",
-                    item.libelle
-                );
+                if item.epine().is_some() {
+                    assert!(
+                        bati.tournant.is_some(),
+                        "{cat} « {} » : porte une épine mais n'a pas de moitié tournante",
+                        item.libelle
+                    );
+                    avec_epine += 1;
+                } else if bati.tournant.is_some() {
+                    dissocies_sans_epine += 1;
+                }
             }
         }
+        assert!(avec_epine > 0, "aucun item à épine : l'implication ne s'exerce pas");
+        // Et le cas qui a fait tomber l'ancienne rédaction existe bien : sans
+        // lui, l'équivalence serait de nouveau vraie par accident.
+        assert!(
+            dissocies_sans_epine > 0,
+            "aucun item dissocié sans épine : l'équivalence redeviendrait vraie par hasard"
+        );
     }
 
     // **La correction de §C.10, rendue structurelle.** Les deux moitiés de l'ISV

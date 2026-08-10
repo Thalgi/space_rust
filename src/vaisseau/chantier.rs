@@ -23,10 +23,10 @@
 #![allow(dead_code)]
 
 use super::{
-    accoupler, cuire, Budget, Composant, DonneesSousEnsemble, EtatStation, GenrePort, Piece, Port,
-    Profil, Repere, Station,
+    accoupler_roule, cuire, Budget, Composant, DonneesSousEnsemble, Enveloppe, EtatStation, GenrePort,
+    Piece, Port, Profil, Repere, Station,
 };
-use macroquad::prelude::Vec3;
+use macroquad::prelude::{Mat4, Vec3};
 use std::collections::HashSet;
 use std::rc::Rc;
 
@@ -79,6 +79,10 @@ struct Entree {
     id: u64,
     piece: Piece,
     hote: Option<(PortLibre, usize)>,
+    /// Roulis appliqué à l'accouplement (§11.3). Gardé parce que `pivoter` doit
+    /// pouvoir le **changer** : sans lui, on ne saurait pas de quel angle la
+    /// pièce est déjà tournée, donc pas quel delta appliquer.
+    roulis: f32,
 }
 
 /// Une étape de [`Recette`] : quoi poser, et où (`docs/conception/assembleur.md`
@@ -97,6 +101,14 @@ pub struct Etape {
     /// Indice du port de montage du composant qu'on pose (dans son propre
     /// `ports()`) — ignoré pour la racine.
     pub montage: usize,
+    /// **Roulis** autour de l'axe d'accostage, en radians
+    /// (`conception/assembleur.md` §11.3). Ignoré pour la racine.
+    ///
+    /// `serde(default)` : les recettes écrites avant le Lot 7 se rechargent
+    /// sans conversion, et le zéro qu'elles reçoivent signifie exactement le
+    /// comportement qu'elles avaient — « les hauts restent alignés ».
+    #[serde(default)]
+    pub roulis: f32,
 }
 
 /// Une recette complète : de quoi reconstruire un chantier à l'identique.
@@ -115,6 +127,20 @@ struct Instantane {
     budget: Option<Budget>,
     prochain_id_port: u64,
     prochain_id_piece: u64,
+}
+
+/// Ce qu'un déplacement ferait, une fois tous ses contrôles passés — voir
+/// [`Chantier::plan_deplacement`].
+struct PlanDeplacement {
+    /// Le sous-arbre qui bouge.
+    bouge: HashSet<u64>,
+    /// Transformation rigide qui l'emmène de son ancienne pose à la nouvelle.
+    delta: Mat4,
+    /// Port de destination, et sa position courante dans `libres`.
+    cible: PortLibre,
+    pos_cible: usize,
+    /// Port hôte à rendre à `libres` sous un `id` neuf.
+    ancien_hote: PortLibre,
 }
 
 /// Constructeur de station à bookkeeping des ports libres.
@@ -138,6 +164,8 @@ pub struct Chantier {
     historique: bool,
     pile_annuler: Vec<Instantane>,
     pile_refaire: Vec<Instantane>,
+    /// Compteur de mutations **réussies**, monotone. Voir [`Self::version`].
+    version: u64,
 }
 
 impl Chantier {
@@ -197,6 +225,27 @@ impl Chantier {
         self.pieces.len()
     }
 
+    /// **Numéro de version** : avance à chaque mutation réussie — pose, retrait,
+    /// annulation, rétablissement — et jamais autrement.
+    ///
+    /// Sert de **clé de cache** à l'écran d'assemblage. L'état vert/rouge/éteint
+    /// des ports (§8.4) coûte un `peut_poser` par port, donc une collision
+    /// contre toutes les pièces : sur 45 pièces et 60 ports libres, 2 700
+    /// distances d'enveloppes pour un résultat qui **ne change pas** tant qu'on
+    /// ne touche à rien (§10.3). Il faut donc le garder d'une image à l'autre —
+    /// et savoir quand le jeter.
+    ///
+    /// Un compteur, et pas un état comparé : `nb_pieces` ne suffirait pas (poser
+    /// puis retirer y ramène le même nombre), et comparer les listes de ports
+    /// coûterait ce qu'on cherche à économiser.
+    ///
+    /// ⚠️ **`annuler` la fait avancer, pas reculer.** Le vaisseau revient en
+    /// arrière, la version non : ce qu'elle date, c'est le moment où l'affichage
+    /// a cessé d'être à jour, et une annulation le périme autant qu'une pose.
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
     /// Identifiant **stable** de la dernière pièce posée (racine ou enfant),
     /// ou `None` si le chantier est encore vide. Remplace le piège
     /// `nb_pieces() - 1` : juste après `poser`/`racine`, ça reste vrai que
@@ -218,7 +267,7 @@ impl Chantier {
         let corps = Repere::IDENTITE;
         let id = self.nouvel_id_piece();
         self.ajouter_libres(corps, &comp, None, id);
-        self.pieces.push(Entree { id, piece: cuire(corps, &comp), hote: None }); // dernier usage : consomme `comp`
+        self.pieces.push(Entree { id, piece: cuire(corps, &comp), hote: None, roulis: 0.0 }); // dernier usage : consomme `comp`
         self.enregistrer(avant);
         true
     }
@@ -234,8 +283,21 @@ impl Chantier {
     /// au mauvais endroit : c'est le point qui compte pour une UI qui a du
     /// retard sur le modèle (`docs/conception/assembleur.md` §6.1, point 3).
     pub fn poser(&mut self, hote_id: u64, comp: Composant, montage_idx: usize) -> bool {
+        self.poser_roule(hote_id, comp, montage_idx, 0.0)
+    }
+
+    /// [`Self::poser`] avec **roulis** autour de l'axe d'accostage (§11.3).
+    /// `poser` n'est qu'un appel à zéro : une seule liste de contrôles.
+    pub fn poser_roule(
+        &mut self,
+        hote_id: u64,
+        comp: Composant,
+        montage_idx: usize,
+        roulis: f32,
+    ) -> bool {
         let Some((pos, hote)) = self.trouver(hote_id) else { return false };
-        let Some((montage, corps)) = Self::corps_prevu(&hote, &comp, montage_idx) else {
+        let Some((montage, corps)) = Self::corps_prevu_roule(&hote, &comp, montage_idx, roulis)
+        else {
             return false;
         };
         if !hote.genre.compatible(montage.genre) || !hote.profil.compatible(montage.profil) {
@@ -253,7 +315,7 @@ impl Chantier {
         self.libres.swap_remove(pos); // port consommé — l'`id` n'est jamais réutilisé
         let id = self.nouvel_id_piece();
         self.ajouter_libres(corps, &comp, Some(montage_idx), id);
-        self.pieces.push(Entree { id, piece: cuire(corps, &comp), hote: Some((hote, montage_idx)) }); // dernier usage : consomme `comp`
+        self.pieces.push(Entree { id, piece: cuire(corps, &comp), hote: Some((hote, montage_idx)), roulis }); // dernier usage : consomme `comp`
         self.enregistrer(avant);
         true
     }
@@ -302,8 +364,21 @@ impl Chantier {
     /// ici, le *si* est dans [`Self::peut_poser`] — deux questions, deux
     /// méthodes.
     pub fn pose_prevue(&self, hote_id: u64, comp: &Composant, montage_idx: usize) -> Option<Piece> {
+        self.pose_prevue_roule(hote_id, comp, montage_idx, 0.0)
+    }
+
+    /// [`Self::pose_prevue`] **avec roulis** (§11.3) : le fantôme doit montrer
+    /// l'angle que la pose emploiera, sans quoi tourner une pièce en main ne se
+    /// verrait qu'après l'avoir posée.
+    pub fn pose_prevue_roule(
+        &self,
+        hote_id: u64,
+        comp: &Composant,
+        montage_idx: usize,
+        roulis: f32,
+    ) -> Option<Piece> {
         let (_, hote) = self.trouver(hote_id)?;
-        let (_, corps) = Self::corps_prevu(&hote, comp, montage_idx)?;
+        let (_, corps) = Self::corps_prevu_roule(&hote, comp, montage_idx, roulis)?;
         Some(cuire(corps, comp))
     }
 
@@ -361,6 +436,27 @@ impl Chantier {
         }
     }
 
+    /// **Aperçu** : la même station que [`Self::terminer`], mais sans consommer
+    /// le chantier.
+    ///
+    /// `terminer` prend `self` — c'est juste, un chantier *publié* ne doit plus
+    /// bouger. L'écran d'assemblage, lui, doit dessiner un chantier **qu'on est
+    /// en train de modifier**, à chaque image. Sans ce miroir il n'aurait eu que
+    /// deux issues, toutes deux mauvaises : cloner le chantier entier par image,
+    /// ou redessiner les pièces à la main — donc une **deuxième** façon de
+    /// construire une station, exactement le doublon que le Lot 1 a passé son
+    /// temps à supprimer.
+    ///
+    /// Il copie les pièces (l'écran en garde le résultat entre deux
+    /// modifications, il ne l'appelle pas à chaque image).
+    pub fn apercu(&self) -> EtatStation {
+        let pieces = self.pieces.iter().map(|e| e.piece.clone()).collect();
+        match Station::depuis_pieces(pieces) {
+            Some(s) => EtatStation::Prete(s),
+            None => EtatStation::Vide,
+        }
+    }
+
     /// Retire la pièce `id` **et tout son sous-arbre**. Le port qu'elle
     /// consommait en se posant redevient libre — sous un `id` **neuf**,
     /// l'ancien reste périmé comme toute pose consommée (§6.1) — et le budget
@@ -395,6 +491,188 @@ impl Chantier {
         }
         self.enregistrer(avant);
         true
+    }
+
+    /// **Déplace la pièce `id` — et tout son sous-arbre — sur le port libre
+    /// `cible_id`** (`docs/conception/assembleur.md` §10.10).
+    ///
+    /// Un seul geste, donc **une seule** entrée d'historique. `retirer` puis
+    /// `poser` ne ferait pas l'affaire pour trois raisons : `retirer` emporte le
+    /// sous-arbre (on perdrait la descendance), l'annulation compterait deux
+    /// coups, et le port hôte rendu recevrait un `id` neuf entre les deux.
+    ///
+    /// **Le sous-arbre suit rigidement** : sa géométrie interne ne change pas,
+    /// seule la transformée du bloc bouge. On ne re-pose rien, on translate et
+    /// tourne un ensemble.
+    ///
+    /// Refuse — sans rien changer — dans quatre cas :
+    ///
+    /// - `id` ne désigne aucune pièce vivante ;
+    /// - `id` est la **racine** : elle n'a pas de port hôte, elle est à
+    ///   l'origine par définition, et la déplacer ne ferait que translater tout
+    ///   le vaisseau dans un chantier centré sur l'origine ;
+    /// - le port cible appartient au sous-arbre qui bouge — la pièce
+    ///   s'accrocherait à sa propre descendance, un cycle que rien ne prévoit ;
+    /// - genre/profil incompatibles, ou le bloc déplacé heurterait une pièce
+    ///   restée en place.
+    ///
+    /// Le budget n'entre pas en jeu : rien n'est créé ni détruit.
+    pub fn deplacer(&mut self, id: u64, cible_id: u64, montage_idx: usize) -> bool {
+        let Some(plan) = self.plan_deplacement(id, cible_id, montage_idx) else { return false };
+        let PlanDeplacement { bouge, delta, cible, pos_cible, ancien_hote } = plan;
+
+        let avant = self.avant_mutation();
+
+        // Le bloc bouge : pièces **et** repères monde des ports qu'il expose.
+        // ⚠️ Les oublier donnerait des ports fantômes — dessinés à l'ancienne
+        // place, accrochant à la nouvelle. Partagé avec `pivoter`.
+        self.appliquer_delta_bloc(&bouge, delta);
+
+        // Le port de destination est consommé, l'ancien hôte redevient libre —
+        // sous un `id` **neuf**, comme tout port rendu (§6.1).
+        self.libres.swap_remove(pos_cible);
+        let neuf = self.prochain_id_port;
+        self.prochain_id_port += 1;
+        self.libres.push(PortLibre { id: neuf, ..ancien_hote });
+
+        // Et la pièce déplacée change de parent.
+        if let Some(e) = self.pieces.iter_mut().find(|e| e.id == id) {
+            e.hote = Some((cible, montage_idx));
+        }
+        self.enregistrer(avant);
+        true
+    }
+
+    /// **Tourne la pièce `id` (et son sous-arbre) autour de son axe d'accostage.**
+    ///
+    /// `roulis` est un angle **absolu**, pas un incrément : l'appelant décide de
+    /// l'orientation voulue, et rappeler avec la même valeur ne bouge rien. Un
+    /// incrément aurait rendu l'opération non idempotente, donc pénible à
+    /// annuler et à rejouer.
+    ///
+    /// Le bloc suit **rigidement** — même machinerie que [`Self::deplacer`]
+    /// (§11.5) : tourner une pièce tourne tous ses ports du même angle, donc ses
+    /// enfants aussi.
+    ///
+    /// Refuse, sans rien changer : la racine (pas d'axe d'accostage — elle n'est
+    /// accouplée à rien), une pièce inconnue, ou une rotation qui ferait heurter
+    /// le bloc contre une pièce restée en place.
+    pub fn pivoter(&mut self, id: u64, roulis: f32) -> bool {
+        let Some(entree) = self.pieces.iter().find(|e| e.id == id) else { return false };
+        let Some((hote, montage_idx)) = entree.hote else { return false };
+        let comp = entree.piece.composant.clone();
+        let ancienne = entree.piece.transforme;
+
+        let Some((_, corps)) = Self::corps_prevu_roule(&hote, &comp, montage_idx, roulis) else {
+            return false;
+        };
+        let delta = corps.to_mat4() * ancienne.inverse();
+        let bouge = self.sous_arbre(id);
+        if self.collision_bloc(&bouge, delta, hote.origine) {
+            return false;
+        }
+
+        let avant = self.avant_mutation();
+        self.appliquer_delta_bloc(&bouge, delta);
+        if let Some(e) = self.pieces.iter_mut().find(|e| e.id == id) {
+            e.roulis = roulis;
+        }
+        self.enregistrer(avant);
+        true
+    }
+
+    /// Roulis courant de la pièce, ou 0 (racine, ou pièce inconnue).
+    pub fn roulis(&self, id: u64) -> f32 {
+        self.pieces.iter().find(|e| e.id == id).map(|e| e.roulis).unwrap_or(0.0)
+    }
+
+    /// Applique une transformation rigide à tout un sous-arbre : les poses des
+    /// pièces, **et les repères monde des ports libres qu'elles exposent**.
+    ///
+    /// Factorisée entre [`Self::deplacer`] et [`Self::pivoter`] : les deux font
+    /// exactement le même geste sur le bloc, et c'est le port oublié qui
+    /// donnerait le défaut le plus discret — un port dessiné à l'ancienne place
+    /// et qui accroche à la nouvelle.
+    fn appliquer_delta_bloc(&mut self, bouge: &HashSet<u64>, delta: Mat4) {
+        for e in self.pieces.iter_mut().filter(|e| bouge.contains(&e.id)) {
+            e.piece.transforme = delta * e.piece.transforme;
+        }
+        let delta_repere = Repere::depuis_mat4(delta);
+        for p in self.libres.iter_mut().filter(|p| bouge.contains(&p.origine)) {
+            p.repere = delta_repere.compose(p.repere);
+        }
+    }
+
+    /// **Le déplacement aboutirait-il ?** Même question que [`Self::deplacer`],
+    /// sans effet de bord — le pendant de `peut_poser` face à `poser`.
+    ///
+    /// C'est ce que l'écran interroge pour colorer les ports pendant un
+    /// déplacement (§8.4). Sans lui il aurait fallu se rabattre sur
+    /// `peut_poser`, qui juge **une pièce seule** contre tout le vaisseau : il
+    /// aurait peint en vert des ports que `deplacer` refuse — un port qui ment,
+    /// de la même famille que le fantôme qui ment.
+    pub fn peut_deplacer(&self, id: u64, cible_id: u64, montage_idx: usize) -> bool {
+        self.plan_deplacement(id, cible_id, montage_idx).is_some()
+    }
+
+    /// Tous les contrôles de [`Self::deplacer`], et ce qu'ils produisent.
+    /// **Source unique** de la décision : `deplacer` l'applique, `peut_deplacer`
+    /// se contente de regarder si elle existe. Deux listes de contrôles
+    /// séparées finiraient par diverger, et l'écran annoncerait alors une pose
+    /// que le modèle refuse.
+    fn plan_deplacement(&self, id: u64, cible_id: u64, montage_idx: usize) -> Option<PlanDeplacement> {
+        let entree = self.pieces.iter().find(|e| e.id == id)?;
+        // Racine : pas d'hôte, donc rien à déplacer.
+        let (ancien_hote, _) = entree.hote?;
+        let comp = entree.piece.composant.clone();
+        let ancienne = entree.piece.transforme;
+
+        let bouge = self.sous_arbre(id);
+        let (pos_cible, cible) = self.trouver(cible_id)?;
+        // Se poser sur sa propre descendance : un cycle.
+        if bouge.contains(&cible.origine) {
+            return None;
+        }
+
+        let (montage, corps) = Self::corps_prevu(&cible, &comp, montage_idx)?;
+        if !cible.genre.compatible(montage.genre) || !cible.profil.compatible(montage.profil) {
+            return None;
+        }
+
+        // Delta rigide qui emmène le bloc de son ancienne pose à la nouvelle.
+        // Composition de transformations rigides = produit de matrices, dans cet
+        // ordre : `delta ∘ ancienne`.
+        let delta = corps.to_mat4() * ancienne.inverse();
+        if self.collision_bloc(&bouge, delta, cible.origine) {
+            return None;
+        }
+        Some(PlanDeplacement { bouge, delta, cible, pos_cible, ancien_hote })
+    }
+
+    /// Le bloc `bouge`, transporté par `delta`, heurterait-il une pièce restée
+    /// en place ?
+    ///
+    /// Ne confronte **que** le mouvant à l'immobile : les membres du bloc se
+    /// chevauchent entre eux par construction, ils sont accouplés. `exempte`
+    /// est la pièce d'accueil, tolérée au joint comme dans [`Self::collision`],
+    /// dont ce contrôle reprend le critère à l'identique.
+    fn collision_bloc(&self, bouge: &HashSet<u64>, delta: Mat4, exempte: u64) -> bool {
+        let immobiles: Vec<Enveloppe> = self
+            .pieces
+            .iter()
+            .filter(|e| !bouge.contains(&e.id) && e.id != exempte)
+            .map(|e| e.piece.composant.enveloppe_locale().transformee(e.piece.transforme))
+            .collect();
+        self.pieces
+            .iter()
+            .filter(|e| bouge.contains(&e.id))
+            .any(|e| {
+                let mienne =
+                    e.piece.composant.enveloppe_locale().transformee(delta * e.piece.transforme);
+                immobiles.iter().any(|sienne| {
+                    mienne.distance_axes(sienne) < FACTEUR_COLLISION * (mienne.rayon + sienne.rayon)
+                })
+            })
     }
 
     /// La pièce `id` **et toute sa descendance** — l'ensemble exact que
@@ -498,7 +776,7 @@ impl Chantier {
                     (piece_idx, h.indice)
                 });
                 let montage = e.hote.map_or(0, |(_, m)| m);
-                Etape { composant: e.piece.composant.clone(), hote, montage }
+                Etape { composant: e.piece.composant.clone(), hote, montage, roulis: e.roulis }
             })
             .collect()
     }
@@ -525,7 +803,10 @@ impl Chantier {
                         .iter()
                         .find(|p| p.origine == hote_id && p.indice == port_idx)
                         .map(|p| p.id)?;
-                    ch.poser(port_id, etape.composant.clone(), etape.montage)
+                    // Le roulis fait partie de la pose : le rejouer par `poser`
+                    // (donc à zéro) rendrait une géométrie différente de celle
+                    // qu'on a sauvegardée, sans que rien ne le signale.
+                    ch.poser_roule(port_id, etape.composant.clone(), etape.montage, etape.roulis)
                 }
             };
             if !pose_ok {
@@ -548,8 +829,19 @@ impl Chantier {
     /// géométrie. Les tenir d'accord par trois copies d'`accoupler` aurait été
     /// le doublon habituel de ce projet ; ici il n'y a rien à tenir d'accord.
     fn corps_prevu(hote: &PortLibre, comp: &Composant, montage_idx: usize) -> Option<(Port, Repere)> {
+        Self::corps_prevu_roule(hote, comp, montage_idx, 0.0)
+    }
+
+    /// [`Self::corps_prevu`] avec roulis (§11.3). Source unique : `corps_prevu`
+    /// n'est plus qu'un appel à zéro.
+    fn corps_prevu_roule(
+        hote: &PortLibre,
+        comp: &Composant,
+        montage_idx: usize,
+        roulis: f32,
+    ) -> Option<(Port, Repere)> {
         let montage = *comp.ports().get(montage_idx)?;
-        Some((montage, accoupler(hote.repere, montage.repere)))
+        Some((montage, accoupler_roule(hote.repere, montage.repere, roulis)))
     }
 
     fn payer(&mut self, comp: &Composant) -> bool {
@@ -575,7 +867,11 @@ impl Chantier {
         }
     }
 
+    /// ⚠️ **`Instantane` ne porte pas `version`**, et ne doit pas : restaurer un
+    /// état passé rendrait la version non monotone, donc inutilisable comme clé
+    /// de cache — deux états différents pourraient porter le même numéro.
     fn restaurer(&mut self, i: Instantane) {
+        self.version += 1;
         self.pieces = i.pieces;
         self.libres = i.libres;
         self.budget = i.budget;
@@ -596,7 +892,14 @@ impl Chantier {
     /// Empile l'instantané pris par [`Self::avant_mutation`], si l'historique
     /// est actif — et invalide la pile de refaire : une opération réussie
     /// rend caduc tout ce qu'on aurait pu refaire.
+    ///
+    /// **Le compteur de version avance ici**, hors du `if` : il date toute
+    /// mutation réussie, que l'historique soit actif ou non. Ces deux lignes et
+    /// `restaurer` sont les **seuls** endroits qui le touchent — appelés une
+    /// fois par mutation réussie, jamais sur un refus, ce qui vaut mieux que
+    /// cinq incréments dispersés dans les méthodes publiques.
     fn enregistrer(&mut self, avant: Option<Instantane>) {
+        self.version += 1;
         if let Some(a) = avant {
             self.pile_annuler.push(a);
             self.pile_refaire.clear();
@@ -652,6 +955,7 @@ impl Chantier {
 #[cfg(test)]
 mod tests {
     use super::super::generateur::Rng;
+    use crate::vaisseau::accoupler;
     use super::super::{Sorties, StyleTreillis, VarianteModule, VariantePanneau};
     use super::*;
     use macroquad::prelude::{vec3, Vec3};
@@ -666,6 +970,354 @@ mod tests {
     #[test]
     fn chantier_vide_donne_vide() {
         assert_eq!(Chantier::new().terminer(), EtatStation::Vide);
+    }
+
+    /// **`apercu` dit la même chose que `terminer`, sans rien consommer.**
+    ///
+    /// Deux façons de construire une station, c'est la porte ouverte au fantôme
+    /// qui ment : l'écran dessinerait un vaisseau que la publication ne
+    /// donnerait pas. Le test compare les deux sorties sur le **même** chantier
+    /// — et il ne peut le faire que parce qu'`apercu` ne le détruit pas, ce qui
+    /// est précisément la propriété visée.
+    #[test]
+    fn l_apercu_est_la_station_publiee_sans_consommer_le_chantier() {
+        let mut ch = Chantier::new();
+        assert_eq!(ch.apercu(), EtatStation::Vide, "un chantier vide n'a rien à montrer");
+
+        ch.racine(module());
+        let id = ch.libres()[0].id;
+        ch.poser(id, module(), 1);
+
+        // Appelé deux fois de suite : le chantier survit au premier appel.
+        let a = ch.apercu();
+        let b = ch.apercu();
+        assert_eq!(a, b, "l'aperçu n'est pas stable d'un appel à l'autre");
+        // Et le chantier est intact — on peut encore poser dessus.
+        assert_eq!(ch.nb_pieces(), 2);
+
+        // La publication doit donner exactement la même station.
+        assert_eq!(a, ch.terminer(), "l'aperçu diverge de la station publiée");
+    }
+
+    /// **La version date toute mutation réussie, et elle seule.**
+    ///
+    /// C'est la clé de cache de l'écran (§10.3) : elle doit avancer sur tout ce
+    /// qui change le vaisseau — y compris `annuler`, qui le change autant qu'une
+    /// pose — et **rester immobile sur un refus**, sinon le cache se jetterait à
+    /// chaque clic raté.
+    #[test]
+    fn la_version_avance_a_chaque_mutation_reussie_et_pas_autrement() {
+        let mut ch = Chantier::new().avec_historique();
+        let v0 = ch.version();
+
+        // Refus : rien ne bouge. Un identifiant de port qui n'existe pas.
+        assert!(!ch.poser(9999, module(), 0));
+        assert_eq!(ch.version(), v0, "un refus a fait avancer la version");
+        assert!(!ch.annuler(), "rien à annuler sur un chantier vierge");
+        assert_eq!(ch.version(), v0, "une annulation vide a fait avancer la version");
+
+        // Chaque réussite avance, strictement.
+        assert!(ch.racine(module()));
+        let v1 = ch.version();
+        assert!(v1 > v0, "racine n'a pas daté");
+
+        let id = ch.libres()[0].id;
+        assert!(ch.poser(id, module(), 1));
+        let v2 = ch.version();
+        assert!(v2 > v1, "poser n'a pas daté");
+
+        // ⚠️ Annuler fait AVANCER : le vaisseau recule, la date non. Un cache
+        // indexé dessus doit se jeter, et deux états distincts ne doivent jamais
+        // porter le même numéro.
+        assert!(ch.annuler());
+        let v3 = ch.version();
+        assert!(v3 > v2, "annuler n'a pas daté — le cache garderait l'état d'avant");
+        assert_eq!(ch.nb_pieces(), 1, "l'annulation n'a pas défait la pose");
+
+        assert!(ch.refaire());
+        assert!(ch.version() > v3, "refaire n'a pas daté");
+
+        // Retrait : dernière porte de mutation.
+        let v4 = ch.version();
+        let piece = ch.derniere_piece().expect("une pièce posée");
+        assert!(ch.retirer(piece));
+        assert!(ch.version() > v4, "retirer n'a pas daté");
+    }
+
+    // ---- L4.6 `deplacer` (§10.10) ----
+
+    /// **Déplacer garde la descendance, et ne crée ni ne détruit rien.**
+    /// C'est la propriété qui justifie l'existence de la méthode : `retirer`
+    /// puis `poser` perdrait le sous-arbre.
+    #[test]
+    fn deplacer_emporte_le_sous_arbre_sans_rien_perdre() {
+        let mut ch = Chantier::new();
+        ch.racine(module());
+        // Une branche : b sur la racine, c sur b.
+        let p0 = ch.libres()[0].id;
+        assert!(ch.poser(p0, module(), 1));
+        let b = ch.derniere_piece().unwrap();
+        let sur_b = ch.libres().iter().find(|p| p.origine == b).map(|p| p.id).unwrap();
+        assert!(ch.poser(sur_b, module(), 1));
+        let c = ch.derniere_piece().unwrap();
+
+        let avant_pieces = ch.nb_pieces();
+        let avant_libres = ch.libres().len();
+        let sous_arbre = ch.sous_arbre(b);
+        assert!(sous_arbre.contains(&c), "le montage du test ne fait pas de c un enfant de b");
+
+        // Une destination hors du sous-arbre déplacé.
+        let cible = ch
+            .libres()
+            .iter()
+            .find(|p| !sous_arbre.contains(&p.origine) && ch.peut_poser(p.id, &module(), 1))
+            .map(|p| p.id);
+        let Some(cible) = cible else {
+            panic!("aucune destination libre : le scénario ne teste rien");
+        };
+        assert!(ch.deplacer(b, cible, 1), "le déplacement aurait dû aboutir");
+
+        assert_eq!(ch.nb_pieces(), avant_pieces, "des pièces ont disparu ou apparu");
+        assert_eq!(ch.libres().len(), avant_libres, "le compte de ports libres a changé");
+        assert!(ch.piece(c).is_some(), "l'enfant a été perdu par le déplacement");
+        assert_eq!(ch.sous_arbre(b), sous_arbre, "le sous-arbre n'est plus le même");
+    }
+
+    /// **Le bloc se déplace rigidement** : la position de l'enfant *relative* à
+    /// son parent est inchangée. Sans ça le sous-arbre se disloquerait — chaque
+    /// pièce garderait son ancienne place pendant que sa racine bouge.
+    #[test]
+    fn le_sous_arbre_deplace_garde_sa_forme() {
+        let mut ch = Chantier::new();
+        ch.racine(module());
+        let p0 = ch.libres()[0].id;
+        ch.poser(p0, module(), 1);
+        let b = ch.derniere_piece().unwrap();
+        let sur_b = ch.libres().iter().find(|p| p.origine == b).map(|p| p.id).unwrap();
+        ch.poser(sur_b, module(), 1);
+        let c = ch.derniere_piece().unwrap();
+
+        let ecart_avant = ch.piece(c).unwrap().centre() - ch.piece(b).unwrap().centre();
+        let sous_arbre = ch.sous_arbre(b);
+        let cible = ch
+            .libres()
+            .iter()
+            .find(|p| !sous_arbre.contains(&p.origine) && ch.peut_poser(p.id, &module(), 1))
+            .map(|p| p.id)
+            .expect("aucune destination libre");
+        assert!(ch.deplacer(b, cible, 1));
+
+        let ecart_apres = ch.piece(c).unwrap().centre() - ch.piece(b).unwrap().centre();
+        assert!(
+            (ecart_avant.length() - ecart_apres.length()).abs() < 1e-3,
+            "l'enfant s'est éloigné de son parent : {} -> {}",
+            ecart_avant.length(),
+            ecart_apres.length()
+        );
+    }
+
+    /// **Les ports libres du bloc suivent le bloc.** `PortLibre::repere` est en
+    /// coordonnées monde : ne pas lui appliquer le delta donnerait des ports
+    /// fantômes, dessinés à l'ancienne place et accrochant à la nouvelle.
+    ///
+    /// Vérifié **sans recopier le delta** : on redemande où le port devrait
+    /// être, à partir de la pose de sa pièce et de son indice local — c'est-à-dire
+    /// par le même chemin que `ajouter_libres`.
+    #[test]
+    fn les_ports_du_bloc_deplace_suivent_leur_piece() {
+        let mut ch = Chantier::new();
+        ch.racine(module());
+        let p0 = ch.libres()[0].id;
+        ch.poser(p0, module(), 1);
+        let b = ch.derniere_piece().unwrap();
+
+        let sous_arbre = ch.sous_arbre(b);
+        let cible = ch
+            .libres()
+            .iter()
+            .find(|p| !sous_arbre.contains(&p.origine) && ch.peut_poser(p.id, &module(), 1))
+            .map(|p| p.id)
+            .expect("aucune destination libre");
+        assert!(ch.deplacer(b, cible, 1));
+
+        let mut verifies = 0;
+        for p in ch.libres() {
+            let Some(piece) = ch.piece(p.origine) else { continue };
+            let corps = Repere::depuis_mat4(piece.transforme);
+            let local = piece.composant.ports()[p.indice].repere;
+            let attendu = corps.compose(local);
+            assert!(
+                p.repere.pos.distance(attendu.pos) < 1e-3,
+                "port {} de la pièce {} : monde {:?}, attendu {:?}",
+                p.indice,
+                p.origine,
+                p.repere.pos,
+                attendu.pos
+            );
+            verifies += 1;
+        }
+        assert!(verifies > 0, "aucun port vérifié : la garde ne s'exerce pas");
+    }
+
+    /// Les quatre refus de §10.10, **sans rien changer** au chantier.
+    #[test]
+    fn deplacer_refuse_les_cas_impossibles() {
+        let mut ch = Chantier::new();
+        ch.racine(module());
+        let racine = ch.derniere_piece().unwrap();
+        let p0 = ch.libres()[0].id;
+        ch.poser(p0, module(), 1);
+        let b = ch.derniere_piece().unwrap();
+
+        let etat = |c: &Chantier| (c.nb_pieces(), c.libres().len(), c.version());
+        let temoin = etat(&ch);
+
+        // Pièce inconnue.
+        assert!(!ch.deplacer(u64::MAX, ch.libres()[0].id, 0));
+        // La racine ne se déplace pas : pas de port hôte.
+        assert!(!ch.deplacer(racine, ch.libres()[0].id, 0));
+        // Port cible inconnu.
+        assert!(!ch.deplacer(b, u64::MAX, 0));
+        // Sur sa propre descendance : un cycle.
+        let sien = ch.libres().iter().find(|p| p.origine == b).map(|p| p.id).unwrap();
+        assert!(!ch.deplacer(b, sien, 1));
+
+        assert_eq!(etat(&ch), temoin, "un refus a modifié le chantier");
+    }
+
+    /// **Un déplacement est UN coup d'historique.** C'est la deuxième raison
+    /// d'être de la méthode : `retirer` puis `poser` en compterait deux, et
+    /// annuler ne défairait que la moitié du geste.
+    #[test]
+    fn annuler_un_deplacement_le_defait_en_entier() {
+        let mut ch = Chantier::new().avec_historique();
+        ch.racine(module());
+        let p0 = ch.libres()[0].id;
+        ch.poser(p0, module(), 1);
+        let b = ch.derniere_piece().unwrap();
+        let ou_etait = ch.piece(b).unwrap().centre();
+
+        let sous_arbre = ch.sous_arbre(b);
+        let cible = ch
+            .libres()
+            .iter()
+            .find(|p| !sous_arbre.contains(&p.origine) && ch.peut_poser(p.id, &module(), 1))
+            .map(|p| p.id)
+            .expect("aucune destination libre");
+        assert!(ch.deplacer(b, cible, 1));
+        assert!(
+            ch.piece(b).unwrap().centre().distance(ou_etait) > 1e-3,
+            "le déplacement n'a rien bougé : le test ne prouverait rien"
+        );
+
+        assert!(ch.annuler(), "rien à annuler après un déplacement");
+        assert!(
+            ch.piece(b).unwrap().centre().distance(ou_etait) < 1e-3,
+            "une seule annulation n'a pas ramené la pièce à sa place"
+        );
+    }
+
+    // ---- L7.2 le roulis (section 11.3) ----
+
+    /// **Pivoter tourne le bloc et rien d'autre** : la piece reste accostee au
+    /// meme port, ses enfants suivent, et le compte de pieces ne bouge pas.
+    #[test]
+    fn pivoter_tourne_la_piece_et_son_sous_arbre() {
+        let mut ch = Chantier::new();
+        ch.racine(module());
+        let p0 = ch.libres()[0].id;
+        assert!(ch.poser(p0, module(), 1));
+        let b = ch.derniere_piece().unwrap();
+        let sur_b = ch.libres().iter().find(|p| p.origine == b).map(|p| p.id).unwrap();
+        assert!(ch.poser(sur_b, module(), 1));
+        let c = ch.derniere_piece().unwrap();
+
+        let contact = ch.piece(b).unwrap().centre();
+        let avant_pieces = ch.nb_pieces();
+        let ecart_avant = (ch.piece(c).unwrap().centre() - contact).length();
+        // Reperes AVANT, pour pouvoir exiger que quelque chose ait tourne.
+        let haut_avant = ch.piece(b).unwrap().transforme.transform_vector3(Vec3::Y);
+
+        assert!(ch.pivoter(b, std::f32::consts::FRAC_PI_2), "le pivot aurait du aboutir");
+
+        // ⚠️ **Le pivot doit VRAIMENT tourner.** Sans cette assertion, toutes
+        // celles qui suivent (la piece reste au contact, le sous-arbre garde sa
+        // forme) passent aussi quand `pivoter` ne fait rien du tout — le
+        // red-check l'a montre. Un test d'invariant ne prouve pas l'effet.
+        let haut_apres = ch.piece(b).unwrap().transforme.transform_vector3(Vec3::Y);
+        assert!(
+            haut_avant.dot(haut_apres) < 0.9,
+            "un quart de tour n'a pas tourne la piece : {haut_avant:?} -> {haut_apres:?}"
+        );
+
+        assert_eq!(ch.nb_pieces(), avant_pieces, "des pieces ont disparu ou apparu");
+        // La piece pivotee reste au meme endroit : elle tourne SUR son port.
+        assert!(
+            ch.piece(b).unwrap().centre().distance(contact) < 1e-3,
+            "la piece pivotee a quitte son port"
+        );
+        // Son enfant a suivi, en gardant sa distance : le bloc est rigide.
+        let ecart_apres = (ch.piece(c).unwrap().centre() - contact).length();
+        assert!(
+            (ecart_avant - ecart_apres).abs() < 1e-3,
+            "le sous-arbre s'est deforme : {ecart_avant} -> {ecart_apres}"
+        );
+        assert!((ch.roulis(b) - std::f32::consts::FRAC_PI_2).abs() < 1e-6, "roulis non retenu");
+    }
+
+    /// **Le roulis est un angle ABSOLU, pas un increment.** Rappeler avec la
+    /// meme valeur ne doit rien bouger — sans quoi l'operation ne serait pas
+    /// idempotente, donc penible a annuler et a rejouer.
+    #[test]
+    fn pivoter_deux_fois_au_meme_angle_ne_bouge_rien() {
+        let mut ch = Chantier::new();
+        ch.racine(module());
+        let p0 = ch.libres()[0].id;
+        ch.poser(p0, module(), 1);
+        let b = ch.derniere_piece().unwrap();
+
+        assert!(ch.pivoter(b, 0.8));
+        let pose = ch.piece(b).unwrap().transforme;
+        assert!(ch.pivoter(b, 0.8));
+        let encore = ch.piece(b).unwrap().transforme;
+        assert!(
+            (pose - encore).abs_diff_eq(macroquad::prelude::Mat4::ZERO, 1e-4),
+            "un second pivot au meme angle a bouge la piece"
+        );
+    }
+
+    /// La racine ne pivote pas : elle n'est accouplee a rien, donc n'a pas
+    /// d'axe d'accostage autour duquel tourner.
+    #[test]
+    fn pivoter_refuse_la_racine_et_les_inconnues() {
+        let mut ch = Chantier::new();
+        ch.racine(module());
+        let racine = ch.derniere_piece().unwrap();
+        let temoin = (ch.nb_pieces(), ch.libres().len(), ch.version());
+        assert!(!ch.pivoter(racine, 1.0), "la racine a pivote");
+        assert!(!ch.pivoter(u64::MAX, 1.0), "une piece inconnue a pivote");
+        assert_eq!((ch.nb_pieces(), ch.libres().len(), ch.version()), temoin, "un refus a mute");
+    }
+
+    /// **Le roulis survit a l'aller-retour par la recette** (section 6.4).
+    /// Le rejouer a zero rendrait une geometrie differente de celle qu'on a
+    /// sauvegardee, sans que rien ne le signale.
+    #[test]
+    fn le_roulis_survit_a_la_recette() {
+        let mut ch = Chantier::new();
+        ch.racine(module());
+        let p0 = ch.libres()[0].id;
+        assert!(ch.poser_roule(p0, module(), 1, 0.9));
+        let pose = ch.pieces().map(|(_, p)| p.centre()).collect::<Vec<_>>();
+
+        let recette = ch.recette();
+        assert!(recette.iter().any(|e| e.roulis != 0.0), "la recette ne porte pas le roulis");
+        let rejoue = Chantier::depuis_recette(&recette).expect("recette rejouable");
+        let pose2 = rejoue.pieces().map(|(_, p)| p.centre()).collect::<Vec<_>>();
+        assert_eq!(pose.len(), pose2.len());
+        for (a, b) in pose.iter().zip(&pose2) {
+            assert!(a.distance(*b) < 1e-4, "geometrie changee au rejeu : {a:?} vs {b:?}");
+        }
     }
 
     #[test]

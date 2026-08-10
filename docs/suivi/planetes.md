@@ -188,6 +188,13 @@ séparée `shaders/atmosphere.frag.glsl`, additive et sans écriture de profonde
 longueur de corde, crépuscule au terminateur, embrasement à contre-jour. Teinte prise
 sur `atmo` **et** `voile`. Voir `conception/planetes.md` § 14.
 
+**Densité séparée de la teinte** (2026-08-09) : `atmo` est une teinte unitaire,
+`atmo_densite` porte la quantité d'air. Les deux tenaient dans un seul `Vec3`, si bien
+qu'un halo **terne** ne pouvait s'écrire que comme un halo **mince** — Vénus (92 bars)
+sortait deux fois plus fine que la Terre. Quatre entrées corrigées : Vénus 0,28 → 1,45,
+Titan 0,31 → 1,20, Hycean 0,59 → 1,30, Ash 0 → 0,32. Le reste du catalogue est
+**inchangé au bit près** (`avec_atmo` fait la scission lui-même).
+
 **Reste (optionnel, non bloquant)** :
 
 - [x] Rotation à **vitesse variable** par planète : `ROTATIONS_JOURS` (vraies périodes
@@ -195,7 +202,7 @@ sur `atmo` **et** `voile`. Voir `conception/planetes.md` § 14.
       et en bas — à l'échelle littérale Vénus paraîtrait figée, ce qui se lit comme un bug.
 - [x] **Couche de nuages séparée** : repère propre qui super-tourne (×1,35 + dérive), donc
       les nuages glissent au-dessus du relief au lieu d'y être collés ; ombre portée
-      échantillonnée dans le même repère. Conditionnée à la présence d'air (`atmo`/`voile`),
+      échantillonnée dans le même repère. Conditionnée à la présence d'air (`atmo_densite`/`voile`),
       et hors de portée des géantes gazeuses (leur branche rend la main plus haut).
 - [x] **Reflet spéculaire de l'océan au terminateur** : il était éteint par `diff` là où il
       est le plus fort. Extinction géométrique + renfort de Fresnel au rasant.

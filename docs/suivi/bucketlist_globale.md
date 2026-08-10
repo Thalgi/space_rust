@@ -132,6 +132,12 @@ exactement le même système (reproductible, partageable).
       silhouette — d'où le liseré net du limbe), raréfaction en altitude, terminateur qui
       déborde sur la nuit, diffusion vers l'avant à contre-jour. Additive, sans écriture de
       profondeur, sautée sous 0,75 px d'épaisseur. Voir STATE.md § P.1.
+- [x] **Densité d'atmosphère indépendante de sa teinte** (2026-08-09, § P.1 ter).
+      `atmo` portait les deux — teinte en direction, quantité en longueur — donc un air
+      **épais mais terne** était inécrivable : Vénus, l'atmosphère la plus lourde du système
+      solaire interne, était notée deux fois plus fine que la Terre, et Ash (« cendres en
+      suspension ») à zéro. Champ `atmo_densite` séparé ; Vénus, Titan, Hycean et Ash
+      corrigés, le reste du catalogue rendu à l'identique.
 - [x] **Orbites des lunes** tracées (elles ne l'étaient pas du tout : les lunes naissent
       sans polyligne, et les dessiner avec les planètes les aurait centrées sur le barycentre
       du système au lieu de leur planète).
@@ -174,6 +180,13 @@ exactement le même système (reproductible, partageable).
 - [ ] **Pulsation/variabilité** (étoiles variables) : luminosité qui oscille légèrement.
 - [~] **Classes spéciales** : pulsar, magnétar, étoile à neutrons **faits** (`etoile.rs`, et
       `est_remnant()` leur retire la zone habitable). Wolf-Rayet : toujours à faire.
+- [x] **Une étoile se lit comme une étoile en vue système** (2026-08-09, § P.3 bis).
+      À l'échelle vraie elle fait **1,14 px de rayon** au cadrage par défaut : ni teinte, ni
+      tache, ni couronne ne peut s'y voir. Plancher en pixels `soleil::PX_MIN = 8`, qui
+      **s'efface en approchant** et ne touche qu'elle. ⚠️ Il n'achète PAS les éruptions :
+      leurs boucles sont dessinées à `r × 0,05`, il faudrait un Soleil plus large que
+      l'orbite de Mercure pour qu'elles atteignent le pixel. Elles restent la récompense de
+      l'approche.
 
 ## 10. Systèmes binaires & trinaires — ✅ fait
 

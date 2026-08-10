@@ -1518,3 +1518,738 @@ propriété d'accord entre deux appelants d'un même calcul ne garde pas ce
 calcul, elle garde son unicité.** D'où, deux fois (L3.2, L3.3), un second test
 qui pinne la valeur elle-même — écrit *avant* le red-check, pour la première
 fois de ce chantier.
+
+---
+
+## L4.1 — Le squelette de l'écran (2026-08-09)
+
+Premier lot dont l'essentiel ne se teste pas (§6.6). Ce qui est là : entrée
+depuis l'accueil (`ASSEMBLEUR - CONSTRUIRE (VAB)`), les trois zones de §8.2,
+caméra orbitale, boussole, bandeau, et un chantier qu'on regarde tourner.
+Rien ne se pose encore — la palette est un cadre vide (L4.2), le clic n'existe
+pas (L4.3).
+
+### Ce qui a été ajouté au modèle : `Chantier::apercu`
+
+`terminer` prend `self`, et c'est juste : un chantier **publié** ne doit plus
+bouger. Mais l'écran doit dessiner un chantier **qu'on est en train de
+modifier**, à chaque image. Sans miroir non consommant, deux issues, toutes
+deux mauvaises : cloner le chantier entier par image, ou redessiner les pièces
+à la main — donc une **deuxième façon de construire une station**, exactement le
+doublon que le Lot 1 a passé son temps à supprimer, et la porte ouverte au
+fantôme qui ment (§8.3).
+
+`apercu(&self) -> EtatStation` copie les pièces et passe par le même
+`Station::depuis_pieces`. L'écran en garde le résultat entre deux modifications
+(`rafraichir`, appelé après toute mutation et **jamais depuis le dessin**) :
+c'est le cache de §10.3, posé d'emblée plutôt qu'ajouté après coup.
+
+Le test compare `apercu` et `terminer` sur le **même** chantier — ce qu'il ne
+peut faire que parce qu'`apercu` ne le détruit pas, donc la propriété visée est
+aussi ce qui rend le test possible.
+
+### Ce qui se teste dans un lot de dessin : les zones
+
+§10.9 demande que *tout ce qui se décide* sorte du code de dessin. Sur L4.1 il
+n'y a qu'une décision, et elle est réelle : **de quelle zone relève un point**.
+La caméra ne doit pas pivoter quand on glisse sur la palette (le défaut que
+`VueStation` corrige avec `liste::sur_la_liste`), et en L4.3 un clic dans la
+palette ne devra pas poser une pièce dans le vide.
+
+`Zones::pour(taille)` et `Zones::zone(p)` sont donc du calcul pur, testé à
+quatre titres : le pavage sans trou ni recouvrement, le classement au voisinage
+des frontières, le fait que seule la vue capte le glisser, et le cas de l'écran
+étroit (`Parametres` propose du 1000×700, rien n'interdit plus petit).
+
+### Le chantier vide n'est pas rien
+
+Une caméra orbitale autour du néant ne montre **aucun** mouvement : impossible
+de juger que le squelette marche. D'où une grille du plan de pose — origine,
+échelle, et le plan sur lequel on posera. C'est ce qu'on « regarde tourner »
+tant qu'aucune pièce n'est posée, et sans quoi L4.1 n'aurait rien de jugeable
+à l'œil.
+
+### Ce que l'arbitrage §10.7 devient
+
+**(a) Le coût affiché** : réglé sans code. `Station::cout_total()` somme déjà
+les pièces posées ; l'aperçu en donne une, donc le bandeau la lit. C'est
+`Chantier::budget_restant` (qui rend `INFINITY` en bac à sable) qu'il ne fallait
+pas afficher, et il ne l'est pas.
+
+**(b) Échap perd le vaisseau** : ⚠️ **toujours ouvert**. Sans conséquence au
+Lot 4.1 — rien ne se pose encore, il n'y a rien à perdre. À trancher **avant
+L4.3**, qui est l'étape où le travail de l'utilisateur commence à exister.
+
+### Red-check : 5 sabotages, et un qui a corrigé une affirmation
+
+| Sabotage | Rougit |
+|---|---|
+| `apercu` saute une pièce | l'accord aperçu/publication |
+| la vue 3D recouvre la palette | le pavage |
+| la palette n'est plus reconnue | le classement **et** le glisser |
+| plus de garde de largeur sur écran étroit | le cas étroit |
+| **ordre des tests de `zone()` inversé** | **rien — et c'est le résultat** |
+
+Le dernier était censé rougir : le commentaire affirmait que « le bandeau
+l'emporte sur les deux autres ». Il est resté **vert**, parce que les trois
+rectangles sont disjoints — l'ordre est donc indifférent, et l'affirmation
+était fausse. Commentaire corrigé pour dire ce qui est vrai (les rects sont
+disjoints, la vue 3D sert de repli hors écran), et le sabotage remplacé par
+un vrai défaut de classement.
+
+C'est la deuxième fois de ce projet qu'un red-check corrige la **prose** plutôt
+que le code. Le mécanisme est le même que pour le test de luminance de P.1 ter :
+un red-check qui refuse de rougir dit toujours quelque chose.
+
+**Mesures** : 532 → **537 tests**, 0 avertissement clippy.
+
+---
+
+## L4.2 — La palette et son grisage (2026-08-09)
+
+Colonne de gauche remplie : catégories repliables (repliées d'entrée — trente
+entrées d'un coup dans 220 px seraient illisibles, et c'est ce que le pliage
+existe pour éviter), molette de défilement quand le curseur est sur la colonne,
+et **grisage**. Le clic sur une entrée n'est pas branché : c'est L4.3.
+
+### Le grisage suit la route de §10.2, pas la naïve
+
+Une entrée qui ne se pose **nulle part** doit se voir éteinte, sinon on la
+choisit et on découvre un vaisseau sans aucun port allumé — un cul-de-sac muet.
+
+La façon naïve balaie, pour chacun des 31 composants, tous les ports libres :
+le coût croît avec la station. `palette::grisage` relève d'abord les couples
+`(genre, profil)` **distincts** parmi les ports libres — une poignée — puis
+appelle `posables` une fois par couple et fait l'union. Le coût cesse de
+dépendre du nombre de ports, ce qui est la raison d'être de la duale dans un
+écran « pièce d'abord ».
+
+Recalculé par `rafraichir`, donc **à chaque mutation et seulement là** (§10.3),
+par la même porte unique que l'aperçu et le maillage.
+
+⚠️ **Grisage = incompatible partout, pas encombré partout.** `posables` ne juge
+que genre et profil ; l'anti-collision n'entre pas ici. Une entrée allumée peut
+n'avoir que des ports **rouges**. C'est la distinction de §8.4, et elle se joue
+port par port en L4.4 — un `peut_poser` par entrée et par port ramènerait
+exactement le balayage que §10.2 cherche à éviter.
+
+**Chantier vide : tout est allumé** (§10.1). Sans pièce il n'y a aucun port
+libre, donc l'union est vide et toute la palette serait éteinte — un écran où
+rien ne peut jamais commencer.
+
+### ⚠️ Le défaut trouvé par le test : `Volet`
+
+Première rédaction : exclure les **catégories** `PoseeAMain` et `Effet`, dont la
+documentation dit qu'aucune de leurs variantes n'expose de port. C'est vrai —
+**et la réciproque est fausse**. Le test l'a dit immédiatement :
+
+> `VOLET n'a aucun port : entrée morte dans la palette`
+
+`Volet` est rangé en `Structure`, une catégorie bien affichée, et n'a aucun port
+de montage. Filtrer par catégorie l'aurait laissé passer : une entrée grisée à
+jamais, qui se clique et ne fait rien — le **second** des deux défauts que §6.5
+demande précisément de garder, introduit en croyant éviter le premier.
+
+La catégorie est un **rangement de menu**, pas une propriété de montage. Le
+critère juste est le port : `contenu()` filtre sur `!comp.ports().is_empty()`,
+ce qui **subsume** l'exclusion par catégorie (les deux catégories tombent
+d'elles-mêmes) et ne laisse plus aucune liste à tenir à la main. `categories()`
+se déduit du contenu, pour la même raison.
+
+Un test nomme le contre-exemple, avec sa propre garde : si `Volet` gagnait des
+ports un jour, il le dit au lieu de devenir vacant.
+
+### Dette remboursée au passage
+
+Quatre `#[allow(dead_code)]` retirés dans `composant/mod.rs` (`Categorie`,
+`Categorie::nom`, `categorie`, `posables`) : leurs commentaires annonçaient
+« consommé par l'écran » depuis L2.4. C'est fait, donc l'annotation ment.
+
+### Red-check : 6 sabotages, 6 rougissements
+
+| Sabotage | Rougit |
+|---|---|
+| `grisage` rend tout `true` | la discrimination **et** l'accord avec le moteur |
+| règle du chantier vide levée | le chantier vide |
+| entrelacement des catégories dans `contenu` | le groupement |
+| une catégorie affichée vidée | la palette peuplée |
+| **retour au filtrage par catégorie** | les deux gardes de port (dont `Volet`) |
+
+**Mesures** : 537 → **545 tests**, 0 avertissement clippy.
+
+---
+
+## L4.3 — Le clic (2026-08-09)
+
+On peut maintenant **construire un vaisseau à la main** : choisir une pièce,
+viser un port, poser. C'est le but que §10.8 fixait au Lot 4 tout entier — pas
+d'être confortable, d'être possible.
+
+### §10.7 (b) tranché : on assume la perte
+
+Arbitrage rendu par l'utilisateur le 2026-08-09 : **le Lot 5 réparera**. Quitter
+l'écran détruit le chantier, et on l'accepte jusqu'à la sauvegarde de L5.1.
+C'est la seule des trois issues qui ne laisse pas d'état caché — garder la vue
+vivante dans `Etat` aurait fait survivre le vaisseau à un aller-retour au menu
+**sans que rien ne le dise**.
+
+En revanche **Échap repose d'abord la pièce en main** (§8.3) et ne quitte qu'au
+repos : sortir directement aurait fait perdre le vaisseau au geste qui sert le
+plus souvent à annuler une prise en main.
+
+### La discrimination clic / glissé, et la règle naïve qu'elle remplace
+
+Le même bouton fait tourner la caméra (`input_orbite`, au glisser) et pose une
+pièce (au clic). Sans discrimination, chaque rotation finirait par une pose
+accidentelle sous le curseur.
+
+`ecran::clic::Discriminateur` retient le point d'enfoncement et **l'écart
+maximal atteint** — pas l'écart final. La règle naïve (comparer relâchement et
+appui) laisse passer le glissé qui **revient à son point de départ** : on fait
+tourner la vue d'un tour, on relâche là où on avait appuyé, et l'écran pose une
+pièce. Un test nomme ce cas.
+
+Pas de seuil de durée : un appui long mais immobile reste un clic — c'est le
+geste de quelqu'un qui vise soigneusement, l'utilisateur qu'on ne veut pas
+punir. Seuil : 4 px, assez pour le tremblement de la main.
+
+Tous les clics de l'écran passent par lui, palette comprise : un geste qui
+commence dans la vue 3D et finit sur la colonne ne doit pas choisir une pièce
+au passage.
+
+### La porte unique des mutations
+
+`VueAssembleur::muter(|ch| …)` : poser, retirer, annuler, refaire y passent tous
+et rafraîchissent ce qui en dérive (aperçu, maillage, grisage). §10.3 le demande
+explicitement — *« deux chemins de mutation, et le jour où l'un oublie
+d'invalider, l'écran affiche un vaisseau périmé »*. C'est la famille de défaut
+que le projet traque depuis le Lot 1, transposée à l'affichage.
+
+### Le montage retenu (§10.5)
+
+`designation::montage_pour` : le **premier** port de montage de la pièce qui
+accepte le port hôte visé. Le cycle parmi les autres attend L4.4, parce qu'il
+n'a de sens qu'accompagné du fantôme — sans lui, cycler serait un réglage
+aveugle.
+
+Le test vérifie le choix auprès du **moteur** (`Chantier::compatibles`), pas en
+recopiant la règle : il exige que l'indice retenu accepte vraiment le port, et
+qu'aucun indice plus petit ne convenait.
+
+### Dette remboursée
+
+Deux `#[allow(dead_code)]` retirés dans `designation.rs` (`ACCROCHE_PIXELS`,
+`port_sous_curseur`) : écrits en L3.3 avec la mention « pas encore branché à une
+vue ». Ils le sont.
+
+### Red-check : 6 sabotages, 9 tests rougis
+
+| Sabotage | Rougit |
+|---|---|
+| écart **final** au lieu du maximal | le glissé qui revient au départ |
+| pas de remise à zéro de la dérive | le clic qui suit un glissé |
+| un relâchement seul fabrique un clic | le relâchement sans appui |
+| seuil à 500 px | les trois tests de glissé |
+| seuil à 0 px | le tremblement de deux pixels |
+| `montage_pour` rend toujours le montage 0 | les deux tests de montage |
+
+**Mesures** : 545 → **554 tests**, 0 avertissement clippy.
+
+### Ce qui reste au Lot 4
+
+- **L4.4** — fantôme (`pose_prevue`), les trois couleurs de §8.4 avec le cache
+  d'état des ports (§10.3), et le cycle de montage de §10.5.
+- **L4.5** — sélection (`piece_sous_rayon`), surlignage du sous-arbre
+  (`sous_arbre`), Suppr, boutons undo/redo au bandeau.
+
+---
+
+## L4.4 — Le fantôme et les trois couleurs (2026-08-09)
+
+L'écran **explique** maintenant ce qu'il refuse. Avant, un port qui n'acceptait
+pas la pièce ne faisait simplement rien au clic.
+
+### Le fantôme passe par le même code que la pose
+
+`Chantier::pose_prevue` (L3.1) rend la pièce **exacte** qu'une pose produirait ;
+la vue la dessine, elle ne la recalcule pas. §8.3 est catégorique sur ce point,
+et pour l'appliquer jusqu'au bout `Piece::dessiner` a été extraite de
+`Station::dessiner`, qui l'appelle désormais en boucle : le fantôme et le
+vaisseau se peignent par le même chemin. Un second chemin de dessin aurait donné
+un fantôme qui ne ressemble pas au résultat — la variante graphique du fantôme
+qui ment.
+
+Il s'affiche **même quand la pose serait refusée** : `pose_prevue` répond au
+*où*, `peut_poser` au *si*. §8.5 en dépendra pour tracer le segment de plus
+courte approche entre le fantôme et la pièce qui le refuse.
+
+### Les trois couleurs, et le daltonisme
+
+`ecran::ports::Etat` — `Posable` / `Encombre` / `Incompatible` — calculé hors du
+dessin (§10.9).
+
+⚠️ Vert et rouge sont la **pire** paire pour un deutéranope, et le projet les
+avait explicitement écartés pour les bascules (`ui::COULEUR_ACTIF`). Ici la
+convention les impose. La parade : **la taille du marqueur double le code
+couleur** — bille de 0,09 posable, 0,07 encombrée, 0,04 éteinte. Le canal qui
+survit au daltonisme est la luminance et la forme, jamais la teinte seule.
+
+Et ce sont les ports **libres** qui sont tracés, pas `Station::dessiner_ports`
+qui les trace tous, consommés compris : bon pour inspecter une station finie,
+trompeur ici où un port occupé ressemblerait à une place libre.
+
+### `Chantier::version` : la clé de cache
+
+Colorer les ports coûte un `peut_poser` par port, donc une collision contre
+toutes les pièces — 2 700 distances d'enveloppes sur une station de 45 pièces
+(§10.3), pour un résultat qui ne change pas tant qu'on ne touche à rien.
+
+D'où un compteur de mutations réussies sur le `Chantier`. Trois points :
+
+- `nb_pieces` n'aurait pas suffi : poser puis retirer y ramène le même nombre ;
+- **`annuler` fait AVANCER la version**, pas reculer. Le vaisseau revient en
+  arrière, la date non — ce qu'elle date, c'est le moment où l'affichage a cessé
+  d'être à jour, et une annulation le périme autant qu'une pose. `Instantane` ne
+  porte donc **pas** `version` : la restaurer casserait la monotonie et deux
+  états distincts pourraient porter le même numéro ;
+- l'incrément vit dans `enregistrer` et `restaurer`, deux fonctions privées
+  appelées une fois par mutation réussie. Mieux que cinq incréments dispersés
+  dans les méthodes publiques, qu'on oublie.
+
+Clé de cache de l'écran : `(version, pièce en main, montage)` — tout ce dont le
+résultat dépend, et rien d'autre.
+
+### Le montage est celui du vaisseau, pas du port
+
+⚠️ **Correction de L4.3.** `montage_pour(chantier, comp, port)` résolvait le
+montage **au clic**, port par port. Or les couleurs et le fantôme sont calculés
+pour *un* montage : poser avec un autre aurait donné une orientation que rien
+n'avait montrée — le fantôme qui ment, par un autre chemin.
+
+Remplacé par `premier_montage(chantier, comp)` : le premier montage qu'au moins
+un port libre accepte, choisi à la **prise en main**, cyclé par **Tab**, et c'est
+lui qu'on pose. Un seul montage courant.
+
+### ⚠️ Deux tests corrigés par le red-check
+
+**Le rouge, cherché et pas deviné.** `un_port_compatible_mais_encombre_existe`
+enchaînait des modules de longueur 2 en espérant qu'un port finisse bloqué.
+Aucun ne l'était : le test est parti **rouge d'emblée**. Un balayage
+(longueur × montage) a montré où le rouge vit — deux modules **courts** clipsés
+bout à bout, dont les enveloppes se chevauchent assez pour rendre les écoutilles
+restantes compatibles mais inutilisables. Le test dit maintenant les trois états
+atteignables, en relevant vert et rouge sur des montages différents du même
+chantier : aucun montage ne donne les deux, et l'exiger aurait été une contrainte
+inventée pour le test.
+
+**Un test d'accord sur des données qui n'exercent rien.**
+`chaque_port_recoit_l_etat_que_le_moteur_confirme` tournait sur ce même chantier
+de modules longs — donc **sans aucun port encombré**. Il ne parcourait jamais la
+branche rouge, et le sabotage « plus d'anti-collision » le laissait vert. Les
+deux tests partagent désormais `chantier_aux_trois_etats()`. Un test d'accord ne
+vaut que sur des données qui exercent tous les cas.
+
+### Red-check : 5 sabotages
+
+| Sabotage | Rougit |
+|---|---|
+| `restaurer` ne date plus | la version (annuler/refaire) |
+| plus d'anti-collision dans `etats` | l'accord avec le moteur **et** les trois états |
+| `compatibles` interrogé au montage 0 | les deux mêmes |
+| montage ignoré partout dans `etats` | les trois tests de `ports` |
+| `premier_montage` rend le dernier | le montage proposé |
+
+**Mesures** : 554 → **559 tests**, 0 avertissement clippy.
+
+### Reste au Lot 4
+
+**L4.5** — sélection (`piece_sous_rayon`), surlignage du sous-arbre
+(`sous_arbre`), Suppr, boutons undo/redo au bandeau.
+
+---
+
+## L4.5 — Sélection, sous-arbre, Suppr (2026-08-09)
+
+Du branchement pur, comme §10.8 l'annonçait : les quatre appels du modèle
+existaient et étaient testés depuis les Lots 2 et 3.
+
+- **Sélection** par `piece_sous_rayon` — les mêmes enveloppes que
+  l'anti-collision, donc désigner une pièce et refuser d'y poser parlent du même
+  volume.
+- **Surlignage du sous-arbre** (`sous_arbre`) tracé avec `enveloppes::piece`,
+  extraite de `enveloppes::station` : le volume que le modèle connaît déjà,
+  plutôt qu'une seconde géométrie de surlignage inventée pour l'occasion. Et
+  **tout** le sous-arbre, pas la pièce cliquée — Suppr emporte la descendance
+  (§6.2), et ça doit se voir **avant** d'appuyer.
+- **Suppr** sans confirmation, racine comprise (§10.6 : c'est annulable, et le
+  projet n'a de boîte de dialogue nulle part).
+- **UNDO / REDO au bandeau.** Z et Y les faisaient déjà ; les boutons les rendent
+  **découvrables**, ce qu'un raccourci n'est pas.
+
+Le port l'emporte sur la pièce quand les deux sont sous le curseur : un port est
+un point qu'on vise délibérément, et il est **sur** une pièce par construction —
+l'ordre inverse rendrait tout port inatteignable.
+
+Une sélection peut devenir orpheline (un `annuler` fait disparaître la pièce
+visée). `maj_surligne` retombe alors au repos, en s'appuyant sur un contrat déjà
+testé en L3.2 : `sous_arbre` d'un identifiant inconnu rend l'ensemble **vide**.
+
+Couleur du surlignage : **jaune**, ni vert ni rouge. Ces deux-là ont déjà un sens
+ferme sur cet écran (§8.4) et un troisième message dans les mêmes teintes se
+lirait de travers.
+
+---
+
+## L4.6 — Déplacer une pièce posée (2026-08-09)
+
+> Demandé par l'utilisateur. Conception en `conception/assembleur.md` §10.10,
+> écrite avant le code.
+
+Seule étape du Lot 4 qui ajoute au **modèle** : `Chantier::deplacer`,
+`Chantier::peut_deplacer`, et `Repere::depuis_mat4`.
+
+### Pourquoi pas `retirer` + `poser`
+
+Trois raisons, chacune suffisante, et chacune a son test :
+
+1. `retirer` emporte le sous-arbre : la descendance serait perdue ;
+2. l'annulation compterait **deux** coups, et n'en défairait que la moitié ;
+3. le port hôte rendu reçoit un `id` neuf (§6.1) : une UI qui gardait l'ancien
+   viserait dans le vide entre les deux opérations.
+
+### Le bloc suit rigidement
+
+La géométrie interne d'un sous-arbre ne change pas : seule la transformée du
+bloc bouge, comme un produit de matrices. On ne re-pose rien.
+
+⚠️ **Le piège : `PortLibre::repere` est en coordonnées monde.** Déplacer un
+sous-arbre invalide les repères de tous les ports libres qu'il expose ; sans le
+même delta, ils seraient dessinés à l'ancienne place et accrocheraient à la
+nouvelle. C'est le seul endroit du modèle où une donnée dérivée survit à une
+mutation. Le test le vérifie **sans recopier le delta** — il redemande où le port
+devrait être à partir de la pose de sa pièce et de son indice local, soit le même
+chemin que `ajouter_libres`.
+
+### `peut_deplacer`, et le port qui mentait
+
+Première intention : colorer les ports pendant un déplacement avec `peut_poser`,
+comme pour une pose. **Faux.** `peut_poser` juge une pièce **seule** contre tout
+le vaisseau ; un déplacement fait bouger un bloc entier et libère sa place
+d'origine. Les deux réponses diffèrent, et c'est celle de `deplacer` qui compte
+puisque c'est elle qui s'exécutera.
+
+Le sabotage le confirme, ce n'était pas théorique : brancher `peut_poser` fait
+rougir les deux tests de déplacement, dont celui qui vérifie qu'un port du bloc
+déplacé n'est jamais proposé comme destination.
+
+D'où `plan_deplacement`, **source unique** des contrôles : `deplacer` applique
+son résultat, `peut_deplacer` regarde seulement s'il existe. Deux listes de
+contrôles séparées finiraient par diverger, et l'écran annoncerait alors une pose
+que le modèle refuse — le même défaut que le fantôme qui ment, déplacé d'un cran.
+
+### Ce que ça ne change pas
+
+**Le format de sauvegarde.** `recette` (L2.5) lit l'état *courant* — chaque pièce
+et son `hote` — et non un journal d'opérations. Un déplacement qui met `hote` à
+jour produit donc une recette juste, sans nouveau champ dans `Etape`. C'est ce
+qui rend cette étape possible dans le Lot 4 plutôt que dans un lot de modèle.
+
+### L'interaction n'ajoute pas d'état
+
+**M** lève le sous-arbre sélectionné ; l'écran retombe dans « pièce en main »,
+avec ses trois couleurs, son fantôme et son cycle de montage — mais la pièce
+vient du vaisseau, pas de la palette. Clic sur un port valide : le déplacement se
+fait. Échap : on repose où c'était. Ce n'est donc **pas un quatrième état** au
+sens de §8.3.
+
+La clé de cache des ports porte désormais la **source** autant que
+l'identifiant : sans quoi l'entrée n°3 de la palette et la pièce n°3 du vaisseau
+auraient la même clé.
+
+### Red-check : 6 sabotages, 7 tests rougis
+
+| Sabotage | Rougit |
+|---|---|
+| les ports du bloc ne suivent pas | les ports qui suivent leur pièce |
+| seule la pièce visée bouge | la forme du sous-arbre |
+| le cycle n'est plus refusé | les refus **et** « pas sa propre destination » |
+| l'ancien port hôte n'est pas rendu | le compte de ports libres |
+| le déplacement n'entre pas à l'historique | l'annulation en un coup |
+| les ports répondent pour une **pose** | les deux tests de déplacement |
+
+**Mesures** : 559 → **566 tests**, 0 avertissement clippy. Le Lot 4 est **clos**.
+
+---
+
+## Lot 5 — L'écran qui garde et qui explique (2026-08-09)
+
+### L5.1 — Sauvegarde disque
+
+`vaisseau::sauvegarde` : `enregistrer`, `charger`, `liste`. Ce qui part sur le
+disque est une **`Recette`** — la liste ordonnée des poses, chaque hôte désigné
+par une *position* (indice de pièce, indice local de port) et jamais par un
+`PortLibre::id`, qui n'a de sens que dans la session qui l'a distribué (§6.1).
+
+Aucune `Mat4` cuite n'est écrite : rejouer la liste les reconstruit. **Ce qui
+n'est vrai que parce que la construction est déterministe** — le déterminisme
+n'était donc pas un raffinement mais un prérequis de la sauvegarde (§6.4), et
+`recette`/`depuis_recette` (L2.5) trouvent enfin leur consommateur, dix-huit mois
+de journal plus tard.
+
+Le test d'aller-retour passe par le **vrai fichier** : sérialiser en mémoire
+prouverait que serde fonctionne, pas que le format écrit se relit.
+
+Trois décisions :
+
+- **L'échec d'écriture se dit.** Les réglages retombent en silence sur leurs
+  défauts — un réglage perdu n'est rien. Un vaisseau perdu, si : le message
+  apparaît au-dessus du bandeau.
+- **Le nom est assaini.** C'est une saisie libre : sans filtre, `../reglages`
+  écrirait hors du dossier. Test dédié sur cinq noms hostiles.
+- **Le chantier rechargé porte l'historique.** On charge pour continuer à
+  construire ; un vaisseau sur lequel Annuler ne répond pas serait une surprise.
+
+**Interface : neuf emplacements numérotés**, façon sauvegarde rapide — touches
+1–9 pour choisir, F5 écrire, F9 relire. Le projet n'a de champ de saisie nulle
+part et §10.6 a déjà écarté les boîtes de dialogue ; l'idiome donne le service
+sans rien inventer. Le bandeau montre les neuf d'un coup (`[1.3....9]` : chiffre
+= occupé, point = libre), relevé au disque à l'entrée et après chaque écriture,
+jamais par image.
+
+`/vaisseaux/` et `/reglages.json` ajoutés au `.gitignore` : données de
+l'utilisateur, pas du code.
+
+### L5.2 — L'overlay qui explique le refus
+
+§8.5 : l'overlay ne décore pas, il répond à **une** question — *pourquoi ce port
+est-il rouge ?* Un port rouge sans explication est un bug du point de vue de
+l'utilisateur, même quand le refus est correct.
+
+`enveloppes::conflit` existait depuis le Lot 1, **écrit et testé mais jamais
+appelé** (trois `#[allow(dead_code)]`). Il est branché : dès qu'on vise un port
+`Encombre`, l'écran trace l'enveloppe proposée en blanc, celles qui la refusent
+en rouge, le segment de plus courte approche entre chacune et elle, et le
+bandeau écrit **de combien il manque**.
+
+Il ne s'affiche **que** sur un port refusé. En permanence il noierait l'écran de
+fils de fer et cesserait d'attirer l'œil là où il faut ; la touche E reste
+l'affichage de *toutes* les enveloppes, qui répond à l'autre question — « mes
+enveloppes sont-elles serrées ? », la dette de L1.4 que seul le regard peut
+juger, et qui devient enfin jugeable.
+
+**La décision est sortie du dessin** (§10.9) : `gene_par` rend qui s'oppose et de
+combien, sans rien peindre ; `conflit` s'en sert pour tracer. C'est ce qui rend
+testable la propriété qui compte — *l'overlay n'explique que des refus que le
+modèle a prononcés* —, vérifiée dans les deux sens contre `peut_poser`, sur le
+vrai `FACTEUR_COLLISION` et sur une pose issue de `pose_prevue`.
+
+### Red-check : 5 sabotages, 4 rougissements — et le cinquième est instructif
+
+| Sabotage | Rougit |
+|---|---|
+| plus d'assainissement du nom | le nom qui sort du dossier |
+| chantier rechargé sans historique | l'historique après chargement |
+| une seule étape écrite | l'aller-retour disque |
+| la marge du modèle ignorée dans l'overlay | l'accord overlay/modèle |
+| **l'hôte n'est plus exempté** | **rien** |
+
+⚠️ Le dernier est resté **vert**. Sur les modules essayés, l'hôte reste hors du
+seuil même au joint : `FACTEUR_COLLISION = 0.85` tolère l'adjacence de docking,
+et l'exemption ne change alors rien. Elle reste — `Chantier::collision`
+l'applique, et les deux doivent dire la même chose sur *toutes* les formes, pas
+seulement celles qu'on a essayées — mais c'est une **garde non exercée**, écrite
+comme telle dans le code plutôt que supposée solide.
+
+**Mesures** : 566 → **571 tests**, 0 avertissement clippy. Le Lot 5 est clos.
+
+### Reste au chantier assembleur
+
+**Lot 6**, et il ne se commence qu'après avoir *réellement construit* quelque
+chose avec l'écran :
+
+- **L6.1** — l'arbitrage de L1.4 : les 19 variantes qui sous-déclarent leur
+  `rayon_local`, jugées à l'œil grâce à l'overlay. La dette est parquée depuis le
+  Lot 1 faute d'avoir pu **voir** une enveloppe ; c'est maintenant possible.
+- **L6.2** — composites : figer une sélection en `SousEnsemble`
+  (`Chantier::figer`, écrit et sans client), et la palette qui liste ceux qu'on a
+  créés. C'est en assemblant à la main qu'on verra quels regroupements
+  reviennent.
+- **L6.3** — `GenrePort::PoutreBout`, posé sur aucun composant : lui donner un
+  usage ou le retirer.
+
+---
+
+## Lots 7 a 9 — Les trois modes d'edition : conception (2026-08-09)
+
+Demandes par l'utilisateur (Move / Rotate / Resize, facon Blockbench), avec
+consigne explicite de **concevoir d'abord**. Conception complete en
+`conception/assembleur.md` **section 11**. Rien n'est code.
+
+### Ce que la conception a tranche
+
+**Le port reste l'ancre.** Blockbench est un editeur libre ; cet assembleur est
+un graphe de ports, ou la pose d'une piece est *deduite* de son accouplement.
+Rendre les pieces flottantes ne serait pas ajouter trois modes, ce serait
+remplacer les Lots 1 a 5. Chaque mode devient donc une **liberte bornee
+relative au port** :
+
+| Mode | Ce que ca regle | Parametre |
+|---|---|---|
+| Move | l'ecart au port, le long de l'axe d'accostage | 1 scalaire |
+| Rotate | le roulis autour de ce meme axe | 1 scalaire |
+| Resize | les **cotes propres** du composant | ses champs existants |
+
+### Les cinq points qui ont demande une decision
+
+1. **Le roulis etait deja parque** (section 10.6) : *« un champ de plus dans
+   `Etape` — le format de sauvegarde. A decider comme telle, pas en passant. »*
+   La decision est prise, et c'est bien ce qu'elle coute. `serde(default)` fait
+   que les fichiers ecrits en L5.1 se rechargent sans conversion.
+2. **Resize n'est PAS un facteur d'echelle.** Les cotes vivent dans le composant,
+   et `ports()`, `enveloppe_locale()` et `cout()` en decoulent : un `scale`
+   par-dessus ferait mentir les trois. Editer les champs ne change **aucun**
+   format, et trouve enfin un consommateur a `unites::proportion`, marque
+   « API prevue pour le generateur » depuis le Lot 1.
+3. **Move/Rotate sont rigides, Resize ne l'est pas.** Les deux premiers
+   reutilisent tels quels le delta de sous-arbre de `deplacer` (section 10.10).
+   Allonger un module, lui, deplace ses ports **differemment** : chaque enfant
+   doit etre re-accouple en cascade. D'ou un lot entier pour le troisieme.
+4. **L'annulation d'un geste continu n'existe pas dans le modele.** Un glisse
+   produit une valeur par image ; muter a 60 Hz empilerait 60 instantanes par
+   seconde. Il faut une notion de **geste** (`debuter_geste` / `finir_geste`) —
+   a ecrire **avant** le premier gizmo, pas apres.
+5. **Le bouton gauche a deja deux sens** (section 10.4 : glisser = camera,
+   clic = poser). Un gizmo en ajoute un troisieme. La sortie est un **mode**,
+   pas une heuristique de plus : poignee sous le curseur et mode actif, le
+   glisse va a la poignee.
+
+### Decoupage
+
+- **Lot 7** — le geste (L7.1), le roulis dans le modele (L7.2), la designation
+  des poignees + gizmo ROTATE (L7.3). Porte l'essentiel de la plomberie.
+- **Lot 8** — le decalage (L8.1) et le gizmo MOVE (L8.2). Presque gratuit une
+  fois le Lot 7 fait.
+- **Lot 9** — l'acces uniforme aux cotes (L9.1), `redimensionner` avec
+  re-accouplement en cascade (L9.2), gizmo RESIZE (L9.3). Le seul qui touche au
+  catalogue entier.
+
+**Les trois lots sont tres inegaux**, et mieux vaut le savoir avant de commencer.
+Ordre impose : L7.1 d'abord (l'annulation par geste conditionne les trois modes),
+L9 en dernier (le seul non rigide).
+
+### La branche non retenue, ecrite pour qu'elle reste un choix
+
+Si les libertes bornees ne suffisent pas a l'usage, la sortie n'est **pas** de
+les assouplir jusqu'a ce que la piece se detache — on obtiendrait un graphe de
+ports dont les aretes ne veulent plus rien dire. Ce serait une piece
+explicitement **libre** (`hote: None` hors racine, pose absolue serialisee), et
+c'est une decision d'une autre nature. A ne pas commencer avant d'avoir bute sur
+le manque en construisant.
+
+---
+
+## L7.2 — La rotation, sans attendre le gizmo (2026-08-09)
+
+Retour d'usage : *« je n'arrive pas a assembler un vehicule, et je ne peux pas
+tourner mes pieces »*. Les deux moities disent la meme chose — le systeme de
+ports ne laissait **aucune liberte**, donc on ne pouvait pas composer la forme
+qu'on avait en tete.
+
+### La conception surestimait le cout
+
+La section 11.6 posait qu'il fallait d'abord une notion de **geste** dans
+`Chantier` (mutation continue, une seule entree d'historique) « avant d'ecrire le
+premier gizmo ». C'est vrai — **pour un glisse**.
+
+Or **une pression de touche est deja un geste atomique** : une entree
+d'historique, une mutation, rien a bracketer. La rotation au clavier n'a donc
+besoin d'aucune de cette plomberie et pouvait arriver tout de suite. L7.1 reste
+necessaire, mais seulement le jour ou un gizmo se glisse.
+
+### Ce qui a ete fait
+
+- `accoupler_roule(hote, montage, roulis)` — `Quat::from_rotation_z` sur l'axe
+  d'accostage. `accoupler` n'est plus qu'un appel a zero, donc **une seule**
+  formule ; la garde « roulis nul redonne l'accouplement d'origine » protege
+  toutes les pieces posees et toutes les recettes deja ecrites.
+- `Etape.roulis` avec `serde(default)` : les fichiers du Lot 5 se rechargent
+  sans conversion. `depuis_recette` rejoue l'angle — le rejouer a zero aurait
+  rendu une geometrie differente de la sauvegarde, en silence.
+- `Chantier::pivoter(id, roulis)` — angle **absolu**, pas increment (idempotent,
+  donc rejouable et annulable sans surprise). Le sous-arbre suit rigidement, par
+  la machinerie de `deplacer` : les deux partagent desormais
+  `appliquer_delta_bloc`, et c'est le port oublie qui donnerait le defaut le plus
+  discret.
+- Ecran : **R** tourne d'un cran de 15°, **Maj+R** en sens inverse. Piece en
+  main : l'angle se regle avant la pose et le fantome le montre. Piece
+  selectionnee : le chantier tourne, un coup d'historique.
+
+### Les trois defauts d'ecran trouves au passage
+
+Le retour disait aussi « je n'arrive pas a assembler ». La palette allait bien
+(mesuree : 31 entrees, 8 categories, 23 allumees apres un module racine) — c'est
+l'ecran qui ne se laissait pas trouver :
+
+1. **Les huit categories s'ouvraient repliees.** Le choix de L4.2 protegeait la
+   lisibilite, mais l'ecran s'ouvrait sur huit titres et **rien de cliquable** :
+   l'action principale etait invisible. La premiere categorie s'ouvre desormais
+   d'entree — une ouverte, sept fermees, montre le mecanisme *et* donne de quoi
+   commencer.
+2. **Le bandeau depassait de la fenetre.** Une seule ligne de ~180 caracteres,
+   soit bien au-dela de 1280 px : la fin etait coupee, et c'est la fin qui
+   portait les raccourcis. Deux lignes maintenant, la consigne d'abord et en
+   clair, l'aide-memoire en dessous et en gris.
+3. **Le chantier vide ne disait rien.** La consigne existait, en petit, tout en
+   bas, au bout de la ligne coupee. Elle est maintenant au milieu de la vue, la
+   ou l'oeil arrive.
+
+### Red-check : 4 sabotages, et un test renforce
+
+| Sabotage | Rougit |
+|---|---|
+| roulis ignore dans `accoupler_roule` | l'orientation changee **et** le pivot (apres renforcement) |
+| `accoupler` derive de zero | trois tests, dont deux anterieurs au Lot 7 |
+| la recette n'emporte pas le roulis | la survie a l'aller-retour |
+| `pivoter` traite l'angle comme un increment | l'idempotence |
+
+⚠️ **`pivoter_tourne_la_piece_et_son_sous_arbre` passait au vert quand le pivot
+ne faisait rien.** Il verifiait que la piece reste au contact et que le
+sous-arbre garde sa forme — deux invariants qu'une identite satisfait
+parfaitement. Il exige maintenant que le haut de la piece ait **tourne**. Encore
+un test d'invariant qui ne prouvait pas l'effet ; c'est la troisieme fois de ce
+chantier.
+
+**Mesures** : 571 → **579 tests**, 0 avertissement clippy.
+
+---
+
+## Cloture du chantier assembleur (2026-08-09)
+
+**Valide comme fait par l'utilisateur** : *« ca aidera a faire quelques
+vaisseaux »*. L'assembleur passe de chantier en cours a **outil utilisable**.
+
+Ce qui marche de bout en bout : choisir une piece, viser un port, poser ;
+selectionner, tourner, deplacer, retirer ; annuler, refaire, sauver, recharger.
+L'ecran explique ses refus.
+
+| Lot | Contenu | Etat |
+|---|---|---|
+| 1 | Ce qui manquait au modele avant meme de parler d'editeur | fait |
+| 2 | Identifiants stables, retrait, undo/redo, palette, recette | fait |
+| 3 | Pose prevue, sous-arbre, designation ecran | fait |
+| 4 | **L'ecran** : zones, palette, clic, fantome, couleurs, selection, deplacement | fait |
+| 5 | Sauvegarde disque + overlay qui explique le refus | fait |
+| 7 (partiel) | **Rotation** au clavier, roulis dans le modele et la recette | fait |
+
+### Ce qui reste, et qui n'est plus bloquant
+
+- **Lot 6** — dette d'enveloppes de L1.4 (19 variantes qui sous-declarent leur
+  rayon, desormais jugeables a l'oeil grace a l'overlay), composites
+  (`Chantier::figer`, ecrit et sans client), `GenrePort::PoutreBout` sans usage.
+- **Lot 8** — decalage le long de l'axe d'accostage. Meme forme que le roulis :
+  un scalaire dans `accoupler`, un champ `serde(default)` dans `Etape`.
+- **Lot 9** — redimensionnement. Le seul qui touche au catalogue entier, et le
+  seul dont le sous-arbre n'est pas rigide (section 11.5).
+- **L7.1 / L7.3** — le geste continu et les gizmos, **seulement si** le clavier
+  se revele insuffisant a l'usage. La rotation a montre qu'une touche suffit
+  souvent, et que la conception avait surestime le besoin.

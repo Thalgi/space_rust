@@ -40,6 +40,24 @@ impl Piece {
     pub fn centre(&self) -> Vec3 {
         self.transforme.transform_point3(Vec3::ZERO)
     }
+
+    /// Dessine cette pièce seule, à sa pose cuite.
+    ///
+    /// Extraite de [`Station::dessiner`], qui l'appelle désormais en boucle :
+    /// le **fantôme** de l'assembleur (§8.3) est une `Piece` rendue par
+    /// `Chantier::pose_prevue`, et il doit se peindre par le même chemin que le
+    /// vaisseau. Un second chemin de dessin donnerait un fantôme qui ne
+    /// ressemble pas à ce qu'on va obtenir — la variante graphique du fantôme
+    /// qui ment.
+    pub fn dessiner(&self) {
+        unsafe {
+            get_internal_gl().quad_gl.push_model_matrix(self.transforme);
+        }
+        self.composant.dessiner(&mut Immediat);
+        unsafe {
+            get_internal_gl().quad_gl.pop_model_matrix();
+        }
+    }
 }
 
 /// Une station terminée et **immuable**. Construite entièrement (via
@@ -94,13 +112,7 @@ impl Station {
     /// tracé à son composant — c'est le branchement rendu de la couche cuite.
     pub fn dessiner(&self) {
         for p in &self.pieces {
-            unsafe {
-                get_internal_gl().quad_gl.push_model_matrix(p.transforme);
-            }
-            p.composant.dessiner(&mut Immediat);
-            unsafe {
-                get_internal_gl().quad_gl.pop_model_matrix();
-            }
+            p.dessiner();
         }
     }
 

@@ -16,6 +16,7 @@ mod mesure;
 pub(crate) mod maillage;
 mod montage;
 mod peintre;
+pub mod sauvegarde;
 mod pieces;
 mod port;
 mod symetrie;
@@ -36,17 +37,28 @@ pub use mesure::{a_des_mailles, mesurer, silhouette};
 // projette les ports libres à l'écran. `Chantier` lui-même n'est pas encore
 // réexporté : aucune vue n'en tient un avant le Lot 4, et l'exporter à vide
 // ne ferait qu'ajouter un avertissement.
-pub use chantier::PortLibre;
+pub use chantier::{Chantier, PortLibre, Recette};
+pub(crate) use chantier::FACTEUR_COLLISION;
 pub(crate) use composant::{rayon_panache, teinte_panache};
 pub use composant::{
     // `echantillons` est appelée par chemin complet (`crate::vaisseau::…`)
     // depuis `ecran/catalogue.rs` : la réexportation est bien utilisée.
     echantillons,
+    // Palette de l'assembleur (§6.5) : la catégorie d'une variante, et la
+    // duale de `Chantier::compatibles`. Écrites en L2.4, consommées par
+    // l'écran depuis L4.2.
+    categorie, posables, Categorie as CategoriePalette,
     Composant, VariantePanneauMega, VarianteRaptor, DonneesSousEnsemble, FamillePropulsion, PiedHexa, Sorties, StyleTreillis, VarianteAntenne,
     ogive_rayon, BARDAGE_ARC, BOUCLIER_ELANCEMENT, JUPE_COUVERTURE,
     VarianteCaisson, VarianteCharge, VarianteCoiffe, VarianteModule, VariantePanneau,
+    rayon_pour_anneau, VarianteMiroir,
     VariantePropulseur, VarianteRadiateur,
 };
+pub(crate) use composant::grappe_hauteur;
+/// Largeur hors-tout d'une grappe de cuves. Consommée par les tests du
+/// générateur, qui vérifient que la pile polaire **s'affine en descendant**.
+#[cfg(test)]
+pub(crate) use composant::grappe_rayon_hors_tout;
 // `preset_isv` et `preset_isv_hexa` (les vaisseaux **d'un seul tenant**) ne sont
 // volontairement pas réexportés : la vue a besoin des deux moitiés séparément
 // pour ne faire tourner que la section d'équipage, via
@@ -58,7 +70,8 @@ pub use generateur::{
     demo_anneaux, demo_bouclier_grand, demo_bouclier_petit, demo_bouclier_thermique, demo_cargo, demo_charpente, demo_charpente_hexa,
     demo_epine_pavillon, demo_equipage, demo_panneaux_mega, demo_raptor, demo_habitat_isv, demo_moteur_antimatiere,
     demo_moteur_antimatiere_principal, demo_radiateur_mega, demo_reservoir,
-    generer, preset_anneau, preset_elysium, preset_stanford, preset_starship,
+    generer, preset_anneau, preset_elysium, preset_stanford_anneau, preset_stanford_moyeu,
+    preset_starship,
     preset_comsat, preset_iss, preset_isv_equipage, preset_isv_fixe, preset_isv_moteur, preset_mir,
     preset_sonde, preset_tiangong, Epine, EtatEquipage, Ossature,
     ParamsStation, Style, ISV_AXE,
@@ -69,7 +82,7 @@ pub use montage::{
     demo_habitats, demo_panneaux, demo_poutres, demo_propulsion, demo_radiateurs, demo_station,
     demo_treillis,
 };
-pub use port::{accoupler, GenrePort, Port, Repere};
+pub use port::{accoupler, accoupler_roule, GenrePort, Port, Repere};
 pub use symetrie::Symetrie;
 pub use unites::Profil;
 

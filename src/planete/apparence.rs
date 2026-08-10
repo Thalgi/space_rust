@@ -53,7 +53,18 @@ pub struct Apparence {
     pub warp_amt: f32,   // force du domain warping
     pub seed: f32,       // décalage de bruit -> chaque géante est unique
     pub poly_cotes: f32, // vortex polaire : 0 = aucun, sinon nb de côtés (6 = hexagone Saturne)
-    pub atmo: Vec3,      // couleur*intensité du halo atmosphérique (0 = pas d'atmosphère)
+    /// **Teinte** de l'air, vecteur unitaire (voir [`Apparence::avec_air`]).
+    ///
+    /// Ne dit RIEN de la quantité d'air : c'est [`Apparence::atmo_densite`] qui
+    /// la porte. Les deux vivaient dans ce seul `Vec3` — teinte en direction,
+    /// densité en longueur — et l'amalgame rendait inexprimable le cas « épais
+    /// mais sombre » : Vénus, dont le halo est terne, se retrouvait notée deux
+    /// fois plus fine que la Terre alors qu'elle porte 92 bars.
+    pub atmo: Vec3,
+    /// **Densité** de la colonne d'air, 0 = corps nu. Échelle relative, calée
+    /// sur la Terre ≈ 1,07 (l'ancienne longueur de `atmo` pour le bleu océanique) ;
+    /// ce n'est pas une pression, mais ce que l'atmosphère *montre* au limbe.
+    pub atmo_densite: f32,
     pub lave: f32,       // monde de lave : fissures incandescentes émissives (0 = aucun)
     // Telluriques — groupe climatique.
     pub eau_motif: f32,  // 0 océan global, 1 continents, 2 mers intérieures, 3 marais
@@ -129,6 +140,7 @@ impl Apparence {
             seed: 0.0,
             poly_cotes: 0.0,
             atmo: Vec3::ZERO,
+            atmo_densite: 0.0,
             lave: 0.0,
             eau_motif: 1.0,
             grad_lat: 0.3,
@@ -263,8 +275,32 @@ impl Apparence {
         self.riv_lave = 1.0;
         self
     }
-    pub fn avec_atmo(mut self, couleur: Vec3) -> Self {
-        self.atmo = couleur;
+    /// Forme historique : un seul `Vec3` où la teinte est la direction et la
+    /// densité la longueur. Conservée parce que la majorité du catalogue écrit
+    /// encore `teinte * intensité`, et que la scission doit être **neutre** pour
+    /// ces mondes-là : on retrouve exactement l'ancien rendu.
+    ///
+    /// Pour écrire une atmosphère dont la couleur et l'épaisseur ne se déduisent
+    /// pas l'une de l'autre, prendre [`Apparence::avec_air`].
+    pub fn avec_atmo(self, couleur: Vec3) -> Self {
+        self.avec_air(couleur, couleur.length())
+    }
+
+    /// Atmosphère explicite : `teinte` (normalisée ici — l'appelant écrit une
+    /// couleur lisible) et `densite` indépendantes.
+    ///
+    /// Une densité nulle efface la teinte : sans quoi un corps nu garderait une
+    /// couleur d'air, et « pas d'atmosphère » aurait deux écritures possibles —
+    /// que les gardes du catalogue ne sauraient plus distinguer.
+    pub fn avec_air(mut self, teinte: Vec3, densite: f32) -> Self {
+        let densite = densite.max(0.0);
+        if densite <= 0.0 {
+            self.atmo = Vec3::ZERO;
+            self.atmo_densite = 0.0;
+        } else {
+            self.atmo = teinte.normalize_or_zero();
+            self.atmo_densite = densite;
+        }
         self
     }
     pub fn avec_hexagone(mut self) -> Self {

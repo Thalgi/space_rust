@@ -17,7 +17,7 @@
 //! **serre**, et une enveloppe peut contenir la pièce en restant ridiculement
 //! large. Ça, seul l'œil le dit.
 
-use crate::vaisseau::{Enveloppe, Noyau, Station};
+use crate::vaisseau::{Enveloppe, Noyau, Piece, Station};
 use macroquad::prelude::*;
 
 /// Segments du contour d'un anneau. 16 suffit : c'est un repère de débogage,
@@ -33,17 +33,10 @@ const ANNEAUX: usize = 3;
 pub const CALME: Color = Color { r: 0.20, g: 0.65, b: 0.75, a: 1.0 };
 /// Enveloppe de la pièce **proposée** (le fantôme).
 ///
-/// ⚠️ Cette couleur et les trois éléments qui suivent (`REFUS`, [`conflit`],
-/// `plus_proches`) n'ont **pas encore de consommateur** : ils servent l'état
-/// « pièce en main » de l'assembleur, qui attend les identifiants stables de
-/// ports (`suivi/assembleur.md` L2.1). Ils sont écrits maintenant parce que
-/// c'est ce qui a justifié la conception de l'overlay
-/// (`conception/assembleur.md` §8.5) et qu'ils sont testés — pas parce qu'ils
-/// pourraient servir un jour.
-#[allow(dead_code)]
+/// Consommée depuis L5.2 : l'assembleur trace ce conflit dès qu'on vise un port
+/// rouge.
 pub const PROPOSEE: Color = Color { r: 1.00, g: 1.00, b: 1.00, a: 1.0 };
 /// Enveloppe **en cause** dans un refus, et le segment de plus courte approche.
-#[allow(dead_code)]
 pub const REFUS: Color = Color { r: 1.00, g: 0.25, b: 0.20, a: 1.0 };
 
 /// Repère orthonormé dont `w` est l'axe donné. Sert à tracer les anneaux
@@ -145,10 +138,17 @@ fn fil_boudin(centre: Vec3, eu: Vec3, ev: Vec3, hu: f32, hv: f32, r: f32, couleu
     }
 }
 
+/// L'enveloppe d'**une** pièce. Sert au surlignage du sous-arbre sélectionné
+/// dans l'assembleur (L4.5) : le volume que le modèle connaît déjà, plutôt
+/// qu'une seconde géométrie de surlignage inventée pour l'occasion.
+pub fn piece(p: &Piece, couleur: Color) {
+    fil(&p.composant.enveloppe_locale().transformee(p.transforme), couleur);
+}
+
 /// Toutes les enveloppes d'une station, au repos.
 pub fn station(st: &Station, couleur: Color) {
-    for piece in st.pieces() {
-        fil(&piece.composant.enveloppe_locale().transformee(piece.transforme), couleur);
+    for p in st.pieces() {
+        piece(p, couleur);
     }
 }
 
@@ -162,21 +162,22 @@ pub fn station(st: &Station, couleur: Color) {
 /// reprend **exactement** son critère, sinon l'overlay expliquerait un refus
 /// que le modèle n'a pas prononcé, ce qui serait pire que pas d'overlay du tout.
 ///
-/// Renvoie le nombre de gêneurs, pour que la vue puisse l'écrire en clair.
-#[allow(dead_code)]
-pub fn conflit(st: &Station, propose: &Enveloppe, marge: f32, exempte: Option<usize>) -> usize {
+/// Renvoie le nombre de gêneurs et le **manque** le plus criant — l'écart le
+/// plus négatif —, pour que la vue puisse écrire la phrase de §8.5 : *« ce
+/// radiateur est à 1,2 de cette poutre, il en faut 1,8 »*.
+pub fn conflit(
+    st: &Station,
+    propose: &Enveloppe,
+    marge: f32,
+    exempte: Option<usize>,
+) -> (usize, f32) {
     fil(propose, PROPOSEE);
-    let mut gene = 0;
-    for (i, piece) in st.pieces().iter().enumerate() {
-        if Some(i) == exempte {
-            continue;
-        }
+    let genes = gene_par(st, propose, marge, exempte);
+    let mut pire = 0.0_f32;
+    for &(i, manque) in &genes {
+        pire = pire.min(manque);
+        let piece = &st.pieces()[i];
         let sienne = piece.composant.enveloppe_locale().transformee(piece.transforme);
-        let axes = propose.distance_axes(&sienne);
-        if axes >= marge * (propose.rayon + sienne.rayon) {
-            continue;
-        }
-        gene += 1;
         fil(&sienne, REFUS);
         // Le segment de plus courte approche, matérialisé entre les deux
         // **axes** : c'est sur eux que porte le critère, et le montrer entre les
@@ -186,7 +187,44 @@ pub fn conflit(st: &Station, propose: &Enveloppe, marge: f32, exempte: Option<us
         draw_sphere(p, 0.08, None, REFUS);
         draw_sphere(q, 0.08, None, REFUS);
     }
-    gene
+    (genes.len(), pire)
+}
+
+/// **Qui s'oppose à `propose`, et de combien il manque** — la *décision* de
+/// l'overlay, séparée de son dessin (§10.9) et donc testable.
+///
+/// Rend, pour chaque pièce gênante, son indice dans la station et le manque :
+/// distance des axes moins le seuil, donc **négatif**, et c'est exactement ce
+/// qu'il faudrait gagner pour que la pose passe.
+///
+/// ⚠️ Le critère est **littéralement** celui de `Chantier` — distance des axes
+/// contre `marge × (r1 + r2)`. Un overlay qui expliquerait un refus que le
+/// modèle n'a pas prononcé serait pire que pas d'overlay du tout.
+///
+/// ⚠️ **`exempte` n'est pas couvert par les tests.** Le red-check l'a montré :
+/// supprimer l'exemption laisse `loverlay_dit_la_meme_chose_que_le_modele` au
+/// vert. Sur les modules essayés, l'hôte reste hors du seuil même au joint —
+/// `FACTEUR_COLLISION = 0.85` tolère l'adjacence de docking, et l'exemption ne
+/// change alors rien. Elle reste, parce que `Chantier::collision` l'applique et
+/// que les deux doivent dire la même chose sur *toutes* les formes, pas
+/// seulement celles qu'on a essayées ; mais c'est une garde **non exercée**, et
+/// mieux vaut l'écrire que de croire le contraire.
+pub fn gene_par(
+    st: &Station,
+    propose: &Enveloppe,
+    marge: f32,
+    exempte: Option<usize>,
+) -> Vec<(usize, f32)> {
+    st.pieces()
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| Some(*i) != exempte)
+        .filter_map(|(i, piece)| {
+            let sienne = piece.composant.enveloppe_locale().transformee(piece.transforme);
+            let manque = propose.distance_axes(&sienne) - marge * (propose.rayon + sienne.rayon);
+            (manque < 0.0).then_some((i, manque))
+        })
+        .collect()
 }
 
 /// Point du noyau au paramètre `(u, v)` — chacun dans `[0, 1]`. `v` est ignoré
@@ -245,6 +283,62 @@ fn plus_proches(a: &Enveloppe, b: &Enveloppe) -> (Vec3, Vec3) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vaisseau::{Chantier, Composant, Profil, VarianteModule, FACTEUR_COLLISION};
+
+    /// **L'overlay n'explique que des refus que le modèle a prononcés** (§8.5).
+    ///
+    /// La garde vaut dans les deux sens, et c'est le second qui compte : un
+    /// overlay qui dessinerait un conflit là où `peut_poser` accepte ferait
+    /// douter d'une pose parfaitement valide — « pire que pas d'overlay du
+    /// tout », dit la conception.
+    ///
+    /// Vérifié sur le **vrai** critère du modèle (`FACTEUR_COLLISION`), et sur
+    /// une pose fournie par `pose_prevue`, celle-là même que le fantôme montre.
+    #[test]
+    fn loverlay_dit_la_meme_chose_que_le_modele() {
+        let court =
+            Composant::ModuleAxial { profil: Profil::P1, variante: VarianteModule::Standard, longueur: 1.0 };
+        let mut ch = Chantier::new();
+        ch.racine(court.clone());
+        let id = ch.libres()[0].id;
+        assert!(ch.poser(id, court.clone(), 0));
+
+        let station = match ch.apercu() {
+            crate::vaisseau::EtatStation::Prete(s) => s,
+            _ => panic!("chantier vide"),
+        };
+
+        let mut accord_refus = 0;
+        let mut accord_pose = 0;
+        for m in 0..court.ports().len() {
+            for p in ch.libres() {
+                let Some(piece) = ch.pose_prevue(p.id, &court, m) else { continue };
+                let propose = court.enveloppe_locale().transformee(piece.transforme);
+                // Hôte exempté, comme dans l'anti-collision : `apercu` conserve
+                // l'ordre de `Chantier::pieces`, d'où l'indice.
+                let exempte = ch.pieces().position(|(pid, _)| pid == p.origine);
+                let genes = gene_par(&station, &propose, FACTEUR_COLLISION, exempte);
+
+                // `peut_poser` refuse aussi pour incompatibilité de genre ou de
+                // profil ; l'overlay ne parle que d'encombrement. On ne compare
+                // donc que sur les ports que le montage accepte.
+                if !ch.compatibles(&court, m).contains(&p.id) {
+                    continue;
+                }
+                if ch.peut_poser(p.id, &court, m) {
+                    assert!(genes.is_empty(), "overlay : conflit annoncé sur une pose que le modèle accepte");
+                    accord_pose += 1;
+                } else {
+                    assert!(!genes.is_empty(), "overlay : aucun gêneur sur une pose que le modèle refuse");
+                    // Le manque est bien un manque : négatif, donc à combler.
+                    assert!(genes.iter().all(|(_, m)| *m < 0.0), "un « manque » positif");
+                    accord_refus += 1;
+                }
+            }
+        }
+        assert!(accord_pose > 0, "aucune pose acceptée : la moitié de la garde ne s'exerce pas");
+        assert!(accord_refus > 0, "aucune pose refusée : l'autre moitié non plus");
+    }
 
     /// Configurations couvrant les cas où une résolution approchée peut fauter :
     /// croisées, sécantes, parallèles superposées, parallèles disjointes (le

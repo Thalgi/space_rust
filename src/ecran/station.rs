@@ -168,6 +168,10 @@ pub struct VueStation {
     /// Rendu des panaches : un material et ses tampons, gardés d'une frame à
     /// l'autre plutôt que rechargés.
     panaches: RenduPanache,
+    /// Décalage de la colonne d'items, en pixels. Le catalogue a dépassé la
+    /// hauteur de l'écran : sans lui, les dernières briques étaient coupées et
+    /// les lignes tombaient à la taille minimale, donc illisibles.
+    defilement: f32,
 }
 
 impl VueStation {
@@ -199,6 +203,7 @@ impl VueStation {
             regime: 0.0,
             allume: false,
             panaches: RenduPanache::new(),
+            defilement: 0.0,
             equipage: EtatEquipage::Deploye,
         };
         vue.charger();
@@ -327,12 +332,13 @@ impl VueStation {
         let col = liste::colonne(ecran);
         let n = self.items.len();
         draw_rectangle(col.x - 4.0, col.y - 4.0, col.w + 8.0, col.h + 8.0, Color::new(0.02, 0.03, 0.12, 0.92));
-        let h = liste::hauteur_ligne(col, n);
-        let taille = (h * 0.52).clamp(crate::police::TAILLE_MIN, 14.0);
+        // Ligne à hauteur **fixe** : c'est tout l'intérêt du défilement, le
+        // texte cesse de rétrécir quand le catalogue s'allonge.
+        let taille = (liste::LIGNE_DEFIL * 0.52).clamp(crate::police::TAILLE_MIN, 14.0);
         for (i, item) in self.items.iter().enumerate() {
-            let r = liste::ligne(col, n, i);
-            if r.y + r.h > col.y + col.h {
-                break; // déborde : on ne dessine pas hors de la colonne
+            let r = liste::ligne_defilee(col, i, self.defilement);
+            if !liste::ligne_visible(col, r) {
+                continue; // hors champ : on saute, sans arrêter la boucle
             }
             let courant = i == self.idx % n;
             let survol = r.contains(souris);
@@ -345,8 +351,14 @@ impl VueStation {
             let texte = liste::tronquer(liste::abrege(&item.libelle), r.w - 8.0, taille as u16);
             crate::police::texte(&texte, r.x + 4.0, r.y + r.h * 0.5 + taille * 0.35, taille, fg);
         }
+        // L'ascenseur, seulement s'il y a de quoi défiler : une barre qui
+        // remplit toute sa glissière n'apprend rien.
+        if let Some((rail, curseur)) = liste::ascenseur(col, n, self.defilement) {
+            draw_rectangle(rail.x, rail.y, rail.w, rail.h, Color::new(0.06, 0.10, 0.16, 0.9));
+            draw_rectangle(curseur.x, curseur.y, curseur.w, curseur.h, Color::new(0.0, 0.70, 0.70, 1.0));
+        }
         if clic {
-            liste::item_sous_curseur(col, n, souris)
+            liste::item_sous_curseur_defile(col, n, self.defilement, souris)
         } else {
             None
         }
@@ -563,6 +575,17 @@ impl VueStation {
         // il serait effacé par le `clear_background` du rendu 3D qui suit.
         let sur_liste = liste::sur_la_liste(vec2(screen_width(), screen_height()), m);
         self.cam.input_orbite(sur_liste);
+        // La molette défile la colonne quand le curseur est dessus. `sur_liste`
+        // a déjà retiré à la caméra le glisser **et** le zoom : la roue est donc
+        // libre, sans nouvelle règle de priorité à inventer.
+        if sur_liste {
+            let (_, roue) = mouse_wheel();
+            if roue != 0.0 {
+                let col = liste::colonne(vec2(screen_width(), screen_height()));
+                self.defilement =
+                    liste::borner_defilement(col, self.items.len(), self.defilement - roue * liste::LIGNE_DEFIL);
+            }
+        }
 
         let aspect = screen_width() / screen_height();
         let (cam_info, mut cam3d) = self.cam.construire(Vec3::ZERO, aspect);

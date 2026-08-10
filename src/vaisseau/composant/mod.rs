@@ -32,6 +32,7 @@ pub use panneau_solaire::VariantePanneau;
 pub use antenne::VarianteAntenne;
 mod caisson;
 pub use caisson::{VarianteCaisson, VarianteCharge};
+pub use miroir::{rayon_pour_anneau, VarianteMiroir};
 mod bouclier;
 mod panache;
 mod panneau_mega;
@@ -42,6 +43,16 @@ pub(crate) use panache::{rayon as rayon_panache, teinte as teinte_panache};
 mod thermique;
 mod coque;
 mod raptor;
+mod grappe;
+/// Cotes d'une grappe de cuves, exposées pour que le générateur puisse **caler
+/// la pile sur le bout du mât** au lieu de la faire flotter au jugé, et
+/// comparer sa largeur à celle de la couronne d'habitat au-dessus.
+pub(crate) use grappe::hauteur as grappe_hauteur;
+#[allow(unused_imports)] // consommee par les tests du generateur.
+pub(crate) use grappe::rayon_hors_tout as grappe_rayon_hors_tout;
+mod hangar;
+mod miroir;
+mod module_arc;
 mod tore;
 /// Section du bardage thermique, exposée pour que l'assemblage puisse vérifier
 /// qu'il **épouse** l'épine. C'est la surface qui se plaque sur la poutre — la
@@ -313,6 +324,60 @@ pub enum Composant {
         jonctions: usize,
         phase: f32,
     },
+    /// **Miroir primaire** d'un tore de Stanford (`miroir.rs`). Grand disque
+    /// reflechissant, legerement creux, monte sur un mat.
+    ///
+    /// Contrairement au tore, il **expose un port** : c'est ce qui le rend
+    /// constructible dans l'assembleur, et une piece de cette portee ne sert a
+    /// rien si on ne peut pas l'accrocher.
+    Miroir {
+        profil: Profil,
+        variante: miroir::VarianteMiroir,
+        rayon: f32,
+        /// Fleche au centre, en fraction du rayon. 0 = parfaitement plat.
+        creux: f32,
+    },
+    /// **Module en coin d'arc** de l'Endurance (`module_arc.rs`) : une section
+    /// de caisson **a faces planes** balayee le long d'un arc.
+    ///
+    /// Douze d'entre eux, chaines par leurs ports de bout, ferment un anneau de
+    /// 28,4 U de diametre. Ce n'est deliberement pas un `Tore` : la section de
+    /// l'Endurance est facettee, pas de revolution.
+    /// **Grappe de réservoirs** (`grappe.rs`) : trois cuves sphériques par
+    /// rangée, en triangle autour de l'axe, sur plusieurs rangées empilées.
+    ///
+    /// Une **seule** pièce : le parc n'avait que le réservoir unitaire, et une
+    /// soute d'ergols se construisait donc cuve par cuve, sans qu'aucune
+    /// opération ne traite la grappe comme un tout.
+    GrappeReservoirs {
+        profil: Profil,
+        /// Rayon d'une cuve. La disposition en découle — voir `rayon_disposition`.
+        rayon_cuve: f32,
+        rangees: usize,
+    },
+    /// **Hangar** (`hangar.rs`) : un fût d'habitat prolongé d'une baie
+    /// parallélépipédique qui abrite les engins.
+    ///
+    /// Le parc savait faire des cylindres et des caissons, mais rien qui
+    /// **abrite** — pas de volume creux avec une porte par où sort un vaisseau.
+    Hangar {
+        profil: Profil,
+        variante: hangar::VarianteHangar,
+        /// Longueur du fût cylindrique, avant la baie.
+        fut: f32,
+        /// Profondeur de la baie.
+        baie: f32,
+    },
+    ModuleArc {
+        profil: Profil,
+        variante: module_arc::VarianteArc,
+        /// Rayon majeur de l'anneau auquel ce module appartient.
+        rayon: f32,
+        /// Angle couvert, en radians.
+        arc: f32,
+        /// Cote du caisson (section carree).
+        section: f32,
+    },
     /// **Coque a ogive tangente** : le fut cylindrique d'un lanceur, ferme par
     /// un nez dont la pente rejoint le fut **sans cassure**. C'est la forme du
     /// Starship, et la raison du choix est geometrique et non stylistique : une
@@ -537,6 +602,10 @@ impl Composant {
             Composant::Panache { .. } => "PANACHE",
             Composant::PanneauMega { .. } => "PANNEAU MEGA",
             Composant::Tore { .. } => "TORE",
+            Composant::Miroir { .. } => "MIROIR",
+            Composant::GrappeReservoirs { .. } => "GRAPPE RESERVOIRS",
+            Composant::Hangar { .. } => "HANGAR",
+            Composant::ModuleArc { .. } => "MODULE ARC",
             Composant::CoqueOgive { .. } => "COQUE OGIVE",
             Composant::JupeMoteur { .. } => "JUPE MOTEUR",
             Composant::Volet { .. } => "VOLET",
@@ -583,6 +652,12 @@ impl Composant {
             Composant::Panache { .. } => vec![],
             Composant::PanneauMega { profil, .. } => panneau_mega::ports(*profil),
             Composant::Tore { .. } => vec![],
+            Composant::Miroir { profil, .. } => miroir::ports(*profil),
+            Composant::GrappeReservoirs { profil, rayon_cuve, rangees } => {
+                grappe::ports(*profil, *rayon_cuve, *rangees)
+            }
+            Composant::Hangar { profil, fut, baie, .. } => hangar::ports(*profil, *fut, *baie),
+            Composant::ModuleArc { profil, rayon, arc, .. } => module_arc::ports(*profil, *rayon, *arc),
             Composant::CoqueOgive { profil, longueur, nez } => coque::ports(*profil, *longueur, *nez),
             Composant::JupeMoteur { profil, longueur } => coque::jupe_ports(*profil, *longueur),
             Composant::Volet { .. } => coque::volet_ports(),
@@ -611,6 +686,16 @@ impl Composant {
         match self {
             Composant::ModuleAxial { profil, longueur, variante } => module_axial::dessiner(p, *profil, *variante, *longueur),
             Composant::Noeud { profil, sorties } => noeud::dessiner(p, *profil, *sorties),
+            Composant::Miroir { variante, rayon, creux, .. } => miroir::dessiner(p, *variante, *rayon, *creux),
+            Composant::GrappeReservoirs { rayon_cuve, rangees, .. } => {
+                grappe::dessiner(p, *rayon_cuve, *rangees)
+            }
+            Composant::Hangar { profil, variante, fut, baie } => {
+                hangar::dessiner(p, *variante, *profil, *fut, *baie)
+            }
+            Composant::ModuleArc { variante, rayon, arc, section, .. } => {
+                module_arc::dessiner(p, *variante, *rayon, *arc, *section)
+            }
             Composant::PanneauSolaire { variante, longueur, largeur, .. } => panneau_solaire::dessiner(p, *variante, *longueur, *largeur),
             Composant::Treillis { profil, longueur, style } => treillis::dessiner(p, *profil, *longueur, *style),
             Composant::Radiateur { variante, longueur, largeur, .. } => radiateur::dessiner(p, *variante, *longueur, *largeur),
@@ -713,6 +798,10 @@ impl Composant {
             Composant::Panache { .. } => panache::cout(),
             Composant::PanneauMega { longueur, largeur, .. } => panneau_mega::cout(*longueur, *largeur),
             Composant::Tore { rayon_majeur, .. } => tore::cout(*rayon_majeur),
+            Composant::Miroir { variante, rayon, .. } => miroir::cout(*variante, *rayon),
+            Composant::GrappeReservoirs { rayon_cuve, rangees, .. } => grappe::cout(*rayon_cuve, *rangees),
+            Composant::Hangar { profil, variante, baie, .. } => hangar::cout(*variante, *profil, *baie),
+            Composant::ModuleArc { variante, .. } => module_arc::cout(*variante),
             Composant::CoqueOgive { longueur, nez, .. } => coque::cout(*longueur, *nez),
             Composant::JupeMoteur { longueur, .. } => coque::jupe_cout(*longueur),
             Composant::Volet { longueur, corde, .. } => coque::volet_cout(*longueur, *corde),
@@ -806,6 +895,12 @@ impl Composant {
             Composant::Panache { .. } => panache::rayon_local(),
             Composant::PanneauMega { longueur, largeur, .. } => panneau_mega::rayon_local(*longueur, *largeur),
             Composant::Tore { rayon_majeur, rayon_mineur, .. } => tore::rayon_local(*rayon_majeur, *rayon_mineur),
+            Composant::Miroir { rayon, creux, .. } => miroir::rayon_local(*rayon, *creux),
+            Composant::GrappeReservoirs { rayon_cuve, rangees, .. } => {
+                grappe::rayon_local(*rayon_cuve, *rangees)
+            }
+            Composant::Hangar { profil, fut, baie, .. } => hangar::rayon_local(*profil, *fut, *baie),
+            Composant::ModuleArc { rayon, arc, section, .. } => module_arc::rayon_local(*rayon, *arc, *section),
             Composant::CoqueOgive { profil, longueur, nez } => coque::rayon_local(*profil, *longueur, *nez),
             Composant::JupeMoteur { profil, longueur } => coque::jupe_rayon_local(*profil, *longueur),
             Composant::Volet { longueur, corde, .. } => coque::volet_rayon_local(*longueur, *corde),
@@ -932,6 +1027,38 @@ impl Composant {
             // L'aile pivote : la sphère couvre toutes ses orientations.
             Composant::PanneauMega { .. } => centree(),
             Composant::Tore { .. } => centree(),
+            // ⚠️ Même limite que le tore, et pour la même raison : un disque
+            // très large est mal servi par une sphère, qui réserve autant de
+            // volume **devant et derrière** que sur les côtés. C'est le cas
+            // d'usage du « boudin » (§9) — noyau rectangle — et il vaudra la
+            // peine d'y passer si un miroir doit un jour côtoyer autre chose
+            // que le vide. Tant qu'il coiffe un anneau, la sphère suffit.
+            Composant::Miroir { .. } => centree(),
+            // Grappe : capsule le long de l'axe, gonflée du rayon hors-tout —
+            // une sphère centrée réserverait tout le volume au-dessus et
+            // au-dessous d'une pile qui est franchement allongée.
+            Composant::GrappeReservoirs { rayon_cuve, rangees, .. } => Enveloppe::capsule(
+                Vec3::ZERO,
+                Vec3::new(0.0, 0.0, grappe::hauteur(*rayon_cuve, *rangees)),
+                grappe::rayon_hors_tout(*rayon_cuve),
+            ),
+            // Hangar : capsule du pied du fût au fond de la baie. Le rayon est
+            // le cercle **circonscrit à l'hexagone** de la baie, qui déborde le
+            // cylindre. Pas la demi-diagonale d'une boîte englobante : le coin
+            // qu'elle réserverait est un vide réel, où l'on doit pouvoir poser.
+            Composant::Hangar { profil, fut, baie, .. } => Enveloppe::capsule(
+                Vec3::ZERO,
+                Vec3::new(0.0, 0.0, *fut + *baie),
+                hangar::rayon_section(*profil),
+            ),
+            // Le module d'arc est allongé le long de sa corde : capsule de
+            // l'origine au bout de l'arc, plutôt qu'une sphère qui réserverait
+            // tout le disque intérieur de l'anneau — là où passent justement
+            // les autres modules.
+            Composant::ModuleArc { rayon, arc, section, .. } => {
+                let bout = module_arc::bout(*rayon, *arc);
+                Enveloppe::capsule(Vec3::ZERO, bout, *section * 0.5 * 2.0_f32.sqrt())
+            }
             // Coque et moteur : deux fuseaux couches sur +Z, centres sur
             // l'origine. Le rayon de la capsule est le rayon **hors-tout** de
             // chaque module — cordons de soudure et cannelures compris. Les
@@ -1079,7 +1206,31 @@ fn suivante(c: &Composant) -> Option<Composant> {
             inclinaison: 0.3,
         },
         Composant::PanneauMega { .. } => Composant::Tore { rayon_majeur: 12.0, rayon_mineur: 1.5, segments: 48, anneaux: 12, jonctions: 3, phase: 0.5 },
-        Composant::Tore { .. } => Composant::CoqueOgive { profil: Profil::P2, longueur: 8.0, nez: 3.0 },
+        Composant::Tore { .. } => Composant::Miroir {
+            profil: Profil::P1,
+            variante: miroir::VarianteMiroir::Primaire,
+            rayon: 6.0,
+            creux: 0.06,
+        },
+        Composant::Miroir { .. } => Composant::GrappeReservoirs {
+            profil: Profil::P1,
+            rayon_cuve: 0.8,
+            rangees: 3,
+        },
+        Composant::GrappeReservoirs { .. } => Composant::Hangar {
+            profil: Profil::P2,
+            variante: hangar::VarianteHangar::Ouvert,
+            fut: 3.0,
+            baie: 5.0,
+        },
+        Composant::Hangar { .. } => Composant::ModuleArc {
+            profil: Profil::P2,
+            variante: module_arc::VarianteArc::Habitat,
+            rayon: 14.2,
+            arc: module_arc::arc_endurance(),
+            section: 2.0,
+        },
+        Composant::ModuleArc { .. } => Composant::CoqueOgive { profil: Profil::P2, longueur: 8.0, nez: 3.0 },
         Composant::CoqueOgive { .. } => Composant::JupeMoteur { profil: Profil::P2, longueur: 2.0 },
         Composant::JupeMoteur { .. } => Composant::Volet { longueur: 3.0, corde: 2.0, braquage: 0.6 },
         Composant::Volet { .. } => Composant::BardageTuiles { profil: Profil::P2, longueur: 6.0, nez: 2.0, arc: coque::BARDAGE_ARC },
@@ -1132,7 +1283,6 @@ pub fn echantillons() -> Vec<Composant> {
 /// prises »). Pure organisation de menu : ne change rien à ce qui se pose où,
 /// seul [`Composant::ports`] en décide.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
 pub enum Categorie {
     Structure,
     Habitat,
@@ -1165,7 +1315,6 @@ impl Categorie {
         Categorie::Effet,
     ];
 
-    #[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
     pub fn nom(self) -> &'static str {
         match self {
             Categorie::Structure => "STRUCTURE",
@@ -1186,7 +1335,6 @@ impl Categorie {
 /// d'échantillons ci-dessus : ajouter une variante à `Composant` casse la
 /// compilation ici — la couverture de la palette est une propriété du
 /// compilateur, pas une discipline à se rappeler.
-#[allow(dead_code)] // Libelle du catalogue de l'assembleur (Lot 4) : ecrit avec la brique, consomme par l'ecran.
 pub fn categorie(c: &Composant) -> Categorie {
     match c {
         Composant::ModuleAxial { .. }
@@ -1231,6 +1379,12 @@ pub fn categorie(c: &Composant) -> Categorie {
         | Composant::BouclierThermique { .. }
         | Composant::Charniere { .. }
         | Composant::Tore { .. } => Categorie::PoseeAMain,
+        // Le miroir se **monte** (port de mat), le module d'arc se **chaine** :
+        // les deux ont des ports, donc leur place est dans la palette.
+        Composant::Miroir { .. } => Categorie::Energie,
+        Composant::GrappeReservoirs { .. } => Categorie::Propulsion,
+        Composant::Hangar { .. } => Categorie::Cargo,
+        Composant::ModuleArc { .. } => Categorie::Habitat,
         Composant::Panache { .. } => Categorie::Effet,
     }
 }
@@ -1243,7 +1397,6 @@ pub fn categorie(c: &Composant) -> Categorie {
 ///
 /// Chaque entrée est un échantillon représentatif ([`echantillons`]) et
 /// l'indice de son port de montage — le premier compatible, s'il y en a un.
-#[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
 pub fn posables(genre: GenrePort, profil: Profil) -> Vec<(Composant, usize)> {
     echantillons()
         .into_iter()
@@ -3670,7 +3823,7 @@ mod tests {
         // développeur est alors déjà dans ce fichier (le `match` de `suivante`
         // ne compile plus sans lui), et bumper ce nombre est la confirmation
         // qu'il a bien recousu la chaîne au lieu de la court-circuiter.
-        assert_eq!(ech.len(), 39, "la chaîne ne visite pas les 39 variantes");
+        assert_eq!(ech.len(), 43, "la chaîne ne visite pas les 43 variantes");
     }
 
     // ================================================================

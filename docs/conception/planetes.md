@@ -706,7 +706,7 @@ mondes qui n'en ont pas (lacs du priority-flood rendus en eau sur la Lune…).
 Deux garde-fous :
 
 1. **Régime hydrologique branché dans le shader** (§ 10.2, réalisé) :
-   - pas d'atmosphère NI de voile (`atmo + voile ≈ 0`) → aucun liquide, le
+   - pas d'atmosphère NI de voile (`atmo_densite + voile ≈ 0`) → aucun liquide, le
      flux est ignoré (Lune, Mercure, Carbone…) ;
    - air mais `eau ≈ 0` → salines/playas claires dans les cuvettes, oueds
      (lits à sec sombres) pour les rivières — jamais d'eau bleue ni de reflet ;
@@ -763,10 +763,16 @@ haute couche voit encore l'étoile quand le sol est dans l'ombre), éclairage
 multi-source identique au corps, et **diffusion vers l'avant** — à contre-jour
 la lumière rase la coquille sans dévier et l'arc du limbe s'embrase.
 
-**Teinte et densité** viennent de `atmo` *et* de `voile` : sans le voile, le
-halo de Vénus serait bleu clair au lieu de jaune épais.
+**Teinte et densité sont deux champs distincts** (depuis le 2026-08-09) :
+`atmo` est une teinte **unitaire**, `atmo_densite` porte seule la quantité d'air,
+et `voile` s'ajoute aux deux — sans lui, le halo de Vénus serait bleu clair au
+lieu de jaune épais. Les deux vivaient dans un seul `Vec3` (teinte en direction,
+densité en longueur), ce qui rendait **inécrivable** le cas « épais mais terne » :
+Vénus, 92 bars, se retrouvait notée deux fois plus fine que la Terre. Écriture
+historique préservée par `avec_atmo(teinte × intensité)`, qui fait la scission
+lui-même ; `avec_air(teinte, densite)` pour les cas où les deux divergent.
 
-**Coût.** La passe est sautée si `atmo == 0`, ou si la coquille tient dans moins
+**Coût.** La passe est sautée si `atmo_densite == 0`, ou si la coquille tient dans moins
 de `ATMO_PX_MIN = 0.75` px — en vue système, des dizaines de corps de quelques
 pixels ne paient rien.
 
@@ -778,9 +784,9 @@ sur du vide. C'est cette unification qui a permis d'**épaisser la coquille de
 
 **Ce que l'épaisseur ne règle pas.** Élargir la coquille élargit la bande ; elle
 ne l'éclaircit pas. Un corps à atmosphère ténue reste pâle parce que son plafond
-est sa **densité** — Mars plafonne à 31 % au limbe avec `|atmo| = 0.105`, que la
-coquille fasse 5 % ou 10 %. Les deux réglages sont indépendants : `DISC` pour la
-largeur, `atmo`/`voile` pour l'éclat.
+est sa **densité** — Mars plafonnait à 31 % au limbe avec `atmo_densite = 0.105`,
+que la coquille fasse 5 % ou 10 %. Les deux réglages sont indépendants : `DISC`
+pour la largeur, `atmo_densite`/`voile` pour l'éclat.
 
 **Bornes de l'épaisseur.** Le quad doit tenir dans le cadrage : galerie et
 vignettes regardent de 3 r avec un fov de 45°, soit 1,243 r de demi-hauteur de
@@ -861,8 +867,9 @@ Revu pour couvrir les besoins du catalogue. `*` = déjà présent dans `Apparenc
    dunes, mesas/canyons, orgues basaltiques, pics de glace, dunes de glace, récifs,
    terrasses, strates colorées (Striped/Sodalite), plaines lisses.
 6. **Couche nuageuse** — densité + vitesse + couleur (Thunderstorm/Storm/Fog/Dust Storm).
-7. **Atmosphère / voile** `atmo`* — couleur + densité du halo ; voile opaque qui cache
-   le sol (Vénus jaune, Titan orange, Fog blanc).
+7. **Atmosphère / voile** `atmo`* (teinte unitaire) + `atmo_densite`* (quantité d'air,
+   champs **séparés** — voir § 14) ; voile opaque qui cache le sol (Vénus jaune,
+   Titan orange, Fog blanc).
 8. **Calottes polaires** — latitude de la banquise, fonction de la température.
 9. **Émissif** — `lave`* (fissures), + cryovolcans (points), bioluminescence + lumières
    de villes côté nuit (déjà pour océans).

@@ -1,6 +1,6 @@
 use super::eruptions::EtatBoucle;
 use super::{Soleil, MAX_TACHES};
-use crate::astre::CameraInfo;
+use crate::astre::{Astre, CameraInfo};
 use crate::impostor::push_quad;
 use macroquad::models::{draw_mesh, Mesh, Vertex};
 use macroquad::prelude::*;
@@ -11,7 +11,11 @@ const QUADS_PAR_LOT: usize = 200;
 impl Soleil {
     pub(super) fn dessiner(&mut self, cam: &CameraInfo) {
         let c = self.base.position;
-        let r = self.base.rayon;
+        // Rayon DESSINÉ : plancher en pixels (voir `soleil::PX_MIN`). Tout ce
+        // qui suit en dérive — quad, boucles, éjections, occultation. Reprendre
+        // `base.rayon` pour l'un d'eux détacherait les protubérances de la
+        // surface et les ferait masquer par une sphère de la mauvaise taille.
+        let r = self.rayon_dessine(cam.pos);
         let rot = self.temps * 0.12;
 
         // ---- 1) Corps : quad + shader ----

@@ -20,7 +20,7 @@ sur un fichier contenant du travail non commité. Pour annuler ses propres
 modifications : ré-éditer les lignes, ou sauvegarder le fichier dans le
 scratchpad **avant** de le toucher (red-checks compris).
 
-État vérifié : **522 tests verts**, **`cargo clippy --all-targets` : 0 avertissement**.
+État vérifié : **622 tests verts**, **`cargo clippy --all-targets` : 0 avertissement**.
 
 ## Chantier courant : finir les planètes et la vue système
 
@@ -634,6 +634,55 @@ assume que le détail stellaire ne se voit qu'en approchant, soit on exagère le
 rayon des étoiles en vue système comme les jeux le font couramment. Je ne tranche
 pas — c'est un parti pris visuel.
 
+#### P.3 bis — Tranché : plancher à 8 px (2026-08-09)
+
+**La mesure a changé la question.** Un plancher ne peut pas livrer ce qui avait
+lancé le chantier :
+
+| ce qu'on veut voir | rayon nécessaire |
+|---|---|
+| disque rond, teinte, assombrissement du limbe | ~4 px |
+| taches (`taille ≈ 0,2 r`) lisibles comme des marbrures | ~10 px |
+| **boucles d'éruption** (dessinées à `r × 0,05`) | **20 px pour atteindre LE pixel, 60 pour se lire comme une arche** |
+
+Or au cadrage par défaut l'orbite de Mercure fait **19 px de rayon**. Un plancher
+assez grand pour montrer les éruptions ferait un Soleil **plus large que toute
+l'orbite de Mercure**. Cette option est morte : le plancher achète « ça se lit
+comme une étoile », pas « ça se lit comme une étoile ACTIVE ». Les protubérances
+restent la récompense de l'approche.
+
+`soleil::PX_MIN = 8.0`. Conséquence mesurée : le Soleil dessiné fait **7,90
+unités, soit 42 % du rayon de l'orbite de Mercure** (18,72). Les corps étaient
+**déjà** grossis d'un facteur fixe 5 (`ECHELLE_CORPS`, distances laissées
+vraies) : le plancher ne crée pas l'exagération, il la rend dépendante de la
+distance — et il **s'efface** dès que la taille vraie dépasse 8 px, sans saut (le
+facteur vaut exactement 1 à la traversée).
+
+**Trois pièges, tous réels, tous traités :**
+
+1. **La cible de clic serait restée sur le rayon physique.** `Systeme::pick`
+   lisait `corps().rayon` : l'étoile serait devenue un disque de 8 px qu'il
+   faudrait toucher à 1,6 px près. D'où `Astre::rayon_dessine(cam_pos)` — une
+   **seule** source de taille, lue par le rendu ET par la sélection.
+2. **Les protubérances se seraient détachées.** `point_boucle`, la taille des
+   billboards et `cache_par_sphere` prenaient tous `base.rayon`. Un seul oublié
+   et les arches flottent à côté d'une sphère d'occultation de la mauvaise
+   taille. `dessiner` dérive désormais tout d'un unique `r`.
+3. **La garde existante ne voyait rien.** `presets.rs` teste
+   `R_SOLEIL < 0.39 · UA · 0.25` — sur la **constante**. Un plancher agrandit au
+   moment du dessin et passe devant elle sans la déclencher. Garde ajoutée sur la
+   taille effectivement peinte.
+
+**Une quatrième copie de `VIEWPORT_H` aurait été de trop.** `planete` et `disque`
+en tenaient chacun une, réglées en cascade par les appelants — et `galerie.rs` ne
+réglait déjà que celle de `planete`, donnant aux anneaux le LOD du plein écran
+dans une cellule. L'étoile en a besoin **hors du chemin de dessin** (`pick`), où
+personne n'aurait pensé à la poser. Cellule unique dans `impostor`, les deux
+setters publics délèguent : aucun site d'appel n'a bougé.
+
+`camera::DIST_DEFAUT` : le cadrage de référence (1 280) était écrit deux fois
+dans `skymap`, avec un commentaire promettant qu'elles restaient égales.
+
 #### 2. L'horloge — ça, c'était un vrai défaut, corrigé
 
 `Systeme::update` passait **la même cadence** aux orbites et à l'animation propre
@@ -904,10 +953,58 @@ effet ; les refaire au raisonnement serait deviner deux fois de suite.
 
 Le défaut de structure, si le rendu le confirme : **un seul nombre porte deux
 sens** — l'éclat de la teinte et la quantité d'air. Vénus demande *sombre et
-épais*, ce que `atmo` seul ne sait pas dire. La correction propre est un champ
-`atmo_densite` distinct, dérivé par défaut du groupe climatique pour que
-l'essentiel des 161 entrées ne bouge pas. Édition à l'échelle du catalogue :
-signalée, pas engagée.
+épais*, ce que `atmo` seul ne sait pas dire.
+
+### P.1 ter — La scission `atmo` / `atmo_densite` (2026-08-09)
+
+Faite. `Apparence::atmo` est désormais une **teinte unitaire** ; `atmo_densite`
+porte seule la quantité d'air. Le shader ne calcule plus `length(atmo)` et ne
+normalise plus : les deux arrivent séparés.
+
+**La migration est neutre par construction.** `avec_atmo(v)` — l'écriture
+historique `teinte × intensité`, que garde la quasi-totalité des 161 entrées —
+pose `densite = |v|` et `teinte = v.normalisé`. On retrouve exactement l'ancien
+rendu ; test `lecriture_historique_de_latmosphere_est_preservee`. Le nouveau
+constructeur `avec_air(teinte, densite)` sert aux entrées corrigées.
+
+Quatre corrections délibérées, toutes le même cas : **épais mais terne**, qui
+n'était pas *mal évalué* mais **inécrivable** — un halo sombre ne pouvait se
+noter que comme un halo mince.
+
+| monde | avant | après | pourquoi |
+|---|---|---|---|
+| Vénus | 0.276 | **1.45** | 92 bars ; ne s'en sortait que par le terme `voile` |
+| Titan | 0.313 | **1.20** | 1,5 bar, brume à 600 km — la couche la plus haute |
+| Hycean | 0.587 | **1.30** | enveloppe épaisse de vapeur : c'est sa définition |
+| Ash | 0.000 | **0.32** | des cendres en suspension **sont** de l'air |
+
+Plafond de densité du shader porté de 1.6 à 2.4 (`PLAFOND`) : Vénus et Titan
+saturaient tous deux au même halo et cessaient de se distinguer. **Aucun monde
+antérieur n'atteignait 1.6** (le plus dense sortait à 0,99) — relever ne change
+rien à l'existant.
+
+Trois effets de bord traités :
+
+- `atmo` **n'est plus déclaré** dans `planete.frag.glsl` : le corps ne peint plus
+  le halo, il lui suffit de savoir qu'il y a de l'air. Les deux portes
+  (hydrologie, nuages) lisaient `atmo.r + atmo.g + atmo.b + voile` — une somme
+  qui vaudrait ~1,7 sur un caillou nu maintenant que la teinte est unitaire.
+  Elles lisent `atmo_densite + voile`. **C'est `aucun_uniform_du_corps_n_est_ignore`
+  qui a attrapé l'uniform devenu mort**, sans que je l'aie vu : le garde a servi.
+- `genese::apparences::gazeuse` écrivait `a.atmo = atmo` **en direct**, court-circuitant
+  le constructeur. Passée par `avec_atmo`.
+- Donner de l'air à Ash lui ouvrait la garde « ni air ni eau → pas de villes » :
+  un monde de cendre et de lave se serait mis à briller de lumières urbaines côté
+  nuit (le shader ne bloque qu'au-delà de `lave >= 0.5`, et Ash est à 0,3).
+  `villes = 0` posé explicitement, avec sa raison.
+
+⚠️ **Un test écrit puis jeté.** La première version de la garde cherchait un
+monde « plus dense ET moins lumineux que la Terre » — censé être impossible sous
+l'ancien encodage. Elle est partie rouge, et **elle avait tort** : une teinte
+ramenée à la norme 1 voit sa luminance dictée par sa *couleur* (le bleu pèse 0,07
+en Rec. 709, le jaune 0,93), pas par son épaisseur. Elle mesurait la teinte en
+croyant mesurer l'air. Remplacée par la préservation de l'écriture historique,
+qui est vérifiable. La note est gardée dans le test.
 
 ### P.2 — Ceintures : mesuré (2026-08-08). ⚠️ **Il n'y a rien à optimiser là.**
 
@@ -1646,9 +1743,9 @@ source** (`include_str!`). Inhabituel, mais c'est le seul garde possible ici.
 
 | Chantier | Où on en est | Reprendre par |
 |---|---|---|
-| **Assembleur** (Lot 4) | Lots 1–3 clos, Lot 4 conçu, pas commencé | `conception/assembleur.md` §10, puis L4.1 |
+| **Assembleur** | Lots 4–5 clos ; **rotation (R) faite** sans attendre le gizmo | Lot 8 (décalage) et Lot 9 (redimensionnement) |
 | **Starship** ✅ **5/5** | Coque, 6 Raptor, jupe, 4 volets droits, bardage de tuiles (fût **et** ogive) et 2 hublots. Exposé **debout**, moteurs en bas. | Vaisseau **mobile** (transferts entre astres) |
-| **Endurance** | Rien | `conception/stations.md` Partie D bis |
+| **Endurance** | **Module en coin d'arc fait** (brique seule, §D.5 étape 4) | assembler l'anneau à douze, §D.5 étape 5 |
 
 ## L'assembleur, en résumé
 
@@ -1661,12 +1758,18 @@ Starship sont journalisés en **Partie F** du même fichier.
 | **§9** « le boudin » | Enveloppe **rectangle** pour les plaques, distances exactes | ✅ |
 | **Lot 2** (L2.1–L2.5) | Modèle du `Chantier` : identifiants stables, `retirer`, undo/redo, palette, sérialisation | ✅ |
 | **Lot 3** (L3.1–L3.3) | `pose_prevue` (fantôme), `sous_arbre`, désignation port/pièce | ✅ |
-| **Lot 4** (L4.1–L4.5) | **L'écran d'assemblage** | ⏸ conçu, pas commencé |
-| **Lot 5** | Sauvegarde disque (L5.1), overlay §8.5 (L5.2) | à faire |
+| **Lot 4** (L4.1–L4.6) | **L'écran d'assemblage**, déplacement compris | ✅ |
+| **Lot 5** | Sauvegarde disque (L5.1), overlay §8.5 (L5.2) | ✅ |
 | **Lot 6** | Arbitrage L1.4 (L6.1), composites `figer` (L6.2), `PoutreBout` (L6.3) | à faire |
 
-Le modèle répond aux quatre questions de §8 et **aucun écran ne le consomme
-encore**. Premier geste de L4.1 : réexporter `Chantier` depuis `vaisseau`.
+Le modèle répond aux quatre questions de §8, et **un écran le consomme enfin** :
+`ecran::assembleur::VueAssembleur`. `Chantier` est réexporté, et
+`Chantier::apercu` lui donne une station sans le consommer (voir
+`suivi/assembleur.md` § L4.1).
+
+**Arbitrage §10.7 (b) rendu** (2026-08-09) : quitter l'écran détruit le
+chantier, et on l'assume jusqu'à la sauvegarde du Lot 5. Échap repose d'abord la
+pièce en main, et ne quitte qu'au repos.
 
 ⚠️ Le Lot 4 est le **premier lot majoritairement non testé** (§6.6 : pas de test
 de rendu) — comme l'interface de jeu. La discipline change de forme : pousser

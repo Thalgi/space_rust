@@ -12,6 +12,29 @@ use rendu::{texture_halo, TAILLE_HALO};
 
 const MAX_TACHES: usize = 8; // doit correspondre à spots[8] dans le shader
 
+/// **Rayon apparent minimal d'une étoile, en pixels.**
+///
+/// À l'échelle vraie une étoile fait **1,14 px de rayon** au cadrage par défaut
+/// de la vue système (§ P.3) : ni granulation, ni tache, ni couleur ne peuvent
+/// s'y lire. Ce n'est pas un bug — une étoile *est* un point à deux milliards de
+/// kilomètres — mais c'est illisible.
+///
+/// Ce que 8 px achètent, mesuré contre la table de P.3 :
+///
+/// - **disque rond, teinte, assombrissement du limbe** : à partir de ~4 px ;
+/// - **taches** (`taille ≈ 0,2` du rayon) : ~2 px de large ici, lisibles ;
+/// - **boucles d'éruption** (dessinées à `r × 0,05`) : il en faudrait 20 px pour
+///   qu'elles atteignent le pixel, 60 pour qu'elles se lisent comme des arches.
+///   **Aucun plancher raisonnable ne les montre au cadrage par défaut** — le
+///   Soleil serait plus large que l'orbite de Mercure. Elles restent la
+///   récompense de l'approche, ce qui est de toute façon là qu'elles sont belles.
+///
+/// Les corps sont déjà grossis d'un facteur fixe 5 (`presets::ECHELLE_CORPS`,
+/// distances laissées vraies) : le plancher ne crée pas l'exagération, il la rend
+/// dépendante de la distance. Et il **s'efface** en approchant (voir
+/// [`impostor::rayon_plancher`]).
+pub const PX_MIN: f32 = 8.0;
+
 /// Vide le cache de materials du soleil (hot-reload des shaders).
 pub fn vider_cache_materials() {
     materiau::vider_cache();
@@ -137,6 +160,17 @@ impl Astre for Soleil {
     fn draw(&mut self, cam: &CameraInfo) {
         self.dessiner(cam);
     }
+    /// Rayon élargi par le plancher en pixels ([`PX_MIN`]). C'est **la** source
+    /// de la taille de l'étoile : `dessiner` en dérive le quad, les boucles et
+    /// l'occultation, `Systeme::pick` sa cible de clic.
+    fn rayon_dessine(&self, cam_pos: Vec3) -> f32 {
+        crate::impostor::rayon_plancher(
+            self.base.rayon,
+            (cam_pos - self.base.position).length(),
+            crate::impostor::viewport_h(),
+            PX_MIN,
+        )
+    }
     fn set_eruptions(&mut self, freq: f32, forme: f32, puissance: f32, alea: f32) {
         self.freq = freq;
         self.forme = forme;
@@ -160,5 +194,95 @@ impl Astre for Soleil {
         }
         let (i, o) = crate::etoile::zone_habitable(self.luminosite);
         Some((i * crate::etoile::UA, o * crate::etoile::UA)) // UA -> unités monde
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PX_MIN;
+    use crate::camera::DIST_DEFAUT;
+    use crate::etoile::UA;
+    use crate::genese::presets::R_SOLEIL;
+    use crate::impostor::{px_rayon, rayon_plancher};
+
+    /// Hauteur d'écran de référence, celle de la table du § P.3.
+    const VH: f32 = 1080.0;
+
+    /// **Le plancher tient sa promesse au cadrage qui a motivé sa création.**
+    /// C'est là — et seulement là — que la décision a été prise : 1,14 px de
+    /// rayon à l'échelle vraie.
+    #[test]
+    fn au_cadrage_par_defaut_l_etoile_atteint_son_plancher() {
+        let vrai = px_rayon(R_SOLEIL, DIST_DEFAUT, VH);
+        assert!(
+            vrai < 2.0,
+            "l'échelle vraie ne donne plus un point ({vrai} px) : le plancher n'a plus lieu d'être"
+        );
+        let dessine = px_rayon(rayon_plancher(R_SOLEIL, DIST_DEFAUT, VH, PX_MIN), DIST_DEFAUT, VH);
+        assert!((dessine - PX_MIN).abs() < 1e-3, "{dessine} px au lieu de {PX_MIN}");
+    }
+
+    /// **Et il ne mange pas l'orbite de Mercure.**
+    ///
+    /// ⚠️ La garde existante (`presets.rs`, « le Soleil mange l'orbite de
+    /// Mercure ») porte sur la **constante** `R_SOLEIL` et exige un quart de
+    /// l'orbite. Un plancher agrandit au moment du DESSIN : il passe devant elle
+    /// sans la déclencher. D'où cette garde-ci, sur la taille effectivement
+    /// peinte.
+    ///
+    /// À 8 px le Soleil occupe **42 %** du rayon de l'orbite de Mercure au
+    /// cadrage par défaut — au-delà du quart que s'autorise la constante, et
+    /// c'est le prix assumé de la lisibilité. Le seuil ci-dessous dit ce qui
+    /// resterait acceptable, pas ce qui est mesuré : au-delà de la moitié, le
+    /// disque toucherait visiblement l'orbite et le système cesserait de se lire.
+    #[test]
+    fn l_etoile_agrandie_reste_dans_l_orbite_de_mercure() {
+        let dessine = rayon_plancher(R_SOLEIL, DIST_DEFAUT, VH, PX_MIN);
+        let mercure = 0.39 * UA; // demi-grand axe, mêmes unités monde
+        assert!(
+            dessine < mercure * 0.5,
+            "le Soleil dessiné ({dessine}) couvre {:.0} % du rayon de l'orbite de Mercure ({mercure})",
+            dessine / mercure * 100.0
+        );
+    }
+
+    /// **Le plancher est une exception, pas la règle.** Tout ce qui n'est pas
+    /// une étoile garde l'échelle vraie : elle seule tombe sous le pixel au
+    /// cadrage par défaut. Une Terre relevée de la même façon serait plus grosse
+    /// que le Soleil, et `Systeme::pick` — qui lit `rayon_dessine` — donnerait à
+    /// chaque caillou une cible de clic de huit pixels.
+    ///
+    /// Le test porte sur l'implémentation **par défaut** du trait, celle dont
+    /// héritent planètes, lunes et disques. (`Planete::new` charge un material,
+    /// donc un contexte GL : impossible à construire ici.)
+    #[test]
+    fn le_defaut_du_trait_rend_le_rayon_physique() {
+        use crate::astre::{Astre, Categorie, CameraInfo, CorpsBase};
+        use macroquad::prelude::{vec3, Vec3};
+
+        struct Caillou(CorpsBase);
+        impl Astre for Caillou {
+            fn categorie(&self) -> Categorie {
+                Categorie::Planete
+            }
+            fn corps(&self) -> &CorpsBase {
+                &self.0
+            }
+            fn corps_mut(&mut self) -> &mut CorpsBase {
+                &mut self.0
+            }
+            fn update(&mut self, _dt: f32) {}
+            fn draw(&mut self, _cam: &CameraInfo) {}
+        }
+
+        // Rayon d'une Terre : ~0,01 unité, très en deçà du pixel de loin.
+        let terre = Caillou(CorpsBase::new(Vec3::ZERO, 1.0, 0.0102));
+        for dist in [1.0_f32, DIST_DEFAUT, 30_000.0] {
+            assert_eq!(
+                terre.rayon_dessine(vec3(0.0, 0.0, dist)),
+                0.0102,
+                "à {dist} : une planète a été planchéiée"
+            );
+        }
     }
 }

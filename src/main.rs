@@ -26,7 +26,7 @@ mod vaisseau;
 use ecran::{
     Parametres,
     Accueil, Categorie, Cible, Galerie, GalerieDisques, GalerieEtoiles, Objet, Skymap,
-    SortieStarmap, Starmap, VueStation,
+    SortieStarmap, Starmap, VueAssembleur, VueStation,
 };
 use macroquad::prelude::*;
 
@@ -49,6 +49,7 @@ enum Etat {
     GalerieDisques(Box<GalerieDisques>),
     GalerieEtoiles(Box<GalerieEtoiles>),
     Station(Box<VueStation>),
+    Assembleur(Box<VueAssembleur>),
     Parametres(Parametres),
 }
 
@@ -102,6 +103,11 @@ async fn main() {
                         Cible::Vaisseaux => {
                             Etat::Station(Box::new(VueStation::new(Categorie::Vaisseaux)))
                         }
+                        // ⚠️ Échap détruit la vue, donc le vaisseau en cours
+                        // (`conception/assembleur.md` §10.7 b, arbitrage encore
+                        // ouvert). Sans conséquence au Lot 4.1 : rien ne se pose
+                        // encore. À trancher avant L4.3.
+                        Cible::Assembleur => Etat::Assembleur(Box::new(VueAssembleur::new())),
                     };
                 }
             }
@@ -147,6 +153,11 @@ async fn main() {
             }
             Etat::Station(s) => {
                 if s.frame() {
+                    etat = Etat::Accueil(Accueil::new());
+                }
+            }
+            Etat::Assembleur(a) => {
+                if a.frame() {
                     etat = Etat::Accueil(Accueil::new());
                 }
             }

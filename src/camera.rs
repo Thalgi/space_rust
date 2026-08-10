@@ -16,6 +16,14 @@ pub const DIST_MIN: f32 = 0.01;
 /// Distance maximale : de quoi englober le nuage de Oort.
 pub const DIST_MAX: f32 = 30000.0;
 
+/// **Cadrage de référence** : le recul qui cadre le système solaire jusqu'à
+/// Neptune, et donc la distance à laquelle se mesure ce qu'un corps offre à
+/// l'œil (table du § P.3, plancher `soleil::PX_MIN`).
+///
+/// Elle était écrite deux fois dans `skymap` — au démarrage et au rechargement
+/// du preset — avec un commentaire promettant qu'elles restaient égales.
+pub const DIST_DEFAUT: f32 = 1280.0;
+
 /// `yaw` et de tangage `pitch`. Indépendante de la distance : la direction
 /// cible → caméra est déjà unitaire.
 ///

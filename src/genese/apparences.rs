@@ -197,10 +197,9 @@ pub fn tellurique(c1: Vec3, c2: Vec3, c3: Vec3, eau: f32, motif: f32, grad: f32,
 /// `c2` = ceintures sombres, `c1` = accent (filaments chauds), `c3` = zones claires.
 /// `bandes` = paires de jets par hémisphère (2..9, profil zonal — voir zonal.rs).
 pub fn gazeuse(c1: Vec3, c2: Vec3, c3: Vec3, bandes: f32, warp: f32, atmo: Vec3) -> Apparence {
-    let mut a = Apparence::new(TypePlanete::Gazeuse, c1, c2, c3, 0.0);
+    let mut a = Apparence::new(TypePlanete::Gazeuse, c1, c2, c3, 0.0).avec_atmo(atmo);
     a.nb_bandes = bandes;
     a.warp_amt = warp;
-    a.atmo = atmo;
     a
 }
 

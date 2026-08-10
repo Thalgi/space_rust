@@ -124,6 +124,19 @@ pub trait Astre {
         1.0
     }
 
+    /// Rayon **réellement dessiné**, en unités monde, vu depuis `cam_pos`.
+    ///
+    /// Par défaut le rayon physique : ce que voit l'œil est ce qui existe. Seule
+    /// l'étoile s'en écarte (plancher en pixels, voir `soleil::PX_MIN`), parce
+    /// qu'à l'échelle vraie elle fait un pixel de large au cadrage par défaut.
+    ///
+    /// **`Systeme::pick` lit cette valeur-là**, pas `corps().rayon` : sans quoi
+    /// la cible de clic resterait celle du rayon physique et l'étoile deviendrait
+    /// un disque de 8 px qu'il faudrait toucher au pixel près.
+    fn rayon_dessine(&self, _cam_pos: Vec3) -> f32 {
+        self.corps().rayon
+    }
+
     /// Bornes (interne, externe) de la zone habitable, si l'astre est une étoile.
     fn zone_viable(&self) -> Option<(f32, f32)> {
         None

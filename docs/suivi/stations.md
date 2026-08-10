@@ -2773,3 +2773,692 @@ regardant l'intérieur du réservoir, hublots du mauvais côté.
 
 - [Starship — SpaceX](https://www.spacex.com/vehicles/starship/)
 - [Raptor (rocket engine) — Wikipedia](https://en.wikipedia.org/wiki/Raptor_(rocket_engine))
+
+---
+
+## Deux briques neuves : miroir primaire et module en coin d'arc (2026-08-09)
+
+Demandees par l'utilisateur apres la cloture de l'assembleur : *« on va
+travailler sur des composants pour l'Endurance et le tore de Stanford »*, puis
+*« d'abord un disque a 110 % de la taille du tore »*.
+
+### Miroir primaire (`composant/miroir.rs`)
+
+**110 % du rayon de l'anneau** (`rayon_pour_anneau`, `DEBORD_ANNEAU = 1.10`) : au
+gabarit exact, la jante resterait dans son ombre au moindre desalignement.
+
+C'est la piece iconique du tore de Stanford, et elle manquait : le preset n'avait
+que le moyeu, les bras, les habitats et l'anneau. **Sans miroir, rien n'explique
+d'ou vient la lumiere dans un tore vitre** — or c'est tout le principe de
+l'objet.
+
+- Membrane en bande de quadrilateres (`Peintre::triangles`), pas en eventail :
+  un eventail depuis le centre donne des triangles etires au bord, et gere mal
+  le cas perce. La bande entre `trou` et `rayon` reste reguliere et couvre les
+  trois variantes sans branche separee.
+- **Legerement creuse**, en parabole : plate au bord, creusee au centre. Un creux
+  uniforme donnerait un cone, pas une membrane tendue.
+- Trois variantes : `Primaire` (plein), `Anneau` (perce, laisse passer l'axe du
+  moyeu), `Petales` (segmente).
+- **Le cout suit la surface**, pas le rayon : doubler le rayon quadruple la
+  membrane a tendre. Un cout lineaire ferait passer un miroir geant pour deux
+  fois un petit.
+- Pose sur `preset_stanford` en variante `Anneau`, a 0,75 rayon au-dessus du plan
+  de l'anneau, face vers le bas.
+
+⚠️ **Il expose un port, contrairement au tore.** `Composant::Tore` rend `vec![]` :
+il est range en « pose a la main » et **l'assembleur ne peut donc pas le
+proposer**. Le miroir, lui, se monte — c'est ce qui le rend constructible dans le
+VAB, et une piece de cette portee ne sert a rien si on ne peut pas l'accrocher.
+
+### Module en coin d'arc (`composant/module_arc.rs`)
+
+L'etape 4 de l'ordre de travail (section D.5) : la brique de l'Endurance, jugee
+seule avant tout assemblage.
+
+Une section de caisson **a faces planes** balayee le long d'un arc, en facettes
+plates. ⚠️ **Ce n'est deliberement pas un `Tore`** : la section de l'Endurance
+est facettee, pas de revolution — reutiliser le tore lui oterait sa silhouette.
+
+Deux ports de bout, tangents a l'anneau : les chainer fait tourner chaque suivant
+de `arc`, et douze coins de 30° ferment le cercle. Quatre familles
+(`Habitat`, `Soute`, `PosteRanger`, `PosteLander`), comme le demande la section D.3.
+
+⚠️ **Le graphe de ports est un arbre : l'anneau ne se referme pas en cycle.** Le
+douzieme module *touche* le premier geometriquement, mais rien ne les soude. Sans
+consequence pour le rendu ni pour la sauvegarde ; ca en aurait une le jour ou un
+retrait au milieu devrait casser l'anneau en deux.
+
+### ⚠️ Le red-check a demoli un test, et l'enseignement vaut d'etre garde
+
+`douze_modules_chaines_referment_l_anneau` semblait la garde evidente de la
+brique. **Deplacer le port de fin a `0,9 x arc` l'a laisse vert.**
+
+La raison est de la geometrie pure : la position du corps s'obtient en sommant
+douze fois le meme vecteur, tourne a chaque pas d'un douzieme de tour — et **la
+somme d'un vecteur *quelconque* sur les douze multiples de 30° est nulle par
+symetrie**. N'importe quelle position de port ferme donc l'anneau, du moment que
+la *rotation* vaut bien 2π/12. Le test ne prouvait que la rotation.
+
+D'ou `les_ports_sont_tangents_a_l_anneau`, qui lie enfin position et
+orientation : un port d'anneau regarde le long de la tangente, donc sa direction
+avant est perpendiculaire au rayon qui le porte. Le sabotage rougit aussitot.
+
+Et une inversion **globale** du signe reste invisible aux deux — la chaine tourne
+a l'envers mais reste coherente avec elle-meme. C'est
+`les_rayons_declares_contiennent_la_piece`, anterieur et qui confronte la
+geometrie *dessinee* au rayon declare, qui attrape ce cas la.
+
+C'est la quatrieme fois de ce chantier qu'un test verifie un invariant sans
+prouver l'effet.
+
+### Limite connue : la palette ne liste pas les sous-variantes
+
+`echantillons()` ne visite qu'un echantillon **par variante de `Composant`**, pas
+par sous-variante — meme limite que `VarianteCaisson` et toutes les autres
+familles. On ne peut donc pas choisir « ARC SOUTE » a l'ecran, seulement la
+famille par defaut. C'est une vraie lacune pour l'Endurance, dont l'interet est
+justement l'alternance des quatre familles autour de l'anneau.
+
+### Mesures
+
+579 → **592 tests**, 0 avertissement clippy. La chaine d'echantillons passe de 39
+a 41 variantes, et `docs/reference/fils.md` a ete regenere.
+
+**6 sabotages** : signe du repere inverse, port de fin deplace, une seule
+facette, miroir sous-dimensionne, cout lineaire, creux uniforme.
+
+### La colonne de composants defile (2026-08-09)
+
+Signale a l'usage : *« il y a tellement de choses que je n'arrive plus a lire le
+contenu de chaque item »*.
+
+**Le diagnostic.** `liste::hauteur_ligne` divise la place disponible par le
+nombre d'items, borne a `LIGNE_MIN = 16`. Tant que la liste tenait, c'etait
+juste. Passe une quarantaine d'entrees — seuil que le catalogue vient de
+franchir, notamment avec les deux briques du jour — **deux choses arrivaient
+ensemble** : les lignes tombaient au minimum, donc le texte a la taille minimale
+(illisible), **et** le surplus etait coupe net par un `break`, sans que rien ne
+signale qu'il existait.
+
+**Le correctif** vit dans `liste.rs`, ou il se teste (section 10.9 : ce qui se
+decide sort du dessin) : hauteur de ligne **fixe** (`LIGNE_DEFIL = 24`),
+decalage borne, ascenseur qui n'apparait que s'il sert, et un `item_sous_curseur`
+qui tient compte du decalage. La molette defile quand le curseur est sur la
+colonne — `sur_la_liste` retirait deja a la camera le glisser *et* le zoom, donc
+la roue etait libre : aucune nouvelle regle de priorite a inventer.
+
+La propriete qui porte tout : **on clique sur ce qu'on voit**. `ligne_defilee` et
+`item_sous_curseur_defile` sont deux calculs separes qui doivent parler du meme
+ecran ; le test les confronte a cinq decalages differents.
+
+⚠️ **Un sabotage a d'abord glisse entre les mailles.** Retirer le plancher de
+taille du curseur d'ascenseur ne rougissait rien : le plancher ne mord qu'au-dela
+d'un millier d'items (a 24 px de ligne sur ~700 px de colonne), et le test
+s'arretait a mille. Il monte maintenant a cinq mille, avec la note que c'est une
+garde **defensive**, hors d'echelle des catalogues reels. Sans ce `n`, le test
+faisait semblant.
+
+**6 sabotages** : signe du decalage dans le test de collision, course trop
+courte, ascenseur permanent, plancher de curseur retire, bornage supprime,
+hauteur de ligne re-ecrasee. **592 → 598 tests.**
+
+⚠️ Seule la vue **composants** defile pour l'instant. `galerie_disques` et
+`skymap` utilisent la meme colonne et souffriraient du meme defaut si leurs
+listes s'allongeaient — l'API est la, il ne reste qu'a la brancher.
+
+### Le miroir n'avait qu'une face (2026-08-09)
+
+Signale a l'oeil : *« l'interieur et l'exterieur du miroir devraient avoir une
+texture de miroir, ou une teinte bleu sombre »*.
+
+**Le diagnostic.** La membrane etait un maillage a **un seul enroulement**, et
+`vaisseau::panneau` documente deja la raison : *« macroquad ne double-face pas
+les parallelogrammes, donc on le redessine avec les aretes inversees »*. J'avais
+la primitive `triangles` sous les yeux sans faire le rapprochement — toute une
+face du miroir etait donc **invisible**, et l'on voyait au travers en passant
+derriere.
+
+**Deux correctifs :**
+
+1. **Chaque bande est emise deux fois**, la seconde a enroulement inverse. La
+   face avant porte le reflet, la face arriere un **bleu sombre** (0.10, 0.15,
+   0.26) : c'est le dos d'un miroir, pas un second reflecteur, mais il doit se
+   voir.
+2. **Un degrade radial** remplace la couleur plate. Il n'y a ni texture ni
+   normale dans ce parc de composants : une couleur unie donne un jeton uni, et
+   un miroir uni ne ressemble a rien. Cinq bandes concentriques, du bleu profond
+   au centre au blanc-bleu au bord — ce que renvoie un reflecteur : le ciel au
+   milieu, la lumiere rasante sur la jante.
+
+**Le test compte ce qui sort du peintre**, plutot que de relire le code : un
+peintre d'essai enregistre les triangles, et l'on verifie que chacun a bien son
+jumeau de normale opposee. C'est ce qui rougit si quelqu'un retire un jour la
+seconde emission.
+
+**2 sabotages** : face arriere supprimee, degrade aplati. **598 → 600 tests.**
+
+### Le tore de Stanford se desolidarise (2026-08-09)
+
+Trois demandes d'un coup, a l'oeil : *« le miroir ne devrait pas planer parallele
+au tore, il devrait etre incline vers le soleil ; seul le tore devrait tourner ;
+je veux un pilier d'habitat qui s'etire en haut et en bas de la partie centrale,
+avec un module a chaque pole »*.
+
+**1. Le miroir est incline a 45°.** A plat, il ne renvoyait rien : la lumiere
+arrive **perpendiculairement a l'axe de rotation**, et un disque parallele a
+l'anneau la reflechit d'ou elle vient. 45° est le seul angle qui la renvoie *le
+long* de l'axe, donc vers l'anneau — c'est la geometrie meme du tore de Stanford,
+et la raison pour laquelle toutes ses illustrations montrent un miroir de biais.
+Le test encadre l'angle des deux cotes : ni parallele a l'anneau (le defaut
+d'origine), ni couche dans son plan (il ne le verrait plus).
+
+**2. Le moyeu ne tourne plus.** Un tore de Stanford ne tourne pas d'un bloc :
+l'anneau tourne — c'est lui qui fait la gravite —, mais le moyeu est
+**desolidarise** (« despun ») pour qu'on puisse s'y amarrer, et le miroir doit
+garder le soleil dans le meme axe. Solidaire de l'anneau, il ne renverrait la
+lumiere qu'une fraction du temps.
+
+`preset_stanford` se scinde donc en `preset_stanford_moyeu` (moyeu, pilier,
+poles, miroir) et `preset_stanford_anneau` (bras, habitats, tore), branches par
+une nouvelle `Fabrique::Despun` — le mecanisme de moitie tournante existait deja
+pour l'ISV, il ne restait qu'a l'employer. La vue d'un seul tenant reste, en
+`#[cfg(test)]`, et se compose des deux moities plutot que de les rebatir : c'est
+ce qui garantit que la vue animee et la vue statique montrent le meme objet, et
+un test verifie que les deux moities sont **disjointes et completes**.
+
+**3. Le pilier polaire.** Une colonne le long de l'axe qui traverse le moyeu et
+sort des deux cotes, coiffee d'un noeud d'amarrage et d'une antenne a chaque
+pole. C'est la zone de gravite nulle du tore, et elle ne tourne pas. Symetrique
+par construction — une boucle sur `[1, -1]` pose les deux moities avec le meme
+code, plutot qu'un haut et un bas ecrits separement qui finiraient par diverger.
+
+### ⚠️ Un test qui encodait une coincidence
+
+`seul_litem_a_deux_moities_porte_une_epine` exigeait l'**equivalence** entre
+« a une moitie tournante » et « porte une epine ». C'etait vrai — parce que l'ISV
+etait alors le **seul** item dissocie, donc les deux formules designaient le meme
+item. Le tore de Stanford, desolidarise a son tour, n'a evidemment pas d'epine :
+le test a rougi pour une raison qui n'etait pas la sienne.
+
+Le sens qui porte quelque chose est unidirectionnel : l'epine regle l'alesage du
+collier de la section tournante, donc un item qui en porte une **doit** avoir
+cette section. La reciproque ne dit rien. Le test verifie desormais
+l'implication, **et** qu'il existe au moins un item dissocie sans epine — sans
+quoi l'equivalence redeviendrait vraie par hasard et personne ne le saurait.
+
+`Fabrique::Rotatif` est supprimee : le tore en etait le seul usage, et une
+variante d'enum sans constructeur est du code mort.
+
+**3 sabotages** : miroir remis a plat, pilier d'un seul cote, miroir bascule du
+cote tournant. **600 → 603 tests.**
+
+### Trois reglages a l'oeil sur le tore (2026-08-09)
+
+Le genre de choses qu'aucun test ne dit, et que seul l'ecran tranche.
+
+- **Noeud de pole : quatre sorties, pas six.** Le noeud n'est pas tourne, donc
+  ses ports axiaux (±Z) et radiaux (±X) tombent tous dans le plan horizontal et
+  forment un collier d'amarrage propre. Les deux sorties de plus d'un noeud a six
+  pointent le long de ±Y — l'une **dans** le pilier, l'autre en plein dans
+  l'antenne de pole. C'est ce qui n'allait pas.
+- **Miroir a 30°, et non 45°.** La geometrie pure demande 45° : c'est l'angle qui
+  renvoie *exactement* le long de l'axe une lumiere qui arrive
+  perpendiculairement. Mais a 45° le disque se presente trop de profil et sa
+  surface disparait sous les angles de camera usuels. 30° est un **arbitrage de
+  lecture, pas d'optique** — assez incline pour se lire de biais, assez ouvert
+  pour montrer son reflet.
+- **Miroir 50 % plus large** (110 % → 165 % du rayon de l'anneau). Consequence
+  directe du point precedent : une fois incline, un disque ne presente a l'anneau
+  que sa **projection**. La cote qui compte est ce qu'il couvre, pas son rayon
+  nu.
+
+### ⚠️ Un verrou de valeur retire au passage
+
+`le_miroir_deborde_l_anneau_qu_il_eclaire` exigeait **exactement** 110 %. Passer
+a 165 % l'a fait rougir — pour rien : le debord est un arbitrage visuel, et
+§6.6 ecarte explicitement les verrous de valeur, qui *« avaient une raison datee,
+pas une raison permanente »*. Un tel test rougit a chaque retouche sans rien
+apprendre a personne, et pousse a le mettre a jour machinalement — c'est-a-dire a
+ne plus le lire.
+
+Il **encadre** desormais : le miroir deborde (sinon la jante reste dans l'ombre),
+sans etre demesure (au-dela du triple, ce n'est plus un reflecteur mais un
+couvercle), et le facteur est le meme a toute echelle — c'est une proportion, pas
+une taille. Meme traitement pour l'inclinaison, qui se compare a la constante
+plutot qu'a un nombre reecrit dans le test.
+
+### Le pilier polaire, deuxieme passe (2026-08-09)
+
+- **Miroir trois fois plus loin** (0,75 → 2,25 rayon d'anneau). De pres il
+  coiffait le tore comme un couvercle et l'ecrasait ; recule, il redevient une
+  piece distincte, tenue a distance. ⚠️ **C'est desormais lui qui fixe le rayon
+  englobant**, donc le recul de la camera : le tore occupe mecaniquement moins
+  de place a l'ecran au cadrage automatique.
+- **Coeur d'habitat aux poles, plus de noeud.** Ni six sorties ni quatre : les
+  deux ont ete essayes et ecartes a l'oeil. Un noeud est une **croix**, et une
+  croix au sommet d'une colonne se lit comme un embranchement — or il n'y a rien
+  a embrancher la-haut. Le tube du `CoeurGris` prolonge le pilier au lieu de le
+  contredire, et c'est **la piece meme qu'emploie le complexe Elysium** pour ses
+  habitats : un seul vocabulaire d'un bout a l'autre de la famille.
+
+### ⚠️ Le tore avait deja des habitats axiaux, et ils tournaient
+
+En posant le pilier je n'avais pas vu que `habitats_accouples` place **deja**
+une paire de coeurs sur l'axe, au centre — mon pilier s'installait donc dans une
+region deja occupee. Trois tests l'ont dit d'un coup, en comptant quatre
+`CoeurGris` la ou ils en attendaient deux.
+
+Et ces habitats-la etaient du **cote tournant**, par accident de decoupage : ils
+voisinaient les bras dans le code d'origine, pas dans l'espace. Le nom du test
+qui les garde le disait pourtant depuis toujours —
+`les_habitats_du_moyeu_sont_paralleles_a_laxe`. Ils sont passes du cote fixe, ce
+que demandait aussi la consigne « seul le tore doit tourner ». Sans consequence
+visible (ce sont des corps de revolution sur leur propre axe), mais le decoupage
+dit maintenant ce qu'il fait.
+
+**Trois tests distinguaient les habitats par leur type** ; ils en distinguent
+desormais **quatre par leur distance a l'origine** (`coeurs_tries`) : deux
+accouples au moyeu, deux aux poles. Meme composant, meme variante — seule la
+position les separe, et s'appuyer sur l'ordre de pose aurait ete s'appuyer sur un
+detail d'ecriture.
+
+### ⚠️ Un verrou de valeur retire
+
+`le_miroir_deborde_l_anneau_qu_il_eclaire` exigeait **exactement** 110 %. Le
+passage a 165 % l'a fait rougir pour rien : le debord est un arbitrage visuel, et
+§6.6 ecarte les verrous de valeur, qui *« avaient une raison datee, pas une
+raison permanente »*. Il **encadre** desormais — le miroir deborde, sans etre
+demesure, et le facteur est le meme a toute echelle.
+
+**603 tests**, 0 avertissement clippy.
+
+### ⚠️ Le pilier polaire etait a moitie enfoui (2026-08-09)
+
+Signale a l'oeil : *« les coeurs d'habitat de chaque cote semblent recouverts par
+un autre fut d'habitat »*. Une **sonde** l'a chiffre au lieu de le deviner :
+
+```
+  y=  1.500  r= 3.000  MODULE AXIAL   <- segment de pilier
+  y=  4.500  r= 7.250  MODULE AXIAL   <- habitat axial (fut 0..9)
+  y=  4.500  r= 3.000  MODULE AXIAL   <- segment, au meme endroit
+  y=  7.500  r= 3.000  MODULE AXIAL   <- segment, toujours dedans
+```
+
+Les **trois segments de fut par cote** couvraient exactement la meme tranche
+(y de 0 a 9) que l'habitat axial deja pose, dont le rayon est plus du double.
+Six pieces dessinees pour rien, et **invisibles** : aucun test ne les voyait,
+puisque chacune etait individuellement bien formee.
+
+Le fut du pilier, c'est donc l'habitat axial lui-meme ; `pilier_polaire` ne pose
+plus que ses **coiffes**, au-dela. Le moyeu passe de 15 pieces a 7.
+
+**Une garde nouvelle** : `le_pilier_n_enfouit_aucune_de_ses_pieces` verifie que
+les modules axiaux se succedent le long de l'axe **sans se recouvrir**. C'est
+exactement le defaut qui vient d'etre corrige, et il n'avait aucune chance
+d'etre attrape autrement — chaque piece etait juste, c'est leur *ensemble* qui ne
+l'etait pas. Red-check : reposer un segment enfoui rougit aussitot.
+
+**Antennes de pole retirees.** Une parabole en bout ajoutait un detail d'echelle
+incompatible avec une piece longue de plusieurs unites.
+
+**Moyeu du miroir : un anneau, pas un point.** Le mat central et ses trois
+haubans flottaient au milieu du trou de la variante percee, rattaches a rien de
+visible — la piece paraissait tenue par un piquet. Une **couronne de membrures**
+au bord du trou dit ce qui se passe vraiment : la membrane est tendue sur un
+anneau, et c'est l'anneau qui porte.
+
+**604 tests**, 0 avertissement clippy.
+
+### Le decoupage tournant/fixe, revu (2026-08-09)
+
+Demande : *« tout l'anneau avec l'ossature centrale tourne avec le reste ; les
+deux gros modules coeur sont la partie qui ne tourne pas »*.
+
+| Moitie | Contenu |
+|---|---|
+| **Tourne** | ossature hexagonale centrale, bras et tunnels, tore, coiffes de pole |
+| **Fixe** | les deux gros coeurs d'habitat axiaux, et le miroir |
+
+C'est ainsi qu'un axe « despun » fonctionne : le manege tourne **autour** du
+moyeu, pas l'inverse. L'ossature porte l'anneau — la laisser immobile pendant
+que sa jante tourne n'aurait rien a quoi se raccrocher.
+
+⚠️ **Le miroir reste du cote fixe**, et ce n'est pas negociable : il doit garder
+le soleil dans le meme axe. Solidaire de l'anneau, il ne renverrait la lumiere
+qu'une fraction du temps — ce qui rendrait vaine l'inclinaison a 30° reglee juste
+avant. La demande ne nommait que les deux coeurs ; c'est la seule piece que j'ai
+gardee fixe sans qu'on me le dise, et la raison est ci-dessus.
+
+Les coiffes de pole tournent, elles : posees **sur** l'axe de rotation, ce sont
+des corps de revolution, donc sans effet visible — et ca evite une troisieme
+moitie pour deux pieces.
+
+### ⚠️ Deux tests filtraient sur le mauvais critere
+
+La colonne d'habitat est desormais **a cheval sur les deux moities**, et deux
+tests qui n'interrogeaient qu'une seule moitie ne voyaient plus qu'un bout. Ils
+lisent la vue d'un seul tenant — c'est exactement ce pour quoi elle existe.
+
+Et `le_pilier_n_enfouit_aucune_de_ses_pieces` filtrait sur le **type** de
+composant : or les tunnels des bras sont des `ModuleAxial` eux aussi, mais
+couches a l'horizontale. Leur etendue en Y est nulle, et les meler a la colonne
+faisait s'entrelacer une douzaine d'intervalles degeneres. C'est
+l'**orientation** qui definit la colonne, pas le type — le test filtre desormais
+sur l'axe.
+
+Nouvelle garde dans `les_deux_moities_du_tore_sont_disjointes_et_completes` : les
+coeurs axiaux du cote fixe, l'ossature du cote tournant. **2 sabotages**, dont
+celui qui deplace les coeurs et rougit six tests d'un coup.
+
+**604 tests**, 0 avertissement clippy.
+
+### La fleche polaire (2026-08-09)
+
+Un **second coeur d'habitat** a chaque pole, au-dela de la coiffe, etire cinq
+fois (25 unites) et **deux fois plus fin**.
+
+Le profil vient de la grille, pas d'un facteur ecrit a la main : `FLECHE_PROFIL`
+est **P0** la ou l'habitat est P2, soit le **quart** du diametre. Halvee une
+premiere fois (P1), puis encore : a P1 la fleche restait un fut, et ce qu'il faut
+ici est une **tige**. P0 est le plus fin que porte la grille, donc le bout de la
+course — descendre plus bas demanderait un profil neuf. La colonne
+s'effile donc en trois paliers — gros coeur, coiffe, fleche — au lieu de filer
+d'un seul gabarit sur toute sa longueur, ce qui la ferait lire comme un tube et
+non comme un mat.
+
+**Toute la colonne axiale est desormais immobile** : coeurs, coiffes et fleches.
+Les coiffes tournaient un temps — sans effet visible, ce sont des corps de
+revolution poses sur l'axe de rotation — mais les ranger du cote fixe dit ce
+qu'elles sont : la partie de la station ou l'on ne pese rien. Une garde le
+verifie explicitement (aucun `CoeurGris` du cote tournant), et c'est
+precisement celle qui manquait quand les coiffes y etaient encore.
+
+Profil de la colonne, du centre vers le haut :
+
+```
+  y=  4.50  coeur accouple   (0..9,  P2)
+  y= 11.50  coiffe           (9..14, P2)
+  y= 26.50  fleche           (14..39, P0 — une tige)
+  y= 54.78  miroir
+```
+
+⚠️ **Le miroir n'a pas bouge**, sur consigne explicite. Il reste a 2,25 rayons
+d'anneau, et la fleche s'arrete a 39 : il subsiste donc un ecart d'une quinzaine
+d'unites entre le sommet de la colonne et le disque. A l'oeil de trancher si ca
+se voit — le miroir fait 40 de rayon, ce qui compense peut-etre.
+
+**604 tests**, 0 avertissement clippy.
+
+### Deux miroirs, et une colonne doublee (2026-08-09)
+
+- **Un second miroir** de l'autre cote de l'anneau. Un seul laissait une moitie
+  du tore eclairee et l'autre non, alors qu'il est vitre sur tout son pourtour.
+- **Colonne deux fois plus longue** (`POLE_ETIREMENT` 5 → 10) : la fleche passe
+  de 25 a 50 unites.
+- **Miroirs rapproches d'un tiers** (2,25 → 1,5 rayon d'anneau) : deux disques
+  aussi lointains ne se lisaient plus comme appartenant au meme objet.
+
+### ⚠️ Le piege du second miroir, et le test qui l'a trouve
+
+Les deux miroirs doivent regarder **le meme soleil**. Chacun part de la normale
+qui fait face a l'anneau — −Y en haut, +Y en bas — puis s'incline vers le
+soleil ; comme ils partent de cotes opposes, il faut les pencher **en sens
+opposes**. Du meme signe, l'un des deux regarderait a l'oppose et ne renverrait
+rien.
+
+D'ou une constante `SOLEIL`, qui n'existe que pour ca : l'eclairage de la vue
+suit la camera, il n'y a pas de vrai soleil a viser, et c'est **l'accord entre
+les deux miroirs** qui compte, pas l'azimut choisi. Le test exige un produit
+scalaire positif avec elle pour les deux, plus une normale qui redescend vers le
+plan de l'anneau.
+
+Il a servi tout de suite : **le signe de `vers_anneau` etait inverse**, et le
+miroir du haut regardait a l'oppose du soleil (n·soleil = −0,5). Un defaut que
+l'oeil aurait peut-etre laisse passer, l'eclairage suivant la camera.
+
+Et le correctif ne s'est pas arrete au signe. L'axe du penchement se **deduit**
+desormais de `SOLEIL` (`n × soleil`) au lieu d'etre un `rotation_z` de signe
+choisi a la main — un axe calcule ne peut pas se tromper de cote, quel que soit
+le pole et quelle que soit la direction donnee au soleil. Verifie dans les deux
+sens : deplacer `SOLEIL` a un autre azimut laisse le test **vert** (les miroirs
+suivent), figer l'axe le fait **rougir**.
+
+### ⚠️ Deux assertions qui decrivaient un ordre de grandeur
+
+`le_pilier_polaire_est_symetrique_et_coiffe` verifiait qu'« il y a quelque chose
+au-dessus du pole » — vrai tant que le miroir etait l'element le plus haut. La
+fleche doublee culmine desormais au-dessus de lui : les assertions ne decrivaient
+pas une propriete mais la geometrie du moment. Remplacees par ce qui reste vrai —
+les extremites de la colonne sont les points extremes de la station sur son axe.
+
+⚠️ **A regarder** : la colonne monte a 64, les miroirs sont a 36,5. Les disques
+sont donc traverses par la fleche a peu pres au tiers de sa hauteur. C'est
+peut-etre exactement l'effet voulu (les miroirs portes par le mat), peut-etre pas.
+
+**604 tests**, 0 avertissement clippy.
+
+### Deux briques neuves : grappe de reservoirs et hangar (2026-08-09)
+
+**`GrappeReservoirs`** — trois cuves spheriques par rangee, en triangle autour
+de l'axe, sur plusieurs rangees empilees. Le parc n'avait que le reservoir
+**unitaire** : une soute d'ergols se construisait cuve par cuve, autant de pieces
+et autant de ports consommes, et aucune operation ne traitait la grappe comme un
+tout. C'est desormais **une** piece — elle se pose, se deplace et se retire d'un
+bloc.
+
+Trois par rangee est le plus petit groupe qui **enserre un axe** : deux
+laisseraient l'ensemble plat, quatre gaspillent le volume entre les cuves. Le
+rayon de disposition se **calcule** pour que deux voisines soient tangentes
+(`d = r / sin(π/n)`), au lieu d'etre un nombre trouve a tatons : le jour ou le
+nombre par rangee change, la tangence suit.
+
+**`Hangar`** — un fut d'habitat prolonge d'une **baie parallelepipedique**. Le
+parc savait faire des cylindres et des caissons techniques, mais rien qui
+**abrite** : pas de volume creux avec une porte par ou sort un engin. Un hangar
+tout cylindrique perdrait ses coins (un engin est plus large que haut) ; une
+boite seule ne se raccorde a rien, tout le reste du parc etant de revolution.
+D'ou les deux — le fut donne l'accroche et le vocabulaire, la baie donne le
+volume et la porte. Deux variantes, ouverte et fermee.
+
+### ⚠️ Un sabotage vert, et le commentaire qu'il a corrige
+
+Le decalage d'une demi-rangee entre rangees successives etait presente comme
+« serrant le volume ». **Faux** : les rangees etant espacees d'un diametre,
+l'empilement en colonnes garde les cuves tangentes tout autant, et supprimer le
+decalage ne rougit **aucun** test. C'est un choix de lecture, rien de plus — le
+commentaire le dit maintenant, et aucune garde ne le protege. On ne teste pas un
+gout.
+
+### Red-check : 6 sabotages
+
+| Sabotage | Rougit |
+|---|---|
+| disposition approximative au lieu du calcul de tangence | la tangence |
+| rangees espacees d'un rayon | l'empilement **et** l'enveloppe globale |
+| decalage de rangee supprime | **rien** — voir ci-dessus |
+| baie plus etroite que le fut | le debord de baie |
+| port de toit tourne vers l'avant | l'ecoutille et le toit |
+| cout independant de la profondeur de baie | le cout au volume |
+
+**604 → 615 tests**, 0 avertissement clippy. La chaine d'echantillons passe de 41
+a 43 variantes, `docs/reference/fils.md` regenere.
+
+### ⚠️ La grappe etait surchargee (2026-08-09)
+
+Juge a l'oeil : *« la grappe de reservoirs a l'air tres bizarre avec les choses
+ajoutees, compare au reservoir spherique d'origine »*.
+
+J'avais ajoute une **ame centrale**, des **colliers** vers l'axe et un
+**cerclage** par rangee — de la structure censee « expliquer ce qui relie les
+cuves ». A l'ecran, ca brouillait tout : la grappe ne ressemblait plus au
+reservoir unitaire dont elle est le pluriel, mais a un assemblage indistinct.
+
+Le traitement est desormais **exactement** celui de `reservoir.rs` : sous-couche
+sombre pour que les joints ressortent, puis icosphere facettee a la **meme
+subdivision** (3, et non 2 comme je l'avais mise — un ecart qui suffisait deja a
+distinguer les deux pieces sans raison). Deux pieces de la meme famille doivent
+se peindre pareil, sinon leur parente ne se voit pas.
+
+**La lecon, et elle revient** : ajouter de la structure pour « expliquer » une
+piece la rend souvent moins lisible, pas plus. C'est le meme reflexe qui avait
+plante un mat au centre du miroir, et le meme oeil qui l'a corrige.
+
+Une garde compte ce que recoit le peintre — **deux spheres par cuve, et rien
+d'autre**. Toute structure rajoutee emet des cylindres, et le compte s'en
+apercoit. Red-check : remettre un seul cylindre rougit.
+
+**616 tests**, 0 avertissement clippy.
+
+### La baie du hangar passe a l'hexagone (2026-08-10)
+
+Juge a l'oeil : *« le hangar a besoin d'un bon relooking : la face du
+parallelepipede tournee vers Z doit devenir un hexagone, dont le cote parallele
+a x est double »*.
+
+La baie etait un parallelepipede. Deux defauts, l'un de vocabulaire, l'autre de
+geometrie :
+
+1. **Elle ne rimait avec rien.** L'hexagone est partout dans le parc — treillis,
+   tours, pales, ceinture des nacelles. La boite a angles droits etait la seule
+   forme du vaisseau sans echo, et elle se lisait comme un colis arrime.
+2. **Le raccord ne tenait pas.** Le tronc de cone qui evasait le fut vers la
+   baie visait la **demi-largeur** de celle-ci ; a `1,55·r` contre une
+   demi-hauteur de `1,05·r`, il **depassait de la silhouette** en haut et en
+   bas. Defaut present depuis le premier jet, jamais vu : aucun test ne
+   comparait les deux cotes.
+
+L'hexagone corrige les deux. Le raccord est desormais **l'hexagone lui-meme**,
+reduit par [`echelle_pied`] jusqu'a s'inscrire exactement dans le cercle du fut
+— une homothetie de la section ne peut pas deborder de la section.
+
+#### La section
+
+Une seule cote maitresse, `demi_hauteur = 1,05·r` (inchangee) ; tout le reste
+**derive** de la geometrie de l'hexagone, aucun facteur ecrit a la main :
+
+| Cote | Formule | A P2 (`r = 2`) |
+|---|---|---|
+| cote oblique | `demi_hauteur · 2/√3` | 2,42 |
+| demi-plat (cote ∥ x) | `cote · ALLONGE/2` | 2,42 |
+| demi-largeur | `demi_plat + cote/2` | 3,64 |
+
+`ALLONGE = 2` est la demande : les deux cotes paralleles a x valent deux fois
+chacun des quatre obliques. A 1 on aurait l'hexagone regulier — un tuyau a six
+pans, aussi haut que large, qui n'abriterait rien de mieux qu'un cylindre.
+**C'est ce facteur, et lui seul, qui fait la difference entre une section de
+coque et une baie.** La demi-largeur passe de `1,55·r` a `1,82·r` : la baie a
+gagne en largeur ce que l'allongement demandait, a hauteur constante.
+
+Aucune primitive du `Peintre` n'a de section non circulaire : le prisme sort en
+triangles bruts, comme `pieces::prisme_onigiri`. L'evasement est **noye** de 3 %
+dans la baie et retire de 1 % en echelle, sans quoi sa face haute et la face
+basse de la baie se disputeraient le plan `z = fut` et clignoteraient l'une a
+travers l'autre — meme piege, meme remede, que les collerettes de
+`nacelle_cargo`.
+
+#### Ce que l'hexagone change ailleurs
+
+- **Les rails de toit** etaient poses a `demi_largeur·0,62`. Sur un hexagone, au
+  dela du demi-plat on est **sur la pente** : ils sont reindexes sur le plat.
+- **L'encadrement de porte** etait quatre barres droites — bon pour un
+  rectangle. C'est un jonc suivant les six aretes de la bouche.
+- **L'enveloppe** prenait la demi-diagonale de la boite. L'hexagone n'a pas de
+  coin en `(demi_largeur, demi_hauteur)` : reserver ce coin-la interdisait de
+  poser une piece dans un **vide reel**. Elle prend le cercle circonscrit.
+- **Le cout** suivait le volume de la boite. Il suit l'aire de l'hexagone, 17 %
+  plus petite : on ne facture pas un vide qu'on n'abrite pas.
+
+#### Red-check : 3 sabotages, 3 rouges
+
+| Sabotage | Rougit |
+|---|---|
+| `demi_plat` a `ALLONGE·0,4` au lieu de `·0,5` | l'hexagone allonge |
+| `echelle_pied` indexee sur la demi-hauteur | le pied de l'evasement |
+| aire de section = celle de la boite englobante | le cout au volume |
+
+Le test d'hexagone se mesure **contre `ALLONGE`**, pas contre `2.0` : changer la
+constante doit changer la forme sans rougir, changer la formule doit rougir.
+C'est le contraire d'un verrou de valeur (§6.6).
+
+**616 → 618 tests**, 0 avertissement clippy, `docs/reference/fils.md` regenere
+(la baie passe de 12 a 18 fils : un prisme hexagonal a six aretes de plus qu'une
+boite).
+
+### Charge utile du mât polaire bas (2026-08-10)
+
+Demande : *« sur la colonne du bas du tore, ajouter l'habitat de l'ISV dans la
+même disposition en triple, et dessous, avec un peu d'espace, la grappe de
+réservoirs »*.
+
+Les deux charges partagent la **même figure** — trois volumes en couronne autour
+d'un axe vide, où passe le mât. Ce n'est pas une coïncidence dont on profite :
+c'est ce qui fait qu'elles se lisent comme deux étages d'une même pile.
+
+#### ⚠️ Au jeu nominal, les trois modules se croisaient
+
+Mesuré avant de poser, et c'est ce qui a sauvé le montage. La couronne
+d'habitat de l'ISV se cale sur le gabarit de l'épine : `épine + jeu + inscrit`.
+Sur la flèche polaire, qui est en **P0** (rayon 0,5 contre 1,12 pour l'épine),
+ça donne un rayon de 1,97 — or il en faut **2,07** pour que trois sections
+onigiri P2 ne s'interpénètrent pas. Les trois fûts se seraient croisés, et
+l'assemblage serait resté « valide ».
+
+Le calcul qui l'établit **existait déjà** : `la_charge_utile_suit_le_gabarit_de
+_lepine` le faisait pour *vérifier* le montage de l'ISV. Il **décide**
+désormais (`hab_rayon_mini`), ce qui est sa place (§10.9) — un chiffre qui
+contrôle une pose ne doit pas vivre uniquement dans un test.
+
+La couronne retient donc **la plus large des deux contraintes**, et c'est la
+**ferrure** qui s'allonge pour rejoindre le mât, jamais la couronne qui se
+rapproche. Sur l'ISV le jeu commande toujours et rien ne bouge : couronne 2,589
+et ferrure 0,500, aux valeurs historiques — tenu par
+`la_couronne_de_lisv_est_inchangee`, sans quoi la généralisation aurait déplacé
+l'habitat du vaisseau au passage.
+
+| | ISV (épine 1,12) | mât polaire (P0, 0,5) |
+|---|---|---|
+| couronne | 2,589 (le jeu) | 2,318 (l'encombrement) |
+| ferrure | 0,500 | 1,196 |
+
+#### Ancrage par le bout, pas par le haut
+
+Toute la pile se mesure **depuis le bout de la flèche** et remonte : cuves d'
+abord (pied à −64, exactement la pointe du mât), puis l'écart de mât nu, puis
+l'habitat. Ancrée par le haut, la dernière rangée de cuves serait passée dans le
+vide dès qu'une cote bouge — et personne ne l'aurait vu. Ce qui doit rester vrai,
+c'est que la pile **finit sur le mât**.
+
+Disposition obtenue : habitat en −40,4..−48,4 (couronne 2,32, hors-tout 4,32),
+mât nu sur 6, cuves en −54,4..−64,0 (hors-tout 3,45). La pile **s'affine en
+descendant**, comme le mât lui-même sous les cœurs ; l'inverse ferait une massue.
+
+C'est la seule chose qui **rompt la symétrie des deux pôles**, et c'est voulu :
+le haut porte l'amarrage, le bas porte ce qui se consomme. Une station symétrique
+jusqu'au bout n'a ni haut ni bas.
+
+#### ⚠️ Marge de 1,8 sous le miroir bas — à voir à l'œil
+
+Les disques font 40 unités de rayon et sont inclinés à 30° : ce qu'on ajoute sur
+la colonne passe forcément dans leur voisinage. Aucune pièce n'est **à cheval**
+sur un miroir (garde `la_charge_polaire_ne_traverse_aucun_miroir`), mais le
+module d'habitat le plus proche n'est qu'à **1,8** du plan du disque, et toute la
+charge est **derrière** le miroir bas — donc masquée depuis les points de vue
+situés au-dessus de l'anneau. À juger à l'écran ; se corrige en réduisant
+`POLE_ECART`, qui fait descendre la charge.
+
+#### Red-check : 4 sabotages
+
+| Sabotage | Rougit |
+|---|---|
+| cuves ancrées 5 plus haut que le bout | l'enfilage sur le mât |
+| couronne sans le plancher d'encombrement | le croisement des modules |
+| plancher porté à 8 fois le jeu | la couronne de l'ISV |
+| charge remontée dans le plan du miroir (écart 14) | la traversée de miroir |
+
+⚠️ **Le premier jet du 4ᵉ sabotage n'a rien rougi** (écart 20) : la charge
+franchissait bien le plan du miroir mais restait à 1,3 de dégagement. Un
+sabotage qui ne rougit pas ne prouve pas que la garde est faible — encore
+faut-il qu'il produise vraiment le défaut visé. Refait à 14, il rougit.
+
+**618 → 622 tests**, 0 avertissement clippy.

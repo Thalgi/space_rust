@@ -6,6 +6,7 @@
 use crate::astre::CameraInfo;
 use macroquad::models::Vertex;
 use macroquad::prelude::*;
+use std::cell::RefCell;
 
 /// Vertex shader partagé : billboard dont le disque est mis à l'échelle par `disc`.
 pub const VERT_IMPOSTOR: &str = include_str!("shaders/impostor.vert.glsl");
@@ -49,6 +50,62 @@ pub fn uniforms_standard(mat: &Material, cam: &CameraInfo, temps: f32, disc: f32
     let to_cam = -cam.forward;
     mat.set_uniform("to_cam", (to_cam.x, to_cam.y, to_cam.z));
     mat.set_uniform("disc", disc);
+}
+
+// ---------------------------------------------------------------------------
+// Échelle apparente
+// ---------------------------------------------------------------------------
+
+// Hauteur (px) du viewport de rendu courant. **Une seule cellule**, alors que
+// `planete` et `disque` en tenaient chacun la leur : il fallait les régler en
+// cascade, et un appelant qui en oubliait une donnait à ce module-là le LOD du
+// plein écran dans une cellule de galerie (c'est le cas de `galerie.rs`, qui ne
+// réglait que `planete`). L'étoile en a besoin à son tour, et hors du chemin de
+// dessin — `Systeme::pick` doit connaître la taille RÉELLEMENT dessinée.
+// 0 = plein écran.
+thread_local! {
+    static VIEWPORT_H: RefCell<f32> = const { RefCell::new(0.0) };
+}
+
+/// Hauteur du viewport de rendu courant (galerie : hauteur de cellule,
+/// éventuellement divisée par le facteur pixel). 0 = plein écran.
+pub fn set_viewport_h(h: f32) {
+    VIEWPORT_H.with(|v| *v.borrow_mut() = h);
+}
+
+/// Hauteur effective : la valeur posée, ou l'écran entier à défaut.
+pub fn viewport_h() -> f32 {
+    let h = VIEWPORT_H.with(|v| *v.borrow());
+    if h > 0.0 {
+        h
+    } else {
+        screen_height()
+    }
+}
+
+/// Rayon apparent d'un corps, en pixels — approximation petit angle pour un fov
+/// de ~45° : `px ≈ r/dist · h / (2·tan(22,5°))`. Pilote tous les LOD.
+pub fn px_rayon(r: f32, dist: f32, vh: f32) -> f32 {
+    r / dist.max(1e-3) * vh * 1.2
+}
+
+/// Rayon **à dessiner** pour qu'un corps couvre au moins `px_min` pixels.
+///
+/// N'agrandit jamais que ce qui est trop petit, et **rend la main** dès que la
+/// taille vraie dépasse le plancher : à la traversée, le facteur vaut exactement
+/// 1, donc aucun saut — seule la vitesse de croissance a un coude.
+///
+/// Le piège du LOD des débris (`disque_particules.vert.glsl`) ne s'applique pas
+/// ici : là-bas la taille se calculait dans le vertex shader à partir de la
+/// matrice `Projection`, qui chez macroquad est la vue-projection COMBINÉE — un
+/// coefficient qui s'annule en visant l'axe Y, d'où des débris infinis. Ici il
+/// n'y a pas de matrice, seulement une distance.
+pub fn rayon_plancher(r: f32, dist: f32, vh: f32, px_min: f32) -> f32 {
+    let px = px_rayon(r, dist, vh);
+    if px <= 0.0 {
+        return r; // corps de rayon nul : rien à planchéier
+    }
+    r * (px_min / px).max(1.0)
 }
 
 /// Plafond de pipelines de macroquad (`quad_gl.rs`, `MAX_PIPELINES`). Chaque
@@ -269,6 +326,75 @@ mod tests {
                  GPU par objet, et le plafond de {MAX_PIPELINES} saute."
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_plancher {
+    use super::{px_rayon, rayon_plancher};
+
+    /// **Un plancher n'agrandit jamais que ce qui est trop petit.** S'il pouvait
+    /// rétrécir, une étoile déjà grosse rapetisserait en approchant — l'inverse
+    /// exact de ce qu'on veut, et invisible sur les cas lointains.
+    #[test]
+    fn le_plancher_ne_retrecit_jamais() {
+        for dist in [1.0_f32, 10.0, 100.0, 1_000.0, 100_000.0] {
+            let r = rayon_plancher(1.116, dist, 1080.0, 8.0);
+            assert!(r >= 1.116, "dist {dist} : {r} < rayon vrai");
+        }
+        // Corps de rayon nul : pas de division par zéro, pas d'agrandissement.
+        assert_eq!(rayon_plancher(0.0, 100.0, 1080.0, 8.0), 0.0);
+    }
+
+    /// **Ce que le plancher promet, il le tient** : au-delà de la distance de
+    /// bascule, le corps couvre exactement le minimum demandé.
+    #[test]
+    fn au_dela_du_seuil_la_taille_apparente_est_constante() {
+        for dist in [500.0_f32, 1_280.0, 20_000.0] {
+            let r = rayon_plancher(1.116, dist, 1080.0, 8.0);
+            let px = px_rayon(r, dist, 1080.0);
+            assert!((px - 8.0).abs() < 1e-3, "dist {dist} : {px} px au lieu de 8");
+        }
+    }
+
+    /// **Et il rend la main en approchant.** C'est ce qui distingue un plancher
+    /// d'une exagération permanente : passé le seuil, on revient à l'échelle
+    /// vraie, sans saut — le facteur vaut exactement 1 à la traversée.
+    #[test]
+    fn le_plancher_s_efface_de_pres_et_sans_saut() {
+        // Seuil : la distance où la taille vraie atteint exactement 8 px.
+        let seuil = 1.116 / 8.0 * 1080.0 * 1.2;
+        assert!((px_rayon(1.116, seuil, 1080.0) - 8.0).abs() < 1e-3);
+        // Plus près : rayon vrai, intact.
+        let pres = rayon_plancher(1.116, seuil * 0.5, 1080.0, 8.0);
+        assert!((pres - 1.116).abs() < 1e-6, "de près l'étoile doit garder sa taille : {pres}");
+
+        // Continuité au seuil. Elle se mesure en RELATIF : de part et d'autre à
+        // ±eps, l'écart de taille doit rester de l'ordre d'eps. Une tolérance
+        // absolue ne prouverait rien — un vrai saut la franchirait pour un eps
+        // assez petit, alors qu'ici le majorant s'annule avec eps.
+        for eps in [1e-2_f32, 1e-3, 1e-4] {
+            let avant = rayon_plancher(1.116, seuil * (1.0 - eps), 1080.0, 8.0);
+            let apres = rayon_plancher(1.116, seuil * (1.0 + eps), 1080.0, 8.0);
+            let saut = (apres - avant).abs() / 1.116;
+            assert!(
+                saut <= 3.0 * eps,
+                "saut relatif {saut} pour un pas de {eps} : la taille n'est pas continue au seuil"
+            );
+        }
+    }
+
+    /// Le plancher suit le **viewport**, pas l'écran : dans une cellule de
+    /// galerie deux fois plus courte, il faut deux fois plus de monde pour
+    /// couvrir les mêmes pixels.
+    #[test]
+    fn le_plancher_suit_le_viewport() {
+        let plein = rayon_plancher(1.116, 1_280.0, 1080.0, 8.0);
+        let cellule = rayon_plancher(1.116, 1_280.0, 540.0, 8.0);
+        assert!(
+            (cellule - plein * 2.0).abs() < 1e-3,
+            "viewport moitié -> rayon double attendu : {cellule} vs {plein}"
+        );
     }
 }
 

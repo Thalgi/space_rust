@@ -88,6 +88,103 @@ pub fn item_sous_curseur(colonne: Rect, n: usize, souris: Vec2) -> Option<usize>
     (i < n).then_some(i)
 }
 
+// ---------------------------------------------------------------------------
+// Défilement
+// ---------------------------------------------------------------------------
+//
+// **Pourquoi il a fallu en ajouter un.** `hauteur_ligne` divise la place
+// disponible par le nombre d'items, borné à `LIGNE_MIN`. Tant que la liste
+// tenait, c'était juste ; passé une quarantaine d'entrées, deux choses
+// arrivaient ensemble — les lignes tombaient au minimum (texte au plus petit,
+// donc illisible) **et** le surplus était coupé net, sans que rien ne dise
+// qu'il existait. Le catalogue des composants a franchi ce seuil.
+//
+// Une liste qui défile règle les deux : la ligne garde une hauteur confortable,
+// et l'ascenseur dit à la fois **qu'il y a plus** et **où l'on en est**.
+
+/// Hauteur d'une ligne défilante. **Fixe**, contrairement à
+/// [`hauteur_ligne`] : c'est tout l'intérêt du défilement, la ligne cesse de
+/// rétrécir quand la liste s'allonge.
+pub const LIGNE_DEFIL: f32 = 24.0;
+
+/// Largeur de l'ascenseur.
+pub const ASCENSEUR_L: f32 = 6.0;
+
+/// Combien de lignes entières la colonne peut montrer.
+pub fn lignes_visibles(colonne: Rect) -> usize {
+    (colonne.h / LIGNE_DEFIL).floor().max(0.0) as usize
+}
+
+/// Faut-il défiler ? Faux quand tout tient — et il ne faut alors **pas**
+/// d'ascenseur, une barre qui occupe toute sa glissière ne dit rien.
+pub fn defile(colonne: Rect, n: usize) -> bool {
+    n > lignes_visibles(colonne)
+}
+
+/// Décalage maximal, en pixels. Zéro si tout tient.
+///
+/// Borné de façon que le **dernier item soit entièrement visible** en bout de
+/// course : s'arrêter plus tôt laisserait une entrée qu'on ne peut jamais lire,
+/// ce qui est exactement le défaut qu'on corrige.
+pub fn defilement_max(colonne: Rect, n: usize) -> f32 {
+    (n as f32 * LIGNE_DEFIL - colonne.h).max(0.0)
+}
+
+/// Ramène un décalage dans ses bornes.
+pub fn borner_defilement(colonne: Rect, n: usize, offset: f32) -> f32 {
+    offset.clamp(0.0, defilement_max(colonne, n))
+}
+
+/// Rectangle de la ligne `i`, décalé de `offset`. Peut sortir de la colonne :
+/// c'est à l'appelant de sauter celles que [`ligne_visible`] écarte.
+pub fn ligne_defilee(colonne: Rect, i: usize, offset: f32) -> Rect {
+    Rect::new(
+        colonne.x,
+        colonne.y + i as f32 * LIGNE_DEFIL - offset,
+        colonne.w - ASCENSEUR_L - 2.0,
+        LIGNE_DEFIL - 2.0,
+    )
+}
+
+/// La ligne se voit-elle, même en partie ?
+pub fn ligne_visible(colonne: Rect, r: Rect) -> bool {
+    r.y + r.h > colonne.y && r.y < colonne.y + colonne.h
+}
+
+/// Index de l'item sous le curseur, **décalage compris**.
+///
+/// Doit rester d'accord avec [`ligne_defilee`] : c'est la propriété qui fait
+/// qu'on clique sur ce qu'on voit, et elle se teste pour les deux à la fois.
+pub fn item_sous_curseur_defile(colonne: Rect, n: usize, offset: f32, souris: Vec2) -> Option<usize> {
+    if n == 0 || !colonne.contains(souris) {
+        return None;
+    }
+    let i = ((souris.y - colonne.y + offset) / LIGNE_DEFIL).floor();
+    if i < 0.0 {
+        return None;
+    }
+    let i = i as usize;
+    (i < n).then_some(i)
+}
+
+/// Rail et curseur de l'ascenseur, ou `None` si tout tient.
+///
+/// Le curseur a une **taille minimale** : proportionnel sans plancher, il
+/// deviendrait un trait invisible sur une liste très longue — or c'est
+/// précisément là qu'on en a le plus besoin.
+pub fn ascenseur(colonne: Rect, n: usize, offset: f32) -> Option<(Rect, Rect)> {
+    if !defile(colonne, n) {
+        return None;
+    }
+    let rail = Rect::new(colonne.x + colonne.w - ASCENSEUR_L, colonne.y, ASCENSEUR_L, colonne.h);
+    let total = n as f32 * LIGNE_DEFIL;
+    let h = (colonne.h * (colonne.h / total)).max(ASCENSEUR_L * 3.0).min(colonne.h);
+    let course = colonne.h - h;
+    let t = offset / defilement_max(colonne, n).max(1e-6);
+    let curseur = Rect::new(rail.x, rail.y + course * t.clamp(0.0, 1.0), rail.w, h);
+    Some((rail, curseur))
+}
+
 /// Côté du bouton de repli, en pixels. Assez large pour être visé au doigt
 /// comme à la souris, assez petit pour ne pas manger une ligne d'item.
 pub const COTE_REPLI: f32 = 22.0;
@@ -255,6 +352,121 @@ mod tests {
     // Cliquer sur une ligne doit rendre **cette** ligne. Sondé au centre de
     // chacune, sur plusieurs tailles de liste — viser une seule ligne ne
     // distinguerait pas un calcul juste d'un calcul qui rendrait toujours 0.
+    /// **On clique sur ce qu'on voit, quel que soit le décalage.** C'est la
+    /// propriété qui lie `ligne_defilee` et `item_sous_curseur_defile` : deux
+    /// calculs séparés qui doivent parler du même écran, sinon la liste
+    /// sélectionne une entrée voisine de celle qu'on a visée — le genre de
+    /// défaut qu'on met longtemps à croire.
+    #[test]
+    fn le_clic_defile_retombe_sur_la_ligne_vue() {
+        let col = colonne(vec2(1280.0, 720.0));
+        let n = 41;
+        for offset in [0.0_f32, 7.0, LIGNE_DEFIL, 100.0, defilement_max(col, n)] {
+            let mut vues = 0;
+            for i in 0..n {
+                let r = ligne_defilee(col, i, offset);
+                if !ligne_visible(col, r) {
+                    continue;
+                }
+                // Un point franchement à l'intérieur de la ligne.
+                let p = vec2(r.x + r.w * 0.5, r.y + r.h * 0.5);
+                if !col.contains(p) {
+                    continue; // ligne coupée par le bord : hors sujet
+                }
+                assert_eq!(
+                    item_sous_curseur_defile(col, n, offset, p),
+                    Some(i),
+                    "offset {offset} : le clic au milieu de la ligne {i} désigne autre chose"
+                );
+                vues += 1;
+            }
+            assert!(vues > 3, "offset {offset} : trop peu de lignes visibles pour prouver quoi que ce soit");
+        }
+    }
+
+    /// **En bout de course, le dernier item est entièrement lisible.**
+    /// S'arrêter plus tôt laisserait une entrée qu'on ne peut jamais lire — le
+    /// défaut même qu'on corrige.
+    #[test]
+    fn le_dernier_item_se_lit_en_bas_de_course() {
+        let col = colonne(vec2(1280.0, 720.0));
+        for n in [41_usize, 60, 200] {
+            let max = defilement_max(col, n);
+            let r = ligne_defilee(col, n - 1, max);
+            assert!(r.y >= col.y - 0.5, "n={n} : le dernier item sort par le haut");
+            assert!(
+                r.y + r.h <= col.y + col.h + 0.5,
+                "n={n} : le dernier item dépasse encore ({} > {})",
+                r.y + r.h,
+                col.y + col.h
+            );
+        }
+    }
+
+    /// **Pas d'ascenseur quand tout tient**, et un ascenseur dès que non. Une
+    /// barre qui remplit toute sa glissière n'apprend rien et occupe de la place.
+    #[test]
+    fn l_ascenseur_n_apparait_que_s_il_sert() {
+        let col = colonne(vec2(1280.0, 720.0));
+        let tient = lignes_visibles(col);
+        assert!(tient > 2, "colonne trop courte pour que le test ait un sens");
+        assert!(ascenseur(col, tient, 0.0).is_none(), "ascenseur alors que tout tient");
+        assert_eq!(defilement_max(col, tient), 0.0, "un décalage possible alors que tout tient");
+        assert!(ascenseur(col, tient + 1, 0.0).is_some(), "pas d'ascenseur alors qu'un item déborde");
+    }
+
+    /// **Le curseur reste dans son rail**, à tout décalage, et garde une taille
+    /// visible même sur une liste très longue — c'est là qu'on en a le plus
+    /// besoin.
+    #[test]
+    fn le_curseur_de_l_ascenseur_reste_dans_son_rail() {
+        let col = colonne(vec2(1280.0, 720.0));
+        // ⚠️ Le dernier `n` est **hors d'échelle exprès**. Le plancher de taille
+        // du curseur ne mord qu'au-delà d'un millier d'items environ (à 24 px de
+        // ligne sur une colonne de ~700 px) — donc jamais avec les catalogues
+        // réels, qui en comptent quarante. C'est une garde **défensive**, et
+        // sans un `n` de cet ordre le red-check la laissait passer : retirer le
+        // plancher ne rougissait rien.
+        for n in [40_usize, 100, 5000] {
+            let max = defilement_max(col, n);
+            for t in [0.0_f32, 0.25, 0.5, 1.0] {
+                let (rail, cur) = ascenseur(col, n, max * t).expect("devrait défiler");
+                assert!(cur.y >= rail.y - 0.5, "n={n} t={t} : curseur au-dessus du rail");
+                assert!(
+                    cur.y + cur.h <= rail.y + rail.h + 0.5,
+                    "n={n} t={t} : curseur sous le rail"
+                );
+                assert!(cur.h >= ASCENSEUR_L * 2.0, "n={n} : curseur trop fin pour être vu");
+            }
+        }
+    }
+
+    /// Le décalage est borné des deux côtés : ni au-dessus du premier item, ni
+    /// au-delà du dernier.
+    #[test]
+    fn le_defilement_est_borne() {
+        let col = colonne(vec2(1280.0, 720.0));
+        let n = 41;
+        assert_eq!(borner_defilement(col, n, -500.0), 0.0);
+        assert_eq!(borner_defilement(col, n, 1e6), defilement_max(col, n));
+        // Et une liste courte ne défile pas du tout.
+        assert_eq!(borner_defilement(col, 2, 1e6), 0.0);
+    }
+
+    /// **La ligne défilante ne rétrécit pas.** C'est la raison d'être du
+    /// défilement : `hauteur_ligne` tombait au minimum dès qu'il y avait trop
+    /// d'items, et le texte avec elle.
+    #[test]
+    fn la_ligne_defilante_garde_sa_hauteur() {
+        let col = colonne(vec2(1280.0, 720.0));
+        for n in [3_usize, 41, 500] {
+            let r = ligne_defilee(col, 0, 0.0);
+            assert!((r.h - (LIGNE_DEFIL - 2.0)).abs() < 1e-4, "n={n} : hauteur {} inattendue", r.h);
+        }
+        // Alors que la version non défilante, elle, s'écrase.
+        assert!(hauteur_ligne(col, 500) < LIGNE_DEFIL, "le défaut d'origine a disparu tout seul ?");
+    }
+
     #[test]
     fn le_clic_retombe_sur_la_ligne_visee() {
         let c = colonne(ECRAN);

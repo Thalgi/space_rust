@@ -38,9 +38,10 @@ uniform vec3 light_color;
 uniform vec3 lights_pos[4];
 uniform vec3 lights_color[4];
 
-uniform vec3 atmo;          // couleur × intensité du halo (0 = pas d'atmosphère)
-uniform float voile;        // voile opaque (Vénus, Titan) : épaissit et recolore
-uniform vec3 voile_couleur; // teinte du voile
+uniform vec3 atmo;           // TEINTE de l'air, unitaire (ne dit rien de la quantité)
+uniform float atmo_densite;  // QUANTITÉ d'air (0 = pas d'atmosphère)
+uniform float voile;         // voile opaque (Vénus, Titan) : épaissit et recolore
+uniform vec3 voile_couleur;  // teinte du voile
 
 // Hauteur d'échelle de la coquille, en fraction de son épaisseur : la densité
 // décroît d'un facteur e sur cette hauteur. 0.35 -> l'essentiel du halo tient
@@ -54,6 +55,14 @@ uniform vec3 voile_couleur; // teinte du voile
 
 // Opacité de la coquille à corde pleine (Beer-Lambert : 1 - exp(-K·ép)).
 #define K 4.0
+
+// Plafond de densité. Il valait 1.6 quand la densité était la longueur d'un
+// vecteur couleur et qu'aucun monde ne l'approchait (le plus dense sortait à
+// 0,99). Vénus et Titan, une fois leur épaisseur écrite pour de vrai, passent
+// au-dessus : sans marge ils saturaient tous deux au même halo et cessaient de
+// se distinguer. Aucun monde antérieur n'atteignait 1.6 -> relever ne change
+// rien à l'existant.
+#define PLAFOND 2.4
 
 /// Éclairement de la coquille vue depuis la direction `na`, pour une source en
 /// `sp`. Le terminateur atmosphérique déborde sur la nuit (crépuscule : la haute
@@ -101,10 +110,14 @@ void main() {
 
     // Densité et teinte. Un voile opaque épaissit l'atmosphère et lui impose sa
     // couleur : le halo de Vénus est jaune, pas bleu.
-    float force = length(atmo);
-    if (force < 1e-4) discard; // corps sans atmosphère
-    vec3 teinte = mix(atmo / force, voile_couleur, voile * 0.6);
-    float densite = clamp(force * 0.9 + voile * 0.8, 0.0, 1.6);
+    //
+    // La teinte arrive déjà unitaire : la densité vit dans son propre uniform et
+    // n'est plus la longueur d'un vecteur couleur. Le plafond est haut (PLAFOND)
+    // parce que les mondes les plus épais du catalogue — Vénus, Titan — dépassent
+    // franchement la Terre, ce que l'ancien amalgame ne pouvait pas exprimer.
+    if (atmo_densite < 1e-4) discard; // corps sans atmosphère
+    vec3 teinte = mix(atmo, voile_couleur, voile * 0.6);
+    float densite = clamp(atmo_densite * 0.9 + voile * 0.8, 0.0, PLAFOND);
 
     float alpha = 1.0 - exp(-K * epaisseur * densite);
     gl_FragColor = vec4(teinte * lit * (alpha * phase), alpha);

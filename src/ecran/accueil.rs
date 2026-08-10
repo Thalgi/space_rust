@@ -21,6 +21,8 @@ pub enum Cible {
     Megastructures,
     /// Vaisseaux et supervaisseaux (ISV, puis Endurance et Starship).
     Vaisseaux,
+    /// Assembleur : construire un vaisseau à la main (`conception/assembleur.md`).
+    Assembleur,
     /// Réglages du jeu (affichage, taille de fenêtre, rendu).
     Parametres,
     /// Ferme le jeu.
@@ -48,6 +50,7 @@ const BLOC_STATIONS: &[(&str, Cible)] = &[
     ("GENERATEUR PROCEDURAL", Cible::Generateur),
     ("MEGASTRUCTURES - ANNEAUX / TORES", Cible::Megastructures),
     ("VAISSEAUX & SUPERVAISSEAUX", Cible::Vaisseaux),
+    ("ASSEMBLEUR - CONSTRUIRE (VAB)", Cible::Assembleur),
 ];
 
 impl Accueil {

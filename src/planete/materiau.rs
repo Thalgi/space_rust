@@ -53,7 +53,10 @@ const TABLE: &[Entree] = &[
     ("warp_amt", UniformType::Float1, |a| Val::F1(a.warp_amt)),
     ("seed", UniformType::Float1, |a| Val::F1(a.seed)),
     ("poly_cotes", UniformType::Float1, |a| Val::F1(a.poly_cotes)),
-    ("atmo", UniformType::Float3, |a| Val::F3(a.atmo)),
+    // Pas de teinte d'air ici : le corps ne peint plus le halo, il lui suffit de
+    // savoir qu'il y a de l'air (hydrologie, nuages). La teinte ne part qu'à la
+    // coquille — voir `uniforms_atmo`.
+    ("atmo_densite", UniformType::Float1, |a| Val::F1(a.atmo_densite)),
     ("lave", UniformType::Float1, |a| Val::F1(a.lave)),
     ("eau_motif", UniformType::Float1, |a| Val::F1(a.eau_motif)),
     ("grad_lat", UniformType::Float1, |a| Val::F1(a.grad_lat)),
@@ -109,15 +112,15 @@ fn set_val(mat: &Material, nom: &str, v: Val) {
 thread_local! {
     static TPL_CORPS: RefCell<Option<Material>> = const { RefCell::new(None) };
     static TPL_ATMO: RefCell<Option<Material>> = const { RefCell::new(None) };
-    // Hauteur (px) du viewport de rendu courant : la galerie dessine dans des
-    // cellules, pas plein écran -> nécessaire au LOD px_rayon. 0 = plein écran.
-    static VIEWPORT_H: RefCell<f32> = const { RefCell::new(0.0) };
 }
 
 /// Indique la hauteur du viewport de rendu courant (galerie : hauteur de
 /// cellule, éventuellement divisée par le facteur pixel). 0 = plein écran.
+///
+/// La valeur vit dans `impostor` : corps, disques et étoiles la lisaient dans
+/// des cellules séparées qu'il fallait régler en cascade.
 pub(super) fn set_viewport_h(h: f32) {
-    VIEWPORT_H.with(|v| *v.borrow_mut() = h);
+    impostor::set_viewport_h(h);
 }
 
 pub(super) fn mat_corps() -> Material {
@@ -145,28 +148,21 @@ pub(super) fn vider_cache() {
     TPL_ATMO.with(|c| *c.borrow_mut() = None);
 }
 
-/// Rayon apparent du corps, en pixels — approximation petit angle pour un fov
-/// de ~45° : `px ≈ r/dist · h / (2·tan(22.5°))`. Pilote tous les LOD.
-fn px_rayon_pur(r: f32, dist: f32, vh: f32) -> f32 {
-    r / dist.max(1e-3) * vh * 1.2
-}
-
-/// Rayon apparent (px) du corps dans le viewport courant.
+/// Rayon apparent (px) du corps dans le viewport courant. La formule est
+/// partagée : voir [`impostor::px_rayon`].
 pub(super) fn px_rayon(cam: &CameraInfo, c: Vec3, r: f32) -> f32 {
-    let vh = VIEWPORT_H.with(|v| *v.borrow());
-    let vh = if vh > 1.0 { vh } else { screen_height() };
-    px_rayon_pur(r, (cam.pos - c).length(), vh)
+    impostor::px_rayon(r, (cam.pos - c).length(), impostor::viewport_h())
 }
 
 /// Vrai si la coquille atmosphérique mérite sa passe de rendu : le corps doit
 /// avoir une atmosphère, et celle-ci doit couvrir au moins un pixel à l'écran.
-fn atmo_visible_pur(atmo: Vec3, px_rayon: f32) -> bool {
-    atmo != Vec3::ZERO && px_rayon * (DISC - 1.0) >= ATMO_PX_MIN
+fn atmo_visible_pur(atmo_densite: f32, px_rayon: f32) -> bool {
+    atmo_densite > 0.0 && px_rayon * (DISC - 1.0) >= ATMO_PX_MIN
 }
 
 /// Voir [`atmo_visible_pur`] : même décision, mesures prises sur la scène.
 pub(super) fn atmo_visible(a: &Apparence, cam: &CameraInfo, c: Vec3, r: f32) -> bool {
-    atmo_visible_pur(a.atmo, px_rayon(cam, c, r))
+    atmo_visible_pur(a.atmo_densite, px_rayon(cam, c, r))
 }
 
 // Texture de secours (1×1) : corps sans terrain précalculé (gazeuses, glacées)
@@ -271,6 +267,7 @@ pub(super) fn appliquer_uniforms_atmo(mat: &Material, a: &Apparence, cam: &Camer
     mat.set_uniform_array("lights_pos", &cam.lights_pos[..]);
     mat.set_uniform_array("lights_color", &cam.lights_color[..]);
     mat.set_uniform("atmo", (a.atmo.x, a.atmo.y, a.atmo.z));
+    mat.set_uniform("atmo_densite", a.atmo_densite);
     mat.set_uniform("voile", a.voile);
     mat.set_uniform(
         "voile_couleur",
@@ -292,6 +289,7 @@ fn uniforms_atmo() -> Vec<UniformDesc> {
         UniformDesc::array(UniformDesc::new("lights_pos", UniformType::Float3), 4),
         UniformDesc::array(UniformDesc::new("lights_color", UniformType::Float3), 4),
         UniformDesc::new("atmo", UniformType::Float3),
+        UniformDesc::new("atmo_densite", UniformType::Float1),
         UniformDesc::new("voile", UniformType::Float1),
         UniformDesc::new("voile_couleur", UniformType::Float3),
     ]);
@@ -456,12 +454,12 @@ mod tests {
     fn pas_de_coquille_sans_atmosphere() {
         // Un corps sans air (Mercure, la Lune) ne doit jamais payer la passe,
         // même occupant tout l'écran.
-        assert!(!atmo_visible_pur(Vec3::ZERO, 10_000.0));
+        assert!(!atmo_visible_pur(0.0, 10_000.0));
     }
 
     #[test]
     fn pas_de_coquille_sous_le_pixel() {
-        let air = vec3(0.35, 0.55, 1.0);
+        let air = 1.0;
         // Épaisseur = px_rayon × (DISC - 1). Le seuil est ATMO_PX_MIN pixels.
         let juste_au_seuil = ATMO_PX_MIN / (DISC - 1.0);
         assert!(atmo_visible_pur(air, juste_au_seuil * 1.01), "au seuil, la coquille se voit");
@@ -476,10 +474,11 @@ mod tests {
     /// qu'en plein écran à distance égale.
     #[test]
     fn le_rayon_apparent_suit_le_viewport_et_la_distance() {
-        let plein = px_rayon_pur(1.0, 10.0, 1000.0);
-        assert!((px_rayon_pur(1.0, 10.0, 250.0) - plein / 4.0).abs() < 1e-4);
-        assert!((px_rayon_pur(1.0, 40.0, 1000.0) - plein / 4.0).abs() < 1e-4);
+        let px = impostor::px_rayon;
+        let plein = px(1.0, 10.0, 1000.0);
+        assert!((px(1.0, 10.0, 250.0) - plein / 4.0).abs() < 1e-4);
+        assert!((px(1.0, 40.0, 1000.0) - plein / 4.0).abs() < 1e-4);
         // Caméra collée au corps : pas de division par zéro.
-        assert!(px_rayon_pur(1.0, 0.0, 1000.0).is_finite());
+        assert!(px(1.0, 0.0, 1000.0).is_finite());
     }
 }
