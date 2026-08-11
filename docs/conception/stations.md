@@ -1302,8 +1302,12 @@ Comme pour l'ISV : **brique d'abord, assemblage ensuite** (§C.29, leçon 1).
    contrairement au plan : c'est elle qui a révélé que le vaisseau mesurait 54 m
    au lieu de 50, et cette cote conditionnait tout le reste.
 3. ✅ Volets articulés — la brique qui **bouge**, à traiter seule.
-4. ⏳ Module en coin d'arc de l'Endurance, jugé seul.
+4. ✅ Module en coin d'arc de l'Endurance, jugé seul (2026-08-09) — quatre
+   variantes : habitat, soute, poste Ranger, poste Lander.
 5. ⏳ Assemblage de l'anneau à douze, avec l'alternance des familles.
+   ⚠️ **Bloqué par la palette**, pas par la géométrie : `echantillons()` ne
+   propose qu'une sous-variante par composant, donc trois des quatre familles
+   d'arc sont inatteignables à l'écran. À débloquer d'abord.
 6. ⏳ Propulsion et réservoirs arrière de l'Endurance.
 
 **Le Starship est terminé** (2026-08-06). Deux briques se sont ajoutées au plan,
@@ -1552,7 +1556,18 @@ décision retenue, alignée sur ce que l'éditeur (§E.4) demandera réellement.
   uniquement des changements de représentation (emprunt vs valeur, clone vs
   copie implicite).
 
-### E.4 Ce qu'il faudra à un futur éditeur façon VAB (non fait ici)
+### E.4 Ce qu'il faudra à un futur éditeur façon VAB — ✅ **l'éditeur existe** (2026-08-09)
+
+> ⚠️ **Cette section est historique.** Elle a été écrite pour vérifier que §E.2
+> et §E.3 ne fermaient aucune porte, en supposant l'éditeur lointain. Il est
+> construit : `ecran::assembleur::VueAssembleur`, lots 1 à 5 clos, plus la
+> rotation au clavier. Tout ce que la liste ci-dessous réclamait existe —
+> sérialisation comprise, au format « recette » qu'elle proposait justement (une
+> liste ordonnée de poses, aucune `Mat4` sérialisée). L'état courant et ce qui
+> reste sont dans [`../suivi/assembleur.md`](../suivi/assembleur.md).
+>
+> Le dernier paragraphe (« rien de cette liste ne se code avant que §E.2 et §E.3
+> soient stables ») a été respecté : ils l'étaient depuis le 2026-07-29.
 
 > **Suite : [`assembleur.md`](assembleur.md) (2026-07-31).** Cette section liste
 > les *fonctionnalités* manquantes ; le document dédié audite le parc de tests

@@ -54,6 +54,7 @@ mod hangar;
 mod miroir;
 mod module_arc;
 mod tore;
+mod jante;
 /// Section du bardage thermique, exposée pour que l'assemblage puisse vérifier
 /// qu'il **épouse** l'épine. C'est la surface qui se plaque sur la poutre — la
 /// mesurer sur les sommets cuits attraperait les lèvres, relevées par
@@ -323,6 +324,21 @@ pub enum Composant {
         anneaux: usize,
         jonctions: usize,
         phase: f32,
+    },
+    /// **Jante** (`jante.rs`) : portion de tore en **canal ouvert**, façon jante
+    /// de vélo — une paroi qui court du flanc à l'autre en passant par le bord
+    /// extérieur, et **vide côté moyeu** : `ouverture` (radians) est le
+    /// demi-angle du vide autour du point le plus proche de l'axe, où le `Tore`
+    /// pose sa fenêtre vitrée. `arc` (radians) est la portion de cercle
+    /// couverte — `TAU / 6` pour un sixième — au lieu du tour complet du
+    /// `Tore`. Même surface paramétrique, aucun port : posée à la main.
+    Jante {
+        rayon_majeur: f32,
+        rayon_mineur: f32,
+        arc: f32,
+        ouverture: f32,
+        segments: usize,
+        anneaux: usize,
     },
     /// **Miroir primaire** d'un tore de Stanford (`miroir.rs`). Grand disque
     /// reflechissant, legerement creux, monte sur un mat.
@@ -602,6 +618,7 @@ impl Composant {
             Composant::Panache { .. } => "PANACHE",
             Composant::PanneauMega { .. } => "PANNEAU MEGA",
             Composant::Tore { .. } => "TORE",
+            Composant::Jante { .. } => "JANTE",
             Composant::Miroir { .. } => "MIROIR",
             Composant::GrappeReservoirs { .. } => "GRAPPE RESERVOIRS",
             Composant::Hangar { .. } => "HANGAR",
@@ -652,6 +669,8 @@ impl Composant {
             Composant::Panache { .. } => vec![],
             Composant::PanneauMega { profil, .. } => panneau_mega::ports(*profil),
             Composant::Tore { .. } => vec![],
+            // Posée à la main, comme le tore : pas de port.
+            Composant::Jante { .. } => vec![],
             Composant::Miroir { profil, .. } => miroir::ports(*profil),
             Composant::GrappeReservoirs { profil, rayon_cuve, rangees } => {
                 grappe::ports(*profil, *rayon_cuve, *rangees)
@@ -724,6 +743,9 @@ impl Composant {
             }
             Composant::Tore { rayon_majeur, rayon_mineur, segments, anneaux, jonctions, phase } => {
                 tore::dessiner(p, *rayon_majeur, *rayon_mineur, *segments, *anneaux, *jonctions, *phase)
+            }
+            Composant::Jante { rayon_majeur, rayon_mineur, arc, ouverture, segments, anneaux } => {
+                jante::dessiner(p, *rayon_majeur, *rayon_mineur, *arc, *ouverture, *segments, *anneaux)
             }
             Composant::CoqueOgive { profil, longueur, nez } => coque::dessiner(p, *profil, *longueur, *nez),
             Composant::JupeMoteur { profil, longueur } => coque::jupe_dessiner(p, *profil, *longueur),
@@ -798,6 +820,7 @@ impl Composant {
             Composant::Panache { .. } => panache::cout(),
             Composant::PanneauMega { longueur, largeur, .. } => panneau_mega::cout(*longueur, *largeur),
             Composant::Tore { rayon_majeur, .. } => tore::cout(*rayon_majeur),
+            Composant::Jante { rayon_majeur, arc, .. } => jante::cout(*rayon_majeur, *arc),
             Composant::Miroir { variante, rayon, .. } => miroir::cout(*variante, *rayon),
             Composant::GrappeReservoirs { rayon_cuve, rangees, .. } => grappe::cout(*rayon_cuve, *rangees),
             Composant::Hangar { profil, variante, baie, .. } => hangar::cout(*variante, *profil, *baie),
@@ -895,6 +918,9 @@ impl Composant {
             Composant::Panache { .. } => panache::rayon_local(),
             Composant::PanneauMega { longueur, largeur, .. } => panneau_mega::rayon_local(*longueur, *largeur),
             Composant::Tore { rayon_majeur, rayon_mineur, .. } => tore::rayon_local(*rayon_majeur, *rayon_mineur),
+            // Même borne que le tore : le point le plus loin de l'axe (v = 0,
+            // le bord extérieur) est toujours couvert, ouverture ou pas.
+            Composant::Jante { rayon_majeur, rayon_mineur, .. } => tore::rayon_local(*rayon_majeur, *rayon_mineur),
             Composant::Miroir { rayon, creux, .. } => miroir::rayon_local(*rayon, *creux),
             Composant::GrappeReservoirs { rayon_cuve, rangees, .. } => {
                 grappe::rayon_local(*rayon_cuve, *rangees)
@@ -1027,6 +1053,10 @@ impl Composant {
             // L'aile pivote : la sphère couvre toutes ses orientations.
             Composant::PanneauMega { .. } => centree(),
             Composant::Tore { .. } => centree(),
+            // Même limite que le tore, et pour la même raison (§ ci-dessus) :
+            // creuse, mal servie par une sphère, mais posée à la main et seule
+            // à ce rayon pour l'instant.
+            Composant::Jante { .. } => centree(),
             // ⚠️ Même limite que le tore, et pour la même raison : un disque
             // très large est mal servi par une sphère, qui réserve autant de
             // volume **devant et derrière** que sur les côtés. C'est le cas
@@ -1206,7 +1236,15 @@ fn suivante(c: &Composant) -> Option<Composant> {
             inclinaison: 0.3,
         },
         Composant::PanneauMega { .. } => Composant::Tore { rayon_majeur: 12.0, rayon_mineur: 1.5, segments: 48, anneaux: 12, jonctions: 3, phase: 0.5 },
-        Composant::Tore { .. } => Composant::Miroir {
+        Composant::Tore { .. } => Composant::Jante {
+            rayon_majeur: 12.0,
+            rayon_mineur: 1.5,
+            arc: std::f32::consts::TAU / 6.0,
+            ouverture: 0.6,
+            segments: 16,
+            anneaux: 6,
+        },
+        Composant::Jante { .. } => Composant::Miroir {
             profil: Profil::P1,
             variante: miroir::VarianteMiroir::Primaire,
             rayon: 6.0,
@@ -1378,7 +1416,8 @@ pub fn categorie(c: &Composant) -> Categorie {
         Composant::TreillisHexagone { .. }
         | Composant::BouclierThermique { .. }
         | Composant::Charniere { .. }
-        | Composant::Tore { .. } => Categorie::PoseeAMain,
+        | Composant::Tore { .. }
+        | Composant::Jante { .. } => Categorie::PoseeAMain,
         // Le miroir se **monte** (port de mat), le module d'arc se **chaine** :
         // les deux ont des ports, donc leur place est dans la palette.
         Composant::Miroir { .. } => Categorie::Energie,
@@ -3823,7 +3862,7 @@ mod tests {
         // développeur est alors déjà dans ce fichier (le `match` de `suivante`
         // ne compile plus sans lui), et bumper ce nombre est la confirmation
         // qu'il a bien recousu la chaîne au lieu de la court-circuiter.
-        assert_eq!(ech.len(), 43, "la chaîne ne visite pas les 43 variantes");
+        assert_eq!(ech.len(), 44, "la chaîne ne visite pas les 44 variantes");
     }
 
     // ================================================================

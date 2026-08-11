@@ -8,6 +8,21 @@
 use macroquad::prelude::*;
 use std::f32::consts::{FRAC_PI_2, PI};
 
+/// Point de la surface d'un tore (rayon majeur `rayon_majeur`, mineur
+/// `rayon_mineur`) et sa normale sortante. `u` court autour de l'anneau, dans
+/// le plan **X‑Z** (axe **Y**) ; `v` court autour du tube — `v = 0` le point le
+/// plus **loin** de l'axe, `v = π` le plus **proche**.
+///
+/// Partagée par `tore.rs` (surface fermée, habillée de tuiles et de vitrage) et
+/// `jante.rs` (canal ouvert, façon jante de vélo) : c'est la même paramétrisation
+/// géométrique, seule l'habillage diffère.
+pub(super) fn surface_tore(rayon_majeur: f32, rayon_mineur: f32, u: f32, v: f32) -> (Vec3, Vec3) {
+    let (su, cu) = u.sin_cos();
+    let (sv, cv) = v.sin_cos();
+    let n = vec3(cv * cu, sv, cv * su);
+    let r = rayon_majeur + rayon_mineur * cv;
+    (vec3(r * cu, rayon_mineur * sv, r * su), n)
+}
 
 /// Épaisseur des traits (nervures, arêtes) une fois cuits en géométrie.
 /// Ignorée par la sortie immédiate, qui trace un segment d'un pixel.

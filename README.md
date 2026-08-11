@@ -97,7 +97,7 @@ Les vaisseaux sauvegardés vont dans `vaisseaux/` (ignoré par git).
   devient testable.
 - `cargo clippy --all-targets` doit rester à **zéro avertissement**.
 
-État vérifié : **579 tests verts**, 0 avertissement clippy.
+État vérifié : **622 tests verts**, 0 avertissement clippy.
 
 ---
 

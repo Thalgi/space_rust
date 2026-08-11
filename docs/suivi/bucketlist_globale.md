@@ -131,7 +131,7 @@ exactement le même système (reproductible, partageable).
       optique = longueur de **corde** traversée (donc deux fois plus dès qu'on sort de la
       silhouette — d'où le liseré net du limbe), raréfaction en altitude, terminateur qui
       déborde sur la nuit, diffusion vers l'avant à contre-jour. Additive, sans écriture de
-      profondeur, sautée sous 0,75 px d'épaisseur. Voir STATE.md § P.1.
+      profondeur, sautée sous 0,75 px d’épaisseur. Détail dans [`planetes.md`](planetes.md) § P.1.
 - [x] **Densité d'atmosphère indépendante de sa teinte** (2026-08-09, § P.1 ter).
       `atmo` portait les deux — teinte en direction, quantité en longueur — donc un air
       **épais mais terne** était inécrivable : Vénus, l'atmosphère la plus lourde du système
@@ -158,7 +158,8 @@ exactement le même système (reproductible, partageable).
       croît aux angles rasants (Fresnel). Extinction géométrique + renfort au rasant.
 - [x] **Gazeuses** : advection par champ de flux façon curl-noise (champ sans divergence) + bandes organiques (double-offset fbm).
 - [x] **Géantes de glace** (Uranus/Neptune) distinctes : Uranus voilée + anneau monobande bleu ciel, Neptune contrastée navy→cyan + Grande Tache Sombre.
-- [ ] **Anneaux** : ombre de la planète sur l'anneau + ombre de l'anneau sur la planète.
+- [x] **Anneaux** : ombre de la planète sur l'anneau **et** ombre de l'anneau sur la
+      planète — les deux sens existent désormais (voir l'entrée détaillée ci-dessous).
 - [x] **Rotation propre** : axe d'inclinaison (déjà là) **et vitesse par planète**, tirée des
       vraies périodes sidérales (`ROTATIONS_JOURS`), rétrogrades comprises (Vénus, Uranus).
       Elle était codée en dur dans le shader : neuf planètes, une seule cadence. Bornée en
@@ -219,6 +220,30 @@ Presets `binaire`, `trinaire`, `quadruple`, plus Alpha Centauri (A+B réels).
 - [ ] Vaisseaux **mobiles** (transferts entre astres), et l'ISV / le Starship en orbite.
       Le Starship est **terminé** depuis le 2026-08-06 : c'est un objet fini qui n'a nulle part
       où aller.
+
+## 10 bis bis. L'assembleur (VAB) — ✅ fait le 2026-08-09
+
+Le chaînon manquant : il existait un **modèle** d'assemblage complet (`Chantier`)
+et aucun écran pour s'en servir. Détail des lots dans
+[`assembleur.md`](assembleur.md), conception dans
+[`../conception/assembleur.md`](../conception/assembleur.md).
+
+- [x] **Écran d'assemblage** : palette à gauche, pièce en main, ports qui
+      s'allument (vert posable, rouge encombré, éteint incompatible).
+- [x] **Déplacer** une pièce déjà posée, avec son sous-arbre.
+- [x] **Rotation au clavier** (R / Maj+R, pas de 15°) — livrée sans attendre le
+      gizmo, parce que sans elle on ne peut composer aucun vaisseau.
+- [x] **Sauvegarde disque** : `vaisseaux/`, dix emplacements, aucune matrice
+      sérialisée (une recette est la liste ordonnée des poses).
+- [x] **Colonne défilante** : la liste des composants a dépassé la hauteur de
+      l'écran. ⚠️ L'ascenseur n'est câblé que là ; `galerie_disques` et `skymap`
+      partagent la colonne et ont le même défaut.
+- [ ] ⚠️ **La palette ne liste qu'une sous-variante par composant.**
+      `ARC SOUTE`, les postes d'amarrage, `HANGAR FERME` sont **inatteignables à
+      l'écran**. Bloque l'assemblage de l'Endurance.
+- [ ] **Lot 8** (décalage le long de l'axe) et **Lot 9** (redimensionnement) —
+      les deux autres modes d'édition façon Blockbench.
+- [ ] **Lot 6** : dette d'enveloppes L1.4, composites `figer`, `PoutreBout`.
 
 ## 10 ter. Paramètres du jeu — ✅ premier jet
 

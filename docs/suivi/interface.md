@@ -22,7 +22,7 @@
 | **I.5** | Agrégation `sur_ui` : une seule porte | ✅ |
 
 **Bouche-trous** : 4 des 5 soldés. Reste **D-INT-2**, l'économie — chantier de
-conception à part entière (tableau dans `STATE.md`).
+conception à part entière (dette **D-INT-2**, tableau dans [`../../STATE.md`](../../STATE.md)).
 
 **28 tests ajoutés, tous red-checkés.**
 
@@ -352,3 +352,605 @@ sans que la barre ait l'air d'avoir changé.
   La question de sa place se posera.
 - **Le parti pris esthétique** : sprites saturés contre Minitel monochrome. À
   juger à l'usage.
+
+---
+
+# Partie B — Calques, lisibilité, police et paramètres
+
+## Récapitulatif I.0–I.5, et ce qui restait ouvert
+
+Conception écrite le 2026-08-04 :
+**[`docs/conception/interface.md`](../conception/interface.md)**. À lire avant
+d'écrire une ligne. C'est la première interface **de jeu** du projet — tout ce
+qui existe aujourd'hui est de l'outillage de développement.
+
+Écran visé : la **Skymap** (vue système), pas la Starmap.
+
+| # | Étape | État |
+|---|---|---|
+| I.0 | Chargement des sprites (atlas, `FilterMode::Nearest`, repli) | ✅ |
+| I.1 | Noms d'astres (presets seulement ; numérotation orbitale en repli) | ✅ |
+| I.2 | Sélecteur de planètes à gauche, rétractable | ✅ |
+| I.3 | Panneau de planète au clic | ✅ |
+| I.4 | Barre de ressources + nom du système | ✅ |
+| I.5 | Agrégation `sur_ui` (une seule porte) | ✅ faite au fil des étapes |
+
+**Trois décisions déjà prises** (§2.2, §4.1) : ressources en **affichage seul**
+(`Tresorerie` figée, pas d'économie), noms d'astres **sur les presets
+seulement**, clic sur une planète **centre la caméra** comme aujourd'hui.
+
+**Cinq questions ouvertes** en §5.1 — l'icône des crédits (aucun sprite),
+quelles ressources dans la barre (14 sprites existent, 5 tiennent), où vit le
+nom, comment se ferme le panneau, les lunes dans le sélecteur.
+
+Deux acquis à ne pas réécrire : **`ecran::liste` *est* le sélecteur** (colonne
+bornée, hauteur de ligne adaptative, item sous le curseur — rien en lui ne
+connaît les composants), et **l'habitabilité se déduit** de
+`etoile::zone_habitable` au lieu de se stocker.
+
+
+> Extrait de [`STATE.md`](../../STATE.md) le 2026-08-10.
+
+## Interface — Bascules de calques en « doubles carrés »
+
+Quatre bascules à deux étages, un mot par case, l'état porté par la **couleur du
+fond** au lieu d'un « : ON » qu'il fallait lire :
+
+| | RING / PLANET | RING / STAR | RING / MOONS | ZONE / HABITABLE |
+|---|---|---|---|---|
+
+**Les orbites de lunes n'existaient pas.** Les lunes sont créées avec un
+`orbite` vide, donc la boucle des trajectoires les sautait — et les dessiner
+avec celle des planètes les aurait centrées sur le **barycentre du système**
+plutôt que sur leur planète, qui bouge. D'où une trace à part, `orbite_lune`, en
+coordonnées relatives au parent, **précalculée** dans `en_lune` (elle ne dépend
+que des éléments orbitaux) et construite à partir du **même** couple de vecteurs
+`(a1, q)` que `orbiter_autour` : deux formules dériveraient en silence.
+
+Désactivées par défaut — elles sont nombreuses et encombrent vite.
+
+**Couleurs, et pourquoi elles ne sont pas libres.** Rouge contre vert est le
+pire couple pour un deutéranope ou un protanope (~8 % des hommes) : les deux
+teintes se confondent. Ce qui les sépare quand la teinte ne le fait pas, c'est la
+**luminance** — un rouge sombre et un vert néon tiennent à plus de 4,5 de rapport
+de contraste, lisible sans percevoir aucune des deux couleurs. Le vert est tiré
+vers le jaune, où un protanope le voit encore clair.
+
+Deux tests le tiennent (`les_deux_etats_se_distinguent_sans_la_teinte`,
+`le_texte_contraste_avec_son_fond`) : une retouche esthétique qui rapprocherait
+les luminances casserait l'accessibilité **sans que rien ne se voie** pour un œil
+trichromate. C'est exactement le genre de régression qu'un test doit attraper.
+
+**Deux autres choses au passage :**
+
+- `draw_orbites` prenait trois booléens de suite, et il en fallait un quatrième.
+  Quatre `bool` positionnels du même type s'intervertissent sans un mot du
+  compilateur — le défaut qu'on venait de corriger sur les horloges. Ils sont
+  devenus `Calques { planetes, etoiles, lunes, zone }`, nommés à l'appel.
+- La taille de police des libellés descend jusqu'à ce que le **plus large** des
+  deux mots tienne, mesuré avec la vraie police. La règle de mesure est passée en
+  argument pour que le calcul se teste **sans fenêtre** (`police::mesure` exige un
+  contexte graphique).
+
+PHYS garde sa bascule à une ligne : ce n'est pas un calque mais un mode de
+simulation, et il dit donc son état en toutes lettres.
+
+## Interface — Trajectoires planétaires en points sarcelle
+
+Le trait continu est devenu un **semis de points** : un court segment centré sur
+l'échantillon, et non posé à son départ — sinon chaque marque se décale vers
+l'avant et l'espacement se lit de travers.
+
+**Un pas fixe ne pouvait pas marcher, et la première version l'a montré.** Une
+même orbite couvre quelques pixels vue de loin et plusieurs écrans vue de près :
+à pas constant on obtient, selon le bout, un trait plein ou deux marques perdues
+sur l'écran. C'était le défaut signalé — « pas assez de points pour visualiser le
+cercle de près ».
+
+Deux corrections, et il fallait les deux :
+
+1. **La réserve d'échantillons** (`Orbite::N_TRACE`) passe de 96 à **512**. Elle
+   plafonne la densité : le tracé peut en sauter, jamais en inventer. Elle ne
+   sert que de près, et coûte ~6 Ko par orbite. Les lunes suivent (72 → 256).
+2. **Le pas s'adapte** : `dessiner_points` mesure l'espacement **à l'écran** et
+   saute ce qu'il faut pour viser 22 px entre deux points. La distance retenue
+   est celle de l'arc le **plus proche**, pas celle du foyer — vue de l'intérieur
+   d'une grande orbite, l'arc proche est à des ordres de grandeur du foyer, et
+   c'est lui qu'on regarde.
+
+`draw_line_3d` rend un pixel de large quelle que soit la distance : un segment
+très court se lit donc comme un point à tous les zooms utiles, et ne s'allonge en
+tiret que de très près.
+
+Les **lunes** ont suivi (mêmes points, violet pâle) : deux traces de même nature
+dessinées différemment auraient été une incohérence gratuite.
+
+**Les quatre teintes sont désormais nommées et testées ensemble.** Ce qui compte
+n'est pas chacune prise à part mais qu'elles se distinguent **entre elles** :
+quatre réseaux superposés sur le même fond noir, dont deux confondus, et on ne
+sait plus ce qu'on regarde.
+
+| calque | teinte |
+|---|---|
+| trajectoires planétaires | sarcelle |
+| orbites stellaires | paille (tirets) |
+| orbites lunaires | violet pâle |
+| zone habitable | vert |
+
+`les_calques_ne_se_confondent_pas` mesure les écarts deux à deux **en Lab**, où
+la distance approche la différence perçue — pas en RGB, où deux couleurs
+numériquement éloignées peuvent se ressembler. Et
+`les_calques_restent_des_traits_de_fond` borne l'alpha : un calque est un fond de
+carte, pas le sujet.
+
+Le pas adaptatif a ses tests aussi : espacement obtenu proche de la cible sur
+toute la plage de zoom, pas **jamais nul** (la boucle de tracé n'avancerait plus)
+et **jamais au-delà du quart** des échantillons (il ne resterait plus un cercle).
+⚠️ Le premier jeu de red-checks a laissé passer le retour à 96 échantillons —
+rien ne gardait ce nombre. D'où `N_TRACE`, nommée et bornée par une assertion de
+compilation, avec le raisonnement : c'est un plancher, pas une copie de la
+valeur.
+
+## Interface — Désigner un corps efface les traces qui ne le concernent pas
+
+Sur un système garni, une douzaine de cercles superposés empêchent de voir lequel
+appartient au corps qu'on vient de désigner. Un clic met donc à **10 %** tout ce
+qui ne lui est pas lié.
+
+**« Lié » veut dire : lui-même, ce autour de quoi il tourne, ou ce qui tourne
+autour de lui.**
+
+- désigner une **étoile** garde **toutes les trajectoires de ses planètes** —
+  sans quoi on ne voit plus le système du tout ;
+- désigner une planète garde sa trace **et** les orbites de ses lunes ;
+- désigner une lune garde la sienne **et** celle de sa planète ;
+- la planète sœur, elle, s'efface : c'est tout l'objet du filtre.
+
+⚠️ **Deux erreurs successives sur cette règle, et la seconde n'a été trouvée
+qu'à l'écran.**
+
+1. La première version ne regardait que `Astre::parent` — renseigné pour les
+   seules **lunes**. D'où `Systeme::attache`, qui réunit `parent` et `foyer` sous
+   une idée : « ce corps tourne autour de celui-là ».
+2. **Insuffisant, et désigner l'étoile effaçait toujours tout.** Le lien fin
+   passe par le foyer, or `genese::ajouter_planete` — que le préset solaire
+   utilise pour **toutes** ses planètes — les pose sur `Foyer::Barycentre`.
+   L'étoile étant à l'origine, barycentre et étoile se confondent à l'œil, mais
+   `attache` n'y voit aucun astre.
+
+D'où une **seconde règle, assumée comme telle** : une étoile désignée met en
+avant tout son système planétaire, indépendamment du foyer. Les lunes restent en
+retrait — un cran plus bas, et nombreuses.
+
+Effacé et non supprimé : le reste du système doit rester lisible en filigrane,
+sinon désigner une planète donne l'impression que les autres ont disparu. Et
+l'atténuation ne touche **que l'alpha** — une trace effacée qui changerait de
+teinte se lirait comme un autre calque.
+
+La règle est une question de **parenté**, pas de rendu : `liee_au_focus` reçoit
+la fonction parent en argument et se teste sans écran, sur un arbre d'essai
+(étoile, deux planètes, deux lunes).
+
+⚠️ **Une approximation assumée** : les orbites stellaires viennent de l'arbre
+sous forme de polylignes **sans index d'astre**, impossible à lier une à une. On
+les garde donc entières quand c'est une étoile qu'on regarde, et on les efface
+sinon.
+
+⚠️ **Et le test de la première version est resté vert pendant que la
+fonctionnalité était cassée.** Il modélisait `parent` comme rendant déjà
+l'étoile d'une planète — ce que le vrai système ne fait pas. Il vérifiait donc
+mon hypothèse, pas le système. Le double d'essai n'avait même pas de `foyer` :
+la distinction ne pouvait pas être exercée.
+
+Corrigé en donnant un `foyer` au double et en testant `attache` sur de vrais
+astres. Le sabotage qui compte — revenir à `parent` seul — rougit maintenant.
+
+Red-checks : filtre supprimé, enfants délaissés, parent délaissé, atténuation
+nulle, imperceptible, ou qui déteint sur la teinte ; puis `attache` réduite à
+`parent`, `attache` ignorant `parent`, et foyer barycentrique pris pour un astre.
+
+**Taille des points** : elle se règle désormais en **pixels écran**
+(`LONGUEUR_POINT_PX = 3`) et non plus en fraction de l'espacement. Les deux
+réglages deviennent indépendants — espacer les points ne les allonge plus — et
+« des petits points » reste vrai à tous les zooms. Les points de l'arc lointain
+sortent plus courts : c'est la perspective, et c'est juste.
+
+## La vue de départ : le système solaire
+
+La `Skymap` ouvre désormais sur **le preset solaire**, et non plus sur une
+graine procédurale : depuis qu'elle porte l'interface de jeu, elle doit ouvrir
+sur un lieu connu — on y reconnaît les planètes, on y juge les distances. `G`
+tire toujours un système au hasard.
+
+Remis au niveau au passage :
+
+- **Anneaux d'Uranus** (monobande bleu ciel) et **de Neptune** (arcs), ajoutés
+  au **catalogue** et non au preset : la galerie et la vue système lisent la
+  même apparence.
+- **Quatre familles de petits corps** au lieu de deux — ceinture principale,
+  Kuiper, **disque épars** (orbites excentriques et inclinées) et **nuage de
+  Oort** (coquille sphérique, pas un disque). Toutes existaient déjà dans
+  `DisqueConfig` ; le preset n'en utilisait que la moitié.
+- **L'ISS en orbite terrestre** (`src/engin.rs`) : le pont entre les deux
+  moitiés du projet — la station est assemblée par `vaisseau::preset_iss`, cuite
+  en maillage, puis mise en orbite comme une lune. Nouvelle
+  `Categorie::Engin`.
+
+⚠️ **L'échelle de l'ISS est fausse, et c'est inévitable.** À l'échelle réelle
+elle ferait 9 × 10⁻⁶ unité de monde — mille fois moins qu'un pixel. Les facteurs
+sont **nommés** (`ORBITE_ISS`, `ECHELLE_ISS`) plutôt que noyés dans un calcul :
+un mensonge d'échelle assumé vaut mieux qu'un mensonge implicite.
+
+## ⚠️ La police ne couvre que 157 caractères
+
+`assets/minitel.ttf` fait 12 Ko. Relevé sur sa table `cmap` : il porte les
+accents **minuscules** (à â ä ç è é ê ë î ï ô ö ù û ü) — l'essentiel du look
+Minitel — mais **pas leurs majuscules**, ni la ponctuation typographique
+(`…` `—` `«` `»` `·` `×`). Un caractère sans glyphe ne se dessine pas : l'écran
+montre un blanc, ce que l'œil lit comme un texte corrompu.
+
+Deux cas se produisaient pour de bon, tous deux dans la **vue système** :
+
+1. `skymap.rs` titre par `to_uppercase()`. « Système généré » devient
+   « SYSTÈME GÉNÉRÉ » — `È` et `É` disparaissent.
+2. `liste::tronquer` ajoute une **ellipse** `…` à tout libellé trop long, donc à
+   toutes les entrées coupées du sélecteur d'astres.
+
+Corrigé par `police::assainir`, appliquée au **point de passage unique** de tout
+le texte du jeu. La table des remplacements est relevée sur la police, pas
+devinée. Les accents minuscules sont **laissés intacts** : la police les a, et
+les aplatir abîmerait le rendu là où il est juste.
+
+⚠️ **Ce n'était pas une régression de la revue P1** — le défaut est aussi vieux
+que la police. Vérifié : les seules retouches de la passe sur `skymap.rs` et
+`selecteur.rs` étaient des retraits de `mut`.
+
+⚠️ **`texte` et `mesure` doivent traiter la chaîne à l'identique.** Sinon
+`tronquer` mesure une ellipse d'un caractère et en dessine trois : il déborde de
+la colonne qu'il vient d'ajuster. Le désaccord **n'est pas testable** — `mesure`
+exige un contexte GL — il est donc rendu difficile à écrire : les deux fonctions
+ne sont plus que des enveloppes de `preparer`, qui est seule à décider, et qui
+est testée. C'est le sabotage qui l'a imposé : « `mesure` n'assainit plus »
+passait au vert.
+
+## ⚠️ Carrés noirs à la place du texte (atlas de police)
+
+**Symptôme** : en ouvrant la fiche d'un astre dans la vue système, *tous* les
+caractères déjà dessinés dans la frame sortent en rectangles noirs pleins.
+
+**Cause, dans macroquad** (`src/text/atlas.rs`, `Atlas::texture`) : les glyphes
+vivent dans un atlas qui grandit à la demande, et quand il grandit macroquad
+**détruit l'ancienne texture** pour en créer une plus grande :
+
+```rust
+ctx.delete_texture(self.texture);
+self.texture = ctx.new_texture_from_rgba8(...);
+```
+
+Or macroquad ne dessine pas tout de suite : il **empile**. Tout le texte déjà
+empilé dans la frame pointe alors sur une texture détruite — et sort en noir.
+
+Le déclencheur était la fiche : c'est le seul endroit de la vue système à
+demander les tailles de glyphe **10 et 12**. Premier emploi ⇒ l'atlas grandit
+⇒ toute la frame noircit. D'où « ça noircit quand je clique sur une planète ».
+
+#### ⚠️ Ce n'est pas la taille de l'atlas, c'est son **repaquetage**
+
+Première correction insuffisante. Le vrai mécanisme est pire que la simple
+recréation de texture : quand l'atlas déborde, macroquad **vide et repaquette
+tous les glyphes** à de nouvelles positions (`Atlas::cache_sprite`) —
+
+```rust
+let sprites = self.sprites.drain().collect::<Vec<_>>();
+self.image = Image::gen_image_color(new_width, new_height, ...);
+for (key, sprite) in sprites { self.cache_sprite(key, image); }
+```
+
+— si bien que les quads **déjà empilés dans la frame** gardent des coordonnées
+de texture qui ne désignent plus rien. D'où des tuiles noires sur *tout* le
+texte de la frame, et pas seulement sur le caractère fautif.
+
+**Correction définitive** : `precharger()`, appelée juste après le chargement de
+la police et **avant la première frame**. Elle grave tout l'alphabet pour toutes
+les tailles de `TAILLES_PRECHARGEES` (6..=26, le jeu en demande 8 à 22). Tout
+débordement a donc lieu hors frame, là où il ne peut rien casser.
+
+⚠️ **Un défaut de ma première correction** : `graver` insérait la taille dans
+`TAILLES_GRAVEES` **avant** de vérifier que la police était chargée. Police
+absente, la taille était réputée gravée pour toujours et plus rien ne la
+rattrapait — précisément le cas du repli sur la police par défaut de macroquad,
+qui a son propre atlas jamais préparé. Corrigé : on ne marque qu'après avoir
+gravé.
+
+#### La taille qui manquait : 5
+
+`station.rs` bornait la taille de sa liste d'items à **9,0** (`clamp(9.0, 14.0)`).
+Or `preparer` rend `round(9,0 × 0,6) = 5`, et la plage préchargée commençait à
+**6**. La vue des vaisseaux — celle-là même où l'on regarde le Starship —
+gravait donc la taille 5 **en pleine frame**, l'atlas se repaquetait, et tout le
+texte de la frame passait en noir.
+
+Une seule vue, une seule taille, tout le texte.
+
+**Corrigé à la racine** : `police::TAILLE_MIN` / `TAILLE_MAX` sont déclarées
+**dans `police`**, et ce sont les écrans qui s'y bornent — au lieu de trois
+nombres posés à l'œil dans trois fichiers, dont un seul suffisait à rouvrir le
+trou. La plage préchargée (4..=24) les couvre, et le test les vérifie *toutes
+les deux* au lieu des seules tailles littérales.
+
+⚠️ **Le test rougit sur l'ancienne plage `6..=26`** : c'est la garantie qu'il
+attrape le défaut réel, et pas seulement qu'il décrit le correctif.
+
+⚠️ **Fausse piste écartée en chemin** : je soupçonnais le `flush()` de
+`planete::draw` de dessiner le texte en attente avec le matériau de planète.
+`quad_gl.rs` dit le contraire — chaque `DrawCall` **mémorise son propre
+pipeline** au moment de l'empilement (`geometry`, ligne 886) et `draw` le rejoue
+tel quel. Un vidage ne peut pas appliquer le mauvais shader.
+
+⚠️ **Autre piste écartée** : le binaire périmé. L'exe était bien postérieur à la
+correction et contenait les symboles de `precharger` — donc le préchargement
+tournait, et ne suffisait pas.
+
+⚠️ **Piste laissée pour la prochaine fois.** Je n'ai pas pu prouver quel appel
+déclenchait encore le repaquetage : l'analyse statique dit que `graver` couvre
+tout. `graver` **écrit donc maintenant dans la console** quand une taille est
+gravée en pleine frame, avec son numéro. Si les tuiles noires reviennent, cette
+ligne nomme la coupable ; le test `les_tailles_du_jeu_sont_toutes_prechargees`
+tient l'autre bout.
+
+⚠️ Vérifié et **écarté** : le DPI. macroquad calcule `ceil(taille × dpi_scale)`
+avant de mettre en cache (`text.rs`), ce qui aurait décalé toutes mes gravures —
+mais `window_conf` ne demande pas `high_dpi`, donc `window_scale` reste à 1, et
+l'écran est à 96 ppp. Fausse piste, mais elle valait la vérification.
+
+**Première correction (conservée)** : `police::graver`, appelée depuis `texte` **et** `mesure`, à la
+première demande de chaque taille. Elle vide le lot (plus rien n'attend), puis
+grave **tout l'alphabet** d'un coup pour cette taille. L'atlas ne grandit donc
+plus jamais en cours de frame, et une taille inventée par un futur appelant est
+prise en charge d'elle-même.
+
+⚠️ **`assainir` et `graver` forment une paire.** `graver` prépare `ALPHABET` et
+rien d'autre ; `assainir` garantit que rien d'autre n'en sort — tout caractère
+inconnu (€, ✓, un emoji) devient `?`. Si l'une des deux lâche, l'atlas
+regrandit et les carrés noirs reviennent. C'est ce que tient
+`assainir_ne_sort_jamais_de_lalphabet`, red-checké dans les deux sens.
+
+⚠️ **Le défaut n'était pas dans la police mais dans le moment.** Les glyphes
+manquants (section précédente) et les carrés noirs se ressemblent à l'œil et
+n'ont rien à voir : les premiers touchent *certains* caractères, les seconds
+*tous* ceux de la frame. C'est cette différence qui a désigné l'atlas.
+
+## Paramètres du jeu
+
+Écran **PARAMETRES** depuis l'accueil (`src/ecran/parametres.rs`), modèle dans
+`src/reglages.rs`. Six réglages, et la place est faite pour les suivants : les
+entrées sont une **liste**, en ajouter une tient en une ligne.
+
+Un bouton **QUITTER** est posé sous PARAMETRES sur l'accueil. Il sort de la
+boucle de jeu (`return`) plutôt que d'appeler `process::exit`, pour que miniquad
+ferme sa fenêtre proprement. ⚠️ Sa géométrie est **calculée en ligne dans
+`accueil.rs` et n'est donc pas testée** — comme tout le reste de cet écran ; le
+non-recouvrement avec PARAMETRES tient à la construction (52 px d'écart pour
+40 px de haut).
+
+⚠️ **Deux modes d'affichage, pas trois.** macroquad n'expose qu'un
+`set_fullscreen(bool)`, et miniquad l'implémente sur Windows en passant la
+fenêtre en `WS_POPUP` à la taille de l'écran (`native/windows.rs`) — c'est
+**déjà** un plein écran sans bordure. Il n'existe pas de mode exclusif
+(changement de mode vidéo). Proposer « plein écran » et « sans bordure »
+séparément donnerait deux boutons au comportement identique.
+
+Tailles : 9 entrées en 4:3, 16:10 et 16:9, de 1024 × 768 à 1920 × 1200.
+**Pas de 4K**, comme demandé — et le rendu est en impostors plein écran, donc le
+coût monte comme le nombre de pixels.
+
+**D-PARAM-1 soldée** : les réglages sont **sauvegardés** dans `reglages.json`,
+à côté du jeu, et relus au démarrage.
+
+La sauvegarde vit dans `appliquer()` — le **point de passage unique** de tout
+changement. Répartie dans les six actions du menu, elle finirait par en oublier
+une.
+
+⚠️ **Tout échec de lecture retombe sur `default()`** : fichier absent, JSON
+cassé, champ ajouté depuis la dernière version. Un réglage perdu n'est rien ; un
+jeu qui refuse de démarrer pour un fichier de confort serait absurde. `assainir`
+borne ensuite ce qui a été relu — le fichier est éditable à la main, et un gamma
+à zéro ou un indice de palette hors liste donneraient un écran noir sans rien
+expliquer.
+
+**GAMMA au curseur** (0,5 → 2,5), appliqué **avant** la quantification : corriger
+après ne ferait que déplacer des couleurs déjà choisies hors de la palette. Le
+calcul (`gamma_depuis_x` / `x_depuis_gamma`) est séparé du dessin, donc testé.
+
+⚠️ **Le tramage a été retiré** le 2026-08-05, sur jugement visuel : le motif se
+voyait trop. C'était le remède aux **marches de la palette** (basculement de
+bandes entières décrit plus bas) — elles redeviennent donc franches. La
+saturation et l'écrêtage restent.
+
+**La ligne PALETTE se grise à une seule palette installée.** Cycler la
+ramènerait sur elle-même : le libellé ne bougerait pas, ce qui se lit exactement
+comme un bouton cassé. La règle est dans `palette_reglable(rendu, nb_palettes)`,
+à qui le nombre est **donné** — pas lu dans `palette::toutes()`.
+
+⚠️ **C'est le sabotage qui a imposé cette forme.** Écrite d'abord en lisant le
+global, la règle n'était testable que dans le cas installé : « griser toujours »
+passait au **vert**, la branche « on rallume à partir de deux » n'ayant aucune
+garde. En paramétrant, les quatre sabotages (griser toujours, ignorer le nombre,
+ignorer le mode, seuil à 0) rougissent tous.
+
+### Rendu pixel art (PARAMETRES → RENDU / PALETTE / TRAMAGE)
+
+Trois états de rendu : `NET`, `PIXEL ART` (gros pixels, ce qui existait déjà sous
+la touche **P**), `PIXEL ART + PALETTE` (quantification CIELAB). Trois réglages
+s'ajoutent en mode palette, grisés sinon : **palette**, **gamma** et
+**saturation**. Conception complète, corrections apportées au guide d'origine et
+dettes : [`../conception/pixel_art.md`](../conception/pixel_art.md).
+
+**Ajouter une palette** : déposer un `.hex` (format Lospec, un hexa par ligne)
+dans [`assets/palettes/`](assets/palettes/) — ramassé au démarrage, aucun code à
+toucher. **Une seule embarquée : Lospec 2000** — les trois premières (Resurrect 64,
+Sweetie 16, PICO-8) ont été retirées le 2026-08-05.
+
+**Rien n'est refusé en silence.** Un `.hex` que le jeu n'a pas pu charger est
+listé **à l'écran**, dans PARAMETRES, en ambre, avec son nom de fichier et la
+raison (`palette::rejets`). C'est la réponse à la classe d'erreur qui a coûté le
+plus cher cette session : deux palettes déposées n'apparaissaient jamais au menu
+et la seule trace partait dans une console que personne ne lit.
+
+La décision (quoi dire, combien en détailler) vit dans `lignes_de_rejet`, séparée
+du dessin et **testée** ; la lecture disque (`lire_dossier`) ne décide de rien, et
+le tri (`trier`) est pur — c'est ce qui rend l'ensemble testable sans contexte
+graphique.
+
+⚠️ **Plafond : 256 couleurs** (`palette::MAX`), relevé depuis 64 — Lospec 2000
+(182) et AllStars (128) étaient **rejetées puis ignorées**, avec pour seule trace
+une ligne de console. Le coût de rendu monte avec le nombre de couleurs : la
+recherche parcourt toute la palette **par pixel**.
+
+⚠️ **Une palette d'artiste n'est pas une rampe de dégradé.** Mesuré sur
+Mesuré alors sur Resurrect 64 : un dégradé de gris ne tombait que sur **8 couleurs**, avec une
+marche de L=49 à L=69, et tout ce qui dépasse 89 % s'écrase sur le blanc. Trois
+défauts constatés à l'écran en découlent, chacun avec son remède mesuré :
+
+| Défaut vu | Cause mesurée | Remède |
+|---|---|---|
+| Bandes qui basculent d'un bloc | marche de 0,18 en gris | ~~tramage de Bayer~~ — **retiré** le 2026-08-05 (motif trop visible). Les marches redeviennent franches : dette assumée. |
+| Reflet en aplat blanc | spéculaire additif > 1,0 | **écrêtage** (cœur blanc, halo non) |
+| Couleurs ternes, océans gris-violet | les **neutres** de la palette attirent les couleurs peu saturées | **saturation** ×1,9 à luminance constante (+53 % de chroma) |
+
+Deux fausses pistes écartées par la mesure, à ne pas re-explorer : la recherche
+CIELAB garde déjà 85 % de la chroma (pondérer L n'y change rien), et le tramage
+ne désaturait pas — mesuré du temps où il existait.
+
+⚠️ L'écrêtage n'agit **que dans la passe pixel art** : le spéculaire de
+`planete.frag.glsl` n'est pas touché, le modifier changerait le rendu `NET` et
+donc la galerie, les presets et les captures de non-régression.
+
+Le mode est **global** (`reglages::etat_rendu`), pas par vue : les touches P et
+le menu pilotent le même état, et P ne change que le mode (ni la palette, ni le
+gamma, ni la saturation). `ecran/pixel.rs` est devenu la **source unique du blit** — les quatre
+vues y passent, ainsi que le facteur `PIX` et la création de cible qui étaient
+recopiés trois fois.
+
+⚠️ **Seule la couche 3D est quantifiée.** Fond stellaire, orbites et textes
+restent nets, comme c'était déjà la règle.
+
+⚠️ **D-PIX-1** : le miroir CPU testable (`palette.rs`) et le shader
+(`palette.frag.glsl`) sont deux écritures du même algorithme ; aucun test ne
+compile de GLSL, donc rien ne garantit qu'ils restent d'accord.
+
+## Echelle du système solaire
+
+**Les distances étaient déjà réelles** : `a_monde = a_au * UA` avec `UA = 48`,
+linéaire, sans compression, et le preset porte les vraies valeurs (0,39 → 39,5 UA).
+Il n'y avait rien à corriger là.
+
+**Échelle vraie depuis le 2026-08-05 : plus aucune exagération.** `R_TERRE` vaut
+`4,2588e-5 × UA`, soit **0,002 unité** — le vrai rayon terrestre. Le Soleil suit
+(109,2 rayons terrestres au lieu des **mille** qu'il valait). Les lunes aussi :
+elles étaient exagérées *à part*, la Lune à 0,44 rayon terrestre au lieu de 0,27,
+et Ganymède sortait plus petite qu'elle alors qu'elle la dépasse de moitié.
+
+⚠️ **Conséquence assumée** : les planètes sont minuscules. Il faut approcher
+vraiment pour qu'une planète fasse quelques pixels, et depuis l'orbite de Neptune
+le système intérieur est un point. C'est le système solaire.
+
+**Les lunes ont désormais leurs vraies orbites** (table `LUNES` : demi-grands
+axes réels en km). Le placement procédural les mettait six fois trop loin — notre
+Lune vers 0,8 unité au lieu de 0,123, soit 60,3 rayons terrestres.
+
+**Les périodes suivent Kepler avec la masse du parent** (`MASSES_TERRESTRES`).
+C'est indispensable : Io et la Lune sont à peu près à la même distance de leur
+planète, mais Io boucle en 1,8 jour contre 27,3 — parce que Jupiter pèse 318
+Terres. Sans les masses, toutes les lunes tourneraient à la même vitesse. La
+constante est calée sur la période de notre Lune ; vérification indépendante :
+Io ressort à 1,76 jour (vrai : 1,769). Triton est **rétrograde**.
+
+⚠️ **Deux pièges trouvés en chemin.** `ajouter_lune_preset` prenait une taille
+**relative** (`rayon_planete * taille_rel`) : lui passer un rayon absolu rendait
+les lunes 2 000 fois trop petites. Et `poser_lune` forçait `.max(0.05)` sur le
+rayon, soit **vingt-quatre fois la Terre** à l'échelle vraie — toutes les lunes
+sortaient en boules géantes. `ajouter_lune_reelle` n'a ni l'un ni l'autre :
+Phobos a le droit d'être invisible.
+
+### Bouton d'échelle
+
+`ECHELLE_CORPS` (dans `presets.rs`) multiplie les rayons du Soleil, des planètes
+et des lunes **sans toucher aux distances**. À `1.0` = échelle vraie. Le monter
+est le compromis habituel pour rendre un système lisible, et c'est désormais un
+seul endroit.
+
+**Réglé à ×5.** L'échelle magnifie chaque planète **avec son cortège** :
+`distance_lune` la multiplie aussi. Seules les distances au Soleil restent
+vraies.
+
+⚠️ **Pourquoi les orbites de lunes suivent l'échelle.** Elles ne la suivaient
+pas d'abord, et ×5 a mis **Phobos à l'intérieur de Mars** : il n'orbite qu'à
+2,76 rayons martiens, ce qui plafonnait `ECHELLE_CORPS` à **1,15** — autant dire
+aucun réglage. J'avais estimé le plafond à ×25 en regardant la Lune (60 rayons
+terrestres) au lieu de la lune la **plus serrée**. C'est le test qui l'a dit.
+
+### Zoom et plans de coupe
+
+`DIST_MIN` (dans `camera.rs`) est passé de `2.0` à **`0.01`** : le plafond de
+zoom monte de ×640 à **×128 000** pour un cadrage de référence de 1280. À
+`ECHELLE_CORPS = 5`, la Terre mesure 0,010 unité — sans ce plancher, on ne
+pouvait pas l'approcher assez pour qu'elle remplisse l'écran.
+
+⚠️ **Baisser le plancher seul n'aurait rien donné.** La caméra prenait
+`..Default::default()`, donc les valeurs de macroquad : `z_near = 0.01`,
+`z_far = 10000`. Les deux tombaient à côté :
+
+- `z_near` valait **exactement** le nouveau plancher → au zoom maximal la
+  planète se posait sur le plan de coupe et disparaissait ;
+- `z_far` coupait à 10 000 alors que `DIST_MAX` vaut 30 000 et que le nuage de
+  Oort est à 96 000.
+
+Les deux suivent maintenant la distance : `z_near = dist × 0.01`,
+`z_far = dist × 1000`. Le **rapport** near/far reste donc constant — un near
+minuscule avec un far énorme est ce qui fait clignoter les surfaces.
+`les_plans_de_coupe_encadrent_la_cible` tient les deux marges.
+
+### Palette
+
+**Une seule, Lospec 2000**, embarquée par `include_str!` depuis
+`assets/palettes/sources/lospec-2000.hex`. Embarquée et non simplement déposée :
+il en faut **au moins une** même sans dossier d'assets, sinon le menu n'a rien à
+proposer et `palette(0)` rien à rendre.
+
+Les trois anciennes intégrées (Resurrect 64, Sweetie 16, PICO-8) sont retirées.
+Les `.hex` déposés ont été **déplacés** dans `assets/palettes/sources/` (pas
+supprimés) : ce sous-dossier n'est pas scanné, sinon Lospec 2000 serait chargée
+deux fois et apparaîtrait en double. Déposer un `.hex` dans
+`assets/palettes/` en ajoute toujours une.
+
+**Ce qui était faux avant ça, ce sont les rapports de rayons.** Écrits à la main dans chaque appel :
+Jupiter valait 3,1 fois la Terre au lieu de **11**, Pluton près de trois fois trop
+gros. Les rapports étaient incohérents et rien ne le disait — c'est
+vraisemblablement ce qui faisait que le système ne se lisait pas.
+
+Ils viennent maintenant d'une table unique, `RAYONS_TERRESTRES` (valeurs UAI), via
+`rayon_monde(nom)`. Le facteur d'exagération reste (`R_TERRE = 0,55` ; à l'échelle
+vraie la Terre ferait un demi-millième de pixel) mais il est **commun**, donc les
+rapports sont exacts.
+
+⚠️ **Piège évité** : `ajouter_lune_preset` reçoit le rayon de la planète pour
+calculer la limite de Roche, et ces rayons étaient **recopiés en dur** (`1.7`
+pour Jupiter). Grossir Jupiter sans les toucher aurait posé ses lunes **dans** la
+planète. Tout passe désormais par `rayon_monde`.
+
+**Ceintures aux distances réelles** : disque épars 48 → 1 000 UA (Sedna monte à
+937), nuage de Oort **2 000 → 20 000 UA** au lieu de 300 → 480. Le bord interne
+est désormais le vrai ; le nuage externe (jusqu'à ~100 000 UA) reste tronqué.
+⚠️ Conséquence assumée : il faut un zoom bien plus large pour apercevoir Oort.
+
+⚠️ **Les rayons des lunes restent exagérés** et sans rapport exact : Phobos
+mesure 11 km, soit 0,001 unité — invisible. C'est le même mensonge assumé que
+l'échelle de l'ISS.
+
+⚠️ **Limite de test** : `construire_preset_solaire` exige le contexte graphique.
+Les tests prouvent que la table est juste, pas que le preset s'en sert — un rayon
+réécrit à la main les laissait tous verts. D'où
+`le_preset_solaire_puise_ses_rayons_dans_la_table`, qui inspecte le **texte
+source** (`include_str!`). Inhabituel, mais c'est le seul garde possible ici.
+

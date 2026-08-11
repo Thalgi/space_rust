@@ -1041,7 +1041,7 @@ impl VarianteAnneau {
 /// accumulerait une erreur d'orientation à chaque joint et la boucle ne se
 /// refermerait jamais. On calcule donc directement les `n` positions sur le
 /// cercle et on **cuit** chaque pièce à sa place. Helper réutilisable — l'ISV et
-/// l'O'Neill en posent plusieurs, de styles et de tailles différents.
+/// l'O'Neill en posent plusieurs, de styles et de tailles différentes.
 pub(crate) fn poser_anneau(
     asm: &mut Assembleur,
     centre: Vec3,
@@ -1507,6 +1507,14 @@ const ELYSIUM_BRAS: f32 = EPINE_LONGUEUR * 0.5;
 /// une proportion d'ensemble ne se juge pas sur un nombre, elle se regarde.
 const STANFORD_BRAS: f32 = ELYSIUM_BRAS * 0.5;
 
+/// Nombre de bras d'Elysium : **six**, une face sur six de l'hexagone du moyeu
+/// au lieu d'une sur deux ([`STANFORD_N_BRAS`]). L'hexagone en a exactement six
+/// — Elysium prend donc chaque face, Stanford une sur deux.
+const ELYSIUM_N_BRAS: usize = 6;
+
+/// Nombre de bras du tore de Stanford — inchangé, une face sur deux.
+const STANFORD_N_BRAS: usize = 3;
+
 /// Longueur d'un module de tunnel. Le **nombre** s'en déduit de la longueur du
 /// bras, si bien qu'un bras deux fois plus long porte deux fois plus de modules
 /// au lieu de modules deux fois plus longs.
@@ -1573,17 +1581,68 @@ const ELYSIUM_PROFIL: Profil = Profil::P3;
 ///    bras à 120° en prennent une sur deux, et une face est un appui plan
 ///    quand un sommet est une arête.
 ///
-/// ⚠️ Les bras ne sont pas encore **reliés entre eux** : la conception prévoit
-/// des membrures courbes joignant les longerons d'un bras à l'autre autour du
-/// moyeu, et aucune primitive du projet ne trace une poutre à **axe courbe**
+/// ⚠️ Les bras ne sont **pas reliés par une membrure courbe** — la conception en
+/// prévoit une joignant les longerons d'un bras à l'autre autour du moyeu, et
+/// aucune primitive du projet ne trace une poutre à **axe courbe**
 /// (`treillis_conique` courbe sa *section*, pas son axe). C'est une brique à
 /// écrire, donc une étape à part.
+///
+/// **Six bras**, pas trois : Elysium prend **toutes** les faces de l'hexagone du
+/// moyeu au lieu d'une sur deux (§F.1). Un premier essai d'anneau (une jante de
+/// modules d'habitat, un tiers de tour) a été jugé à l'écran et **retiré** ;
+/// à la place, un **sixième** de [`Composant::Jante`] — canal ouvert façon
+/// jante de vélo, calé sur les bras 0 et 1.
 pub fn preset_elysium() -> EtatStation {
     let mut asm = Assembleur::new();
-    moyeu_hexagonal(&mut asm);
-    bras_et_tunnels(&mut asm, ELYSIUM_BRAS);
+    moyeu_elysium(&mut asm);
+    bras_et_tunnels(&mut asm, ELYSIUM_BRAS, ELYSIUM_N_BRAS);
     habitats_accouples(&mut asm, ELYSIUM_HABITAT);
+    jante_elysium(&mut asm);
     asm.terminer()
+}
+
+/// Demi-angle du vide côté moyeu de la jante — voir [`Composant::Jante`].
+/// Assez large pour se voir franchement (canal ouvert, pas une fente), assez
+/// étroit pour laisser des flancs qui lisent comme des parois et non comme un
+/// simple arceau.
+const ELYSIUM_JANTE_OUVERTURE: f32 = 0.6;
+
+/// **Un sixième de la jante d'Elysium** : le premier arc, entre les bras 0
+/// (30°) et 1 (90°) — un tour complet ferait six de ces segments, un par bras.
+/// Jugé seul avant d'éventuellement compléter le tour, comme le premier tiers
+/// d'anneau qui l'a précédé.
+///
+/// `rayon_mineur = hauteur_moyeu()` : la largeur du canal — son étendue le long
+/// de Y, entre ses deux flancs (`v = ±π/2`, où `surface_tore` donne
+/// `y = ±rayon_mineur`) — **doublée** par rapport au premier essai
+/// (`hauteur_moyeu() * 0.5`, le gabarit du tore de Stanford).
+///
+/// Ni décalage ni recentrage à faire : `v` balaie un intervalle **symétrique**
+/// (`±(π − ouverture)`, voir `jante::dessiner`), donc `y = rayon_mineur *
+/// sin(v)` reste centré sur 0 quelle que soit la valeur de `rayon_mineur` — la
+/// pièce elle-même est déjà posée à `Vec3::ZERO`, sans offset. Doubler le
+/// paramètre suffit ; c'est justement ce que garde
+/// `la_jante_reste_centree_sur_son_plan` (`jante.rs`).
+fn jante_elysium(asm: &mut Assembleur) {
+    let comp = Composant::Jante {
+        rayon_majeur: elysium_rayon_jante(),
+        rayon_mineur: hauteur_moyeu(),
+        arc: TAU / ELYSIUM_N_BRAS as f32,
+        ouverture: ELYSIUM_JANTE_OUVERTURE,
+        segments: 24,
+        anneaux: 8,
+    };
+    // La jante démarre à `u = 0` (le +X local) ; tournée autour de Y, elle
+    // démarre au bras 0 et finit au bras 1, comme `bras_et_tunnels` les place
+    // (`radial = (cos a, 0, sin a)`).
+    //
+    // ⚠️ `Quat::from_rotation_y` tourne dans le sens **opposé** à cette
+    // convention d'angle — un premier essai à `+PI/6` amenait le canal à 330°
+    // au lieu de 30°, ce que le test `la_jante_delysium_demarre_au_bras_0` a
+    // pris. D'où le signe négatif, plutôt qu'une deuxième convention d'angle à
+    // tenir en tête.
+    let rot = Quat::from_rotation_y(-PI / 6.0);
+    asm.ajouter(cuire(Repere::new(Vec3::ZERO, rot), &comp));
 }
 
 /// **Tore de Stanford** : bras courts, ceinturés d'un tore cylindrique.
@@ -1684,7 +1743,7 @@ pub fn preset_stanford_anneau() -> EtatStation {
     // et une charpente qui resterait immobile pendant que sa jante tourne
     // n'aurait rien à quoi se raccrocher.
     moyeu_hexagonal(&mut asm);
-    bras_et_tunnels(&mut asm, STANFORD_BRAS);
+    bras_et_tunnels(&mut asm, STANFORD_BRAS, STANFORD_N_BRAS);
 
     // Le tore boucle **au bout** des bras : son rayon majeur est la distance de
     // l'axe à leur pointe. Sa section vaut la hauteur du moyeu (donc son
@@ -1884,6 +1943,13 @@ fn stanford_rayon_tore() -> f32 {
     pied_de_bras() + STANFORD_BRAS
 }
 
+/// Distance de l'axe à la **pointe** d'un bras long — le rayon de la jante
+/// d'Elysium, même construction que [`stanford_rayon_tore`] : elle touche le
+/// bout des bras, jamais un nombre écrit à part.
+fn elysium_rayon_jante() -> f32 {
+    pied_de_bras() + ELYSIUM_BRAS
+}
+
 /// Distance de l'axe à la **base** d'un bras : apothème du moyeu plus la
 /// demi-épaisseur de ses membrures.
 fn pied_de_bras() -> f32 {
@@ -1903,11 +1969,36 @@ fn moyeu_hexagonal(asm: &mut Assembleur) {
     asm.ajouter(cuire(Repere::new(vec3(0.0, haut * 0.5, 0.0), Quat::IDENTITY), &haut_c));
 }
 
-/// **Trois bras** sur une face du moyeu sur deux, chacun garni de son tunnel.
+/// **Moyeu d'Elysium** : trois hexagones, pas deux — une **jante médiane** entre
+/// les deux plateaux, exactement à la hauteur (Y = 0) où les six bras
+/// traversent le moyeu.
+///
+/// Même hauteur totale que [`moyeu_hexagonal`] (les deux plateaux restent aux
+/// mêmes cotes, donc les faces latérales restent carrées et les bras s'y
+/// posent sans rattrapage) — seuls les montants changent : deux jeux de six,
+/// courts, au lieu d'un seul jeu de six qui traverse tout. Une ceinture de plus
+/// à l'endroit où l'ossature encaisse le plus (six bras au lieu de trois), pas
+/// une pièce ajoutée pour « expliquer » — la leçon inverse retenue sur le
+/// miroir et la grappe de cuves (`docs/suivi/stations.md`, clôture du
+/// 2026-08-10) est de ne pas gréer une pièce pour la faire lire comme robuste ;
+/// ici c'est la même primitive répétée, pas une addition hétérogène.
+fn moyeu_elysium(asm: &mut Assembleur) {
+    let demi = hauteur_moyeu() * 0.5;
+    let bas_c = Composant::TreillisHexagone { profil: ELYSIUM_PROFIL, liaison: demi };
+    let mid_c = Composant::TreillisHexagone { profil: ELYSIUM_PROFIL, liaison: demi };
+    let haut_c = Composant::TreillisHexagone { profil: ELYSIUM_PROFIL, liaison: 0.0 };
+    asm.ajouter(cuire(Repere::new(vec3(0.0, -demi, 0.0), Quat::IDENTITY), &bas_c));
+    asm.ajouter(cuire(Repere::new(Vec3::ZERO, Quat::IDENTITY), &mid_c));
+    asm.ajouter(cuire(Repere::new(vec3(0.0, demi, 0.0), Quat::IDENTITY), &haut_c));
+}
+
+/// **`n` bras** sur les faces du moyeu, chacun garni de son tunnel.
 ///
 /// Les sommets de l'hexagone sont à 0°, 60°… ; les **milieux de face** sont
-/// donc à 30°, 90°, 150°…, et on en prend une sur deux : 30°, 150°, 270°.
-fn bras_et_tunnels(asm: &mut Assembleur, bras: f32) {
+/// donc à 30°, 90°, 150°… — six en tout. `n = 3` (Stanford) en prend une sur
+/// deux (30°, 150°, 270°) ; `n = 6` (Elysium) les prend **toutes**, sans qu'une
+/// seule face du moyeu reste nue.
+fn bras_et_tunnels(asm: &mut Assembleur, bras: f32, n: usize) {
     let poutre = Composant::Charpente {
         grand: ELYSIUM_PROFIL,
         petit: Profil::P1,
@@ -1930,8 +2021,8 @@ fn bras_et_tunnels(asm: &mut Assembleur, bras: f32) {
     let n_tunnel = (bras / TUNNEL_MODULE).floor().max(1.0) as usize;
     let pied = pied_de_bras();
 
-    for k in 0..3 {
-        let a = PI / 6.0 + TAU * k as f32 / 3.0;
+    for k in 0..n {
+        let a = PI / 6.0 + TAU * k as f32 / n as f32;
         let radial = vec3(a.cos(), 0.0, a.sin());
         let rot = Quat::from_rotation_arc(Vec3::Z, radial);
         asm.ajouter(cuire(Repere::new(radial * (pied + bras * 0.5), rot), &poutre));
@@ -6089,16 +6180,62 @@ mod tests {
         );
     }
 
+    // Le moyeu d'Elysium porte une **jante médiane** de plus que celui de
+    // Stanford — même hauteur totale, un anneau de plus à Y = 0, là où les six
+    // bras traversent le moyeu.
     #[test]
-    fn elysium_porte_trois_bras_a_120_degres_dans_le_plan_du_moyeu() {
-        for (nom, etat) in [("stanford", preset_stanford()), ("elysium", preset_elysium())] {
+    fn le_moyeu_delysium_a_une_jante_de_plus_que_celui_de_stanford() {
+        let compte_hex = |e: EtatStation| -> usize {
+            let EtatStation::Prete(st) = e else { panic!("station vide") };
+            st.pieces().iter().filter(|p| matches!(p.composant, Composant::TreillisHexagone { .. })).count()
+        };
+        let (s, e) = (compte_hex(preset_stanford_anneau()), compte_hex(preset_elysium()));
+        assert_eq!(s, 2, "Stanford : deux plateaux, pas plus");
+        assert_eq!(e, 3, "Elysium : trois plateaux, la jante médiane comprise");
+    }
+
+    // La jante démarre pile au bras 0 (30°) : son `u = 0` transformé doit
+    // tomber sur ce rayon, dans le plan XZ du moyeu.
+    #[test]
+    fn la_jante_delysium_demarre_au_bras_0() {
+        let EtatStation::Prete(st) = preset_elysium() else { panic!("elysium vide") };
+        let jantes: Vec<&crate::vaisseau::Piece> =
+            st.pieces().iter().filter(|p| matches!(p.composant, Composant::Jante { .. })).collect();
+        assert_eq!(jantes.len(), 1, "une seule jante pour l'instant");
+
+        let (rayon_majeur, arc, ouverture) = match &jantes[0].composant {
+            Composant::Jante { rayon_majeur, arc, ouverture, .. } => (*rayon_majeur, *arc, *ouverture),
+            _ => unreachable!(),
+        };
+        assert!((arc - TAU / ELYSIUM_N_BRAS as f32).abs() < 1e-5, "un sixième de tour");
+        assert!(ouverture > 0.0 && ouverture < PI, "ouverture hors bornes");
+
+        // Le point local (rayon_majeur, 0, 0) est le `u = 0` du canal —
+        // transformé, il doit tomber à 30° dans le plan XZ, comme le bras 0.
+        let local = Vec3::new(rayon_majeur, 0.0, 0.0);
+        let monde = jantes[0].transforme.transform_point3(local);
+        assert!(monde.y.abs() < 1e-3, "la jante sort du plan de l'anneau, y = {}", monde.y);
+        let angle = monde.z.atan2(monde.x).rem_euclid(TAU).to_degrees();
+        assert!((angle - 30.0).abs() < 0.5, "la jante démarre à {angle:.1}°, attendu 30°");
+    }
+
+    // Stanford garde trois bras (une face de moyeu sur deux) ; Elysium en a
+    // désormais **six** — une par face, l'hexagone n'en ayant que six. Chaque
+    // station a donc son propre pas angulaire (120° / 60°), et c'est ce que le
+    // tableau encode plutôt que de dupliquer le test.
+    #[test]
+    fn les_bras_sont_regulierement_repartis_dans_le_plan_du_moyeu() {
+        for (nom, etat, attendu_n, pas) in [
+            ("stanford", preset_stanford(), STANFORD_N_BRAS, 120.0),
+            ("elysium", preset_elysium(), ELYSIUM_N_BRAS, 60.0),
+        ] {
             let EtatStation::Prete(st) = etat else { panic!("{nom} : station vide") };
             let charpentes: Vec<&crate::vaisseau::Piece> = st
                 .pieces()
                 .iter()
                 .filter(|p| matches!(p.composant, Composant::Charpente { .. }))
                 .collect();
-            assert_eq!(charpentes.len(), 3, "{nom} : trois bras");
+            assert_eq!(charpentes.len(), attendu_n, "{nom} : {attendu_n} bras");
 
             let mut angles: Vec<f32> = charpentes
                 .iter()
@@ -6110,7 +6247,7 @@ mod tests {
                 .collect();
             angles.sort_by(f32::total_cmp);
             for (i, a) in angles.iter().enumerate() {
-                let attendu = 30.0 + 120.0 * i as f32;
+                let attendu = 30.0 + pas * i as f32;
                 assert!((a - attendu).abs() < 0.5, "{nom} : bras {i} à {a:.1}°, attendu {attendu}°");
             }
         }
@@ -6166,7 +6303,7 @@ mod tests {
     fn le_tunnel_suit_la_longueur_du_bras() {
         let modules = |bras: f32| -> usize {
             let mut asm = Assembleur::new();
-            bras_et_tunnels(&mut asm, bras);
+            bras_et_tunnels(&mut asm, bras, 1); // un seul bras : compte isolé du nombre d'arms
             let EtatStation::Prete(st) = asm.terminer() else { panic!() };
             st.pieces()
                 .iter()

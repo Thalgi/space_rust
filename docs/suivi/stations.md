@@ -3462,3 +3462,180 @@ sabotage qui ne rougit pas ne prouve pas que la garde est faible — encore
 faut-il qu'il produise vraiment le défaut visé. Refait à 14, il rougit.
 
 **618 → 622 tests**, 0 avertissement clippy.
+
+---
+
+## Clôture de session — 2026-08-10
+
+**Vérifié** : 622 tests verts, 0 avertissement clippy, binaire compilé,
+`docs/reference/fils.md` régénéré.
+
+### Le parc a gagné quatre composants
+
+| Composant | Ce qu'il apporte que rien n'avait |
+|---|---|
+| **Miroir primaire** | une **surface réfléchissante** orientable ; 110 % du tore, variantes disque / anneau / pétales |
+| **Module en coin d'arc** | une pièce dont l'axe **suit une corde** — la brique des anneaux à douze |
+| **Grappe de cuves** | trois cuves en couronne autour d'un axe vide, empilables par rangées |
+| **Hangar** | le premier volume qui **abrite** : creux, avec une porte |
+
+### Trois leçons de la session, toutes payées
+
+1. **Ajouter de la structure pour « expliquer » une pièce la rend moins
+   lisible.** Trois fois (mât du miroir, âme de la grappe, cerclages) ; trois
+   fois retirer a mieux marché. Corollaire : deux pièces de la même famille
+   doivent se **peindre pareil**, sinon leur parenté ne se voit pas.
+2. **Un chiffre qui décide d'une pose ne doit pas vivre dans un test.** Le
+   dégagement entre trois modules d'habitat n'était calculé que par le test de
+   l'ISV ; le montage polaire passait dessous sans que rien ne le voie.
+3. **Un sabotage qui ne rougit pas n'accuse pas la garde.** Encore faut-il qu'il
+   produise vraiment le défaut visé — vérifier le sabotage avant de muscler le
+   test.
+
+### Ce qui attend le lancement du jeu
+
+Trois arbitrages **visuels** sont en suspens, et aucun ne se tranche au clavier :
+
+- le plancher stellaire à 8 px (le Soleil fait 42 % du rayon de l'orbite de
+  Mercure) ;
+- la charge du mât polaire, à 1,8 du plan du miroir bas et **derrière** lui ;
+- le mât polaire qui **perce les disques** des miroirs au tiers de sa hauteur.
+
+### Ce qui bloque la suite
+
+`echantillons()` ne liste **qu'une sous-variante par composant**. `ARC SOUTE`,
+les postes d'amarrage et `HANGAR FERME` existent dans le code, sont testés, et
+sont **inatteignables à l'écran**. C'est ce qui empêche d'assembler l'anneau à
+douze de l'Endurance (§D.5 étape 5) — pas la géométrie, la palette.
+
+### Elysium : anneau essayé et retiré, six bras, moyeu renforcé (2026-08-11)
+
+Un premier tiers de jante (bras 0 à bras 1, tronçon **ouvert** en gros modules
+`Large`) avait été posé sur les bras existants — écran jugé, **retiré** : ça ne
+rendait pas bien. `poser_anneau` reste inchangé (le helper avait été généralisé
+en `poser_arc_anneau` pour l'occasion ; revenu à sa forme d'origine avec l'essai).
+Le complexe reste une ossature à bras, pas une roue, pour l'instant.
+
+À la place, deux changements demandés :
+
+- **Six bras au lieu de trois.** `bras_et_tunnels` prend maintenant un compte
+  (`n`), et Elysium prend **toutes** les faces de l'hexagone du moyeu (30°, 90°,
+  150°, 210°, 270°, 330°) là où Stanford en garde une sur deux. Un seul helper,
+  paramétré — pas une deuxième fonction qui aurait pu diverger.
+- **Moyeu renforcé.** `moyeu_elysium` pose une **jante médiane** en plus des
+  deux plateaux, exactement à Y = 0 où les bras traversent le moyeu — même
+  hauteur totale, donc les faces latérales restent carrées et les bras s'y
+  posent sans rattrapage. Stanford garde son moyeu à deux plateaux
+  (`moyeu_hexagonal`, inchangé) : les deux centres restent délibérément
+  distincts (§F.4).
+
+Deux tests : `les_bras_sont_regulierement_repartis_dans_le_plan_du_moyeu`
+(remplace l'ancien test à 120° seul, encaisse maintenant les deux pas
+angulaires) et `le_moyeu_delysium_a_une_jante_de_plus_que_celui_de_stanford`.
+Red-checkés (arc retiré, compte de bras sabordé à 3, jante médiane retirée) —
+les trois rougissent.
+
+**623 tests**, 0 avertissement clippy.
+
+### Un sixième de jante, façon vélo (2026-08-11)
+
+Demande : un tronçon de tore en **canal ouvert** — parois sur les flancs et le
+bord extérieur, **vide côté moyeu** (« façon pneu de vélo, mais vide côté
+intérieur »). Le `Tore` de Stanford referme sa section sur 360° (fenêtre vitrée
+comprise) ; ici il ne fallait ni fenêtre ni fermeture, juste un canal.
+
+**Nouveau composant, `Composant::Jante`** (`jante.rs`), cinquième brique neuve
+depuis la clôture de l'assembleur. Même surface paramétrique que le tore
+(`surface_tore`, extraite en commun dans `commun.rs` — une source, plus deux
+copies qui auraient pu diverger), habillée autrement :
+
+- **`arc`** (radians) couvre une portion de cercle au lieu du tour complet —
+  `TAU / 6` pour Elysium, un sixième par bras.
+- **`ouverture`** (radians) est le demi-angle du vide autour du point le plus
+  proche de l'axe : la section s'arrête à `v = ±(π − ouverture)` au lieu de se
+  refermer en `v = π`. Le canal va donc d'un flanc à l'autre en passant par le
+  bord extérieur, et laisse un vide côté moyeu — exactement la coupe d'une
+  jante de vélo, pneu ôté.
+- **Face interne émise à part** (même parade que `miroir.rs` : macroquad ne
+  double-face pas), sans quoi la paroi disparaîtrait vue depuis l'intérieur du
+  canal — l'angle sous lequel on la voit le plus souvent.
+
+Posée sur Elysium (`jante_elysium`) : un seul sixième pour l'instant, entre les
+bras 0 et 1, même section que le tore de Stanford
+(`rayon_mineur = hauteur_moyeu() * 0.5`). Premier brique jugée seule avant
+d'éventuellement compléter le tour à six.
+
+⚠️ **`Quat::from_rotation_y` tourne à l'envers de la convention d'angle du
+générateur** (`radial = (cos a, 0, sin a)`) : un premier essai à `+PI/6`
+plaçait la jante à 330° au lieu de 30°. Trouvé par le test de placement, pas
+par relecture — encore un signe qu'une rotation autour d'un axe mérite
+toujours d'être vérifiée, jamais supposée.
+
+Trois tests dans `jante.rs` (vide côté moyeu, double face, arc borné) et un
+dans `generateur.rs` (démarre pile au bras 0). Sept sabotages, sept
+rougissements.
+
+**627 tests**, 0 avertissement clippy. `docs/reference/fils.md` régénéré (44
+variantes).
+
+### Largeur de la jante doublée (2026-08-11)
+
+Demande : doubler la largeur du canal, centrée. `rayon_mineur` passe de
+`hauteur_moyeu() * 0.5` à `hauteur_moyeu()` — c'est le seul paramètre qui
+règle la largeur (l'étendue le long de Y, entre les deux flancs à `v = ±π/2`,
+où `surface_tore` donne `y = ±rayon_mineur`).
+
+**Aucun recentrage à faire, et c'est structurel plutôt qu'un coup de chance** :
+`v` balaie un intervalle symétrique (`±(π − ouverture)`), donc
+`y = rayon_mineur · sin(v)` reste centré sur `y = 0` quelle que soit la valeur
+de `rayon_mineur`. Nouveau test, `la_jante_reste_centree_sur_son_plan`, qui
+vérifie les deux à la fois : centrage **et** que l'étendue suit bien
+`rayon_mineur` (sinon la symétrie pourrait tenir sur un canal resté à sa
+taille d'origine — un sabotage qui plafonne `rayon_mineur` à 2.0 dans le
+dessin confirme que le second volet du test mord bien, pas seulement le
+premier).
+
+### Jante : épaisseur, sol vert, vitrage aux deux bouts (2026-08-11)
+
+Trois demandes d'un coup, toutes sur la même pièce : une vraie épaisseur, un
+sol (provisoire, vert) à l'intérieur du canal, et les deux derniers tronçons de
+la paroi (près du vide côté moyeu) remplacés par du vitrage tenu par une
+grille — la même idée que le vitrage du `Tore` de Stanford, mais sur la jante.
+
+**Épaisseur.** `surface_tore` dérive un point exactement selon `rayon_mineur`
+le long de sa propre normale locale — le formaliser en dérivée était inutile :
+il suffit de rappeler la même fonction avec `rayon_mineur − épaisseur` pour
+obtenir la coque interne, décalée d'exactement cette distance, sans second
+calcul de décalage qui pourrait diverger du premier. La coque interne est
+émise à enroulement inversé (comme avant), mais elle n'est plus la même
+surface répétée — deux coques distinctes, à deux rayons.
+
+**Sol.** Une bande verte plate à l'intérieur du canal, en léger retrait de la
+coque interne (`SOL_RETRAIT_FRAC`, même piège de coïncidence que
+`hangar.rs`) — pour l'instant sans texture, assumé comme provisoire (un
+terrain à habiller viendra plus tard). Positionné côté « pneu » (`v = 0`) :
+sur un anneau qui tourne pour simuler la gravité, c'est la face **externe**
+du tube qui sert de sol, jamais le côté moyeu.
+
+**Vitrage.** `v_paroi` retranche `VITRAGE_SPAN` radians à chaque bout de la
+section pleine ; `v_vitrages` rend les deux intervalles ainsi libérés. Le
+vitrage lui-même reprend le vocabulaire du `Tore` (meneaux le long de l'arc,
+lèvres aux deux bords), mais sur cette section plus étroite — verre
+translucide (alpha 0,35), grille sombre. Fonctions séparées (`v_paroi`,
+`v_vitrages`) plutôt que des bornes recopiées dans `dessiner` : le dessin et
+les tests lisent la même frontière entre coque et vitrage.
+
+⚠️ **Un test qui contournait le vrai dessin.** Le premier jet de
+`la_paroi_a_une_epaisseur_mesurable` rappelait `peau_arc` directement avec sa
+propre formule d'épaisseur, au lieu de passer par `dessiner()` — sabotée,
+`dessiner()` ne rougissait pas : le test se prouvait lui-même, pas le dessin
+(§C.29, encore le même travers). Corrigé en captant les triangles réellement
+peints (`COQUE_EXT`/`COQUE_INT`, via un `CompteurFiltre` par couleur) : le
+sabotage rougit désormais.
+
+Cinq tests neufs ou révisés, dix sabotages, dix rougissements.
+
+**630 tests**, 0 avertissement clippy. `docs/reference/fils.md` régénéré (la
+grille du vitrage ajoute des fils là où la jante n'en avait aucun).
+
+**628 tests**, 0 avertissement clippy.

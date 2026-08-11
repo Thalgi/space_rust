@@ -130,7 +130,8 @@ la plomberie ou l'échelle qui ne suit pas.*
 système), puis décider — LOD sur `px_rayon` comme les géantes gazeuses, ou
 exagération d'échelle assumée. **Ne pas réécrire ce qui existe.**
 
-**Constaté puis tranché** (2026-08-09, § P.3 et P.3 bis de STATE.md). L'hypothèse
+**Constaté puis tranché** (2026-08-09 ; mesures et arbitrage en bas de ce fichier,
+« Chantier P.3 — le détail »). L’hypothèse
 était juste, et rien n'a été réécrit. Deux causes distinctes :
 
 1. **L'horloge** — vrai défaut, corrigé : `Systeme::update` passait le
@@ -146,3 +147,115 @@ exagération d'échelle assumée. **Ne pas réécrire ce qui existe.**
 
 Reste un manque possible et non vérifié : la **variété d'une étoile à l'autre**
 — toutes partagent-elles la même graine de granulation ? À regarder en galerie.
+
+---
+
+# Chantier P.3 — le détail (2026-08-09)
+
+> Extrait de [`STATE.md`](../../STATE.md) le 2026-08-10. Le constat qui a ouvert
+> le chantier est plus haut dans ce fichier ; voici les mesures et l'arbitrage.
+
+## P.3 — Étoiles : deux causes, chiffrées. Une corrigée, une à décider
+
+Rappel du point de départ : **le code existe** (`soleil/eruptions.rs` — boucles
+Montée→Tenue→Rupture→Retombée, taches, granulation `fbm`, trois couronnes) et
+`Astre::update` **est** appelé. Le défaut n'était donc pas l'absence. Deux
+mécanismes distincts, tous deux réels, à deux endroits de la chaîne.
+
+### 1. L'échelle — ce n'est pas un bug, c'est de la physique
+
+`R_SOLEIL = 1,116` unité monde. Rayon apparent, fov 45°, écran de 1080 :
+
+| caméra | soleil (px de rayon) | boucle (`r × 0,05`) | cœur d'éjection (`r × 0,16`) |
+|---|---|---|---|
+| **1280** (défaut skymap) | **1,14** | 0,06 | 0,18 |
+| 480 | 3,03 | 0,15 | 0,49 |
+| 100 | 14,6 | 0,73 | 2,33 |
+| 20 | 72,8 | 3,64 | 11,6 |
+| 5 (focus étoile) | 291 | 14,6 | 46,6 |
+
+**Au cadrage par défaut de la vue système, l'étoile fait deux pixels de large.**
+Aucune granulation, aucune boucle ne peut y être visible — et c'est juste : une
+étoile *est* un point à cette distance. Il faut descendre sous ~100 unités
+(≈ 2 UA) pour que la surface commence à exister.
+
+⚠️ **Décision à prendre, et elle est de conception, pas de correction** : soit on
+assume que le détail stellaire ne se voit qu'en approchant, soit on exagère le
+rayon des étoiles en vue système comme les jeux le font couramment. Je ne tranche
+pas — c'est un parti pris visuel.
+
+### P.3 bis — Tranché : plancher à 8 px (2026-08-09)
+
+**La mesure a changé la question.** Un plancher ne peut pas livrer ce qui avait
+lancé le chantier :
+
+| ce qu'on veut voir | rayon nécessaire |
+|---|---|
+| disque rond, teinte, assombrissement du limbe | ~4 px |
+| taches (`taille ≈ 0,2 r`) lisibles comme des marbrures | ~10 px |
+| **boucles d'éruption** (dessinées à `r × 0,05`) | **20 px pour atteindre LE pixel, 60 pour se lire comme une arche** |
+
+Or au cadrage par défaut l'orbite de Mercure fait **19 px de rayon**. Un plancher
+assez grand pour montrer les éruptions ferait un Soleil **plus large que toute
+l'orbite de Mercure**. Cette option est morte : le plancher achète « ça se lit
+comme une étoile », pas « ça se lit comme une étoile ACTIVE ». Les protubérances
+restent la récompense de l'approche.
+
+`soleil::PX_MIN = 8.0`. Conséquence mesurée : le Soleil dessiné fait **7,90
+unités, soit 42 % du rayon de l'orbite de Mercure** (18,72). Les corps étaient
+**déjà** grossis d'un facteur fixe 5 (`ECHELLE_CORPS`, distances laissées
+vraies) : le plancher ne crée pas l'exagération, il la rend dépendante de la
+distance — et il **s'efface** dès que la taille vraie dépasse 8 px, sans saut (le
+facteur vaut exactement 1 à la traversée).
+
+**Trois pièges, tous réels, tous traités :**
+
+1. **La cible de clic serait restée sur le rayon physique.** `Systeme::pick`
+   lisait `corps().rayon` : l'étoile serait devenue un disque de 8 px qu'il
+   faudrait toucher à 1,6 px près. D'où `Astre::rayon_dessine(cam_pos)` — une
+   **seule** source de taille, lue par le rendu ET par la sélection.
+2. **Les protubérances se seraient détachées.** `point_boucle`, la taille des
+   billboards et `cache_par_sphere` prenaient tous `base.rayon`. Un seul oublié
+   et les arches flottent à côté d'une sphère d'occultation de la mauvaise
+   taille. `dessiner` dérive désormais tout d'un unique `r`.
+3. **La garde existante ne voyait rien.** `presets.rs` teste
+   `R_SOLEIL < 0.39 · UA · 0.25` — sur la **constante**. Un plancher agrandit au
+   moment du dessin et passe devant elle sans la déclencher. Garde ajoutée sur la
+   taille effectivement peinte.
+
+**Une quatrième copie de `VIEWPORT_H` aurait été de trop.** `planete` et `disque`
+en tenaient chacun une, réglées en cascade par les appelants — et `galerie.rs` ne
+réglait déjà que celle de `planete`, donnant aux anneaux le LOD du plein écran
+dans une cellule. L'étoile en a besoin **hors du chemin de dessin** (`pick`), où
+personne n'aurait pensé à la poser. Cellule unique dans `impostor`, les deux
+setters publics délèguent : aucun site d'appel n'a bougé.
+
+`camera::DIST_DEFAUT` : le cadrage de référence (1 280) était écrit deux fois
+dans `skymap`, avec un commentaire promettant qu'elles restaient égales.
+
+### 2. L'horloge — ça, c'était un vrai défaut, corrigé
+
+`Systeme::update` passait **la même cadence** aux orbites et à l'animation propre
+des astres. Or le multiplicateur de vitesse (×0,125 à ×16 en vue système, jusqu'à
+×64 en galerie) existe pour faire tourner les **orbites** : une période de Kepler
+se compte en années.
+
+Les rythmes d'éruption, eux, sont réglés à la main comme un **spectacle** : une
+tache naît en 1,5 s, vit 8 à 16 s, meurt en 2 s ; une boucle monte en ~2 s. À ×16
+tout cela tient dans une demi-seconde — on ne lit plus une protubérance, on lit du
+bruit. **Et il faut accélérer le temps pour voir bouger quoi que ce soit d'autre**,
+donc les deux réglages se combattaient.
+
+`Systeme::update(dt, dt_anim)` sépare les deux. La pause fige toujours tout.
+
+⚠️ **Le test seul ne suffisait pas, et le red-check l'a montré.** Il vérifie le
+contrat de `update` (l'animation reçoit `dt_anim`, la pause la fige), mais il est
+resté **vert** quand on a saboté le *câblage* de la vue système — un test ne voit
+pas comment chaque appelant branche ses arguments. Les deux horloges étant des
+secondes en `f32`, les intervertir compilait sans un mot : exactement le défaut
+d'origine.
+
+D'où `DtAnimation(f32)`, un type distinct. Le sabotage qui passait inaperçu
+**ne compile plus**. Leçon : quand deux paramètres de même type ne veulent pas
+dire la même chose, c'est au **type** de le dire, pas à un test de l'espérer.
+

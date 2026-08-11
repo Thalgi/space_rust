@@ -76,15 +76,6 @@ const MENEAU_PAS_ARC: usize = 5;
 /// veut voir une reprise d'effort, pas un simple contact.
 const JONCTION_DEMI: f32 = 3.2;
 
-/// Point de la surface du tore, et sa normale sortante.
-fn surface(rayon_majeur: f32, rayon_mineur: f32, u: f32, v: f32) -> (Vec3, Vec3) {
-    let (su, cu) = u.sin_cos();
-    let (sv, cv) = v.sin_cos();
-    let n = vec3(cv * cu, sv, cv * su);
-    let r = rayon_majeur + rayon_mineur * cv;
-    (vec3(r * cu, rayon_mineur * sv, r * su), n)
-}
-
 /// Sommets et indices d'une **portion** de tore, sur la plage `[v0, v1]`.
 fn peau(
     rayon_majeur: f32,
@@ -101,7 +92,7 @@ fn peau(
         let u = TAU * i as f32 / ns as f32;
         for j in 0..=nv {
             let v = v0 + (v1 - v0) * j as f32 / nv as f32;
-            sommets.push(surface(rayon_majeur, rayon_mineur, u, v).0);
+            sommets.push(surface_tore(rayon_majeur, rayon_mineur, u, v).0);
         }
     }
     let mut indices = Vec::with_capacity(ns * nv * 6);
@@ -156,7 +147,7 @@ fn tuiles<P: Peintre>(p: &mut P, rayon_majeur: f32, rayon_mineur: f32) {
         let decale = if r % 2 == 0 { 0.0 } else { 0.5 };
         for c in 0..colonnes {
             let u = TAU * (c as f32 + decale) / colonnes as f32;
-            let (centre, n) = surface(rayon_majeur, rayon_mineur, u, v);
+            let (centre, n) = surface_tore(rayon_majeur, rayon_mineur, u, v);
             // Tangente le long de l'anneau : c'est elle qui aligne les rangs
             // au lieu de les laisser tourner avec la courbure.
             let tangente = vec3(-u.sin(), 0.0, u.cos());
@@ -264,7 +255,7 @@ fn fenetre<P: Peintre>(
             let vb = v0 + (v1 - v0) * (j + 1) as f32 / nv as f32;
             let base = cible.0.len() as u16;
             for (u, v) in [(ua, va), (ub, va), (ub, vb), (ua, vb)] {
-                cible.0.push(surface(rayon_majeur, rayon_mineur, u, v).0);
+                cible.0.push(surface_tore(rayon_majeur, rayon_mineur, u, v).0);
             }
             cible.1.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
         }
@@ -277,8 +268,8 @@ fn fenetre<P: Peintre>(
         for k in 0..MENEAU_PAS_ARC {
             let a = v0 + (v1 - v0) * k as f32 / MENEAU_PAS_ARC as f32;
             let b = v0 + (v1 - v0) * (k + 1) as f32 / MENEAU_PAS_ARC as f32;
-            let (pa, na) = surface(rayon_majeur, rayon_mineur, u, a);
-            let (pb, nb) = surface(rayon_majeur, rayon_mineur, u, b);
+            let (pa, na) = surface_tore(rayon_majeur, rayon_mineur, u, a);
+            let (pb, nb) = surface_tore(rayon_majeur, rayon_mineur, u, b);
             p.cylindre(pa + na * ep, pb + nb * ep, rayon_mineur * MENEAU_SECTION, MENEAU);
         }
     };
@@ -306,8 +297,8 @@ fn fenetre<P: Peintre>(
         for i in 0..ns {
             let ua = TAU * i as f32 / ns as f32;
             let ub = TAU * (i + 1) as f32 / ns as f32;
-            let (pa, na) = surface(rayon_majeur, rayon_mineur, ua, v);
-            let (pb, nb) = surface(rayon_majeur, rayon_mineur, ub, v);
+            let (pa, na) = surface_tore(rayon_majeur, rayon_mineur, ua, v);
+            let (pb, nb) = surface_tore(rayon_majeur, rayon_mineur, ub, v);
             p.cylindre(pa + na * saillie, pb + nb * saillie, rayon_mineur * MENEAU_SECTION * 1.3, MENEAU);
         }
     }

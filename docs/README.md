@@ -1,6 +1,6 @@
 # Index de la documentation
 
-Trois familles transverses :
+Trois familles transverses, plus un fichier à part :
 
 - **`conception/`** — le *pourquoi* : intentions, architecture, décisions de
   design. Écrit avant ou pendant le code, n'est pas censé changer à chaque
@@ -11,10 +11,20 @@ Trois familles transverses :
   chantier.
 - **`reference/`** — des **fichiers générés**, reconstruits et comparés par
   un test (jamais édités à la main). Un seul pour l'instant.
+- **[`methode.md`](methode.md)** — la *discipline* : red-check, pièges de tests,
+  règles apprises à leurs dépens. Transverse à tous les chantiers, **à lire
+  avant d'écrire un test**.
 
-Un sujet peut n'avoir qu'un des deux premiers (ex. les ceintures n'ont pas de
-suivi dédié ; les étoiles n'ont pas de conception dédiée — leur bucket list
-*est* la trace de ce qui existe).
+Un sujet peut n'avoir qu'une des deux premières familles (les étoiles n'ont pas
+de conception dédiée — leur bucket list *est* la trace de ce qui existe).
+
+> **Réorganisation du 2026-08-10.** `STATE.md` avait dérivé jusqu'à 1 968 lignes
+> en devenant le journal de tous les chantiers à la fois. Il est revenu à son
+> rôle — état et suite, deux cents lignes — et son contenu a été **réparti** dans
+> les journaux ci-dessous. Quatre fichiers sont nés de cette passe :
+> [`suivi/ceintures.md`](suivi/ceintures.md),
+> [`suivi/technique.md`](suivi/technique.md),
+> [`suivi/revues.md`](suivi/revues.md) et [`methode.md`](methode.md).
 
 ---
 
@@ -22,13 +32,13 @@ suivi dédié ; les étoiles n'ont pas de conception dédiée — leur bucket li
 
 | Fichier | Sujet |
 |---|---|
-| [`stations.md`](conception/stations.md) | Stations spatiales procédurales : modèle de ports, composants, budget/unités/symétrie, raccordement ports↔assemblage, classes de stations (ISS → O'Neill), **+ Partie E : refonte de `composant.rs` et composite `SousEnsemble`** (vers un futur éditeur façon VAB). Fusion de 4 anciens docs. |
+| [`stations.md`](conception/stations.md) | Stations spatiales procédurales : modèle de ports, composants, budget/unités/symétrie, raccordement ports↔assemblage, classes de stations (ISS → O'Neill), **+ Partie E : refonte de `composant.rs` et composite `SousEnsemble`**. ⚠️ §E.4 est **historique** : l'éditeur qu'elle anticipait existe. |
 | [`assembleur.md`](conception/assembleur.md) | Suite de la Partie E.4 ci-dessus : éditeur d'assemblage interactif façon VAB. Audit du parc de tests existant (§1–§4), ce qui manque au code actuel (§5, Lot 1), ce qu'il faut à l'éditeur (§6–§8, Lot 2), l'enveloppe rectangle des plaques (§9, « le boudin »), **l'écran en détail + le découpage des lots 3 à 6 (§10)**, et **les trois modes d'édition Move/Rotate/Resize (§11, lots 7 à 9)**. |
 | [`planetes.md`](conception/planetes.md) | Planètes telluriques : pipeline de rendu (grille cube-sphere, érosion, hydrologie, biomes) + modèle de variantes/catalogue. Fusion de 2 anciens docs. |
 | [`geantes_gazeuses.md`](conception/geantes_gazeuses.md) | Géantes gazeuses : surface V2 (profil zonal, palette, vortex, pôles) + recherche noises/patterns. Fusion de 2 anciens docs. |
 | [`ceintures.md`](conception/ceintures.md) | Champs de débris unifiés : ceintures d'astéroïdes, anneaux planétaires, disques proto*, nuage de Oort — un seul modèle `Disque` paramétrique. |
 | [`interface.md`](conception/interface.md) | **L'interface de jeu** (vue système) : barre de ressources, nom du système, sélecteur de planètes rétractable, panneau de planète au clic. Lecture du schéma du 2026-08-04, inventaire des 14 sprites, ce qui manque au modèle (noms d'astres, économie), découpage en étapes I.0–I.5. |
-| [`pixel_art.md`](conception/pixel_art.md) | **Rendu pixel art** : sous-échantillonnage + quantification CIELAB vers une palette de 64 couleurs. Reprend le guide d'origine **corrigé** de ce qui ne compilait pas ici (indexation dynamique d'uniformes, API `UniformDesc::array`, mélange alpha, attributs du vertex shader), dit ce qui est quantifié et ce qui reste net, et liste les dettes D-PIX-1 à 4. |
+| [`pixel_art.md`](conception/pixel_art.md) | **Rendu pixel art** : sous-échantillonnage + quantification CIELAB vers une palette de 64 couleurs. Reprend le guide d'origine **corrigé** de ce qui ne compilait pas ici, dit ce qui est quantifié et ce qui reste net, et liste les dettes D-PIX-1 à 4. |
 | [`starmap.md`](conception/starmap.md) | Vue galactique (voisinage stellaire, projection oblique rétro, zoom vers la Skymap). |
 | [`systemes_multiples.md`](conception/systemes_multiples.md) | Systèmes à plusieurs étoiles (binaires/trinaires/quadruples), modèle orbital analytique unifié (étoiles + planètes + lunes « sur rails »). |
 
@@ -36,20 +46,22 @@ suivi dédié ; les étoiles n'ont pas de conception dédiée — leur bucket li
 
 | Fichier | Sujet |
 |---|---|
-| [`stations.md`](suivi/stations.md) | **Priorités immédiates en tête** (à corriger avant tout), puis passation du chantier générateur de stations (état des lieux, bugs résolus), audit de référence du preset ISS, et **état/manques de l'ISV Venture Star** (Partie C). Fusion de 2 anciens docs. |
-| [`interface.md`](suivi/interface.md) | Journal de **l'interface de jeu** (vue système) : étapes I.0 à I.5, les deux manques qui n'étaient pas de l'affichage (noms d'astres, économie), la limite de test (`macroquad::rand` exige le contexte graphique), et comment les quatre bouche-trous ont été soldés. |
-| [`stations.md`](suivi/stations.md) **Partie F** | Journal des **mégastructures et vaisseaux** (2026-08-03 → 06) : tore de Stanford, complexe Elysium, panneaux d'échelle mégastructure, séparation vaisseaux/stations, l'incident de perte de travail non commité — puis le **Starship de bout en bout** (F.6 à F.10) : coque à ogive, six Raptor, jupe moteur, volets articulés, bardage de tuiles, hublots, et les six défauts que seul l'écran a montrés. |
-| [`assembleur.md`](suivi/assembleur.md) | Journal du chantier `conception/assembleur.md`, étape par étape. **Lots 1 à 5 clos** (modèle, écran, déplacement de sous-arbre, sauvegarde disque, overlay des refus) **+ rotation au clavier** ; restent les lots 6 (dette d'enveloppes, composites), 8 (décalage) et 9 (redimensionnement). Red-check de chaque étape, y compris les tests jetés parce qu'ils ne gardaient rien. À relire en premier pour reprendre ce chantier — voir aussi [`STATE.md`](../STATE.md) à la racine. |
-| [`planetes.md`](suivi/planetes.md) | Bilan de la refonte v2 du rendu tellurique (fichiers touchés, perfs, tests) + catalogue des ~126 presets. Fusion de 2 anciens docs. |
+| [`stations.md`](suivi/stations.md) | Le plus gros journal du projet. Générateur de stations, audit du preset ISS, **ISV Venture Star** (Partie C), **mégastructures et vaisseaux** (Partie F : tore de Stanford, complexe Elysium, Starship de bout en bout), puis les **composants neufs** de 2026-08-09/10 — miroir primaire, module en coin d'arc, grappe de cuves, hangar à baie hexagonale, charge du mât polaire. |
+| [`assembleur.md`](suivi/assembleur.md) | Journal du chantier `conception/assembleur.md`, étape par étape. **Lots 1 à 5 clos** (modèle, écran, déplacement de sous-arbre, sauvegarde disque, overlay des refus) **+ rotation au clavier** ; restent les lots 6 (dette d'enveloppes, composites), 8 (décalage) et 9 (redimensionnement). Red-check de chaque étape, y compris les tests jetés parce qu'ils ne gardaient rien. |
+| [`planetes.md`](suivi/planetes.md) | Bilan de la refonte v2 du rendu tellurique + catalogue des ~126 presets, **+ Partie C** (2026-08-10) : atmosphères (P.1 et la scission `atmo`/`atmo_densite`), finitions P.4 (rotation propre, nuages en couche, ombre d'anneau, glint), cohérence du catalogue. |
+| [`ceintures.md`](suivi/ceintures.md) | **Nouveau (2026-08-10).** Tout le chantier P.2 : la mesure qui a montré qu'il n'y avait rien à optimiser, la barre sombre des étoiles protosolaires, la couture des disques trouvée **par sondes**, les débris en gros carrés, l'annulation catastrophique, et la découverte que `Projection` n'est pas la projection. |
+| [`etoiles.md`](suivi/etoiles.md) | Catalogue de la galerie des étoiles, **+ le chantier P.3** : les éruptions existaient déjà, les deux causes chiffrées (l'horloge, l'échelle) et l'arbitrage du plancher à 8 px. |
+| [`interface.md`](suivi/interface.md) | Journal de **l'interface de jeu** : étapes I.0 à I.5 et les bouche-trous soldés, **+ Partie B** (2026-08-10) : bascules de calques, trajectoires en points, filtre de focus, les deux pièges de police, les paramètres du jeu et l'échelle du système solaire. |
+| [`technique.md`](suivi/technique.md) | **Nouveau (2026-08-10).** Les pièges du moteur, ceux qui ne tiennent à aucun chantier : plafond de 32 pipelines, clone de `Material` qui partage son pipeline, géométrie jamais double-face, uniform déclaré-mais-non-lu qui vaut zéro en silence. |
+| [`revues.md`](suivi/revues.md) | **Nouveau (2026-08-10).** Les passes de relecture systématique et ce qu'elles ont appris — dont le fait que « 86 avertissements clippy sans défaut réel » était faux, et qu'un vrai défaut y dormait. |
 | [`geantes_gazeuses.md`](suivi/geantes_gazeuses.md) | Catalogue des géantes gazeuses (archétypes, features, presets) et bilan de la V2. |
-| [`etoiles.md`](suivi/etoiles.md) | Catalogue de la galerie des étoiles (types, rendu, chantiers restants). |
-| [`bucketlist_globale.md`](suivi/bucketlist_globale.md) | Bucket list historique du projet dans son ensemble (fondations : étoile aléatoire, orbites, ceinture, refactos successifs). |
+| [`bucketlist_globale.md`](suivi/bucketlist_globale.md) | Bucket list du projet dans son ensemble : ce qui est fait, ce qui reste, section par section. |
 
 ## reference/
 
 | Fichier | Sujet |
 |---|---|
-| [`fils.md`](reference/fils.md) | Catalogue généré des 35 variantes de composants du vaisseau : fils numérotés (mêmes numéros qu'à l'écran, touche **F**), profil tranché, serrage de l'enveloppe. Régénérer avec `FILS=1 cargo test --release le_catalogue_des_fils`. |
+| [`fils.md`](reference/fils.md) | Catalogue généré des variantes de composants du vaisseau : fils numérotés (mêmes numéros qu'à l'écran, touche **F**), profil tranché, serrage de l'enveloppe. Régénérer avec `FILS=1 cargo test --release le_catalogue_des_fils`. |
 
 ---
 
@@ -60,3 +72,21 @@ Les fichiers fusionnés gardent leurs sections d'origine sous des titres
 (commentaires `//!`/`///`) référence ces documents sous la forme
 `docs/conception/<sujet>.md, Partie X §N` — la lettre de partie désigne le
 document d'origine, le numéro de section n'a pas changé.
+
+---
+
+## Repères chronologiques
+
+Pour situer un chantier dans le temps sans relire les journaux.
+
+| Quand | Ce qui s'est joué | Journal |
+|---|---|---|
+| 2026-07-29 | Découpage de `composant.rs`, composite `SousEnsemble` | [`conception/stations.md`](conception/stations.md) §E |
+| 2026-07-31 → 08-03 | Conception de l'assembleur, lots 1 à 3 | [`suivi/assembleur.md`](suivi/assembleur.md) |
+| 2026-08-03 → 06 | Mégastructures, puis **Starship de bout en bout** | [`suivi/stations.md`](suivi/stations.md) Partie F |
+| 2026-08-04 | L'interface de jeu, étapes I.0 à I.5 | [`suivi/interface.md`](suivi/interface.md) |
+| 2026-08-05 | **Revue de code** : 117 → 0 avertissement, 90 éléments morts triés (dont 77 exercés par les tests), et le vrai défaut qu'ils cachaient | [`suivi/revues.md`](suivi/revues.md) |
+| 2026-08-05 → 06 | Réglages persistés, zoom au plancher `0,01`, les **deux** défauts de texte (glyphes manquants puis atlas repaqueté) | [`suivi/interface.md`](suivi/interface.md) Partie B |
+| 2026-08-08 | P.1 atmosphères, P.2 mesuré (rien à optimiser) | [`suivi/planetes.md`](suivi/planetes.md), [`suivi/ceintures.md`](suivi/ceintures.md) |
+| 2026-08-09 | Scission `atmo`/`atmo_densite`, plancher stellaire à 8 px, **assembleur lots 4–5**, miroir et module d'arc | [`suivi/etoiles.md`](suivi/etoiles.md), [`suivi/assembleur.md`](suivi/assembleur.md), [`suivi/stations.md`](suivi/stations.md) |
+| 2026-08-10 | Tore de Stanford retravaillé, grappe de cuves, hangar hexagonal, charge du mât polaire — puis **cette réorganisation** | [`suivi/stations.md`](suivi/stations.md) |
