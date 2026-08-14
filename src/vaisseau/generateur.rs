@@ -7,8 +7,8 @@ use super::chantier::Chantier;
 use super::montage::{cuire, port_monde, poser};
 use super::symetrie::Symetrie;
 use super::{
-    Assembleur, Composant, EtatStation, GenrePort, PiedHexa, Profil, Repere, Sorties, StyleTreillis,
-    ogive_rayon, BARDAGE_ARC, BOUCLIER_ELANCEMENT, JUPE_COUVERTURE,
+    Assembleur, Composant, EtatStation, GenrePort, PiedHexa, Piece, Profil, Repere, Sorties,
+    Station, StyleTreillis, ogive_rayon, BARDAGE_ARC, BOUCLIER_ELANCEMENT, JUPE_COUVERTURE,
     VarianteAntenne, VarianteCaisson, VarianteCharge, VarianteCoiffe, VarianteModule,
     VariantePanneau, VariantePanneauMega, VariantePropulseur, VarianteRadiateur, VarianteRaptor,
     rayon_pour_anneau, VarianteMiroir,
@@ -1590,15 +1590,78 @@ const ELYSIUM_PROFIL: Profil = Profil::P3;
 /// **Six bras**, pas trois : Elysium prend **toutes** les faces de l'hexagone du
 /// moyeu au lieu d'une sur deux (§F.1). Un premier essai d'anneau (une jante de
 /// modules d'habitat, un tiers de tour) a été jugé à l'écran et **retiré** ;
-/// à la place, un **sixième** de [`Composant::Jante`] — canal ouvert façon
-/// jante de vélo, calé sur les bras 0 et 1.
+/// à la place, un tour **complet** de [`Composant::Jante`] — canal ouvert
+/// façon jante de vélo, un sixième par bras, refermé sur les six
+/// ([`jante_elysium`]).
+///
+/// Bâtie en interne autour de **Y** (bras et jante dans le plan XZ — voir
+/// [`bras_et_tunnels`]), puis **pivotée globalement** d'un quart de tour
+/// autour de X ([`tournee`]) pour présenter sa face — son propre axe de
+/// rotation — côté **Z**, plutôt que de réécrire chacune de ses fonctions de
+/// placement autour d'un second axe interne.
 pub fn preset_elysium() -> EtatStation {
     let mut asm = Assembleur::new();
     moyeu_elysium(&mut asm);
     bras_et_tunnels(&mut asm, ELYSIUM_BRAS, ELYSIUM_N_BRAS);
     habitats_accouples(&mut asm, ELYSIUM_HABITAT);
     jante_elysium(&mut asm);
-    asm.terminer()
+    second_anneau_elysium(&mut asm);
+    tournee(asm.terminer(), Quat::from_rotation_x(FRAC_PI_2))
+}
+
+/// Rayon majeur du second anneau : **un tiers du diamètre** de la jante
+/// extérieure (donc deux tiers de son rayon), lui-même **divisé par deux**
+/// sur demande — écrit en deux facteurs plutôt que réduit à
+/// `elysium_rayon_jante() / 3.0` pour garder visible que le second anneau a
+/// deux origines (le tiers de diamètre, puis la réduction de moitié), pas une
+/// seule fraction choisie d'un coup.
+fn elysium_rayon_second_anneau() -> f32 {
+    (2.0 * elysium_rayon_jante() / 3.0) * 0.5
+}
+
+/// **Un second anneau**, entre le moyeu et la jante extérieure : une copie du
+/// `Composant::Tore` de Stanford (même construction que
+/// [`preset_stanford_anneau`] — section, segments, anneaux), mais **sans**
+/// le moyeu ni les bras qui l'accompagnent là-bas : Elysium a déjà les siens,
+/// portés par [`moyeu_elysium`]/[`bras_et_tunnels`] — les reposer ici les
+/// dupliquerait pour rien.
+///
+/// Placé à l'origine, comme [`jante_elysium`] : bâti en interne dans le même
+/// plan XZ que le reste d'Elysium, il suit le même pivot global vers Z
+/// appliqué en fin de [`preset_elysium`], sans rien à ajuster ici.
+///
+/// Jonctions calées sur les **six** bras d'Elysium (pas les trois de
+/// Stanford) : mêmes angles que `bras_et_tunnels`, pour que le vitrage du
+/// tore n'arrive pas là où un bras le traverse.
+fn second_anneau_elysium(asm: &mut Assembleur) {
+    let tore = Composant::Tore {
+        rayon_majeur: elysium_rayon_second_anneau(),
+        rayon_mineur: hauteur_moyeu() * 0.5,
+        segments: 96,
+        anneaux: 16,
+        jonctions: ELYSIUM_N_BRAS,
+        phase: PI / 6.0,
+    };
+    asm.ajouter(cuire(Repere::IDENTITE, &tore));
+}
+
+/// Fait pivoter une station déjà assemblée par un quaternion **global**,
+/// autour de l'origine — pour réorienter tout un preset bâti avec sa propre
+/// convention d'axe interne sans réécrire chacune de ses fonctions de
+/// placement. `Piece::transforme` est déjà une `Mat4` cuite : la pivoter,
+/// c'est la prémultiplier — même principe que la rotation clavier de
+/// l'assembleur (`Chantier::appliquer_delta_bloc`).
+fn tournee(etat: EtatStation, rot: Quat) -> EtatStation {
+    let Some(station) = etat.doit_dessiner() else {
+        return EtatStation::Vide;
+    };
+    let delta = Mat4::from_quat(rot);
+    let pieces: Vec<Piece> =
+        station.pieces().iter().map(|p| Piece::new(delta * p.transforme, p.composant.clone())).collect();
+    match Station::depuis_pieces(pieces) {
+        Some(s) => EtatStation::Prete(s),
+        None => EtatStation::Vide,
+    }
 }
 
 /// Demi-angle du vide côté moyeu de la jante — voir [`Composant::Jante`].
@@ -1607,10 +1670,14 @@ pub fn preset_elysium() -> EtatStation {
 /// simple arceau.
 const ELYSIUM_JANTE_OUVERTURE: f32 = 0.6;
 
-/// **Un sixième de la jante d'Elysium** : le premier arc, entre les bras 0
-/// (30°) et 1 (90°) — un tour complet ferait six de ces segments, un par bras.
-/// Jugé seul avant d'éventuellement compléter le tour, comme le premier tiers
-/// d'anneau qui l'a précédé.
+/// **Le tour complet de la jante d'Elysium** : un sixième de
+/// [`Composant::Jante`] par bras, refermé sur les six
+/// (`ELYSIUM_N_BRAS`). Posées un temps à cinq exemplaires pour vérifier que
+/// le tour se referme symétriquement puis ramenées à un seul le temps de
+/// régler la ville qui s'y ajoute (`jante::ville`), les six reprennent leur
+/// place une fois celle-ci stable — la formule de rotation n'a pas changé
+/// entre-temps, seule la boucle qui la reproduit `ELYSIUM_N_BRAS` fois a
+/// été réintroduite.
 ///
 /// `rayon_mineur = hauteur_moyeu()` : la largeur du canal — son étendue le long
 /// de Y, entre ses deux flancs (`v = ±π/2`, où `surface_tore` donne
@@ -1632,17 +1699,19 @@ fn jante_elysium(asm: &mut Assembleur) {
         segments: 24,
         anneaux: 8,
     };
-    // La jante démarre à `u = 0` (le +X local) ; tournée autour de Y, elle
-    // démarre au bras 0 et finit au bras 1, comme `bras_et_tunnels` les place
-    // (`radial = (cos a, 0, sin a)`).
+    // Chaque tronçon démarre à `u = 0` (le +X local) ; tourné autour de Y,
+    // il démarre au bras `k` et finit au bras `k + 1`, comme `bras_et_tunnels`
+    // les place (`radial = (cos a, 0, sin a)`).
     //
     // ⚠️ `Quat::from_rotation_y` tourne dans le sens **opposé** à cette
     // convention d'angle — un premier essai à `+PI/6` amenait le canal à 330°
-    // au lieu de 30°, ce que le test `la_jante_delysium_demarre_au_bras_0` a
-    // pris. D'où le signe négatif, plutôt qu'une deuxième convention d'angle à
+    // au lieu de 30°, ce que le test `la_jante_delysium_ferme_le_tour` a pris.
+    // D'où le signe négatif, plutôt qu'une deuxième convention d'angle à
     // tenir en tête.
-    let rot = Quat::from_rotation_y(-PI / 6.0);
-    asm.ajouter(cuire(Repere::new(Vec3::ZERO, rot), &comp));
+    for k in 0..ELYSIUM_N_BRAS {
+        let rot = Quat::from_rotation_y(-(PI / 6.0 + k as f32 * TAU / ELYSIUM_N_BRAS as f32));
+        asm.ajouter(cuire(Repere::new(Vec3::ZERO, rot), &comp));
+    }
 }
 
 /// **Tore de Stanford** : bras courts, ceinturés d'un tore cylindrique.
@@ -6194,14 +6263,19 @@ mod tests {
         assert_eq!(e, 3, "Elysium : trois plateaux, la jante médiane comprise");
     }
 
-    // La jante démarre pile au bras 0 (30°) : son `u = 0` transformé doit
-    // tomber sur ce rayon, dans le plan XZ du moyeu.
+    // Les six tronçons de la jante d'Elysium referment le tour : chacun
+    // démarre à son propre bras (`30° + k·60°`), dans le plan XZ **interne**
+    // à `jante_elysium` — testée ici en l'isolant de `preset_elysium`, pour
+    // ne pas mélanger cette géométrie avec le pivot global vers Z (voir
+    // `elysium_fait_face_a_z` plus bas pour celui-là).
     #[test]
-    fn la_jante_delysium_demarre_au_bras_0() {
-        let EtatStation::Prete(st) = preset_elysium() else { panic!("elysium vide") };
+    fn la_jante_delysium_ferme_le_tour() {
+        let mut asm = Assembleur::new();
+        jante_elysium(&mut asm);
+        let EtatStation::Prete(st) = asm.terminer() else { panic!("jante vide") };
         let jantes: Vec<&crate::vaisseau::Piece> =
             st.pieces().iter().filter(|p| matches!(p.composant, Composant::Jante { .. })).collect();
-        assert_eq!(jantes.len(), 1, "une seule jante pour l'instant");
+        assert_eq!(jantes.len(), ELYSIUM_N_BRAS, "un tronçon par bras");
 
         let (rayon_majeur, arc, ouverture) = match &jantes[0].composant {
             Composant::Jante { rayon_majeur, arc, ouverture, .. } => (*rayon_majeur, *arc, *ouverture),
@@ -6210,24 +6284,73 @@ mod tests {
         assert!((arc - TAU / ELYSIUM_N_BRAS as f32).abs() < 1e-5, "un sixième de tour");
         assert!(ouverture > 0.0 && ouverture < PI, "ouverture hors bornes");
 
-        // Le point local (rayon_majeur, 0, 0) est le `u = 0` du canal —
-        // transformé, il doit tomber à 30° dans le plan XZ, comme le bras 0.
+        // Le point local (rayon_majeur, 0, 0) est le `u = 0` de chaque canal —
+        // transformé, chacun doit tomber à `30° + k·60°`, dans le plan XZ.
         let local = Vec3::new(rayon_majeur, 0.0, 0.0);
-        let monde = jantes[0].transforme.transform_point3(local);
-        assert!(monde.y.abs() < 1e-3, "la jante sort du plan de l'anneau, y = {}", monde.y);
-        let angle = monde.z.atan2(monde.x).rem_euclid(TAU).to_degrees();
-        assert!((angle - 30.0).abs() < 0.5, "la jante démarre à {angle:.1}°, attendu 30°");
+        let mut angles: Vec<f32> = jantes
+            .iter()
+            .map(|p| {
+                let monde = p.transforme.transform_point3(local);
+                assert!(monde.y.abs() < 1e-3, "une jante sort du plan de l'anneau, y = {}", monde.y);
+                monde.z.atan2(monde.x).rem_euclid(TAU).to_degrees()
+            })
+            .collect();
+        angles.sort_by(f32::total_cmp);
+        for (k, a) in angles.iter().enumerate() {
+            let attendu = 30.0 + 60.0 * k as f32;
+            assert!((a - attendu).abs() < 0.5, "tronçon à {a:.1}°, attendu {attendu}°");
+        }
+    }
+
+    // `preset_elysium` pivote tout d'un quart de tour autour de X : l'anneau,
+    // bâti en interne dans le plan XZ (voir `la_jante_delysium_ferme_le_tour`
+    // ci-dessus), doit se retrouver dans le plan **XY** une fois publié — Z
+    // devient l'axe étroit (nul en `y` avant le pivot), Y prend la place que Z
+    // tenait (le grand rayon de l'anneau).
+    #[test]
+    fn elysium_fait_face_a_z() {
+        let EtatStation::Prete(st) = preset_elysium() else { panic!("elysium vide") };
+        let jantes: Vec<&crate::vaisseau::Piece> =
+            st.pieces().iter().filter(|p| matches!(p.composant, Composant::Jante { .. })).collect();
+        assert_eq!(jantes.len(), ELYSIUM_N_BRAS, "un tronçon par bras");
+
+        let rayon_majeur = match &jantes[0].composant {
+            Composant::Jante { rayon_majeur, .. } => *rayon_majeur,
+            _ => unreachable!(),
+        };
+        let local = Vec3::new(rayon_majeur, 0.0, 0.0);
+        let mut angles: Vec<f32> = jantes
+            .iter()
+            .map(|p| {
+                let monde = p.transforme.transform_point3(local);
+                assert!(monde.z.abs() < 1e-3, "une jante sort du plan XY après le pivot, z = {}", monde.z);
+                monde.y.atan2(monde.x).rem_euclid(TAU).to_degrees()
+            })
+            .collect();
+        angles.sort_by(f32::total_cmp);
+        for (k, a) in angles.iter().enumerate() {
+            let attendu = 30.0 + 60.0 * k as f32;
+            assert!((a - attendu).abs() < 0.5, "tronçon à {a:.1}°, attendu {attendu}°");
+        }
     }
 
     // Stanford garde trois bras (une face de moyeu sur deux) ; Elysium en a
     // désormais **six** — une par face, l'hexagone n'en ayant que six. Chaque
     // station a donc son propre pas angulaire (120° / 60°), et c'est ce que le
     // tableau encode plutôt que de dupliquer le test.
+    //
+    // Stanford reste bâtie (et publiée) dans le plan XZ (axe étroit Y).
+    // Elysium est bâtie dans le plan XZ en interne, mais `preset_elysium` la
+    // pivote ensuite d'un quart de tour autour de X pour la publier dans le
+    // plan XY (axe étroit Z, voir `elysium_fait_face_a_z`) — d'où l'axe étroit
+    // et l'axe de l'angle qui diffèrent entre les deux lignes du tableau.
     #[test]
     fn les_bras_sont_regulierement_repartis_dans_le_plan_du_moyeu() {
-        for (nom, etat, attendu_n, pas) in [
-            ("stanford", preset_stanford(), STANFORD_N_BRAS, 120.0),
-            ("elysium", preset_elysium(), ELYSIUM_N_BRAS, 60.0),
+        let plat_angle_xz = (|c: Vec3| (c.y, c.z.atan2(c.x))) as fn(Vec3) -> (f32, f32);
+        let plat_angle_xy = (|c: Vec3| (c.z, c.y.atan2(c.x))) as fn(Vec3) -> (f32, f32);
+        for (nom, etat, attendu_n, pas, plat_angle) in [
+            ("stanford", preset_stanford(), STANFORD_N_BRAS, 120.0, plat_angle_xz),
+            ("elysium", preset_elysium(), ELYSIUM_N_BRAS, 60.0, plat_angle_xy),
         ] {
             let EtatStation::Prete(st) = etat else { panic!("{nom} : station vide") };
             let charpentes: Vec<&crate::vaisseau::Piece> = st
@@ -6241,8 +6364,9 @@ mod tests {
                 .iter()
                 .map(|p| {
                     let c = p.transforme.w_axis.truncate();
-                    assert!(c.y.abs() < 1e-4, "{nom} : bras hors du plan, y = {}", c.y);
-                    c.z.atan2(c.x).rem_euclid(TAU).to_degrees()
+                    let (plat, angle) = plat_angle(c);
+                    assert!(plat.abs() < 1e-4, "{nom} : bras hors du plan, coordonnée étroite = {plat}");
+                    angle.rem_euclid(TAU).to_degrees()
                 })
                 .collect();
             angles.sort_by(f32::total_cmp);
@@ -6461,12 +6585,33 @@ mod tests {
         }
     }
 
-    // Le complexe Elysium n'a **pas** d'anneau : c'est ce qui distingue les deux
-    // mégastructures au-delà de la longueur des bras.
+    // Elysium porte un **second anneau** : une copie du `Composant::Tore` de
+    // Stanford — sans son moyeu ni ses bras, Elysium ayant déjà les siens —
+    // au tiers du **diamètre** total (donc deux tiers du rayon), lui-même
+    // divisé par deux sur demande, strictement entre le moyeu et la jante
+    // extérieure, jonctions calées sur les six bras.
     #[test]
-    fn le_complexe_elysium_na_pas_de_tore() {
+    fn elysium_a_un_second_anneau_a_la_moitie_du_tiers_du_diametre() {
         let EtatStation::Prete(st) = preset_elysium() else { panic!() };
-        assert!(!st.pieces().iter().any(|p| matches!(p.composant, Composant::Tore { .. })));
+        let tores: Vec<&crate::vaisseau::Piece> =
+            st.pieces().iter().filter(|p| matches!(p.composant, Composant::Tore { .. })).collect();
+        assert_eq!(tores.len(), 1, "un seul second anneau");
+
+        let (rayon_majeur, jonctions, phase) = match &tores[0].composant {
+            Composant::Tore { rayon_majeur, jonctions, phase, .. } => (*rayon_majeur, *jonctions, *phase),
+            _ => unreachable!(),
+        };
+        let attendu = (2.0 * elysium_rayon_jante() / 3.0) * 0.5;
+        assert!(
+            (rayon_majeur - attendu).abs() < 1e-4,
+            "rayon majeur {rayon_majeur}, attendu {attendu} (moitié du tiers du diamètre)"
+        );
+        assert!(
+            rayon_majeur > 0.0 && rayon_majeur < elysium_rayon_jante(),
+            "hors de l'intervalle moyeu/jante extérieure : {rayon_majeur}"
+        );
+        assert_eq!(jonctions, ELYSIUM_N_BRAS, "une jonction par bras");
+        assert!((phase - PI / 6.0).abs() < 1e-5, "phase non calée sur les bras");
     }
 
     // La longueur des bras **dérive** de l'épine de l'ISV. Si quelqu'un rallonge

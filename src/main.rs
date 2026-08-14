@@ -67,6 +67,23 @@ async fn main() {
     reglages.appliquer();
     let mut etat = Etat::Accueil(Accueil::new());
 
+    // Harnais de profilage (facultatif) : `PROFIL=<libellé exact>` saute le
+    // menu et va droit sur l'item nommé dans les Mégastructures, pour mesurer
+    // le fps **réel** plutôt que de l'estimer en triangles retirés — voir
+    // `docs/suivi/stations.md`. Dix secondes d'échantillonnage (la première
+    // seconde, chargement et premier cadrage compris, est ignorée), puis la
+    // fenêtre se ferme d'elle-même et imprime le résultat sur la sortie
+    // standard — aucune navigation manuelle, aucun œil requis pour lire le
+    // chiffre.
+    let profil = std::env::var("PROFIL").ok();
+    if let Some(libelle) = &profil {
+        let mut v = VueStation::new(Categorie::Megastructures);
+        v.choisir(libelle);
+        etat = Etat::Station(Box::new(v));
+    }
+    let mut echantillons: Vec<f32> = Vec::new();
+    let debut = get_time();
+
     loop {
         match &mut etat {
             Etat::Accueil(a) => {
@@ -162,6 +179,39 @@ async fn main() {
                 }
             }
         }
+
+        if profil.is_some() {
+            let ecoule = get_time() - debut;
+            if ecoule > 1.0 {
+                echantillons.push(get_frame_time());
+            }
+            if ecoule > 10.0 {
+                imprimer_profil(profil.as_deref().unwrap_or(""), &mut echantillons);
+                return;
+            }
+        }
+
         next_frame().await;
     }
+}
+
+/// Résume un profilage fps : moyenne, pire frame, et le « 1 % bas »
+/// (percentile 99 du temps de frame — la métrique qui dit si l'expérience
+/// **bafouille**, là où la moyenne peut la masquer).
+fn imprimer_profil(libelle: &str, echantillons: &mut [f32]) {
+    if echantillons.is_empty() {
+        println!("PROFIL {libelle} : aucun échantillon (item introuvable ?)");
+        return;
+    }
+    echantillons.sort_by(f32::total_cmp);
+    let n = echantillons.len();
+    let moyenne = echantillons.iter().sum::<f32>() / n as f32;
+    let p99 = echantillons[(((n as f32) * 0.99) as usize).min(n - 1)];
+    let pire = *echantillons.last().unwrap();
+    println!(
+        "PROFIL {libelle} : {n} frames | moyenne {:.1} fps | 1% bas {:.1} fps | pire frame {:.1} fps",
+        1.0 / moyenne,
+        1.0 / p99,
+        1.0 / pire
+    );
 }

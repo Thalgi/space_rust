@@ -29,9 +29,16 @@ use macroquad::models::{draw_mesh, Mesh, Vertex};
 use macroquad::prelude::*;
 
 /// Tessellation des solides de révolution (cylindres, cônes, sphères).
-/// C'est le curseur coût/qualité : macroquad tessellait ses cylindres autour de
-/// cette valeur, on la garde pour ne pas changer la silhouette.
-const SEGMENTS: usize = 20;
+/// C'est le curseur coût/qualité — réglé à **12** (baissé de 20, la valeur
+/// historique de macroquad reprise pour ne pas changer la silhouette au
+/// passage à la cuisson) : mesuré en jeu, un maillage cuit reste sensible au
+/// volume de sommets qui le traverse chaque frame (`macroquad::draw_mesh`
+/// recopie systématiquement, aucun tampon GPU persistant par `Mesh`), et les
+/// treillis des mégastructures — des centaines de cylindres fins, chacun peu
+/// visible individuellement — en payaient le prix fort. 12 côtés restent
+/// ronds à l'œil à toute distance normale ; `docs/suivi/stations.md`, « Le
+/// vrai fps, mesuré en jeu ».
+const SEGMENTS: usize = 12;
 
 /// Nombre d'anneaux d'une sphère (hors pôles).
 const ANNEAUX: usize = 10;

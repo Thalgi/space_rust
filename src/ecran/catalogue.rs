@@ -98,6 +98,13 @@ pub enum Fabrique {
     /// garder le soleil dans le même axe — un miroir solidaire de l'anneau ne
     /// renverrait la lumière qu'une fraction du temps.
     Despun { fixe: fn() -> EtatStation, tournant: fn() -> EtatStation },
+    /// **Tourne en entier**, sans moitié dissociée : contrairement à `Despun`
+    /// ou `Isv`, rien ne reste fixe — l'anneau tourne à plat, avec son moyeu.
+    /// L'axe est porté par la variante, pas déduit d'une catégorie de menu :
+    /// deux mégastructures de ce genre peuvent tourner autour d'axes
+    /// différents (Elysium fait face à Z, un futur anneau pourrait tourner
+    /// autour de Y).
+    EtatTournant { construire: fn() -> EtatStation, axe: Vec3 },
     /// **Une pièce seule**, telle quelle.
     ///
     /// C'est la fabrique des entrées **engendrées** : le catalogue en produit
@@ -136,6 +143,10 @@ impl Fabrique {
                 etat: preset_isv_fixe(*e, r.regime),
                 tournant: Some(preset_isv_equipage(*e, r.repli)),
             },
+            // `tournant: None` : rien à dissocier, la rotation s'applique donc
+            // à l'`etat` entier (voir le champ `tournant` de `VueStation` et
+            // son commentaire dans `station.rs`).
+            Fabrique::EtatTournant { construire, .. } => Bati::seul(construire()),
         }
     }
 }
@@ -181,7 +192,7 @@ impl Item {
     pub fn rotation(&self) -> bool {
         matches!(
             self.fabrique,
-            Fabrique::Repli(_) | Fabrique::Isv(_) | Fabrique::Despun { .. }
+            Fabrique::Repli(_) | Fabrique::Isv(_) | Fabrique::Despun { .. } | Fabrique::EtatTournant { .. }
         )
     }
 
@@ -206,6 +217,7 @@ impl Item {
     pub fn axe_rotation(&self) -> Vec3 {
         match self.fabrique {
             Fabrique::Isv(_) => ISV_AXE,
+            Fabrique::EtatTournant { axe, .. } => axe,
             _ => Vec3::Y,
         }
     }
@@ -297,7 +309,10 @@ pub const MEGASTRUCTURES: &[Item] = &[
         "TORE DE STANFORD",
         Fabrique::Despun { fixe: preset_stanford_moyeu, tournant: preset_stanford_anneau },
     ),
-    Item::new("COMPLEXE ELYSIUM", Fabrique::Etat(preset_elysium)),
+    Item::new(
+        "COMPLEXE ELYSIUM",
+        Fabrique::EtatTournant { construire: preset_elysium, axe: Vec3::Z },
+    ),
 ];
 
 /// **Vaisseaux et supervaisseaux** : ce qui se **déplace**, par opposition aux
@@ -480,13 +495,12 @@ mod tests {
         // chauffe (il n'a pas de tuyère, donc pas de panache).
         assert_eq!(porte(BRIQUES, Item::allumage), ["RADIATEUR MEGA"]);
 
-        // Côté mégastructures, deux items tournent — mais pour des raisons
-        // différentes, et c'est tout l'intérêt de les distinguer : le tore
-        // tourne **d'un seul tenant** (gravité par rotation), l'ISV ne fait
-        // tourner qu'une **moitié**, celle qui se replie aussi.
-        // Côté mégastructures il ne reste que des **stations** : seul le tore
-        // tourne, et rien ne se replie ni ne s'allume.
-        assert_eq!(porte(MEGASTRUCTURES, Item::rotation), ["TORE DE STANFORD"]);
+        // Côté mégastructures, deux items tournent, tous deux **d'un seul
+        // tenant** (gravité par rotation, rien à dissocier) : le tore de
+        // Stanford et le complexe Elysium — contrairement à l'ISV, dont seule
+        // la **moitié** rotative se replie aussi. Rien ne se replie ni ne
+        // s'allume côté mégastructures : ce ne sont que des stations.
+        assert_eq!(porte(MEGASTRUCTURES, Item::rotation), ["TORE DE STANFORD", "COMPLEXE ELYSIUM"]);
         assert!(porte(MEGASTRUCTURES, Item::repli).is_empty());
         assert!(porte(MEGASTRUCTURES, Item::allumage).is_empty());
 
@@ -496,13 +510,16 @@ mod tests {
         assert_eq!(porte(VAISSEAUX, Item::repli), [isv]);
         assert_eq!(porte(VAISSEAUX, Item::allumage), [isv]);
 
-        // Et leurs axes diffèrent — un tore tourne à plat, l'ISV est couché.
+        // Et leurs axes diffèrent — le tore de Stanford tourne à plat sur Y,
+        // Elysium fait face à Z (elle-même pivotée d'un quart de tour depuis
+        // sa convention interne, `generateur.rs::tournee`), l'ISV est couché.
         // C'est ce qu'une catégorie de menu ne pouvait déjà pas dire ; les
         // séparer ne change rien à ça, l'axe reste une propriété de l'item.
         let axe = |t: &[Item], libelle: &str| {
             t.iter().find(|i| i.libelle == libelle).unwrap().axe_rotation()
         };
         assert_eq!(axe(MEGASTRUCTURES, "TORE DE STANFORD"), Vec3::Y);
+        assert_eq!(axe(MEGASTRUCTURES, "COMPLEXE ELYSIUM"), Vec3::Z);
         assert_ne!(axe(VAISSEAUX, isv), Vec3::Y);
 
         // Les petites stations sont toutes inertes.

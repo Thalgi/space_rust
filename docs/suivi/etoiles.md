@@ -223,6 +223,19 @@ facteur vaut exactement 1 à la traversée).
    moment du dessin et passe devant elle sans la déclencher. Garde ajoutée sur la
    taille effectivement peinte.
 
+#### P.3 bis, révisé : plancher ramené à 4 px (2026-08-14)
+
+Jugé à l'écran, comme prévu par ce même chantier : 8 px faisait un Soleil trop
+gros au cadrage par défaut. `soleil::PX_MIN` passe à **4** — le seuil que le
+tableau ci-dessus identifiait déjà comme celui où le disque rond, la teinte et
+l'assombrissement du limbe se lisent (sans les taches, qui demandaient ~10 px).
+Le Soleil dessiné occupe désormais **21 %** du rayon de l'orbite de Mercure
+(mesuré ; c'était 42 % à 8 px) — toujours au-dessus du quart que s'autorise la
+constante `R_SOLEIL` seule, mais loin sous le seuil de sécurité (la moitié) que
+`l_etoile_agrandie_reste_dans_l_orbite_de_mercure` garde. Aucun des trois
+pièges ci-dessus n'est concerné : `Astre::rayon_dessine` et la garde sur la
+taille peinte lisent `PX_MIN` en direct, rien à retoucher pour eux.
+
 **Une quatrième copie de `VIEWPORT_H` aurait été de trop.** `planete` et `disque`
 en tenaient chacun une, réglées en cascade par les appelants — et `galerie.rs` ne
 réglait déjà que celle de `planete`, donnant aux anneaux le LOD du plein écran

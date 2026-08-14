@@ -265,21 +265,15 @@ pub(super) fn dessiner<P: Peintre>(
     let porte = fut + baie;
     match variante {
         VarianteHangar::Ouvert => {
-            // Béante : on peint le **fond** de la baie en sombre, et l'ouverture
-            // encadrée. C'est le noir au fond qui fait lire un creux — une face
-            // claire donnerait une caisse pleine.
+            // Béante : on peint le **fond** de la baie en sombre. C'est le noir
+            // au fond qui fait lire un creux — une face claire donnerait une
+            // caisse pleine.
             prisme(
                 p,
                 section(profil, porte - baie * 0.07, 0.90),
                 section(profil, porte - baie * 0.05, 0.90),
                 interieur,
             );
-            // Encadrement : un jonc suivant les six arêtes de la bouche. Six
-            // barres droites vaudraient pour un rectangle, pas pour l'hexagone.
-            let bouche = section(profil, porte - baie * 0.01, 0.97);
-            for k in 0..6 {
-                p.cylindre(bouche[k], bouche[(k + 1) % 6], hh * 0.07, metal);
-            }
         }
         VarianteHangar::Ferme => {
             // Un tablier plein sur toute la section, fendu au milieu : c'est la
@@ -297,6 +291,20 @@ pub(super) fn dessiner<P: Peintre>(
                 sombre,
             );
         }
+    }
+
+    // --- Encadrement de l'entrée, permanent ---
+    //
+    // Un jonc suivant les six arêtes de la bouche — six barres droites
+    // vaudraient pour un rectangle, pas pour l'hexagone. **Hors du `match`
+    // ci-dessus, et pas seulement pour `Ouvert`** : un cadre de porte est une
+    // structure fixe, pas un ornement propre à l'état des vantaux. Qu'elle
+    // soit béante ou fermée, la baie reste la **seule** face du hangar par
+    // où l'on entre — le fût, lui, se raccorde au reste du vaisseau — et
+    // cette entrée reste hexagonale dans les deux cas.
+    let bouche = section(profil, porte - baie * 0.01, 0.97);
+    for k in 0..6 {
+        p.cylindre(bouche[k], bouche[(k + 1) % 6], hh * 0.07, metal);
     }
 
     // --- Rails d'approche sur le toit : ce qui dit le sens de la manœuvre ---
@@ -487,6 +495,50 @@ mod tests {
         assert_eq!(noms.len(), avant, "deux variantes de hangar portent le même nom");
         for v in VarianteHangar::TOUS {
             assert!(v.cout() > 0.0, "{} est gratuit", v.nom());
+        }
+    }
+
+    /// Peintre qui ne retient que les cylindres — pour isoler l'encadrement
+    /// de l'entrée du reste du dessin (fût, baie, rails) sans dupliquer
+    /// `dessiner` dans le test.
+    struct Cylindres {
+        segments: Vec<(Vec3, Vec3, f32)>,
+    }
+    impl Peintre for Cylindres {
+        fn cylindre(&mut self, a: Vec3, b: Vec3, rayon: f32, _: Color) {
+            self.segments.push((a, b, rayon));
+        }
+        fn cone(&mut self, _: Vec3, _: Vec3, _: f32, _: f32, _: f32, _: Color) {}
+        fn sphere(&mut self, _: Vec3, _: f32, _: Color) {}
+        fn cube(&mut self, _: Vec3, _: Vec3, _: Color) {}
+        fn panneau(&mut self, _: Vec3, _: Vec3, _: Vec3, _: Color) {}
+        fn ligne(&mut self, _: Vec3, _: Vec3, _: f32, _: Color) {}
+        fn triangles(&mut self, _: &[Vec3], _: &[u16], _: Color) {}
+        fn empiler_transforme(&mut self, _: Mat4) {}
+        fn depiler_transforme(&mut self) {}
+    }
+
+    /// **L'entrée est encadrée dans les deux variantes**, pas seulement
+    /// `Ouvert` : un cadre de porte est une structure fixe, indépendante de
+    /// l'état des vantaux — béante ou fermée, la baie reste la seule face du
+    /// hangar par où l'on entre, et son encadrement (six barres suivant les
+    /// arêtes de la bouche hexagonale) doit s'y voir dans les deux cas.
+    #[test]
+    fn lentree_est_encadree_dans_les_deux_variantes() {
+        let (profil, fut, baie) = (Profil::P2, 3.0_f32, 5.0);
+        let hh = demi_hauteur(profil);
+        let bouche = section(profil, fut + baie - baie * 0.01, 0.97);
+        for variante in VarianteHangar::TOUS {
+            let mut c = Cylindres { segments: Vec::new() };
+            dessiner(&mut c, variante, profil, fut, baie);
+            for k in 0..6 {
+                let (a, b) = (bouche[k], bouche[(k + 1) % 6]);
+                let trouve = c.segments.iter().any(|&(x, y, r)| {
+                    (x.distance(a) < 1e-4 && y.distance(b) < 1e-4 || x.distance(b) < 1e-4 && y.distance(a) < 1e-4)
+                        && (r - hh * 0.07).abs() < 1e-4
+                });
+                assert!(trouve, "{} : barre {k} de l'encadrement absente", variante.nom());
+            }
         }
     }
 }

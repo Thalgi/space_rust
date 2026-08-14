@@ -1,6 +1,6 @@
 # STATE — où en est le chantier
 
-> Point de reprise, **2026-08-10**. À lire en premier dans une nouvelle session,
+> Point de reprise, **2026-08-14**. À lire en premier dans une nouvelle session,
 > **en entier** : il tient en deux cents lignes, et c'est délibéré.
 >
 > Ce fichier dit **où on en est et quoi faire ensuite**, rien de plus. Le
@@ -15,50 +15,82 @@
 > « Où trouver quoi »). **Ne pas recommencer** : un fait qui se raconte va dans
 > un journal, pas ici.
 
-## Reprendre ici (état au 2026-08-10)
+## Reprendre ici (état au 2026-08-14)
 
-**Vérifié** : **622 tests verts**, `cargo clippy --all-targets` à **0
-avertissement**, binaire compilé, `docs/reference/fils.md` régénéré.
+**Vérifié** : **644 tests verts**, `cargo clippy --all-targets` à **0
+avertissement**, `docs/reference/fils.md` régénéré.
 
-**Tout le code est commité** (`fb7d589` « fix », 2026-08-10) : l'atmosphère, le
-plancher stellaire, l'assembleur, les quatre composants neufs, le tore de
-Stanford et la charge du mât polaire. Seuls les `.md` de cette clôture restent à
-commiter.
+**Pas encore commité** : treize fichiers modifiés depuis le dernier commit
+(`73fb924` « torus ») — `generateur.rs`, `catalogue.rs`, `maillage.rs`,
+`main.rs`, `ecran/station.rs`, `soleil/mod.rs`,
+`composant/{jante,tore,hangar}.rs`, `STATE.md`, `docs/suivi/{stations,
+etoiles}.md`, `docs/reference/fils.md`. Chantier Elysium (profilage fps
+compris) + les trois arbitrages visuels tranchés à l'œil (plancher stellaire,
+miroir troué). **Point de commit à signaler** dès que l'utilisateur veut le
+figer.
 
 ### Ce qui a été fait dans la dernière session
 
 | Chantier | Résultat | Journal |
 |---|---|---|
-| **Atmosphère** : teinte et densité séparées | `atmo` devient une teinte unitaire, `atmo_densite` porte l'épaisseur | [`suivi/planetes.md`](docs/suivi/planetes.md) |
-| **P.3 bis** : plancher stellaire | `soleil::PX_MIN = 8.0` — **à valider à l'œil** | [`suivi/etoiles.md`](docs/suivi/etoiles.md) |
-| **Assembleur** : Lots 4 et 5 | écran d'assemblage complet, déplacement, rotation clavier, sauvegarde disque | [`suivi/assembleur.md`](docs/suivi/assembleur.md) |
-| **Liste défilante** | ascenseur sur la colonne des composants | [`suivi/assembleur.md`](docs/suivi/assembleur.md) |
-| **4 composants neufs** | miroir primaire, module en coin d'arc, grappe de cuves, hangar | [`suivi/stations.md`](docs/suivi/stations.md) |
-| **Tore de Stanford** | ~12 itérations à l'œil : miroirs inclinés vers le soleil, pilier polaire, moitiés fixe/tournante | [`suivi/stations.md`](docs/suivi/stations.md) |
-| **Hangar** : baie hexagonale | section allongée (`ALLONGE = 2`), raccord par homothétie | [`suivi/stations.md`](docs/suivi/stations.md) |
-| **Charge du mât polaire bas** | habitat ISV en triple + grappe de cuves, ancrées sur le bout du mât | [`suivi/stations.md`](docs/suivi/stations.md) |
+| **Complexe Elysium — chantier initial clos** | Jante refermée en anneau complet (6 tronçons), sol/ville corrigés (le sol ne suivait pas la courbe jusqu'au pneu — cause réelle trouvée par mesure, pas par déduction), second anneau au sixième du diamètre de la jante, tout le complexe pivoté face à **Z** et animable au bouton ROTATION, entrée du hangar encadrée dans ses deux variantes, rendu optimisé (grille de vitrage en `ligne` plutôt qu'en `cylindre` : ~146 000 triangles retirés) | [`suivi/stations.md`](docs/suivi/stations.md) Partie F, sessions 2026-08-11 → 2026-08-14 |
+| **Elysium : fps mesuré en jeu** | Harnais `PROFIL=` ajouté ; répartition du coût par famille de composant mesurée (les bras, premier poste) ; `SEGMENTS` baissé 20→12 (18,7→20,0 fps) ; tampons GPU persistants creusés et mis de côté (chantier à part, trop gros/risqué pour cette session) | [`suivi/stations.md`](docs/suivi/stations.md) Partie F, 2026-08-14 |
+| **Trois arbitrages visuels tranchés à l'œil** | Plancher stellaire 8→4 px ; charge/mât « derrière » le miroir bas et « perçant » ses disques — pas des défauts, le miroir est troué en son centre pour le mât | [`suivi/etoiles.md`](docs/suivi/etoiles.md) P.3 bis révisé, [`suivi/stations.md`](docs/suivi/stations.md) |
 
 ### À faire ensuite, par ordre
 
-1. ⚠️ **Trois choses à juger à l'œil** — elles bloquent leurs chantiers respectifs
-   et aucune ne se décide sans lancer le jeu :
-   - le **plancher stellaire à 8 px** (P.3 bis) : le Soleil fait 42 % du rayon de
-     l'orbite de Mercure, et personne ne l'a encore vu ;
-   - la **charge du mât polaire** passe à **1,8** du plan du miroir bas et se
-     trouve **derrière** lui — donc masquée depuis les points de vue au-dessus de
-     l'anneau. Se corrige en réduisant `POLE_ECART` ;
-   - le **mât polaire perce les disques** des miroirs à environ un tiers de sa
-     hauteur (signalé, jamais tranché).
-2. **Palette : lister les sous-variantes.** `echantillons()` n'en donne qu'une par
+1. ⚠️ **Elysium : fps mesuré en jeu, amélioré, encore loin d'être bon.**
+   Harnais de profilage ajouté (`PROFIL=<libellé> ./target/release/solar_game.exe`,
+   voir `suivi/stations.md`) : le gain du correctif de vitrage (session
+   précédente) **mesuré**, pas estimé — insuffisant seul (18,7 fps moyen sur
+   Elysium, contre 59 pour la station à anneau de référence, 28,6 pour
+   Stanford). Cause n°1 identifiée et chiffrée : les six **bras**
+   (`Composant::Charpente`) — 53 928 sommets sur 204 580 (26 %) pour
+   6 pièces, `baies` (densité de treillis) jamais réglé pour l'échelle
+   d'Elysium (2× celle de Stanford).
+   - **Choix fait entre deux corrections** (retoucher la densité des
+     treillis — visuel/structurel, propre à Elysium/Stanford — ou baisser
+     `SEGMENTS`, le curseur global de tessellation des cylindres) :
+     `SEGMENTS` baissé **20 → 12** (`maillage.rs`). Mesuré : 18,7 → **20,0
+     fps**. Réel, mais net en dessous de ce qu'annonçait la réduction de
+     sommets (~38 % de sommets en moins, ~7 % de fps en plus) — le goulot
+     n'est pas surtout le volume de sommets, plutôt un coût **par appel**.
+   - **Piste creusée, pas prise** : des tampons GPU **persistants**
+     (uploader une fois, ne plus recopier chaque frame) sont possibles en
+     principe via `get_internal_gl().quad_context` (accès bas niveau à
+     `miniquad::RenderingBackend`, déjà utilisé ailleurs dans ce projet),
+     mais `Material`/`QuadGl` (le système d'éclairage) n'expose pas son
+     pipeline pour ça — il faudrait un **second chemin de rendu complet**,
+     parallèle à `MaillageStation`. Jugé trop gros et trop risqué (un bug de
+     shader s'y verrait sur tout le jeu, pas seulement Elysium) pour cette
+     session. Détail et refus assumé dans `suivi/stations.md`.
+   - ~~le croisement bras/anneau du second anneau~~ — **tranché** : pas de
+     raccord dédié nécessaire, ni pour Elysium ni pour Stanford ;
+   - la **rotation au bouton** (axe Z) et l'**encadrement du hangar fermé**,
+     tous deux ajoutés ce chantier sans les avoir vus tourner/s'afficher ;
+   - le **sol et la ville restent volontairement provisoires** (vert plat sans
+     texture, parallélépipèdes bruités) — pas un défaut, juste pas habillé.
+2. ~~⚠️ Trois choses à juger à l'œil (Stanford/étoiles)~~ — **les trois
+   tranchées** (2026-08-14, jugées en jeu) :
+   - le **plancher stellaire** : 8 px faisait un Soleil trop gros, ramené à
+     **4 px** (`soleil::PX_MIN`) — occupe désormais 21 % du rayon de l'orbite
+     de Mercure (42 % avant) ;
+   - la **charge du mât polaire** « derrière » le miroir bas et le **mât qui
+     perce les disques** : **pas des défauts** — le miroir est troué en son
+     centre pour le mât (`VarianteMiroir::trou`), tout se voit à travers.
+     `POLE_ECART` inchangé.
+   - Détail dans `suivi/etoiles.md` (P.3 bis, révisé) et `suivi/stations.md`
+     (« Marge de 1,8 sous le miroir bas »).
+3. **Palette : lister les sous-variantes.** `echantillons()` n'en donne qu'une par
    `Composant`, si bien qu'`ARC SOUTE`, les postes d'amarrage et `HANGAR FERME`
    sont **inatteignables à l'écran**. Bloque l'étape 5 de l'Endurance.
-3. **Endurance étape 5** : assembler l'anneau à douze avec l'alternance des
+4. **Endurance étape 5** : assembler l'anneau à douze avec l'alternance des
    quatre familles. Puis étape 6 : propulsion et réservoirs arrière.
-4. **Assembleur Lot 8** (décalage) et **Lot 9** (redimensionnement) ; **Lot 6**
+5. **Assembleur Lot 8** (décalage) et **Lot 9** (redimensionnement) ; **Lot 6**
    pour la dette d'enveloppes L1.4, les composites et `PoutreBout`.
-5. **D-INT-2, l'économie** — reporté explicitement trois fois. À ouvrir quand la
+6. **D-INT-2, l'économie** — reporté explicitement trois fois. À ouvrir quand la
    vue système sera close.
-6. **D-PIX-3/4** (contours Sobel, taille de pixel réglable) et les **comètes**
+7. **D-PIX-3/4** (contours Sobel, taille de pixel réglable) et les **comètes**
    (`Categorie::Comete` n'engendre rien).
 
 ### Dettes ouvertes repérées en chemin
@@ -70,8 +102,10 @@ commiter.
 
 ## Commits
 
-Dernier commit : `fb7d589` « fix » (2026-08-10). Avant lui : `dc0d7bf` « torus
-ok », `2a042e6` « P4 ok », `7278aa1` « P.1 a P.3 ok, plus fix ui ».
+Dernier commit : `73fb924` « torus ». Avant lui : `fb7d589` « fix »
+(2026-08-10), `dc0d7bf` « torus ok », `2a042e6` « P4 ok », `7278aa1` « P.1 a
+P.3 ok, plus fix ui ». **Le chantier Elysium de cette session (voir
+ci-dessus) n'est pas dedans** — sept fichiers modifiés, non commités.
 
 Consigne debout : *« no commit i'll say when commit is needed »* — ne jamais
 commiter de soi-même. **Mais signaler les points de commit** : l'utilisateur
@@ -83,7 +117,7 @@ sur un fichier contenant du travail non commité. Pour annuler ses propres
 modifications : ré-éditer les lignes, ou sauvegarder le fichier dans le
 scratchpad **avant** de le toucher (red-checks compris).
 
-État vérifié : **622 tests verts**, **`cargo clippy --all-targets` : 0 avertissement**.
+État vérifié : **644 tests verts**, **`cargo clippy --all-targets` : 0 avertissement**.
 
 ## Chantier courant : finir les planètes et la vue système
 
@@ -130,11 +164,13 @@ chantier a son journal. C'est la correction du travers qui l'avait porté à
 | **Assembleur** | Lots 4–5 clos ; **rotation (R) faite** sans attendre le gizmo | Lot 8 (décalage) et Lot 9 (redimensionnement) |
 | **Starship** ✅ **5/5** | Coque, 6 Raptor, jupe, 4 volets droits, bardage de tuiles (fût **et** ogive) et 2 hublots. Exposé **debout**, moteurs en bas. | Vaisseau **mobile** (transferts entre astres) |
 | **Endurance** | **Module en coin d'arc fait** (brique seule, §D.5 étape 4) | ⚠️ **bloqué** : la palette ne liste qu'une sous-variante par composant, donc les quatre familles d'arc sont inatteignables à l'écran. Débloquer `echantillons()` d'abord, puis §D.5 étape 5 |
-| **Tore de Stanford** | Miroirs, pilier polaire, moitiés fixe/tournante, charge du mât bas | ⚠️ trois points à **juger à l'œil** — voir « Reprendre ici » |
+| **Tore de Stanford** | Miroirs, pilier polaire, moitiés fixe/tournante, charge du mât bas — les trois points à juger à l'œil sont **tranchés** (2026-08-14) | rien de connu ; reprendre si un nouveau défaut se signale |
+| **Complexe Elysium** | Chantier **initial clos** 2026-08-14 (anneau complet, sol/ville, second anneau, face à Z + rotation, hangar, rendu optimisé) | ⚠️ points à **juger à l'œil** — voir « Reprendre ici » ; sol/ville restent délibérément provisoires |
 
 ## L'assembleur, en résumé
 
-L'ISV est **clos** (`docs/suivi/stations.md` §C.29). Les mégastructures et le
+L'ISV est **clos** (`docs/suivi/stations.md` §C.29), Elysium aussi pour son
+chantier initial (même fichier, Partie F). Les mégastructures et le
 Starship sont journalisés en **Partie F** du même fichier.
 
 | Lot | Contenu | État |
@@ -163,6 +199,11 @@ red-checkables. Ce qui reste non testé ne doit être que *où le rectangle se
 pose*, jamais *ce qu'il signifie*.
 
 Régénérer le catalogue de fils : `FILS=1 cargo test --release le_catalogue_des_fils`.
+
+Mesurer le fps réel d'un item des Mégastructures (pas une estimation en
+triangles) : `PROFIL="<libellé exact>" ./target/release/solar_game.exe` —
+10 s d'échantillonnage, la fenêtre se ferme d'elle-même et imprime le
+résultat (`suivi/stations.md`, « Le vrai fps, mesuré en jeu »).
 
 ## Décisions prises (ne pas les rouvrir sans raison)
 

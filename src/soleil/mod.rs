@@ -33,7 +33,13 @@ const MAX_TACHES: usize = 8; // doit correspondre à spots[8] dans le shader
 /// distances laissées vraies) : le plancher ne crée pas l'exagération, il la rend
 /// dépendante de la distance. Et il **s'efface** en approchant (voir
 /// [`impostor::rayon_plancher`]).
-pub const PX_MIN: f32 = 8.0;
+///
+/// **Jugé à l'œil (2026-08-14) : 8 px faisait un Soleil trop gros au cadrage
+/// par défaut.** Ramené à **4 px** — le seuil identifié juste au-dessus comme
+/// celui où le disque rond, la teinte et l'assombrissement du limbe
+/// commencent déjà à se lire ; en dessous, les taches (~2 px) resteraient les
+/// seules encore lisibles.
+pub const PX_MIN: f32 = 4.0;
 
 /// Vide le cache de materials du soleil (hot-reload des shaders).
 pub fn vider_cache_materials() {
@@ -230,11 +236,12 @@ mod tests {
     /// sans la déclencher. D'où cette garde-ci, sur la taille effectivement
     /// peinte.
     ///
-    /// À 8 px le Soleil occupe **42 %** du rayon de l'orbite de Mercure au
-    /// cadrage par défaut — au-delà du quart que s'autorise la constante, et
-    /// c'est le prix assumé de la lisibilité. Le seuil ci-dessous dit ce qui
-    /// resterait acceptable, pas ce qui est mesuré : au-delà de la moitié, le
-    /// disque toucherait visiblement l'orbite et le système cesserait de se lire.
+    /// À 4 px (`PX_MIN`, jugé à l'œil le 2026-08-14 — 8 px faisait un Soleil
+    /// trop gros au cadrage par défaut) le Soleil dessiné occupe **21 %** du
+    /// rayon de l'orbite de Mercure (mesuré ; c'était 42 % à 8 px). Le seuil
+    /// ci-dessous dit ce qui resterait acceptable, pas ce qui est mesuré :
+    /// au-delà de la moitié, le disque toucherait visiblement l'orbite et le
+    /// système cesserait de se lire.
     #[test]
     fn l_etoile_agrandie_reste_dans_l_orbite_de_mercure() {
         let dessine = rayon_plancher(R_SOLEIL, DIST_DEFAUT, VH, PX_MIN);

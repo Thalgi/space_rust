@@ -217,6 +217,16 @@ impl VueStation {
         self.cadrer();
     }
 
+    /// Sélectionne l'item par son libellé exact, si la catégorie le porte.
+    /// Pour le harnais de profilage (`main.rs`, variable `PROFIL`) : sauter
+    /// la navigation manuelle plutôt que simuler des clics sur la colonne.
+    pub(crate) fn choisir(&mut self, libelle: &str) {
+        if let Some(i) = self.items.iter().position(|it| it.libelle == libelle) {
+            self.idx = i;
+            self.charger();
+        }
+    }
+
     /// (Re)construit l'item courant de la catégorie et son titre — **sans
     /// toucher à la caméra**.
     ///

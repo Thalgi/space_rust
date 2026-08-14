@@ -264,13 +264,20 @@ fn fenetre<P: Peintre>(
     p.triangles(&plein.0, &plein.1, COQUE_JONCTION);
 
     // --- une nervure suivant la section, à `u` fixe ---
+    //
+    // `ligne`, pas `cylindre` : un meneau est un fil décoratif fin, pas une
+    // poutre — un tronc de cylindre plein coûte dix fois plus de triangles
+    // (`SEGMENTS = 20` côtés révolus, cf. `maillage.rs`) qu'une croix de deux
+    // panneaux, pour une différence invisible à cette échelle. Le second
+    // anneau d'Elysium, un tore complet, en pose des centaines — voir
+    // `docs/suivi/stations.md`.
     let nervure_section = |p: &mut P, u: f32, ep: f32| {
         for k in 0..MENEAU_PAS_ARC {
             let a = v0 + (v1 - v0) * k as f32 / MENEAU_PAS_ARC as f32;
             let b = v0 + (v1 - v0) * (k + 1) as f32 / MENEAU_PAS_ARC as f32;
             let (pa, na) = surface_tore(rayon_majeur, rayon_mineur, u, a);
             let (pb, nb) = surface_tore(rayon_majeur, rayon_mineur, u, b);
-            p.cylindre(pa + na * ep, pb + nb * ep, rayon_mineur * MENEAU_SECTION, MENEAU);
+            p.ligne(pa + na * ep, pb + nb * ep, rayon_mineur * MENEAU_SECTION * 2.0, MENEAU);
         }
     };
 
@@ -299,7 +306,42 @@ fn fenetre<P: Peintre>(
             let ub = TAU * (i + 1) as f32 / ns as f32;
             let (pa, na) = surface_tore(rayon_majeur, rayon_mineur, ua, v);
             let (pb, nb) = surface_tore(rayon_majeur, rayon_mineur, ub, v);
-            p.cylindre(pa + na * saillie, pb + nb * saillie, rayon_mineur * MENEAU_SECTION * 1.3, MENEAU);
+            p.ligne(pa + na * saillie, pb + nb * saillie, rayon_mineur * MENEAU_SECTION * 1.3 * 2.0, MENEAU);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **La grille du vitrage ne coûte pas de vrais cylindres.** Un meneau ou
+    /// une lèvre est un fil décoratif fin : `ligne` (une croix de deux
+    /// panneaux, 8 triangles) coûte dix fois moins qu'un tronc de cylindre
+    /// plein (`SEGMENTS = 20` côtés révolus, cf. `maillage.rs`), pour un rendu
+    /// indiscernable à cette échelle. Un tore complet en pose des centaines —
+    /// c'était l'un des premiers postes de coût du second anneau d'Elysium
+    /// (`docs/suivi/stations.md`).
+    #[test]
+    fn le_vitrage_nutilise_pas_de_cylindres() {
+        struct CompteurCylindres {
+            n: usize,
+        }
+        impl Peintre for CompteurCylindres {
+            fn cylindre(&mut self, _: Vec3, _: Vec3, _: f32, _: Color) {
+                self.n += 1;
+            }
+            fn cone(&mut self, _: Vec3, _: Vec3, _: f32, _: f32, _: f32, _: Color) {}
+            fn sphere(&mut self, _: Vec3, _: f32, _: Color) {}
+            fn cube(&mut self, _: Vec3, _: Vec3, _: Color) {}
+            fn panneau(&mut self, _: Vec3, _: Vec3, _: Vec3, _: Color) {}
+            fn ligne(&mut self, _: Vec3, _: Vec3, _: f32, _: Color) {}
+            fn triangles(&mut self, _: &[Vec3], _: &[u16], _: Color) {}
+            fn empiler_transforme(&mut self, _: Mat4) {}
+            fn depiler_transforme(&mut self) {}
+        }
+        let mut c = CompteurCylindres { n: 0 };
+        dessiner(&mut c, 20.0, 2.0, 48, 8, 3, 0.0);
+        assert_eq!(c.n, 0, "{} cylindre(s) émis — la grille du vitrage devrait n'utiliser que `ligne`", c.n);
     }
 }

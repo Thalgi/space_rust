@@ -3437,15 +3437,22 @@ C'est la seule chose qui **rompt la symétrie des deux pôles**, et c'est voulu 
 le haut porte l'amarrage, le bas porte ce qui se consomme. Une station symétrique
 jusqu'au bout n'a ni haut ni bas.
 
-#### ⚠️ Marge de 1,8 sous le miroir bas — à voir à l'œil
+#### ~~Marge de 1,8 sous le miroir bas~~ — jugé à l'œil, ce n'est pas un problème (2026-08-14)
 
 Les disques font 40 unités de rayon et sont inclinés à 30° : ce qu'on ajoute sur
 la colonne passe forcément dans leur voisinage. Aucune pièce n'est **à cheval**
-sur un miroir (garde `la_charge_polaire_ne_traverse_aucun_miroir`), mais le
-module d'habitat le plus proche n'est qu'à **1,8** du plan du disque, et toute la
-charge est **derrière** le miroir bas — donc masquée depuis les points de vue
-situés au-dessus de l'anneau. À juger à l'écran ; se corrige en réduisant
-`POLE_ECART`, qui fait descendre la charge.
+sur un miroir (garde `la_charge_polaire_ne_traverse_aucun_miroir`), et le
+module d'habitat le plus proche n'est qu'à **1,8** du plan du disque, toute la
+charge se trouvant **derrière** le miroir bas.
+
+Redouté comme masquant la charge depuis les points de vue au-dessus de
+l'anneau — **faux à l'écran** : le miroir n'est pas un disque plein, c'est un
+anneau troué en son centre (`VarianteMiroir::trou`, `miroir.rs` — « rayon du
+trou central, en fraction du rayon »), précisément pour que le mât qui le
+traverse ne semble pas flotter au milieu d'un disque intact (commentaire de
+tête de `miroir.rs`). La charge, alignée sur ce même mât, se voit donc **à
+travers** le trou depuis n'importe quel point de vue qui voit le trou —
+`POLE_ECART` n'a pas besoin d'être touché.
 
 #### Red-check : 4 sabotages
 
@@ -3492,14 +3499,19 @@ faut-il qu'il produise vraiment le défaut visé. Refait à 14, il rougit.
    produise vraiment le défaut visé — vérifier le sabotage avant de muscler le
    test.
 
-### Ce qui attend le lancement du jeu
+### Ce qui attendait le lancement du jeu — les trois tranchés (2026-08-14)
 
-Trois arbitrages **visuels** sont en suspens, et aucun ne se tranche au clavier :
+Trois arbitrages **visuels** étaient en suspens, aucun ne se tranchant au
+clavier. Les trois sont désormais réglés :
 
-- le plancher stellaire à 8 px (le Soleil fait 42 % du rayon de l'orbite de
-  Mercure) ;
-- la charge du mât polaire, à 1,8 du plan du miroir bas et **derrière** lui ;
-- le mât polaire qui **perce les disques** des miroirs au tiers de sa hauteur.
+- ~~le plancher stellaire à 8 px~~ — jugé trop gros au cadrage par défaut,
+  ramené à **4 px** (`soleil::PX_MIN`, voir sa note de tête à jour) ;
+- ~~la charge du mât polaire, à 1,8 du plan du miroir bas et derrière lui~~ —
+  **pas un problème** : le miroir est troué en son centre pour le mât
+  (`VarianteMiroir::trou`), la charge se voit à travers, `POLE_ECART` reste
+  inchangé (détail ci-dessus, « Marge de 1,8 sous le miroir bas ») ;
+- ~~le mât polaire qui perce les disques des miroirs~~ — **même raison, même
+  trou** : rien à corriger.
 
 ### Ce qui bloque la suite
 
@@ -3638,4 +3650,925 @@ Cinq tests neufs ou révisés, dix sabotages, dix rougissements.
 **630 tests**, 0 avertissement clippy. `docs/reference/fils.md` régénéré (la
 grille du vitrage ajoute des fils là où la jante n'en avait aucun).
 
-**628 tests**, 0 avertissement clippy.
+### Grille allégée, sol plus haut et rejoint au vitrage (2026-08-12)
+
+Trois retouches sur les pièces posées la veille.
+
+- **Meneaux et lèvres réduits de moitié** (`MENEAU_SECTION_FRAC` 0,05 → 0,025) :
+  jugé à l'écran, la grille écrasait le verre.
+- **Le sol démarre plus haut** : `SOL_RETRAIT_FRAC` 0,15 → 0,6 — le retrait par
+  rapport à la coque interne, jusqu'ici juste assez pour ne pas coïncider avec
+  elle, se voit maintenant nettement comme un surplomb plutôt que comme un
+  habillage collé dessus.
+- **Le sol rejoint le vitrage.** Il n'était qu'une bande étroite (±0,55 rad)
+  au centre du tread ; il couvre maintenant tout `v_paroi` — la même fenêtre
+  en `v` que la coque pleine — donc s'arrête exactement là où le vitrage
+  commence, au lieu de flotter isolé au milieu de la paroi.
+
+`sol()` prend désormais `ouverture` pour lire `v_paroi` elle-même, plutôt
+qu'une largeur à part : une seule source pour « jusqu'où va le sol » et
+« jusqu'où va la coque », comme `v_paroi`/`v_vitrages` le font déjà l'un pour
+l'autre.
+
+Nouveau test, `le_sol_rejoint_le_vitrage` : les bornes en `v` du sol capté
+doivent tomber sur celles de `v_paroi`. Red-check : un sol rétréci à 25% de sa
+largeur réelle rougit bien le test (`v = -0,548` contre un bord attendu à
+`-2,192`).
+
+**631 tests**, 0 avertissement clippy. `docs/reference/fils.md` régénéré (le
+rayon des meneaux a changé).
+
+### Vitrage doublé, tour fermé à six jantes (2026-08-12)
+
+Deux dernières demandes sur la jante : agrandir le vitrage en mordant sur la
+coque blanche adjacente, puis dupliquer la pièce aux cinq bras restants.
+
+- **`VITRAGE_SPAN` doublé** (0,35 → 0,7 rad) : la coque pleine recule d'autant
+  aux deux bouts, `v_paroi` portant déjà tout le calcul — rien d'autre à
+  toucher, le sol qui la rejoint (§ ci-dessus) et les tests qui la lisent
+  suivent automatiquement.
+- **`jante_elysium` pose désormais six jantes**, une par bras, au lieu d'une
+  seule. Chacune tourne de `-(π/6 + k·τ/6)` autour de Y — la même formule que
+  le premier arc (`k = 0` la reproduit à l'identique), généralisée en boucle
+  plutôt que réécrite : les cinq bras restants héritent donc exactement du
+  même vitrage doublé et du même sol relevé, pas d'une version à part qui
+  aurait pu diverger. Le tour se referme.
+
+Test réécrit : `la_jante_delysium_demarre_au_bras_0` devient
+`les_six_jantes_delysium_ferment_le_tour` — six pièces, chacune un sixième de
+tour, démarrant respectivement à 30°, 90°, 150°, 210°, 270°, 330°. Red-check :
+une boucle tronquée à cinq jantes (un bras oublié) rougit bien sur le compte.
+
+**631 tests**, 0 avertissement clippy. `docs/reference/fils.md` régénéré (le
+gabarit vitré de référence a changé de taille).
+
+### La ville : un motif géométrique bruité sur le sol, et retour à un sixième (2026-08-12)
+
+Deux demandes : une silhouette de ville sur le sol de la jante, et retirer les
+cinq jantes posées la veille pour vérifier que le tour se referme
+symétriquement — preuve faite une fois, inutile de payer six fois le coût de
+rendu de la ville pendant qu'elle se règle.
+
+**La ville** (`jante::ville`) : une grille de petits parallélépipèdes
+(`batiment`), présence et hauteur tirées cellule par cellule par un hachage
+entier déterministe (`bruit`, dispersion à la SplitMix — même principe que
+`planete/terrain.rs::hash`, sans dépendance de bruit externe). `VILLE_DENSITE`
+< 1 saute une partie des cellules (des rues) ; sans ça la grille se lirait
+comme un mur crénelé continu, pas une ville.
+
+Chaque bâtiment est posé avec un repère local dérivé de la surface elle-même :
+la tangente le long de l'arc reprend la formule de `tore::tuiles`, la seconde
+tangente s'en déduit par produit vectoriel avec la normale — pas une seconde
+dérivée à tenir en accord avec la première. Un bâtiment pousse à l'**opposé**
+de la normale sortante : la gravité de la station pousse vers l'extérieur (le
+pneu est le sol), donc « en haut » pointe vers l'intérieur du canal.
+
+⚠️ **Deux tests écrits faux, corrigés avant de committer.**
+
+1. `la_ville_laisse_des_rues` comptait `triangles / 6`, en croyant un bâtiment
+   fait de 6 triangles. Il en fait **10** (toit : 2, quatre flancs : 2
+   chacun) — l'erreur donnait par coïncidence 100 « bâtiments » pour 100
+   cellules, soit l'aspect exact d'une ville sans aucune rue. Un script de
+   test à part a confirmé que le bruit, lui, filtrait bien ~60 cellules sur
+   100 : le défaut était dans le test, pas dans `ville()`.
+2. `la_ville_a_des_hauteurs_variees` comparait le rayon absolu des toits.
+   Sabotée (hauteur figée à `hmin`, bruit ignoré), elle restait **verte** :
+   deux bâtiments à la même hauteur mais sur des rangées différentes (`v`
+   différent) n'ont pas le même rayon, et cette variation de position à elle
+   seule dépassait le seuil — le test mesurait la géométrie de la jante, pas
+   le bruit de hauteur qu'il prétendait garder (§C.29, encore la même
+   famille de défaut). Corrigé en mesurant la distance **toit↔base de chaque
+   bâtiment** : le toit vaut `base + hauteur·normale` sur ses quatre coins,
+   donc l'écart des deux centroïdes vaut exactement `hauteur`, quelle que
+   soit la rangée. Sous cette forme, le sabotage rougit.
+
+**Retour à un sixième.** `jante_elysium` reboucle sur un seul appel (bras 0 à
+1) au lieu des six ; la boucle `0..ELYSIUM_N_BRAS` reste dans le commentaire,
+prête à être rétablie une fois la ville jugée à l'écran. Test
+`les_six_jantes_delysium_ferment_le_tour` redevenu
+`la_jante_delysium_demarre_au_bras_0` (une seule pièce attendue).
+
+**634 tests**, 0 avertissement clippy. `docs/reference/fils.md` régénéré (la
+grille de meneaux réduite de moitié avait déjà changé le gabarit ; la ville
+n'ajoute aucun fil, elle ne dessine que des triangles et des `cube`-like).
+
+### Sol par bruit (Perlin/Simplex/Voronoi), deux tours, un second anneau (2026-08-12)
+
+Trois demandes, sur trois pièces différentes.
+
+#### Le sol de la jante, zoné par le bruit au lieu de bâtiments
+
+Retiré : `ville()`/`batiment()` (les parallélépipèdes) et l'ancien `bruit()`
+1D. Le sol reste plat (pas de relief — une grille assez fine pour du relief
+dépasserait le budget de rendu bien avant que ça se voie), mais **zoné en
+couleur** par un empilement de trois bruits, tous nouveaux dans ce module
+(`commun.rs` n'en avait aucun de réutilisable — `planete/terrain.rs::hash`/
+`vnoise`/`fbm` sont privés et pensés pour coller bit à bit aux shaders GLSL,
+hors de propos ici) :
+
+- **Voronoi** (cellulaire, `f1`/`f2`/`id`) pose les **districts** — `id`
+  décide forêt/ville/champ — et, à deux fréquences, le **réseau de voies** :
+  `f2 − f1` proche de zéro marque une frontière de cellule, donc une
+  **route** (frontière de district) ou une **voie** (frontière interne, plus
+  fine).
+- **Perlin** (gradient, grille carrée) et **Simplex** (grille triangulaire)
+  modulent chacun la teinte d'un type de zone différent — ville et forêt
+  respectivement — sur le même générateur de gradients ([`gradient`]) : les
+  deux ne diffèrent que par la géométrie de leur grille.
+
+Neuf zones (`Zone`), chacune sa couleur. `Peintre::triangles` ne prend qu'une
+couleur par appel : `sol()` accumule donc un bucket par zone rencontrée
+(`Vec<(Zone, sommets, indices)>`, cherché-ou-créé à la volée) et n'émet qu'un
+appel par zone non vide — le même principe que les deux teintes de
+`tore::tuiles`, généralisé à un nombre de zones qui n'est pas fixé d'avance.
+
+⚠️ **Deux tests faux, trouvés par red-check.**
+
+1. `la_ville_laisse_des_rues` (avant suppression) comptait
+   `triangles.len() / 6` en croyant un bâtiment fait de 6 triangles — il en
+   fait 10 (toit : 2, quatre flancs : 2 chacun). L'erreur donnait par
+   coïncidence 100 « bâtiments » pour 100 cellules : l'aspect exact d'un mur
+   plein, sans qu'aucune rue n'existe. Devenu sans objet avec la suppression
+   des bâtiments, mais le mécanisme du défaut vaut d'être gardé en mémoire.
+2. `le_sol_a_plusieurs_zones` : la première version comptait les couleurs
+   captées par un `Peintre` filtrant déjà par couleur (`CompteurSelon`),
+   c'est-à-dire qu'elle ne pouvait *que* trouver les zones qu'on lui disait
+   de chercher — inversé en un `Journal` qui retient **toute** couleur
+   peinte, sans a priori, puis compare après coup à la liste des neuf zones
+   attendues.
+
+Deux nouveaux tests directement sur les fonctions de bruit
+(`les_routes_bordent_les_districts`, `le_sol_utilise_bien_les_trois_bruits` —
+bornes plausibles, déterminisme, `f1 ≤ f2`) et deux sabotages sur `zone_en`
+(zone forcée à `Champ` partout, seuil de route rendu impossible) : les quatre
+rougissent.
+
+#### Deux tours, un essieu qui tient l'étoile hexagonale
+
+`tours_elysium` : un module `Coeur` (variante **dorée**, pas `CoeurGris` —
+celle-ci reste réservée aux habitats) à chaque bout du moyeu, qui **prolonge**
+le prisme hexagonal au lieu de le coiffer. Même idiome de rotation que le
+pilier polaire de Stanford (`Quat::from_rotation_x(-sens * PI / 2.0)`).
+
+⚠️ **Premier jet du test insuffisant.** `les_deux_tours_delysium_...` ne
+mesurait que le bout **loin** de chaque tour (`centre + longueur/2`) — qui
+reste au-delà du bord du moyeu quelle que soit la position du centre, du
+moment que `longueur` (10) domine largement `demi_moyeu` (1,5). Un sabotage
+qui rapproche les tours du centre du moyeu passait donc inaperçu. Corrigé en
+mesurant le bout **proche** (celui qui fait face au moyeu) : il doit tomber
+**exactement** sur `demi_moyeu`, sans quoi la tour flotte au large ou
+s'enfonce dans le prisme.
+
+#### Un second anneau, au tiers du diamètre
+
+`second_anneau_elysium` : un `Composant::Tore` complet (pas une `Jante` — une
+deuxième ceinture, pas un tronçon à juger seul), au rayon `2 ×
+elysium_rayon_jante() / 3` — un tiers du **diamètre** total, donc deux tiers
+du rayon. Jonctions calées sur les six bras (`jonctions: ELYSIUM_N_BRAS,
+phase: PI / 6.0`), même construction que `preset_stanford_anneau`.
+
+**Il tombe dans la portée des bras, pas à leur bout** : à cette distance il les
+coupe à mi-course plutôt que de s'y appuyer à l'extrémité comme la jante
+extérieure. Les jonctions évitent que le vitrage arrive là où un bras passe.
+Le croisement bras/anneau lui-même — jugé à l'écran (2026-08-14) — **n'a pas
+besoin de raccord visible dédié**, ni ici ni pour Stanford : tranché, pas
+seulement reporté.
+
+Ancien test `le_complexe_elysium_na_pas_de_tore` (l'invariant inverse, devenu
+faux) remplacé par `elysium_a_un_second_anneau_au_tiers_du_diametre` : un seul
+`Tore`, au bon rayon, strictement entre le moyeu et la jante extérieure,
+jonctions et phase calées sur les bras. Deux sabotages (rayon au tiers du
+*rayon* au lieu du diamètre, nombre de jonctions faux) — les deux rougissent.
+
+**635 tests**, 0 avertissement clippy. `docs/reference/fils.md` inchangé
+(aucun composant neuf, aucune géométrie de référence retouchée — seulement de
+nouveaux usages de pièces existantes).
+
+### ⚠️ Chantier ci-dessus retiré (2026-08-12) — problème constaté sur la forme
+
+Les trois ajouts de la section précédente (sol zoné par bruit, deux tours,
+second anneau) ont été **défaits** sur retour d'écran : un problème dans la
+forme obtenue, non précisé plus loin. Retour exact à l'état d'avant cette
+section :
+
+- `jante.rs` : sol redevenu la bande verte plate + `ville()`/`batiment()` (les
+  parallélépipèdes bruités décrits dans « Sol par bruit… ») — **pas** un
+  retour à la toute première version (le sol reste épais, en surplomb, étendu
+  jusqu'au vitrage, et le vitrage reste doublé — ces réglages datent d'étapes
+  antérieures à cette section et n'ont pas été mis en cause).
+- `generateur.rs` : `tours_elysium`, `second_anneau_elysium`,
+  `elysium_rayon_second_anneau` et leurs appels **supprimés**. Les deux tests
+  qui les gardaient sont partis avec eux ;
+  `le_complexe_elysium_na_pas_de_tore` (l'invariant inverse) est rétabli.
+
+**634 tests**, 0 avertissement clippy — le compte exact d'avant la section
+retirée. `docs/reference/fils.md` régénéré en conséquence (le second anneau
+n'y avait rien changé, mais le sol bruité si).
+
+Cette section reste au journal **pour mémoire** : le code du bruit 2D
+(Perlin/Simplex/Voronoi, hachage `hash2`/`gradient`) et l'idée des tours et du
+second anneau ne sont pas perdus — à reprendre si le problème de forme se
+comprend et se corrige, plutôt qu'à réinventer de zéro.
+
+### Le problème de forme trouvé et corrigé : les bâtiments de la ville (2026-08-12)
+
+Le retour, précisé cette fois : les bâtiments de `ville()` (revenue avec le
+retrait ci-dessus) semblaient **collés à l'intérieur de la jante** au lieu de
+se dresser à plat sur le sol, et leur hauteur dépassait largement le pied du
+vitrage.
+
+**Cause des deux.** `ville()` posait ses bâtiments sur `v_paroi(ouverture)` en
+entier — la même étendue large que le sol lui-même, jusqu'au bord du vitrage
+— et orientait chacun selon la normale **locale** de sa propre position
+(`surface_tore(…, u, v).1`). Sur les rangées excentrées, cette normale
+s'incline avec la courbure du flanc : le bâtiment penchait donc vers le mur
+qu'il longeait au lieu de se dresser droit. `VILLE_HAUTEUR` montait par
+ailleurs jusqu'à 0,9 × `rayon_mineur`, largement plus que le dégagement
+disponible avant le pied du vitrage.
+
+**Corrigé, deux changements indépendants :**
+
+- **Bande étroite et centrée** (`VILLE_DEMI_LARGEUR = 0.5`), sans rapport avec
+  l'étendue du sol jusqu'au vitrage — les bâtiments restent près du « pneu »
+  (`v = 0`), loin des flancs qui se courbent.
+- **Un seul repère par colonne**, dérivé de la normale à `v = 0` pour cet
+  arc — purement radiale (`y = 0`) — au lieu de la normale propre à chaque
+  bâtiment. Tous les bâtiments d'une même colonne se dressent donc parallèles,
+  quelle que soit leur rangée.
+- **Hauteur abaissée** (0,15–0,9 → 0,05–0,25 × `rayon_mineur`) : les plus
+  hauts bâtiments restaient sous le pied du vitrage plutôt que de s'en
+  approcher.
+
+Deux tests neufs : `la_ville_reste_dans_une_bande_etroite` (bornes en `v`,
+marge d'une cellule pour l'emprise des coins) et `les_batiments_se_dressent_a_
+plat` (la direction toit↔base de chaque bâtiment a une composante `y` quasi
+nulle — c'est la signature d'une normale purement radiale). Deux sabotages
+(bande reélargie jusqu'à `v_paroi`, retour à la normale locale) — les deux
+rougissent.
+
+**636 tests**, 0 avertissement clippy. `docs/reference/fils.md` inchangé
+(`ville()` ne dessine que des triangles, jamais de fil).
+
+### Bâtiments décollés du sol — le piège des surfaces coplanaires (2026-08-12)
+
+Nouveau retour, une fois le penchement corrigé ci-dessus : les bâtiments
+« collent au fond de la jante » au lieu de sembler posés sur le sol vert, et
+devraient apparaître côté intérieur du sol.
+
+**Fausse piste explorée d'abord.** J'ai soupçonné que `sol()` donnait la
+couleur verte (`SOL_VERT`) à la face tournée vers l'**extérieur** de la
+station plutôt que vers l'intérieur du canal (comme `COQUE_INT`/`COQUE_EXT`
+pour la paroi) — un vert invisible en jeu expliquerait que seul le dessous
+sombre soit visible, fondu avec la jante. Test écrit
+(`le_sol_vert_est_visible_depuis_linterieur`, vérifie que la normale des
+triangles `SOL_VERT` pointe vers l'axe), sabotage tenté par inversion des deux
+couleurs : le sabotage a montré que le code d'origine était **déjà correct**
+— `bande_double_face(p, &s, &i, SOL_VERT, SOL_VERT_DESSOUS)` donne bien un
+vert visible de l'intérieur. Fausse piste écartée, mais le test est resté
+(couvre une régression réelle possible).
+
+**Cause réelle.** Les bâtiments posent leur base exactement au même rayon que
+la surface du sol (`r = r_sol(rayon_mineur, epaisseur)`, utilisé identique
+par `sol()` et `ville()`) : les deux maillages sont rigoureusement
+coplanaires. C'est précisément le piège que la constante `SOL_RETRAIT_FRAC`
+décrit déjà dans son commentaire pour le sol vs. la coque interne (« le piège
+des surfaces confondues qui clignotent, cf. `hangar.rs` ») — non résolu ici
+pour bâtiments vs. sol.
+
+**Corrigé.** Nouvelle constante `VILLE_SURELEVATION_FRAC = 0.03` : la base de
+chaque bâtiment est décalée vers l'axe (`-n0`, le même sens que le
+surplomb du sol) d'une fraction de `rayon_mineur`, avant tout calcul
+d'empreinte ou de hauteur — `centre = point_sol - n0 * (rayon_mineur *
+VILLE_SURELEVATION_FRAC)`. Les bâtiments se détachent ainsi nettement du sol,
+côté intérieur du canal.
+
+Test neuf : `les_batiments_sont_decolles_du_sol` — vérifie que le rayon (axe
+Y) de chaque coin de base reste sous le rayon maximal du sol
+(`RAYON_MAJEUR + r_sol`, atteint à `v = 0`) diminué du décalage, à une marge
+de 0,01 près (l'empreinte introduit elle-même un léger dépassement radial
+d'ordre 10⁻³, purement géométrique — la marge l'absorbe sans masquer un vrai
+sabotage). Rougi deux fois : décalage remis à zéro dans la constante, puis
+(second essai, la constante étant relue par le test lui-même) `centre` codé
+en dur à `point_sol` sans soustraction — les deux rougissent avec une marge
+resserrée à 0,001 le temps du sabotage, confirmée insuffisante avant d'être
+élargie à 0,01 pour laisser passer le code correct.
+
+**638 tests**, 0 avertissement clippy. `docs/reference/fils.md` inchangé.
+
+### ⚠️ Le décalage ci-dessus allait dans le mauvais sens (2026-08-12)
+
+Même retour une troisième fois, en des termes plus précis : la ville doit
+**toucher** le sol vert et apparaître côté intérieur de l'anneau, or elle
+« colle toujours au fond de la jante ».
+
+**Erreur trouvée.** `VILLE_SURELEVATION_FRAC` (ci-dessus) décalait la base
+des bâtiments **vers l'axe** (`-n0`), donc **loin** de la coque, à
+l'opposé du sol — ce qui ouvre un vide visible entre bâtiment et sol
+(l'inverse de « en contact »), sans même corriger la lecture « collé à la
+jante » puisque le fond du canal reste ce qu'il est. Le bon réflexe pour
+poser un objet sur une surface sans qu'ils clignotent (z-fighting) n'est pas
+de le soulever, mais de l'**encastrer légèrement dans la surface, côté
+opposé au spectateur** — la partie enfoncée se retrouve cachée derrière la
+géométrie opaque du sol, invisible depuis le canal, alors que le gros du
+bâtiment reste bien visible au-dessus, en contact franc.
+
+**Corrigé.** Renommée et inversée : `VILLE_ENCASTREMENT_FRAC = 0.03`, la base
+décalée **vers la coque** (`+n0`, sens opposé au précédent) —
+`centre = point_sol + n0 * (rayon_mineur * VILLE_ENCASTREMENT_FRAC)`.
+
+**Deuxième cause traitée au passage : la couleur.** `VILLE_TEINTE_SOMBRE`
+(gris 0,34/0,35/0,39) était visuellement quasi identique à `COQUE_INT` (gris
+0,30/0,31/0,35) — de quoi lire comme un prolongement de la structure plutôt
+que comme un habitat distinct, indépendamment de la géométrie. Les deux
+teintes de la ville passent à une palette chaude (sable/terre cuite),
+délibérément à l'opposé des gris froids de la coque.
+
+**Tests.** L'ancien test (`les_batiments_sont_decolles_du_sol`, qui vérifiait
+un majorant global peu discriminant) est remplacé par
+`les_batiments_sont_encastres_dans_le_sol` : reconstruit le centre exact de
+chaque bâtiment (moyenne de ses 4 coins de base — les décalages `±
+tangente_u ± tangente_v` s'y annulent), déduit `v` de `centre.y` (non affecté
+par le décalage, purement radial), puis vérifie que le rayon du centre dépasse
+le rayon qu'aurait eu le sol **à ce point précis** d'exactement
+`VILLE_ENCASTREMENT_FRAC`, à 0,01 près. Rougi par inversion du signe
+(`-n0` au lieu de `+n0`).
+
+**⚠️ Piège découvert en écrivant ce test : il ne peut pas, seul, détecter
+que la constante soit remise à zéro** — son rayon attendu se recalcule à
+partir de cette même constante, donc `VILLE_ENCASTREMENT_FRAC = 0.0` le
+laisse passer trivialement (l'écart attendu devient 0, et l'écart réel aussi).
+Garde-fou séparé ajouté : `lencastrement_de_la_ville_nest_pas_nul`, qui
+vérifie juste `VILLE_ENCASTREMENT_FRAC > 0.01` en dur. Rougi en mettant la
+constante à 0. Le même piège s'était déjà posé pour le test précédent
+(la marge de 0,01 masquait un décalage nul faute d'un rayon de référence
+correctement calculé — bug de calcul distinct, corrigé au passage en
+remplaçant le test entier plutôt qu'en le rapiéçant).
+
+**639 tests**, 0 avertissement clippy (`#[allow(clippy::assertions_on_constants)]`
+sur le garde-fou, comme ailleurs dans ce fichier : `camera.rs`, `engin.rs`,
+`palette.rs`, etc.). `docs/reference/fils.md` inchangé.
+
+### ⚠️⚠️ La vraie cause, enfin : `sol()` ne dessinait jamais le pneu (2026-08-12)
+
+Même retour une **quatrième** fois, plus sec cette fois : « les bâtiments sont
+dans le pneu, pas sur le sol vert », et une demande explicite de déboguer
+plutôt que de retenter au jugé — les deux tours précédentes n'avaient
+manifestement rien changé à ce qui se voit en jeu.
+
+**Méthode, cette fois : mesurer au lieu de raisonner.** Un test temporaire
+(non gardé) a fait tourner `dessiner()` aux dimensions réelles d'Elysium
+(`rayon_majeur = 40`, `rayon_mineur = 3`, comme `elysium_rayon_jante()` /
+`hauteur_moyeu()`) à travers un `CompteurFiltre` par couleur, et imprimé le
+rayon (XZ) et le `y` min/max de chaque couche :
+
+```
+COQUE_EXT             r=[39.20, 43.00]  y=[-2.95, 2.95]
+COQUE_INT             r=[39.32, 42.55]  y=[-2.50, 2.50]
+SOL_VERT               r=[39.39, 39.39]  y=[-2.20, 2.20]   ← rayon CONSTANT
+SOL_VERT_DESSOUS       r=[39.39, 39.39]  y=[-2.20, 2.20]   ← rayon CONSTANT
+VILLE_TEINTE           r=[41.46, 42.37]  y=[-1.07, 1.07]
+VILLE_TEINTE_SOMBRE    r=[41.50, 42.37]  y=[-1.07, 1.07]
+```
+
+Le sol vert a un rayon **strictement constant** (39,39 aux deux bornes),
+alors que la ville occupe `r ∈ [41,46, 42,37]` — une plage qui ne recoupe
+**jamais** celle du sol, et qui tombe en plein dans celle de `COQUE_INT`
+(jusqu'à 42,55). Autrement dit : littéralement aucune géométrie verte
+n'existait là où les bâtiments se posent — seulement la coque. « Les
+bâtiments sont dans le pneu » n'était pas une impression, c'était l'exacte
+description de la scène.
+
+**Cause.** `sol()` appelait `peau_arc(rayon_majeur, r_sol(...), segments, 1,
+arc, v0, v1)` — `anneaux` **codé en dur à `1`**, jamais relié au paramètre
+`anneaux` de `dessiner()` (8, pour la paroi). Avec un seul anneau, `peau_arc`
+(`jante.rs:29-58`) ne pose des sommets qu'aux deux bords `j = 0` (`v0`) et
+`j = 1` (`v1`) — jamais entre les deux — et les relie par une **corde
+droite**. Comme `v0`/`v1` sont symétriques et loin de `v = 0` (juste à côté
+du vitrage, à `±1,84 rad` avec `OUVERTURE = 0.6`), leur rayon est
+**identique** par symétrie du cosinus (`cos(-1,84) = cos(1,84)`) : d'où le
+rayon constant observé. Le sol « vert » n'était donc pas une bande courbe
+suivant le pneu comme le documentait déjà le commentaire de tête de
+fonction — c'était une corde plate coupant tout droit d'un bord à l'autre,
+sautant entièrement la zone `v ≈ 0` où la ville se pose (elle, calculée
+correctement via `surface_tore` point par point dans `ville()`, sans jamais
+partager le maillage buggé du sol).
+
+Les deux tours précédentes (surélévation puis encastrement de la base des
+bâtiments) corrigeaient un vrai problème de principe (z-fighting, sens de
+l'encastrement) mais sur une hypothèse fausse : elles supposaient que le sol
+et la ville étaient déjà **au même endroit**, à un decalage de surface près.
+En réalité ils n'étaient jamais géométriquement voisins — le décalage de
+quelques centièmes de `rayon_mineur` ne pouvait rien changer face à un écart
+de plusieurs unités entre deux maillages qui ne se recoupent pas du tout.
+
+**Corrigé.** `anneaux` ajouté au paramètre de `sol()`, reçoit désormais celui
+de `dessiner()` (au lieu de `1` en dur) :
+```rust
+sol(p, rayon_majeur, rayon_mineur, epaisseur, arc, segments, anneaux, ouverture);
+// ...
+fn sol<P: Peintre>(..., segments: usize, anneaux: usize, ouverture: f32) {
+    let (s, i) = peau_arc(rayon_majeur, r_sol(rayon_mineur, epaisseur), segments, anneaux.max(1), arc, v0, v1);
+```
+Mesure de contrôle une fois corrigé :
+```
+SOL_VERT   r=[39.39, 42.28]  ← culmine maintenant à r_pneu = rayon_majeur + r_sol
+```
+42,28 = 40 + 2,28 (`r_sol`), soit exactement le rayon attendu à `v = 0`. La
+ville (`r ∈ [41,46, 42,37]`, embase comprise) tombe désormais **dans**
+l'intervalle du sol, au lieu de ne jamais le recouper.
+
+**Test neuf** : `le_sol_suit_la_courbe_jusquau_pneu` — vérifie que le rayon
+maximal atteint par le sol s'approche de `RAYON_MAJEUR + r_sol` (à 0,05 près),
+pas seulement du rayon (plus petit) des bords `v0`/`v1`. Rougi en remettant
+`anneaux` à `1` en dur dans l'appel à `peau_arc`.
+
+**Effet de bord sur un test existant, corrigé au passage.**
+`le_sol_vert_est_visible_depuis_linterieur` (de la fausse piste explorée deux
+tours plus tôt) comparait la normale de chaque triangle à une référence
+**purement radiale (XZ)** — une approximation qui ne vaut qu'à `v` proche de
+0. Tant que le sol ne visitait que les deux bords (`v ≈ ±1,84`, proche de
+`π/2`), ce n'était jamais mis à l'épreuve ; une fois le maillage corrigé et
+suivant réellement la courbe, ce même test rougissait à tort près des flancs,
+où la vraie normale devient majoritairement **verticale**
+(`n = (0, 1, 0)` pile à `v = π/2`) et où une référence purement radiale ne
+mesure plus grand-chose d'utile. Corrigé en dérivant la normale analytique
+exacte au point (`cos(v) = (r_xz − rayon_majeur) / r_sol`, `sin(v) = y /
+r_sol`, sans repasser par `atan2`) plutôt qu'une approximation. Toujours
+rougi par le sabotage d'origine (couleurs inversées).
+
+**640 tests**, 0 avertissement clippy
+(`#[allow(clippy::too_many_arguments)]` ajouté sur `sol`, désormais à 8
+paramètres — même précédent que `batiment` plus haut dans ce fichier, et
+`tore.rs`, `pieces.rs`, etc.). `docs/reference/fils.md` inchangé (`sol()` ne
+dessine que des triangles).
+
+**Leçon retenue** : les deux tours précédentes ajustaient des grandeurs de
+l'ordre de quelques % de `rayon_mineur` en réponse à un symptôme décrit en
+termes qualitatifs (« collé », « pas au contact ») — sans jamais mesurer où
+les maillages se trouvaient réellement. Un simple dump numérique (rayon/`y`
+min-max par couche, aux dimensions réelles de la pièce visée) a tranché en
+une lecture ce que trois tours de raisonnement géométrique sur le papier
+n'avaient pas trouvé.
+
+### Le tour complet, et Elysium pivotée face à Z (2026-08-12)
+
+Deux demandes en une : refermer le tour de jante (un seul sixième était posé
+depuis §« Un sixième de jante, façon vélo »), et réorienter tout le complexe
+pour qu'il fasse face à **Z** plutôt qu'à Y.
+
+**Le tour complet.** `jante_elysium` bouclait déjà sur un seul tronçon
+(`k = 0`) avec un commentaire disant explicitement que reboucler `0..
+ELYSIUM_N_BRAS` avec la même formule de rotation refermerait le tour « le
+jour venu » — formule retrouvée dans l'historique (§« Vitrage doublé, tour
+fermé à six jantes ») : `Quat::from_rotation_y(-(PI / 6.0 + k as f32 * TAU /
+ELYSIUM_N_BRAS as f32))`. Remis en boucle, sans autre changement.
+
+**Faire face à Z.** Le moyeu, les bras (`bras_et_tunnels`,
+`radial = (cos a, 0, sin a)`) et la jante sont tous bâtis en interne autour de
+**Y** (anneau dans le plan XZ) — Stanford partage la même convention. Plutôt
+que de réécrire chacune de ces fonctions de placement autour d'un second axe
+interne (Z), un pivot **global** est appliqué à la station déjà assemblée :
+
+```rust
+fn tournee(etat: EtatStation, rot: Quat) -> EtatStation {
+    let Some(station) = etat.doit_dessiner() else { return EtatStation::Vide };
+    let delta = Mat4::from_quat(rot);
+    let pieces: Vec<Piece> =
+        station.pieces().iter().map(|p| Piece::new(delta * p.transforme, p.composant.clone())).collect();
+    match Station::depuis_pieces(pieces) {
+        Some(s) => EtatStation::Prete(s),
+        None => EtatStation::Vide,
+    }
+}
+```
+appelé en fin de `preset_elysium` :
+`tournee(asm.terminer(), Quat::from_rotation_x(FRAC_PI_2))`. Même principe
+que la rotation clavier de l'assembleur (`Chantier::appliquer_delta_bloc`,
+qui prémultiplie `Piece::transforme` par un delta) — aucune API de rotation
+globale n'existait, mais `Piece`/`Station::depuis_pieces` suffisaient à
+l'écrire en quelques lignes, sans toucher `assemblage.rs`.
+
+Sous `Quat::from_rotation_x(π/2)`, `(x, y, z) → (x, −z, y)` : l'axe Y
+(l'axe de rotation propre à l'anneau) devient Z, et l'ancien plan XZ devient
+XY. Un point qui avait `y ≈ 0` (dans le plan de l'anneau) se retrouve avec
+`z ≈ 0` — l'anneau fait désormais face à Z.
+
+**Trois tests touchés, un nouveau.**
+- `la_jante_delysium_demarre_au_bras_0` (une seule jante attendue) devient
+  `la_jante_delysium_ferme_le_tour` : appelle `jante_elysium` **isolément**
+  (sur un `Assembleur` neuf, sans passer par `preset_elysium`) pour vérifier
+  la géométrie **avant pivot** — six tronçons, à 30°+k·60°, dans le plan XZ.
+  Isolé du pivot global exprès : mélanger les deux aurait rendu le test
+  illisible et fragile au moindre réglage de l'un ou l'autre plus tard.
+- Nouveau : `elysium_fait_face_a_z` — même vérification (six tronçons,
+  30°+k·60°) mais **après** `preset_elysium`, axes échangés (`z ≈ 0`,
+  angle par `atan2(y, x)`).
+- `les_bras_sont_regulierement_repartis_dans_le_plan_du_moyeu` comparait
+  Stanford et Elysium avec la **même** logique d'axe (`y ≈ 0`,
+  `atan2(z, x)`) — fausse pour Elysium une fois pivotée. Le tableau partagé
+  gagne une cinquième colonne : un pointeur de fonction `fn(Vec3) -> (f32,
+  f32)` par ligne, choisissant le bon couple (coordonnée étroite, angle)
+  selon la station.
+
+Trois sabotages, trois rougissements : `jante_elysium` ramenée à une seule
+boucle (`0..1`), `tournee(...)` retiré de `preset_elysium` (retour à
+`asm.terminer()` nu), et la colonne d'axe d'Elysium remise à la logique XZ de
+Stanford dans le test partagé.
+
+**641 tests**, 0 avertissement clippy. `docs/reference/fils.md` inchangé
+(aucune géométrie de composant modifiée, seulement l'assemblage et le
+placement).
+
+### Le second anneau, repris de la section retirée (2026-08-12)
+
+Demande explicite : une copie du tore de Stanford, **seulement le tore** (pas
+son moyeu ni ses bras), au tiers du diamètre de la jante extérieure. C'est
+très exactement l'idée notée « pour mémoire » dans « ⚠️ Chantier ci-dessus
+retiré » plus haut — reprise maintenant que le problème de forme qui avait
+fait tout défaire (les bâtiments de la ville) est trouvé et corrigé.
+
+`elysium_rayon_second_anneau() = 2 × elysium_rayon_jante() / 3` (un tiers du
+**diamètre**, donc deux tiers du rayon). `second_anneau_elysium` pose un seul
+`Composant::Tore` — mêmes réglages de construction que
+`preset_stanford_anneau` (section = `hauteur_moyeu() * 0.5`, 96 segments,
+16 anneaux), mais **sans** rappeler `moyeu_hexagonal`/`bras_et_tunnels` :
+Elysium a déjà les siens, les reposer aurait dupliqué le moyeu et les bras
+pour rien. Jonctions calées sur les **six** bras d'Elysium (`jonctions:
+ELYSIUM_N_BRAS`), pas les trois de Stanford.
+
+Posé à `Repere::IDENTITE`, dans le même repère interne (plan XZ, axe Y) que
+le reste d'Elysium — il suit donc automatiquement le pivot global vers Z
+appliqué en fin de `preset_elysium` (`tournee`, section précédente), sans
+rien à recalculer ici.
+
+**Test.** `le_complexe_elysium_na_pas_de_tore` (l'invariant devenu faux)
+remplacé par `elysium_a_un_second_anneau_au_tiers_du_diametre` : un seul
+`Tore`, rayon majeur au tiers du diamètre (borné strictement entre 0 et
+`elysium_rayon_jante()`), jonctions et phase calées sur les bras. Deux
+sabotages, comme la première fois que ce test existait : rayon au tiers du
+**rayon** au lieu du diamètre, et nombre de jonctions remis à 3 (celui de
+Stanford) — les deux rougissent.
+
+**641 tests** (compte inchangé : un test remplacé, pas ajouté), 0
+avertissement clippy. `docs/reference/fils.md` inchangé (`Tore` existe déjà
+au catalogue ; seul un nouvel usage de ses paramètres a été ajouté, pas sa
+géométrie).
+
+### Diamètre du second anneau divisé par deux (2026-08-12)
+
+`elysium_rayon_second_anneau` passe de `2 × elysium_rayon_jante() / 3` à
+`(2 × elysium_rayon_jante() / 3) × 0.5` — écrit en deux facteurs plutôt que
+réduit à `elysium_rayon_jante() / 3.0` (algébriquement identique) : le second
+anneau a deux origines distinctes à garder lisibles, le tiers de diamètre
+d'abord, la réduction de moitié ensuite, pas une fraction choisie d'un coup.
+
+Test renommé `elysium_a_un_second_anneau_au_tiers_du_diametre` →
+`elysium_a_un_second_anneau_a_la_moitie_du_tiers_du_diametre`, valeur
+attendue mise à jour. Rougi en retirant le facteur `× 0.5`.
+
+**641 tests** (compte inchangé), 0 avertissement clippy. `docs/reference/fils.md`
+inchangé.
+
+### Elysium tourne sur elle-même, et l'entrée du hangar reste encadrée fermée (2026-08-12)
+
+Deux demandes distinctes en un seul message, confirmées avant travaux
+(`AskUserQuestion`) : (1) faire tourner tout le complexe Elysium sur
+lui-même, au bouton, autour de son axe Z ; (2) sur `Composant::Hangar`, un
+cadre permanent à l'entrée de la baie hexagonale, **quel que soit** l'état
+des vantaux — pas seulement `VarianteHangar::Ouvert`.
+
+#### Rotation d'Elysium
+
+La vue station a déjà tout le mécanisme voulu — une **moitié tournante**
+optionnelle (`VueStation::tournant`), un bouton ROTATION, un angle animé
+(`station.rs` : `tourne`, `angle`, `VITESSE_ROTATION`) — bâti pour l'ISV
+(coque fixe + section d'équipage) et le tore de Stanford (moyeu fixe +
+anneau). La bascule `match &self.tournant { Some(...) => ..., None =>
+dessiner(&self.etat, ..., true) }` (`station.rs` ~L636) fait déjà tourner
+l'**item entier** quand rien n'est dissocié (`tournant: None`) — exactement
+le cas d'Elysium, qui n'a pas de moitié fixe séparée.
+
+Il manquait seulement le déclaratif côté `catalogue.rs` : Elysium était
+`Fabrique::Etat(preset_elysium)`, qui ne déclare ni rotation ni axe. Nouvelle
+variante `Fabrique::EtatTournant { construire: fn() -> EtatStation, axe: Vec3 }`
+— même bâti que `Etat` (`Bati::seul`, donc `tournant: None`, rotation sur
+l'entier), mais portant son propre axe, comme `Despun`/`Isv` portent le
+leur. `Item::rotation()` et `Item::axe_rotation()` mis à jour ; Elysium
+devient `Fabrique::EtatTournant { construire: preset_elysium, axe: Vec3::Z }`
+— Z parce que c'est justement l'axe que `preset_elysium` vise déjà
+(`tournee`, plus haut dans ce même journal).
+
+Un seul autre appelant existant à ajuster : `Fabrique::batir` est un `match`
+**sans** `_ =>`, donc le compilateur a forcé la nouvelle branche — aucune
+branche oubliée possible.
+
+**Test.** `les_capacites_se_deduisent_de_la_fabrique` (déjà existant, déjà
+strict — c'est lui qui a rougi tout seul à la première compilation, avant
+même d'écrire un sabotage) mis à jour : Elysium rejoint le tore de Stanford
+dans la liste des mégastructures qui tournent, et son axe est vérifié = Z.
+Deux sabotages : `Fabrique::Etat` remis à la place d'`EtatTournant`, puis
+l'axe remis à Y — les deux rougissent.
+
+#### Cadre d'entrée du hangar, dans les deux variantes
+
+`hangar.rs` dessinait déjà un encadrement hexagonal (six barres suivant les
+arêtes de la bouche) — mais seulement pour `VarianteHangar::Ouvert`, à
+l'intérieur du `match variante`. `Ferme` ne dessinait qu'un tablier plein
+fendu, sans cadre du tout. Un cadre de porte est une structure **fixe** :
+qu'elle soit ouverte ou fermée, la baie reste la seule face du hangar par où
+l'on entre, et son encadrement ne devrait pas disparaître avec les vantaux.
+
+Corrigé en sortant le bloc d'encadrement du `match`, pour qu'il se dessine
+dans les deux cas — au même endroit géométrique qu'avant (aucun changement
+pour `Ouvert`, qui l'avait déjà).
+
+**Test neuf** : `lentree_est_encadree_dans_les_deux_variantes` — un `Peintre`
+de test local (`Cylindres`, ne retient que les cylindres) capture le dessin
+des deux variantes et vérifie que les six barres de l'encadrement (mêmes
+positions, même rayon `hh * 0.07`) s'y trouvent toutes les deux. Rougi en
+remettant l'encadrement à l'intérieur du bras `Ouvert` du `match`.
+
+**642 tests**, 0 avertissement clippy. `docs/reference/fils.md` inchangé :
+seule la variante `Ouvert` du hangar est échantillonnée pour le catalogue de
+fils (`composant/mod.rs`), et sa géométrie n'a pas changé — `Ferme` gagne des
+fils que le catalogue ne suit pas.
+
+### Optimisation : la grille du vitrage en `ligne`, pas en `cylindre` (2026-08-13)
+
+Retour : Elysium fait chuter le fps lourdement. Diagnostic avant correctif —
+mesurer, pas deviner (la leçon du sol du 2026-08-12, plus haut dans ce même
+journal).
+
+**Où va le maillage.** `MaillageStation`/`Batisseur` (`maillage.rs`) fusionne
+déjà toutes les primitives d'une station en quelques `draw_mesh` (lots de
+1 600 sommets / 2 400 indices) — ce n'est donc **pas** un problème de nombre
+d'appels `p.*`, mais de volume de triangles réellement produit. Et un tronc de
+cylindre plein (`Batisseur::tronc`) coûte cher : `SEGMENTS = 20` côtés révolus
+→ 42 sommets, 240 indices (**80 triangles**) — pour un usage aussi anodin
+qu'un fil de meneau de quelques centimètres de section.
+
+**Où ça se paie.** `jante::vitrage` et `tore::fenetre` posent leurs meneaux et
+lèvres avec `p.cylindre`, et les deux fonctions ont grossi avec Elysium cette
+session : la jante ferme maintenant son tour à **six** tronçons (au lieu d'un
+seul), chacun avec **deux** zones vitrées, et le second anneau est un
+`Composant::Tore` **complet** (le tour entier, pas un arc). Chiffres à
+l'échelle réelle d'Elysium (`elysium_rayon_jante() ≈ 45,3`, `arc = τ/6`,
+second anneau `≈ 15,1`) :
+
+| Source | Cylindres | Triangles avant | Triangles après (`ligne`, 8/primitive) |
+|---|---|---|---|
+| Jante (6 tronçons × 2 zones) | ≈ 1 584 | ≈ 126 720 | ≈ 12 672 |
+| Second anneau (1 tore complet) | ≈ 452 | ≈ 36 160 | ≈ 3 616 |
+| **Total grilles de vitrage** | **≈ 2 036** | **≈ 162 880** | **≈ 16 288** |
+
+Soit environ **146 000 triangles retirés** (~90 % de moins sur ces deux
+grilles), et le nombre de lots `draw_mesh` qu'elles réclament divisé par
+autant (chaque lot plafonne à 1 600 sommets : 66 528 + 18 984 sommets avant
+≈ 54 lots, contre ≈ 11 après). À titre de comparaison, la ville entière
+(bâtiments compris) ne pèse qu'environ 3 300 triangles — la grille de vitrage
+était, de loin, le premier poste de coût du complexe.
+
+**Corrigé** : `p.cylindre(a, b, rayon, couleur)` → `p.ligne(a, b, rayon *
+2.0, couleur)` pour les meneaux et les lèvres, dans `jante::vitrage` **et**
+`tore::fenetre` (cette dernière partagée avec le tore de Stanford, qui en
+profite aussi). `ligne` trace une croix de deux panneaux (8 triangles,
+`Batisseur::panneau` ×2) au lieu d'un tronc de révolution — indiscernable à
+l'échelle d'un meneau, et déjà l'idiome employé ailleurs dans ces mêmes
+fichiers (`jante::aretes`, les arêtes de coque). Seule différence : en rendu
+**immédiat** (non cuit, bouton M), `Immediat::ligne` retombe sur
+`draw_line_3d`, toujours fin d'un pixel plutôt qu'un vrai volume — accepté,
+comme pour tous les usages existants de `ligne` (`cube_fil`, les arêtes de
+coque), et sans effet en jeu normal (`cuit = true` par défaut).
+
+**Effet de bord réparé** : `docs/reference/fils.md` catalogue les fils
+**depuis les appels `p.cylindre`** spécifiquement — en perdre a rendu le
+catalogue périmé (`le_catalogue_des_fils_est_a_jour` a rougi tout seul).
+Régénéré avec `FILS=1 cargo test --release le_catalogue_des_fils`.
+
+**Tests neufs**, un par fichier : `jante::tests::le_vitrage_nutilise_pas_de_cylindres`
+et un nouveau module `tore::tests` (le fichier n'en avait aucun) portant
+`tore::tests::le_vitrage_nutilise_pas_de_cylindres` — un `Peintre` de test
+local ne comptant que les appels `cylindre`, assertion `== 0`. Deux
+sabotages, un par fichier (une seule `ligne` remise en `cylindre`) — les deux
+rougissent, avec des comptes qui confirment l'ampleur (48 et 255 cylindres
+retrouvés aux échelles de test).
+
+**644 tests**, 0 avertissement clippy. `docs/reference/fils.md` régénéré
+(seule modification de contenu de cette section : les fils des meneaux du
+tore, qui n'existent plus en `cylindre`).
+
+### Complexe Elysium — chantier initial CLOS (2026-08-14)
+
+Sur consigne explicite : le chantier initial du complexe Elysium (et, avec
+lui, le second anneau) est considéré **fini**. Chiffres de clôture, mesurés
+(`Station::nb_pieces`/`cout_total`/`rayon`, `MaillageStation::cuire`), pas
+estimés :
+
+| | valeur |
+|---|---|
+| Pièces | 102 |
+| Coût | 784,4 |
+| Rayon englobant | 48,35 |
+| Lots cuits (`draw_mesh`/frame) | 310 |
+| Sommets cuits | 204 580 |
+| Triangles cuits | 234 728 |
+
+Pour comparaison, l'ISV complet (§C.29) : 43 à 45 pièces, 110 008 sommets en
+204 lots. Elysium reste plus lourd (102 pièces contre 45, 310 lots contre
+204), mais dans un rapport sommets/lot comparable (~660 contre ~539) — le
+maillage se tasse correctement, ce n'est pas un défaut d'empaquetage.
+
+**Ce qui a été fait, dans l'ordre** (détail dans les sections ci-dessus de
+cette Partie F, 2026-08-11 → 2026-08-14) :
+1. Composant `Jante` créé — canal ouvert façon jante de vélo, un sixième de
+   tour d'abord (le temps de le régler seul).
+2. Épaisseur réelle, sol vert en surplomb, vitrage doublé aux deux bouts.
+3. Ville procédurale (grille bruitée de bâtiments) posée sur le sol —
+   **trois tours ratés** avant la bonne cause : le sol ne visitait jamais
+   `v ≈ 0` (un seul anneau dans son maillage, corde droite sautant le pneu),
+   pendant que les bâtiments, eux, suivaient correctement la courbe — les
+   deux ne se recoupaient tout simplement jamais. Trouvé par **mesure**
+   (dump numérique rayon/`y` par couche), pas par déduction, après deux
+   correctifs plausibles mais inopérants (surélévation puis encastrement de
+   la base des bâtiments).
+4. Tour complet (6 tronçons) et rotation d'ensemble vers l'axe **Z**
+   (`tournee`, une pièce déjà cuite pivotée globalement, sans toucher aux
+   fonctions de placement internes bâties autour de Y).
+5. Second anneau : copie du `Composant::Tore` de Stanford, sans son moyeu ni
+   ses bras, au sixième du diamètre de la jante extérieure.
+6. Rotation d'Elysium sur elle-même, au bouton, réutilisant intégralement le
+   mécanisme déjà bâti pour l'ISV et Stanford (`Fabrique::EtatTournant`,
+   nouvelle variante déclarative, aucun nouveau code de rendu).
+7. Hangar : entrée encadrée dans ses deux variantes (le cadre est une
+   structure fixe, pas un ornement propre aux vantaux ouverts).
+8. **Optimisation du rendu** : grille de vitrage (jante et tore) en `ligne`
+   plutôt qu'en `cylindre` — ~146 000 triangles retirés, le premier poste de
+   coût du complexe avant correctif.
+
+**Ce qui reste délibérément non fait** (bouche-trous assumés, pas des
+oublis) :
+- **Sol et ville restent provisoires** : vert plat sans texture, parallélé-
+  pipèdes bruités sans détail. Le fichier `jante.rs` le documente en tête.
+- **Rien de ce chantier n'a été vu tourner à l'écran** par cette session : la
+  rotation (axe Z), l'encadrement du hangar fermé, et le gain fps réel de
+  l'optimisation du vitrage (mesuré en triangles retirés, jamais chronométré
+  en jeu) restent à valider à l'œil — voir `STATE.md`.
+
+**Tranché depuis** (2026-08-14) : le croisement bras/second-anneau **n'a pas
+besoin** de raccord visible dédié, ni pour Elysium ni pour Stanford — voir
+« Un second anneau, au tiers du diamètre » ci-dessus.
+
+**Non commité** à la clôture de ce chantier : sept fichiers, dernier commit
+`73fb924` « torus » antérieur à toute cette Partie F. Point de commit signalé
+dans `STATE.md`.
+
+### Le vrai fps, mesuré en jeu — et une deuxième cause trouvée (2026-08-14)
+
+Sur consigne explicite : ne plus estimer, **lancer le jeu**. Le croisement
+bras/anneau du second anneau est tranché au passage — pas de raccord dédié
+nécessaire, ni pour Elysium ni pour Stanford (voir plus haut dans cette
+Partie F, corrigé sur place).
+
+#### Le harnais de profilage
+
+`PROFIL=<libellé exact>` (variable d'environnement) saute le menu, sélectionne
+l'item nommé dans les Mégastructures (`VueStation::choisir`, nouvelle méthode
+`pub(crate)`), échantillonne `get_frame_time()` pendant 10 s (1 s de chauffe
+ignorée), puis imprime moyenne / 1 % bas / pire frame sur la sortie standard
+et ferme la fenêtre — aucune navigation manuelle, aucun œil requis pour lire
+le chiffre. Gardé dans `main.rs` (comme `FILS=1` pour le catalogue de fils :
+un outil de mesure, pas un jetable).
+
+```
+PROFIL=COMPLEXE ELYSIUM ./target/release/solar_game.exe
+PROFIL COMPLEXE ELYSIUM : 170 frames | moyenne 18.7 fps | 1% bas 14.1 fps | pire frame 13.1 fps
+```
+
+#### Trois points de mesure
+
+| Item | fps moyen | 1 % bas | pire frame |
+|---|---|---|---|
+| Station à anneau (roue) — référence légère | 59,0 | 35,5 | 32,4 |
+| Tore de Stanford | 28,6 | 9,3 | 8,1 |
+| **Complexe Elysium** | **18,7** | **14,1** | **13,1** |
+
+**L'optimisation du vitrage (section précédente) était réelle mais
+insuffisante** : Elysium reste net en dessous de la référence légère, et
+Stanford — qui n'a **pas** de grille de vitrage en cylindres depuis le même
+correctif — est lui aussi loin des 59 fps. La corrélation avec le nombre de
+sommets/lots cuits (mesuré, pas supposé) est nette :
+
+| Item | sommets cuits | lots (`draw_mesh`/frame) |
+|---|---|---|
+| Station à anneau | (non mesuré, nettement moins) | — |
+| Complexe Elysium | 204 580 | 310 |
+
+**Pourquoi un maillage « cuit » reste sensible au volume de sommets.**
+`MaillageStation` ne recalcule pas la géométrie à chaque frame (ça, c'est déjà
+acquis), mais `macroquad::models::draw_mesh` **recopie** `mesh.vertices` dans
+son propre tampon de batching (`QuadGl::geometry`, `macroquad-0.4.15/src/
+quad_gl.rs`) **à chaque appel**, donc à chaque frame — il n'existe pas de
+tampon GPU persistant par `Mesh`. Le gain de la cuisson est réel (pas de
+recalcul géométrique, un draw call par lot au lieu d'un par primitive), mais
+il ne supprime pas le coût proportionnel au **volume total de sommets
+traversant le pipeline chaque frame**. D'où la corrélation observée : moins de
+sommets cuits, plus de fps, presque indépendamment du nombre de pièces.
+
+#### Répartition mesurée du coût d'Elysium (`MaillageStation::cuire` par groupe)
+
+| Famille | pièces | lots | sommets | triangles |
+|---|---|---|---|---|
+| **Charpente (bras, ×6)** | 6 | 129 | **53 928** | **102 720** |
+| Jante (×6) | 6 | 43 | 58 032 | 27 792 |
+| ModuleAxial (habitats/tunnels) | 86 | 91 | 38 136 | 72 640 |
+| Tore (second anneau) | 1 | 32 | 47 176 | 17 656 |
+| TreillisHexagone (moyeu) | 3 | 18 | 7 308 | 13 920 |
+
+**Nouveau premier poste de coût, et de loin : les six bras.** `Charpente`
+(`treillis::charpente_dessiner` → `pieces::treillis_conique`) pose, par bras,
+un cadre de base + `baies` fois (4 longerons + 4 cadre + 2 diagonales) en
+`p.cylindre` — dix tubes pleins par baie. `baies = (longueur / (épais.max(0.4)
+· 1,3)).clamp(10, 48)`. Pour le bras d'Elysium (`longueur = 42`, `épais =
+grand.rayon() · TREILLIS_SECTION = 3,0 · 0,5 = 1,5`) : `baies = 42 / 1,95 ≈
+21` — vérifié en recalculant `4 + 21×10 = 214` cylindres/bras × 6 = 1 284
+cylindres, × 42 sommets chacun (`Batisseur::tronc`, `SEGMENTS = 20`) = 53 928
+sommets, exactement la mesure.
+
+**Différence avec le correctif du vitrage : ici la géométrie est
+structurelle, pas décorative.** Les longerons d'un treillis sont l'élément le
+plus lisible de sa silhouette — les remplacer par `ligne` (une croix plate de
+deux panneaux) risque de se voir, contrairement aux meneaux fins du vitrage.
+`baies` croît linéairement avec la longueur du bras : Stanford (`STANFORD_BRAS
+= 21`) tombe à `baies = 21/1,95 ≈ 10`, la borne **basse** du `clamp` — la
+densité de treillis n'a donc jamais été réglée pour un bras deux fois plus
+long que celui de Stanford. C'est une instance concrète de la question déjà
+ouverte dans `STATE.md` (« mégastructures à taille réelle... l'assemblage
+pièce à pièce ne passera pas à l'échelle ») : un paramètre de densité réglé à
+l'échelle ISV/Stanford ne descend pas automatiquement à l'échelle Elysium.
+
+**Pas corrigé dans cette session** : contrairement au vitrage, réduire la
+densité de `baies` change ce que la pièce montre, pas seulement comment elle
+le montre — une décision à soumettre plutôt qu'à trancher seul. Proposition
+faite à l'utilisateur (voir échange) plutôt qu'appliquée d'autorité.
+
+**644 tests**, 0 avertissement clippy (le harnais `PROFIL` et
+`VueStation::choisir` compilent et passent clippy sans avertissement).
+`docs/reference/fils.md` inchangé.
+
+#### `SEGMENTS` baissé (20 → 12), choisi plutôt que la densité des treillis
+
+Décision de l'utilisateur, entre deux corrections proposées pour le premier
+poste de coût (les six bras, §« Le vrai fps, mesuré en jeu » ci-dessus) :
+plutôt que de retoucher la densité de `baies` des treillis (un changement
+**visuel et structurel**, propre à Elysium/Stanford), baisser `SEGMENTS`
+(`maillage.rs`) — un curseur qualité/coût **global**, qui allège tous les
+cylindres du jeu d'un coup, treillis compris.
+
+`SEGMENTS: usize = 20 → 12` (42 → 26 sommets, 80 → 48 triangles par
+cylindre, environ 38 % de moins). Aucun test à modifier :
+`cylindre_compte_sommets_et_indices` (le test qui vérifie le compte exact de
+sommets/indices d'un cylindre, `maillage.rs`) est **formulé à partir de
+`SEGMENTS`**, pas d'un nombre recopié — il continue de garder l'invariant
+sans qu'on ait à le toucher.
+
+**Mesuré, pas supposé** (`PROFIL=COMPLEXE ELYSIUM`) :
+
+| | avant | après `SEGMENTS = 12` |
+|---|---|---|
+| fps moyen | 18,7 | 20,0 |
+| 1 % bas | 14,1 | 16,2 |
+
+Gain réel mais **sous-proportionnel** à la réduction de sommets (~38 % de
+sommets en moins pour ~7 % de fps en plus) : signe que le goulot n'est pas
+purement le volume de sommets recopiés par `draw_mesh`, mais plutôt un coût
+**par appel** (changement d'état, soumission CPU) — voir la section suivante.
+
+#### Tampons GPU persistants : creusé, pas fait
+
+Question posée en cours de session : `macroquad::draw_mesh`/`QuadGl` a-t-il
+un moyen d'envoyer la géométrie **une fois** à la GPU au lieu de la
+recopier chaque frame ? Réponse : **oui en principe**, via l'accès bas
+niveau que macroquad expose déjà —
+`unsafe { get_internal_gl() }.quad_context: &mut dyn miniquad::RenderingBackend`
+(`macroquad-0.4.15/src/window.rs`), déjà utilisé dans ce projet
+(`peintre.rs::Immediat`, pour `push_model_matrix`). `RenderingBackend`
+porte les primitives miniquad pour des tampons **persistants**
+(`new_buffer`, `Bindings`, `Pipeline`, `draw`) — la voie existe.
+
+**Mais `Material` (le système d'éclairage, `eclairage.rs`) est bâti sur le
+pipeline interne de `QuadGl`, pas sur miniquad brut** : son champ `pipeline`
+est privé et n'expose aucun handle réutilisable pour des appels `draw()`
+maison. Contourner `QuadGl` pour de vrais tampons persistants demanderait donc
+un **second chemin de rendu complet**, parallèle à `MaillageStation` : ses
+propres tampons miniquad, son propre `Pipeline` (recompilant `station.vert.
+glsl`/`station.frag.glsl` directement plutôt que via `Material`), sa propre
+gestion de cycle de vie — pas une retouche.
+
+**Décision** : chantier trop gros et trop risqué (un bug de shader/pipeline
+s'y verrait sur tout le jeu, pas seulement Elysium, et rien ici ne permet de
+le vérifier à l'œil sans relancer le jeu) pour l'entreprendre dans cette
+session. **Mis de côté, documenté, pas oublié** — voir `STATE.md`.
+
+**644 tests**, 0 avertissement clippy. `docs/reference/fils.md` inchangé
+(aucun composant neuf, `SEGMENTS` est un paramètre de cuisson, pas de
+géométrie de référence).
