@@ -20,16 +20,11 @@
 **Vérifié** : **719 tests verts**, `cargo clippy --all-targets` à **0
 avertissement**.
 
-**Pas encore commité** depuis le dernier commit (`a0ebb58` « torus &
-elysium complex base complete ») : vingt-deux fichiers modifiés, un supprimé
-(`src/systeme/gravite.rs`, mode N-corps retiré comme code de test), sept
-nouveaux (`src/ecran/icone.rs`, `src/vaisseau/vol.rs`,
-`src/systeme/trajectoire.rs`, `src/transit.rs`,
-`docs/conception/{trajectoires,concept_jeu}.md`,
-`docs/suivi/trajectoires.md`) — `git status --short` pour le détail exact.
-Chantier I.6 (icônes du sélecteur) et lots A/B/C/D du chantier trajectoires
-(voir ci-dessous). **Point de commit à signaler** dès que l'utilisateur veut
-le figer.
+**Commité et poussé** (`c53bab2` « Chantier trajectoires : lots A-D, icônes
+du sélecteur (I.6), retrait N-corps », sur `origin/main`) : chantier I.6
+(icônes du sélecteur) et lots A/B/C/D du chantier trajectoires (voir
+ci-dessous) — trente fichiers touchés au total. Détail exact dans le commit
+lui-même (`git show --stat c53bab2`).
 
 ### Ce qui a été fait juste avant l'ouverture du chantier trajectoires
 
@@ -188,12 +183,11 @@ y compris une liste consolidée de tous les chiffres encore provisoires.
 
 ## Commits
 
-Dernier commit : `a0ebb58` « torus & elysium complex base complete ». Avant
-lui : `73fb924` « torus », `fb7d589` « fix » (2026-08-10), `dc0d7bf` « torus
-ok », `2a042e6` « P4 ok », `7278aa1` « P.1 a P.3 ok, plus fix ui ».
-**Rien depuis n'est dedans** — I.6 (icônes du sélecteur) et les lots A/B/C/D
-du chantier trajectoires, non commités (détail exact du diff en tête de
-fichier, « Reprendre ici »).
+Dernier commit : `c53bab2` « Chantier trajectoires : lots A-D, icônes du
+sélecteur (I.6), retrait N-corps » — **poussé sur `origin/main`**. Avant
+lui : `a0ebb58` « torus & elysium complex base complete », `73fb924`
+« torus », `fb7d589` « fix » (2026-08-10), `dc0d7bf` « torus ok », `2a042e6`
+« P4 ok », `7278aa1` « P.1 a P.3 ok, plus fix ui ».
 
 Consigne debout : *« no commit i'll say when commit is needed »* — ne jamais
 commiter de soi-même. **Mais signaler les points de commit** : l'utilisateur
