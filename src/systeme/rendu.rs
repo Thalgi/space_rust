@@ -9,6 +9,9 @@ pub(super) const COL_PLANETES: Color = Color::new(0.13, 0.78, 0.75, 0.75); // sa
 pub(super) const COL_ETOILES: Color = Color::new(0.85, 0.80, 0.55, 0.32); // paille, discret
 pub(super) const COL_LUNES: Color = Color::new(0.62, 0.55, 0.90, 0.38); // violet pâle
 pub(super) const COL_ZONE: Color = Color::new(0.30, 0.90, 0.40, 0.45); // vert habitable
+/// Aperçu de trajet (Lot D) — ambre, pour trancher net des quatre teintes
+/// ci-dessus (sarcelle/paille/violet/vert) sur le même fond noir.
+const COL_PREVISUALISATION: Color = Color::new(1.0, 0.75, 0.20, 0.85);
 use crate::astre::{CameraInfo, Categorie, Foyer};
 use macroquad::prelude::*;
 
@@ -60,6 +63,7 @@ impl Systeme {
             lunes: orbites_lunes,
             zone: montrer_zone,
             focus,
+            previsualisation,
         } = c;
         // Opacité d'une trace appartenant à `idx`, selon l'astre focalisé.
         let opacite = |idx: usize| {
@@ -156,6 +160,14 @@ impl Systeme {
                     dessiner_pointilles(&poly, attenue(COL_ETOILES, k));
                 }
             }
+        }
+
+        // Aperçu de trajet (Lot D) : arc OUVERT, jamais bouclé sur lui-même —
+        // contrairement aux orbites ci-dessus, `dessiner_points` bouclerait
+        // le dernier point sur le premier (`% n`), reliant l'arrivée au
+        // départ à tort.
+        if let Some(poly) = previsualisation {
+            dessiner_points_ouvert(&poly, COL_PREVISUALISATION, cam);
         }
     }
 
@@ -365,6 +377,38 @@ fn dessiner_points(poly: &[Vec3], centre: Vec3, col: Color, cam: Vec3) {
     while i < n {
         let a = centre + poly[i];
         let b = centre + poly[(i + pas) % n];
+        let demi = (b - a).normalize_or_zero() * demi_monde;
+        draw_line_3d(a - demi, a + demi, col);
+        i += pas;
+    }
+}
+
+/// Trace une polyligne **ouverte** en points, à espacement écran ~constant —
+/// même technique que [`dessiner_points`], adaptée à un arc à sens unique.
+///
+/// Deux écarts avec [`dessiner_points`] : pas de `centre` (la trajectoire
+/// rend déjà des coordonnées monde absolues, voir `Trajectoire::position`),
+/// et surtout pas de `% n` — un arc ouvert dont le dernier segment boucle sur
+/// le premier point relierait à tort l'arrivée au départ.
+fn dessiner_points_ouvert(poly: &[Vec3], col: Color, cam: Vec3) {
+    let n = poly.len();
+    if n < 2 {
+        return;
+    }
+    let mut proche = f32::MAX;
+    let mut i = 0;
+    while i < n {
+        proche = proche.min((poly[i] - cam).length_squared());
+        i += 16;
+    }
+    let px = px_par_unite(proche.max(0.0).sqrt());
+    let pas = pas_points((poly[1] - poly[0]).length() * px, n);
+    let demi_monde = LONGUEUR_POINT_PX / px.max(1e-6) * 0.5;
+    let mut i = 0;
+    while i + 1 < n {
+        let j = (i + pas).min(n - 1);
+        let a = poly[i];
+        let b = poly[j];
         let demi = (b - a).normalize_or_zero() * demi_monde;
         draw_line_3d(a - demi, a + demi, col);
         i += pas;

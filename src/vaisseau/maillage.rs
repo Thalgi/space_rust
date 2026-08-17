@@ -341,6 +341,11 @@ impl Peintre for Batisseur {
 /// La station se place dans le monde par **une** `push_model_matrix` autour de
 /// [`MaillageStation::dessiner`] : le maillage n'a pas à être recuit quand elle
 /// bouge, et deux stations identiques peuvent partager le même.
+// `Default` (lots vides) sert `std::mem::take` : `Astre::tenter_lancer`
+// (`engin.rs`) extrait le maillage d'un `EnginOrbital` pour le transférer à
+// un `VaisseauEnTransit`, l'original étant de toute façon jeté juste après
+// par l'appelant (`Systeme::lancer`).
+#[derive(Default)]
 pub struct MaillageStation {
     lots: Vec<Mesh>,
 }

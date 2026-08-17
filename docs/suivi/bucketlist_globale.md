@@ -217,9 +217,15 @@ Presets `binaire`, `trinaire`, `quadruple`, plus Alpha Centauri (A+B réels).
 - [ ] ⚠️ **L'échelle est exagérée** et le restera tant qu'il n'y aura pas de vue « orbite
       basse » : à l'échelle réelle l'ISS fait 9 × 10⁻⁶ unité de monde. Facteurs nommés
       (`ORBITE_ISS`, `ECHELLE_ISS`).
-- [ ] Vaisseaux **mobiles** (transferts entre astres), et l'ISV / le Starship en orbite.
-      Le Starship est **terminé** depuis le 2026-08-06 : c'est un objet fini qui n'a nulle part
-      où aller.
+- [~] Vaisseaux **mobiles** (transferts entre astres), et l'ISV / le Starship en orbite.
+      Le Starship, **terminé** depuis le 2026-08-06, **vole pour de vrai depuis le 2026-08-16** :
+      un exemplaire pilotable posté en orbite terrestre
+      ([`conception/trajectoires.md`](../conception/trajectoires.md), Lots A/B/C/D,
+      [`suivi/trajectoires.md`](trajectoires.md)) peut être lancé vers une destination choisie
+      en jeu (bouton LANCER) et suit un arc de rendez-vous garanti vers la position future de
+      sa cible, avec un aperçu ambre du trajet pendant l'armement et une caméra qui le suit
+      une fois parti (Lot D). Reste : ce qui se passe à l'arrivée — amarrage, consommation à
+      la colonisation (Lot E), pour l'instant un vaisseau arrivé reste immobile.
 
 ## 10 bis bis. L'assembleur (VAB) — ✅ fait le 2026-08-09
 

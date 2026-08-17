@@ -382,6 +382,21 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
         sys.nommer(idx_iss, "ISS");
     }
 
+    // ===== Le Starship, posté en orbite terrestre =====
+    // Premier vaisseau **pilotable** du jeu (chantier trajectoires, Lot C) :
+    // assemblé par `vaisseau::preset_starship` (même modèle que la vue
+    // stations), posté comme l'ISS mais avec ses statistiques de vol
+    // calculées à la pose (`EnginOrbital::starship_pose`) — c'est ce qui lui
+    // permettra de décoller vers une destination choisie en jeu.
+    if let Some(starship) = crate::engin::EnginOrbital::starship_pose(
+        &crate::vaisseau::preset_starship(),
+        terre,
+        rayon_terre,
+    ) {
+        let idx_starship = sys.ajouter(Box::new(starship));
+        sys.nommer(idx_starship, "STARSHIP");
+    }
+
     (sys, "Systeme solaire - jusqu'a Pluton".to_string())
 }
 

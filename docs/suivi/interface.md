@@ -20,11 +20,13 @@
 | **I.3** | Panneau d'astre au clic, habitabilité **déduite** | ✅ |
 | **I.4** | Barre de ressources (14 sur deux lignes) + nom du système | ✅ |
 | **I.5** | Agrégation `sur_ui` : une seule porte | ✅ |
+| **I.6** | Sélecteur : icônes rendues (au lieu de pastilles), contour, débordement des anneaux | ✅ |
 
 **Bouche-trous** : 4 des 5 soldés. Reste **D-INT-2**, l'économie — chantier de
 conception à part entière (dette **D-INT-2**, tableau dans [`../../STATE.md`](../../STATE.md)).
 
-**28 tests ajoutés, tous red-checkés.**
+**28 tests ajoutés, tous red-checkés** (avant I.6 — voir son propre décompte : 12
+tests dans `ecran/icone.rs`).
 
 ---
 
@@ -953,4 +955,243 @@ Les tests prouvent que la table est juste, pas que le preset s'en sert — un ra
 réécrit à la main les laissait tous verts. D'où
 `le_preset_solaire_puise_ses_rayons_dans_la_table`, qui inspecte le **texte
 source** (`include_str!`). Inhabituel, mais c'est le seul garde possible ici.
+
+---
+
+## I.6 — Sélecteur : icônes rendues, contour, débordement des anneaux (2026-08-14)
+
+### La demande
+
+Remplacer la pastille de couleur unie du sélecteur par un vrai portrait
+rendu de chaque astre, en cache (`ecran/icone.rs`, nouveau) — et pour les
+gazeuses, régler trois défauts remontés à l'œil après une première passe :
+
+1. **Le contour d'un pixel autour de la silhouette est trop clair** (blanc) —
+   à assombrir.
+2. **Les gazeuses ne se lisent pas à la même taille.** Une passe précédente
+   les cadrait sur le rayon de la plus grande d'entre elles (Jupiter) pour
+   leur donner une taille **relative** vraie — ce n'est pas ce qui était
+   demandé : Jupiter, Saturne, Uranus et Neptune doivent occuper la **même**
+   place à l'écran, comme n'importe quelle autre planète du sélecteur.
+3. **Les anneaux sont coupés au lieu de déborder.** Le cadrage d'origine
+   reculait la caméra pour faire tenir l'anneau dans les 48×48 px de la
+   cible — exactement l'inverse de la demande : l'anneau doit dépasser le
+   carré de l'icône, pas s'y comprimer.
+
+### Ce qui a changé de conception
+
+**Contour** : `CONTOUR` passe de `WHITE` à `BLACK` dans `ecran/icone.rs` —
+un contour sombre se détache aussi bien d'une planète claire que d'une
+sombre, et reste net sur la ligne survolée (fond cyan translucide) comme au
+repos (fond nuit).
+
+**Taille des gazeuses** : retour au cadrage **par corps**, celui de toujours
+— `recul = rayon_du_corps × RECUL`, sans référence partagée. La référence
+partagée (`Systeme::rayon_gazeuse_reference`, ajoutée à l'itération
+précédente) est retirée : elle n'a plus de raison d'être une fois chaque
+gazeuse cadrée sur elle-même.
+
+**Anneaux qui débordent — le vrai problème.** Faire déborder un anneau d'une
+cible de rendu à **résolution et champ de vision fixes** est contradictoire
+avec « la planète garde la même taille » : à `recul` fixe, élargir le champ
+pour loger l'anneau réduit forcément la taille apparente de la planète dans
+le même cadre (elle occupe une fraction plus petite d'un champ plus large).
+La solution n'est pas un compromis sur ces deux points à la fois, mais un
+troisième axe : la **résolution de la cible**.
+
+Pour un astre à anneau, la cible de rendu s'agrandit dans le **même rapport**
+que le champ de vision s'élargit (`cote_gazeuse`, dérivé du rapport des
+tangentes des deux demi-FOV — pas mesuré à l'œil, recalculé automatiquement
+si `FOVY_DEG`/`FOVY_GAZEUSE_DEG` changent). La planète occupe alors
+exactement le **même nombre de pixels** dans les deux cas (même `rayon`,
+même `recul`, la résolution compense l'élargissement du champ) — seul
+l'anneau, qui n'existait pas dans le champ étroit, apparaît, capté par le
+surplus de champ.
+
+Reste à faire déborder ce **surcroît de pixels** au-delà du carré de
+l'icône à l'écran : le dessin (`skymap.rs::selecteur_dessiner`) étirait
+jusqu'ici **toute** texture dans la même case `rayon_icone() × 2`, quelle
+que soit sa résolution native — une cible plus grande s'y retrouvait donc
+**compressée**, annulant tout le débordement. Corrigé en dessinant à une
+échelle **proportionnelle à la résolution native de la texture**
+(`icone::echelle_dessin`) plutôt qu'à une case de taille fixe : une texture
+deux fois plus large se dessine deux fois plus grande, sans toucher à
+l'échelle réelle de la planète qu'elle contient.
+
+**Pourquoi une cible dédiée, plus grande, plutôt qu'un second passage.** Deux
+tailles de cible de rendu coexistent maintenant (`scratch` 48×48 pour tout
+le reste, `scratch_gazeuse` ~116×116 pour un corps à anneau) plutôt qu'une
+seule cible redimensionnée à la volée : une `RenderTarget` macroquad est
+créée à taille fixe (`render_target_ex(largeur, hauteur, …)`), et personne
+n'a besoin d'un troisième format — Jupiter (sans anneau dans ce preset) et
+toute tellurique restent sur la cible standard.
+
+### Comment le vérifier
+
+`cargo test`/`clippy` ne disent rien de la lecture d'un pixel — capture
+d'écran obligatoire (`CAPTURE=<chemin.png> ./target/release/solar_game.exe`,
+harnais dans `main.rs`), **agrandie avant recadrage** (Pillow, dans le
+scratchpad) : à 1× l'icône fait 20–50 px à l'écran, illisible pour juger un
+contour d'un seul pixel ou un débordement d'anneau au bord d'une case.
+`window_conf` double la fenêtre sous `CAPTURE` (2000×1400, sans effet sur le
+jeu normal) pour partir d'une image déjà plus grande.
+
+### Résultat, vérifié à l'écran
+
+Capture agrandie (Pillow ×3 à ×6, dans le scratchpad) puis lue directement :
+
+- **Contour** : `BLACK` se détache nettement de chaque planète, claire
+  (Uranus, Pluton) ou sombre (Mercure), au repos comme survolée.
+- **Jupiter, Saturne, Uranus et Neptune occupent désormais exactement la
+  même place à l'écran** — comparées côte à côte dans la même capture, les
+  quatre disques font la même taille, anneau ou non.
+- **L'anneau de Saturne déborde bel et bien** du carré de son icône,
+  visiblement, jusque dans la ligne de Jupiter au-dessus — l'effet demandé,
+  pas une approximation.
+- Les telluriques (Mercure, Venus, Terre, Mars, Pluton) gardent leur taille à
+  moitié d'une gazeuse, fond transparent compris — aucune régression sur ce
+  qui marchait déjà.
+- `cote_gazeuse()` calcule **116** à `FOVY_GAZEUSE_DEG = 90°` (contre 48 en
+  standard) : conforme à la valeur dérivée à la main pendant la conception
+  (`48 × tan 45° / tan 22,5° ≈ 115,9`).
+
+**12 tests dans `ecran/icone.rs`** (tous red-checkés, y compris les deux
+nouveaux qui répliquent la formule de projection pour garder la taille de
+planète et la capture d'anneau), plus la suppression de
+`Systeme::rayon_gazeuse_reference` (et ses deux tests) — la référence
+partagée de l'itération précédente n'a plus de raison d'être une fois chaque
+corps cadré sur lui-même. **661 tests verts, `clippy --all-targets` à 0
+avertissement.**
+
+### I.6 bis — Anneau moins dominant, tabulation, panneau animé, vraie Terre (2026-08-14)
+
+Quatre retouches demandées après un premier jugement à l'écran de I.6.
+
+**Anneau de Saturne, toujours trop gros.** Deux leviers, pas un seul :
+
+1. **L'azimut de caméra ne suit plus la lumière** pour un astre à anneau — il
+   se place perpendiculairement à la projection horizontale de l'inclinaison
+   propre de l'anneau (`Astre::normale_anneau`, nouveau, exposé depuis
+   `Apparence.anneau_normal`). Sans ça, l'azimut restait dicté par la
+   position orbitale du moment : Saturne pouvait se présenter presque de
+   face (anneau ouvert en grand cercle) selon l'heure, un hasard sans
+   rapport avec ce qui se lit le mieux en 48 px. L'élévation suit un angle
+   **fixe** de 15° (demandé), remplaçant l'angle générique des corps sans
+   anneau pour ce cas précis.
+2. **`FOVY_GAZEUSE_DEG` cadré sur l'anneau de Saturne (2,3 rayons), pas sur
+   le maximum théorique du générateur aléatoire (2,5)** — 90° → 76°. Une
+   gazeuse au maximum théorique perd un peu de son bord externe
+   (`un_anneau_plus_large_que_saturne_deborde_du_cadre` le mesure) ; c'est
+   assumé, Saturne est la seule gazeuse à anneau du préréglage solaire et
+   c'est elle qui était jugée.
+
+Débordement réduit, mesurable (~22 % de cible en moins), mais **pas
+supprimé** : la demande précédente (« same size as jupiter » + « rings
+overflow, i want it to ») borne d'en bas ce qu'on peut retirer sans revenir
+sur ces deux points.
+
+**Tabulation.** `selecteur::INDENT_TAB` (20 px) décale icône + arbre + nom
+d'un bloc pour toute entrée de profondeur > 0 — comme un fichier texte, la
+colonne se lit d'un coup d'œil comme une liste **sous** le Soleil. Retour
+en arrière assumé sur I.6 (« le sélecteur n'a jamais plus de deux niveaux,
+l'indentation ne distinguait rien » — vrai fonctionnellement, faux à l'œil).
+
+**Panneau de droite animé.** `fiche::avancer_ouverture` (progression 0↔1 à
+vitesse constante dans le temps, un quart de seconde) et `ease_in_out`
+(smoothstep) pilotent un `decalage_horizontal` : le panneau glisse depuis
+hors écran plutôt que d'apparaître d'un coup. `Skymap` garde
+`fiche_affiche` distinct de `fiche_ouverte` — ce dernier redevient `None`
+dès la fermeture demandée, mais le panneau doit continuer à montrer son
+contenu pendant qu'il glisse encore hors champ. 6 tests, tous red-checkés ;
+non vérifiable par capture statique (c'est une animation), la logique est
+testée, le point de repos (immobile) confirmé à l'écran.
+
+**La Terre.** Signalée trop verte dans son icône. Piste explorée d'abord —
+et **fausse** : `eau` monté 0,62 → 0,71 → 0,78 (bien au-delà de la vraie
+fraction d'océan) sans changement visible, y compris sous un azimut de
+caméra complètement différent (testé, jeté). La vraie cause : le terrain
+d'une tellurique se génère **de façon asynchrone** (job en tâche de fond,
+budget de générations simultanées limité — `Planete::terrain_pret`,
+préexistant, déjà utilisé pour ne pas figer un repli dans les captures de
+non-régression de la galerie). L'icône du sélecteur ne le consultait pas :
+elle pouvait mettre en cache un rendu pris **pendant** la génération, sur un
+repli qui n'a rien à voir avec le preset — indépendamment de la valeur
+d'`eau`. Nouveau `Astre::rendu_pret` (défaut `true`, `Planete` délègue à
+`terrain_pret()`) consulté dans `IconesAstres::completer` avant tout rendu ;
+un astre pas prêt est sauté **sans** compter contre `ESSAIS_MAX` — l'attente
+n'a pas de plafond, contrairement à un rendu vide. `eau` repose à 0,71 (la
+vraie fraction terrestre, un correctif légitime en soi, mais qui n'était pas
+la cause du défaut).
+
+**16 tests dans `ecran/icone.rs`, 6 dans `ecran/fiche.rs`** (tous
+red-checkés). **676 tests verts, `clippy --all-targets` à 0 avertissement.**
+
+### I.6 ter — Anneau à plat, bouton de repli agrandi, colonne « liquide » (2026-08-14)
+
+Trois retouches de plus après un nouveau jugement à l'œil de I.6 bis.
+
+**L'anneau de Saturne, cadré à l'horizontale plutôt qu'à l'azimut de la
+lumière.** `azimut_et_elevation` devenait `cadre_camera`, et change de
+signature : `(direction, elevation: f32)` → `(direction, haut: Vec3)`. Pour
+un astre à anneau, `haut` n'est plus jamais `Vec3::Y` — c'est la projection
+de la normale de l'anneau sur le plan perpendiculaire à la direction de vue
+(`n - (n·fwd) fwd`, normalisée). Conséquence géométrique directe : le grand
+axe de l'ellipse projetée est **forcé horizontal à l'écran**, quelle que
+soit l'inclinaison réelle de l'anneau ou l'angle sous lequel Saturne est
+prise ce jour-là dans son orbite. Avant, seul l'azimut (I.6 bis) suivait
+l'inclinaison de l'anneau ; `haut` restait l'axe du monde, donc l'ellipse
+pouvait sortir de travers.
+
+**L'anneau se lisait encore « penché vers l'avant » une fois à l'horizontale**
+— l'ellipse ne tournait plus de travers, mais gardait une ouverture verticale
+(l'angle d'élévation de la caméra, qui restait celui des corps sans anneau).
+Deux options proposées par l'utilisateur : réduire de 30 % *seulement* pour
+Saturne, ou dériver la caméra directement des paramètres de l'anneau pour que
+ça généralise. La seconde a été prise — `cadre_camera` construit désormais
+une base orthonormée dans le plan de l'anneau lui-même (`e1 =
+normalize(Y × n)`, replié sur `Z × n` si `n` est déjà vertical) et exprime
+`direction`/`haut` par un angle d'élévation **paramétrique**
+(`elevation_anneau_rad()`) : `direction = e1 cos a + n sin a`, `haut = n cos a
+− e1 sin a`. Pas de cas particulier Saturne — l'angle est uniforme pour tout
+astre à anneau, aujourd'hui la seule gazeuse annelée du préréglage solaire
+mais pas censée le rester.
+
+**Puis, sur demande explicite, l'angle a été mis à zéro.** À `a = 0`,
+`direction` tombe **dans** le plan de l'anneau et `haut` devient la normale
+de l'anneau elle-même : l'anneau se réduit à un trait horizontal, ouverture
+nulle. Deux tests le pinnent : `lelevation_dun_anneau_est_nulle` (la
+constante) et `a_elevation_nulle_la_direction_tombe_dans_le_plan_de_lanneau`
+(la conséquence géométrique, pas seulement la valeur). Vérifié à l'écran
+(capture + recadrage) : l'anneau traverse l'équateur de Saturne en une
+ligne fine, sans déborder sur la ligne de Jupiter au-dessus.
+
+⚠️ `CameraInfo` (utilisé par l'éclairage du shader) prend désormais `right`
+et `up` dérivés du vrai `haut` de la caméra (`forward.cross(haut)`, etc.), pas
+de `Vec3::Y` en dur — sinon l'éclairage aurait divergé de l'orientation
+réellement rendue dès que `haut` s'écarte de l'axe du monde.
+
+**Bouton de repli (◄) doublé.** `selecteur::ECHELLE_BOUTON_REPLI = 2.0`,
+propre au sélecteur (pas au bouton similaire de la vitrine des briques).
+`liste.rs` gagne des variantes `_bouton`/`_echelle_bouton` prenant le
+facteur en paramètre (`bouton_repli_echelle`,
+`colonne_items_depuis_echelle_bouton`, `zone_active_echelle_bouton`) ; les
+anciennes fonctions restent en enveloppes à `1.0` **seulement** si un autre
+appelant les utilise encore — `zone_active_echelle` n'en avait plus,
+**supprimée** plutôt que gardée morte. Les trois usages (dessin, test de
+clic, réservation d'espace des items) passent tous par le même facteur : un
+bouton agrandi sans hit-test ni réservation d'espace assortis casserait
+silencieusement les clics ou ferait chevaucher la liste sur ses bords.
+
+**Fond et bordure « liquides ».** Toujours le thème terminal/minitel, pas un
+autre : fond nuit conservé, juste la texture du panneau. `Skymap::
+colonne_fond_liquide` remplace le rectangle plat à bordure cyan par 16
+bandes horizontales semi-transparentes (alpha 0,85 → 0,60 de haut en bas,
+léger tint cyan qui s'estompe avec la profondeur) plus une ligne de 2 px
+très claire tout en haut (le « ménisque »). Bordure passée du cyan plein à
+un **gris à 30 % d'opacité**, sur demande explicite (« I want to delete the
+border color... for testing ») — un premier jet, pas un réglage final : pas
+de shader/blur, juste des rectangles empilés, macroquad ne donnant rien de
+plus simple sous la main ici.
+
+**681 tests verts, `clippy --all-targets` à 0 avertissement.**
 

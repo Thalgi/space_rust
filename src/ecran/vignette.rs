@@ -88,6 +88,11 @@ impl Vignette {
             fovy: 45.0_f32.to_radians(),
             aspect: Some(1.0),
             render_target: Some(cible.clone()),
+            // Voir `icone.rs::rendre` : le plan proche par défaut (0.01) est
+            // pensé pour l'échelle du monde, pas pour ce cadrage à `recul` —
+            // un nain comme Pluton a un `recul` bien en deçà, et sa sphère
+            // entière tomberait devant le plan proche sans ce correctif.
+            z_near: (recul * 0.1).max(1e-6),
             ..Default::default()
         };
         set_camera(&cam3d);

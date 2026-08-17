@@ -50,24 +50,77 @@ pub fn colonne(ecran: Vec2) -> Rect {
 /// constantes à tenir d'accord finiraient par diverger, et les deux zones se
 /// recouvriraient sans que rien ne le dise (`conception/interface.md` §1.2).
 pub fn colonne_depuis(ecran: Vec2, haut: f32) -> Rect {
+    colonne_depuis_echelle(ecran, haut, PART_LARGEUR)
+}
+
+/// Comme [`colonne_depuis`], avec une part de largeur d'écran **explicite**
+/// plutôt que [`PART_LARGEUR`] — pour les colonnes qui ont besoin de plus de
+/// place (des icônes rendues plus grandes, par exemple) sans faire bouger le
+/// plafond des **autres** colonnes (la vitrine de composants), qui partagent
+/// ce module sans avoir grossi.
+pub fn colonne_depuis_echelle(ecran: Vec2, haut: f32, part_largeur: f32) -> Rect {
     let haut = haut.max(MARGE);
-    Rect::new(MARGE, haut, ecran.x * PART_LARGEUR - MARGE * 2.0, (ecran.y - haut - MARGE).max(0.0))
+    Rect::new(MARGE, haut, ecran.x * part_largeur - MARGE * 2.0, (ecran.y - haut - MARGE).max(0.0))
 }
 
 /// Hauteur d'une ligne : la place disponible divisée par le nombre d'items,
 /// bornée. Si tout ne rentre pas, la liste **déborde** — c'est visible, et
 /// préférable à des lignes illisibles.
 pub fn hauteur_ligne(colonne: Rect, n: usize) -> f32 {
+    hauteur_ligne_echelle(colonne, n, 1.0)
+}
+
+/// Comme [`hauteur_ligne`], mais avec un multiplicateur explicite : pour les
+/// colonnes qui posent plus qu'un simple libellé (une icône, par exemple) et
+/// ont besoin de lignes plus hautes que le texte seul — au prix, sur une
+/// longue liste, d'un débordement plus tôt (assumé, voir tête de fichier).
+pub fn hauteur_ligne_echelle(colonne: Rect, n: usize, facteur: f32) -> f32 {
     if n == 0 {
-        return LIGNE_MIN;
+        return LIGNE_MIN * facteur;
     }
-    (colonne.h / n as f32).clamp(LIGNE_MIN, LIGNE_MAX)
+    (colonne.h / n as f32).clamp(LIGNE_MIN * facteur, LIGNE_MAX * facteur)
 }
 
 /// Rectangle de la ligne `i`.
 pub fn ligne(colonne: Rect, n: usize, i: usize) -> Rect {
-    let h = hauteur_ligne(colonne, n);
+    ligne_echelle(colonne, n, i, 1.0)
+}
+
+/// Comme [`ligne`], à l'échelle de [`hauteur_ligne_echelle`].
+pub fn ligne_echelle(colonne: Rect, n: usize, i: usize, facteur: f32) -> Rect {
+    let h = hauteur_ligne_echelle(colonne, n, facteur);
     Rect::new(colonne.x, colonne.y + h * i as f32, colonne.w, h - 1.0)
+}
+
+/// Décalage vertical, en pixels, pour ancrer une liste de `n` lignes (à
+/// `facteur`) au **bas** de la colonne plutôt qu'en haut — l'espace que la
+/// liste laisse **au-dessus** d'elle si elle ne remplit pas toute la
+/// hauteur, zéro si elle la remplit ou la dépasse.
+fn decalage_bas(colonne: Rect, n: usize, facteur: f32) -> f32 {
+    let h = hauteur_ligne_echelle(colonne, n, facteur);
+    (colonne.h - h * n as f32).max(0.0)
+}
+
+/// Comme [`ligne_echelle`], mais **ancrée en bas** de la colonne : une liste
+/// trop courte pour remplir toute la hauteur colle à son bas, laissant le
+/// vide au-dessus plutôt qu'en dessous.
+pub fn ligne_echelle_bas(colonne: Rect, n: usize, i: usize, facteur: f32) -> Rect {
+    let mut r = ligne_echelle(colonne, n, i, facteur);
+    r.y += decalage_bas(colonne, n, facteur);
+    r
+}
+
+/// Comme [`item_sous_curseur_echelle`], pour une liste ancrée en bas
+/// ([`ligne_echelle_bas`]) — **doit** rester d'accord avec elle au même
+/// facteur, sinon on ne clique plus sur ce qu'on voit. Ramène la souris au
+/// même décalage que les lignes plutôt que de refaire le calcul : les deux
+/// fonctions ne peuvent alors pas diverger sur le montant du décalage.
+pub fn item_sous_curseur_echelle_bas(colonne: Rect, n: usize, souris: Vec2, facteur: f32) -> Option<usize> {
+    if n == 0 || !colonne.contains(souris) {
+        return None;
+    }
+    let decalage = decalage_bas(colonne, n, facteur);
+    item_sous_curseur_echelle(colonne, n, vec2(souris.x, souris.y - decalage), facteur)
 }
 
 /// Index de l'item sous le curseur, s'il y en a un.
@@ -76,10 +129,17 @@ pub fn ligne(colonne: Rect, n: usize, i: usize) -> Rect {
 /// cette seconde borne, cliquer sous la liste sélectionnerait un item qui n'est
 /// pas là.
 pub fn item_sous_curseur(colonne: Rect, n: usize, souris: Vec2) -> Option<usize> {
+    item_sous_curseur_echelle(colonne, n, souris, 1.0)
+}
+
+/// Comme [`item_sous_curseur`], à l'échelle de [`hauteur_ligne_echelle`] —
+/// **doit** rester d'accord avec [`ligne_echelle`] au même facteur : c'est la
+/// propriété qui fait qu'on clique sur ce qu'on voit.
+pub fn item_sous_curseur_echelle(colonne: Rect, n: usize, souris: Vec2, facteur: f32) -> Option<usize> {
     if n == 0 || !colonne.contains(souris) {
         return None;
     }
-    let h = hauteur_ligne(colonne, n);
+    let h = hauteur_ligne_echelle(colonne, n, facteur);
     let i = ((souris.y - colonne.y) / h).floor();
     if i < 0.0 {
         return None;
@@ -194,7 +254,15 @@ pub const COTE_REPLI: f32 = 22.0;
 /// Sa position ne dépend **pas** de l'état de repli : le bouton ne bouge pas
 /// quand on replie, sinon il faudrait aller le rechercher pour rouvrir.
 pub fn bouton_repli(ecran: Vec2) -> Rect {
-    Rect::new(MARGE, ecran.y - MARGE - COTE_REPLI, COTE_REPLI, COTE_REPLI)
+    bouton_repli_echelle(ecran, 1.0)
+}
+
+/// Comme [`bouton_repli`], avec un facteur d'échelle explicite — pour un
+/// bouton plus grand sans toucher au bouton des **autres** colonnes qui
+/// partagent ce module (la vitrine de composants), qui n'a pas grossi.
+pub fn bouton_repli_echelle(ecran: Vec2, facteur: f32) -> Rect {
+    let cote = COTE_REPLI * facteur;
+    Rect::new(MARGE, ecran.y - MARGE - cote, cote, cote)
 }
 
 /// **Ce que la colonne mange à la souris**, selon qu'elle est repliée ou non.
@@ -202,11 +270,23 @@ pub fn bouton_repli(ecran: Vec2) -> Rect {
 /// Repliée, seul le bouton reste actif — le reste de la bande rend la main à la
 /// caméra, faute de quoi replier la liste ne libérerait pas la vue et n'aurait
 /// aucun intérêt.
-pub fn zone_active(ecran: Vec2, repliee: bool, haut: f32) -> Rect {
+///
+/// Toujours appelée avec une part de largeur et un facteur de bouton
+/// explicites (voir [`colonne_depuis_echelle`]/[`bouton_repli_echelle`]) :
+/// **doit** rester d'accord avec ce qui est réellement dessiné, sinon la
+/// caméra continue de tourner sous une colonne (ou un bouton) agrandi que la
+/// souris croit pourtant avoir pris.
+pub fn zone_active_echelle_bouton(
+    ecran: Vec2,
+    repliee: bool,
+    haut: f32,
+    part_largeur: f32,
+    facteur_bouton: f32,
+) -> Rect {
     if repliee {
-        bouton_repli(ecran)
+        bouton_repli_echelle(ecran, facteur_bouton)
     } else {
-        colonne_depuis(ecran, haut)
+        colonne_depuis_echelle(ecran, haut, part_largeur)
     }
 }
 
@@ -220,8 +300,27 @@ pub fn colonne_items(ecran: Vec2) -> Rect {
 
 /// Idem, sous un bandeau de hauteur `haut`.
 pub fn colonne_items_depuis(ecran: Vec2, haut: f32) -> Rect {
-    let c = colonne_depuis(ecran, haut);
-    Rect::new(c.x, c.y, c.w, (c.h - COTE_REPLI - MARGE).max(0.0))
+    colonne_items_depuis_echelle(ecran, haut, PART_LARGEUR)
+}
+
+/// Comme [`colonne_items_depuis`], avec une part de largeur d'écran
+/// explicite — voir [`colonne_depuis_echelle`].
+pub fn colonne_items_depuis_echelle(ecran: Vec2, haut: f32, part_largeur: f32) -> Rect {
+    colonne_items_depuis_echelle_bouton(ecran, haut, part_largeur, 1.0)
+}
+
+/// Comme [`colonne_items_depuis_echelle`], avec en plus un facteur d'échelle
+/// pour le bouton de repli — **doit** rester d'accord avec celui réellement
+/// dessiné, sinon la dernière ligne passe sous un bouton agrandi.
+pub fn colonne_items_depuis_echelle_bouton(
+    ecran: Vec2,
+    haut: f32,
+    part_largeur: f32,
+    facteur_bouton: f32,
+) -> Rect {
+    let c = colonne_depuis_echelle(ecran, haut, part_largeur);
+    let espace_bouton = COTE_REPLI * facteur_bouton;
+    Rect::new(c.x, c.y, c.w, (c.h - espace_bouton - MARGE).max(0.0))
 }
 
 /// Le curseur est-il **sur la colonne** ? La caméra doit l'ignorer alors, sinon
@@ -334,6 +433,43 @@ mod tests {
                 l / 10.0
             );
         }
+    }
+
+    // **Une part de largeur explicite élargit vraiment la colonne**, et
+    // `colonne_depuis` (sans argument) reste au plafond de 10 % — sinon la
+    // colonne du sélecteur aurait élargi celle de la vitrine de composants
+    // avec elle.
+    #[test]
+    fn colonne_depuis_echelle_elargit_sans_toucher_au_plafond_par_defaut() {
+        let e = vec2(1280.0, 700.0);
+        let large = colonne_depuis_echelle(e, MARGE, 0.18);
+        let standard = colonne_depuis(e, MARGE);
+        assert!(large.w > standard.w, "large={} standard={}", large.w, standard.w);
+        assert!((standard.w - (colonne(e).w)).abs() < 1e-3, "colonne() a dérivé de son plafond de 10 %");
+    }
+
+    // `zone_active_echelle_bouton` **doit** manger la même largeur que la
+    // colonne réellement dessinée : sinon la caméra continuerait de tourner
+    // sous la bande élargie, dans la zone entre l'ancien et le nouveau bord
+    // droit.
+    #[test]
+    fn zone_active_echelle_couvre_toute_la_colonne_elargie() {
+        let e = vec2(1280.0, 700.0);
+        let part = 0.18;
+        let zone = zone_active_echelle_bouton(e, false, MARGE, part, 1.0);
+        let col = colonne_depuis_echelle(e, MARGE, part);
+        assert!((zone.w - col.w).abs() < 1e-3, "zone={} colonne={}", zone.w, col.w);
+    }
+
+    // Même propriété, côté **bouton de repli** : sa zone active doit couvrir
+    // le bouton réellement dessiné, agrandi ou non — sinon la partie
+    // agrandie du bouton laisserait passer un clic à la caméra.
+    #[test]
+    fn zone_active_echelle_couvre_le_bouton_agrandi() {
+        let e = vec2(1280.0, 700.0);
+        let zone = zone_active_echelle_bouton(e, true, MARGE, PART_LARGEUR, 2.0);
+        let bouton = bouton_repli_echelle(e, 2.0);
+        assert_eq!(zone, bouton);
     }
 
     // Toute ligne reste **dans** la colonne : une ligne plus large déborderait
@@ -479,6 +615,92 @@ mod tests {
         }
     }
 
+    // **Un facteur d'échelle agrandit vraiment la ligne**, et pas seulement en
+    // apparence : sur une colonne assez haute pour que le plancher/plafond ne
+    // morde pas, une ligne à facteur 2 doit faire le double d'une ligne à
+    // facteur 1. `hauteur_ligne` (facteur 1, implicite) et `hauteur_ligne_echelle`
+    // ne doivent jamais diverger : la première **délègue** à la seconde.
+    #[test]
+    fn le_facteur_dechelle_double_vraiment_la_ligne() {
+        let c = colonne(vec2(1280.0, 2000.0)); // haute : la colonne ne borne pas
+        let n = 4;
+        let simple = hauteur_ligne(c, n);
+        let double = hauteur_ligne_echelle(c, n, 2.0);
+        assert!((double - simple * 2.0).abs() < 1e-3, "simple={simple} double={double}");
+    }
+
+    // **Même propriété qu'au facteur 1** : on clique sur ce qu'on voit. Testée
+    // séparément parce que `ligne_echelle` et `item_sous_curseur_echelle` sont
+    // deux calculs distincts qui doivent parler du même écran — exactement le
+    // genre de défaut que `le_clic_defile_retombe_sur_la_ligne_vue` garde déjà
+    // pour la version défilante.
+    #[test]
+    fn le_clic_a_lechelle_retombe_sur_la_ligne_visee() {
+        let c = colonne(ECRAN);
+        for facteur in [1.0_f32, 2.0, 3.0] {
+            for n in [1usize, 3, 12] {
+                for i in 0..n {
+                    let l = ligne_echelle(c, n, i, facteur);
+                    let centre = vec2(l.x + l.w * 0.5, l.y + l.h * 0.5);
+                    assert_eq!(
+                        item_sous_curseur_echelle(c, n, centre, facteur),
+                        Some(i),
+                        "facteur={facteur} n={n} i={i}"
+                    );
+                }
+            }
+        }
+    }
+
+    // **Une liste trop courte pour remplir la colonne colle à son bas** :
+    // la dernière ligne finit au bord bas de la colonne, pas quelque part au
+    // milieu avec du vide en dessous.
+    #[test]
+    fn la_liste_ancree_en_bas_colle_au_bord_bas() {
+        let c = colonne(vec2(1280.0, 2000.0)); // haute : la liste ne la remplit pas
+        let n = 4;
+        let derniere = ligne_echelle_bas(c, n, n - 1, 1.0);
+        assert!(
+            (derniere.y + derniere.h + 1.0 - (c.y + c.h)).abs() < 1.0,
+            "la dernière ligne finit à {}, la colonne à {}",
+            derniere.y + derniere.h,
+            c.y + c.h
+        );
+        // Et la première ligne ne commence pas au sommet de la colonne : le
+        // vide doit être au-dessus, pas en dessous.
+        let premiere = ligne_echelle_bas(c, n, 0, 1.0);
+        assert!(premiere.y > c.y + 1.0, "la liste ne colle pas au bas : {} ~ {}", premiere.y, c.y);
+    }
+
+    // **Une liste qui remplit (ou dépasse) la colonne se comporte comme
+    // avant** : rien à décaler, l'ancrage en bas ne doit pas la faire sortir
+    // par le haut.
+    #[test]
+    fn la_liste_ancree_en_bas_ne_bouge_pas_si_elle_remplit_la_colonne() {
+        let c = colonne(ECRAN);
+        let n = 60; // assez pour que LIGNE_MIN morde et remplisse la colonne
+        let premiere_normale = ligne(c, n, 0);
+        let premiere_ancree = ligne_echelle_bas(c, n, 0, 1.0);
+        assert!((premiere_normale.y - premiere_ancree.y).abs() < 1e-3);
+    }
+
+    // **On clique sur ce qu'on voit**, ancrage en bas compris — même
+    // propriété que `le_clic_a_lechelle_retombe_sur_la_ligne_visee`, mais
+    // pour `ligne_echelle_bas`/`item_sous_curseur_echelle_bas`.
+    #[test]
+    fn le_clic_ancre_en_bas_retombe_sur_la_ligne_visee() {
+        let c = colonne(vec2(1280.0, 2000.0));
+        let n = 4;
+        for i in 0..n {
+            let l = ligne_echelle_bas(c, n, i, 1.0);
+            let centre = vec2(l.x + l.w * 0.5, l.y + l.h * 0.5);
+            assert_eq!(item_sous_curseur_echelle_bas(c, n, centre, 1.0), Some(i), "i={i}");
+        }
+        // Et un clic dans le vide laissé au-dessus de la liste ne désigne rien.
+        let vide = vec2(c.x + 5.0, c.y + 5.0);
+        assert_eq!(item_sous_curseur_echelle_bas(c, n, vide, 1.0), None, "clic dans le vide au-dessus");
+    }
+
     // Hors colonne, et **sous la dernière ligne**, rien n'est désigné. Le
     // second cas est le piège : la colonne descend jusqu'en bas de l'écran, donc
     // un clic dans son vide appartient bien au rectangle sans appartenir à
@@ -543,12 +765,18 @@ mod tests {
     fn repliee_la_colonne_ne_mange_plus_que_son_bouton() {
         let e = ECRAN;
         let dans_la_bande = vec2(colonne(e).x + 5.0, colonne(e).y + 30.0);
-        assert!(zone_active(e, false, MARGE).contains(dans_la_bande), "déployée, la colonne prend le clic");
-        assert!(!zone_active(e, true, MARGE).contains(dans_la_bande), "repliée, elle devrait le rendre");
+        assert!(
+            zone_active_echelle_bouton(e, false, MARGE, PART_LARGEUR, 1.0).contains(dans_la_bande),
+            "déployée, la colonne prend le clic"
+        );
+        assert!(
+            !zone_active_echelle_bouton(e, true, MARGE, PART_LARGEUR, 1.0).contains(dans_la_bande),
+            "repliée, elle devrait le rendre"
+        );
         // Le bouton, lui, reste pris dans les deux états.
         let sur_bouton = bouton_repli(e).center();
-        assert!(zone_active(e, false, MARGE).contains(sur_bouton));
-        assert!(zone_active(e, true, MARGE).contains(sur_bouton));
+        assert!(zone_active_echelle_bouton(e, false, MARGE, PART_LARGEUR, 1.0).contains(sur_bouton));
+        assert!(zone_active_echelle_bouton(e, true, MARGE, PART_LARGEUR, 1.0).contains(sur_bouton));
     }
 
     // Les items ne descendent **pas sous le bouton** : la dernière ligne serait
@@ -567,6 +795,23 @@ mod tests {
         // Et il reste de la place pour lister : un rectangle vide serait un bug
         // que le test précédent laisserait passer.
         assert!(items.h > ECRAN.y * 0.5, "la zone d'items est trop courte : {}", items.h);
+    }
+
+    // Même propriété, avec un bouton **agrandi** : sans le facteur transmis
+    // à `colonne_items_depuis_echelle_bouton`, la zone d'items réserverait
+    // toujours la place de l'ancien (petit) bouton, et la dernière ligne
+    // passerait sous la partie agrandie.
+    #[test]
+    fn les_items_ne_passent_pas_sous_un_bouton_agrandi() {
+        let e = ECRAN;
+        let items = colonne_items_depuis_echelle_bouton(e, MARGE, PART_LARGEUR, 2.0);
+        let bouton = bouton_repli_echelle(e, 2.0);
+        assert!(
+            items.y + items.h <= bouton.y + 1e-3,
+            "les items descendent à {} et le bouton (agrandi) commence à {}",
+            items.y + items.h,
+            bouton.y
+        );
     }
 
     #[test]

@@ -21,6 +21,7 @@ mod pieces;
 mod port;
 mod symetrie;
 mod unites;
+pub mod vol;
 
 pub use assemblage::{Assembleur, Budget, EtatStation, Piece, Station};
 pub use enveloppe::{distance_point_rectangle, distance_point_segment, Enveloppe, Noyau};

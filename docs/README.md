@@ -32,6 +32,7 @@ de conception dédiée — leur bucket list *est* la trace de ce qui existe).
 
 | Fichier | Sujet |
 |---|---|
+| [`concept_jeu.md`](conception/concept_jeu.md) | **2026-08-14.** Chapeau au-dessus de tous les autres : la vision RTS (isolement des ressources, plateau de tuiles, recherche/tech tree, habitats spatiaux, superstructures et leur dépendance à l'énergie, classes de vaisseaux). Sert de référence commune à [`trajectoires.md`](conception/trajectoires.md) et au futur chantier économie (D-INT-2). |
 | [`stations.md`](conception/stations.md) | Stations spatiales procédurales : modèle de ports, composants, budget/unités/symétrie, raccordement ports↔assemblage, classes de stations (ISS → O'Neill), **+ Partie E : refonte de `composant.rs` et composite `SousEnsemble`**. ⚠️ §E.4 est **historique** : l'éditeur qu'elle anticipait existe. |
 | [`assembleur.md`](conception/assembleur.md) | Suite de la Partie E.4 ci-dessus : éditeur d'assemblage interactif façon VAB. Audit du parc de tests existant (§1–§4), ce qui manque au code actuel (§5, Lot 1), ce qu'il faut à l'éditeur (§6–§8, Lot 2), l'enveloppe rectangle des plaques (§9, « le boudin »), **l'écran en détail + le découpage des lots 3 à 6 (§10)**, et **les trois modes d'édition Move/Rotate/Resize (§11, lots 7 à 9)**. |
 | [`planetes.md`](conception/planetes.md) | Planètes telluriques : pipeline de rendu (grille cube-sphere, érosion, hydrologie, biomes) + modèle de variantes/catalogue. Fusion de 2 anciens docs. |
@@ -41,6 +42,7 @@ de conception dédiée — leur bucket list *est* la trace de ce qui existe).
 | [`pixel_art.md`](conception/pixel_art.md) | **Rendu pixel art** : sous-échantillonnage + quantification CIELAB vers une palette de 64 couleurs. Reprend le guide d'origine **corrigé** de ce qui ne compilait pas ici, dit ce qui est quantifié et ce qui reste net, et liste les dettes D-PIX-1 à 4. |
 | [`starmap.md`](conception/starmap.md) | Vue galactique (voisinage stellaire, projection oblique rétro, zoom vers la Skymap). |
 | [`systemes_multiples.md`](conception/systemes_multiples.md) | Systèmes à plusieurs étoiles (binaires/trinaires/quadruples), modèle orbital analytique unifié (étoiles + planètes + lunes « sur rails »). |
+| [`trajectoires.md`](conception/trajectoires.md) | **2026-08-14 → 16.** Faire voyager un vaisseau assemblé (ou une station) d'un astre à un autre, au lieu d'un rail fixe. Onze décisions de gameplay tranchées (§4), conséquences techniques (§5), découpage en lots (§6). **Lots A, B, C et D faits** (statistiques de vol, prédiction de position, arc de trajectoire, vaisseau mobile, UI de lancement, aperçu du trajet + caméra qui suit) — un Starship posté vole pour de vrai en jeu, avec un aperçu ambre pendant l'armement. Journal : [`suivi/trajectoires.md`](../suivi/trajectoires.md). Lot E (arrivée) reste à faire. |
 
 ## suivi/
 
@@ -56,6 +58,7 @@ de conception dédiée — leur bucket list *est* la trace de ce qui existe).
 | [`revues.md`](suivi/revues.md) | **Nouveau (2026-08-10).** Les passes de relecture systématique et ce qu'elles ont appris — dont le fait que « 86 avertissements clippy sans défaut réel » était faux, et qu'un vrai défaut y dormait. |
 | [`geantes_gazeuses.md`](suivi/geantes_gazeuses.md) | Catalogue des géantes gazeuses (archétypes, features, presets) et bilan de la V2. |
 | [`bucketlist_globale.md`](suivi/bucketlist_globale.md) | Bucket list du projet dans son ensemble : ce qui est fait, ce qui reste, section par section. |
+| [`trajectoires.md`](suivi/trajectoires.md) | **2026-08-15 → 16.** Journal du chantier `conception/trajectoires.md`, lot par lot. **Lots A, B, C et D** clos — un Starship posté vole pour de vrai depuis un bouton LANCER en jeu, avec aperçu ambre du trajet pendant l'armement et caméra qui suit le vaisseau parti ; l'impasse d'object-safety qui a fait remplacer `Systeme::remplacer` par `Astre::tenter_lancer` ; la découverte sur le mode N-corps (retiré) ; la liste consolidée des chiffres provisoires. |
 
 ## reference/
 
@@ -90,3 +93,5 @@ Pour situer un chantier dans le temps sans relire les journaux.
 | 2026-08-08 | P.1 atmosphères, P.2 mesuré (rien à optimiser) | [`suivi/planetes.md`](suivi/planetes.md), [`suivi/ceintures.md`](suivi/ceintures.md) |
 | 2026-08-09 | Scission `atmo`/`atmo_densite`, plancher stellaire à 8 px, **assembleur lots 4–5**, miroir et module d'arc | [`suivi/etoiles.md`](suivi/etoiles.md), [`suivi/assembleur.md`](suivi/assembleur.md), [`suivi/stations.md`](suivi/stations.md) |
 | 2026-08-10 | Tore de Stanford retravaillé, grappe de cuves, hangar hexagonal, charge du mât polaire — puis **cette réorganisation** | [`suivi/stations.md`](suivi/stations.md) |
+| 2026-08-14 | Icônes du sélecteur (I.6, I.6 bis/ter) — anneau à l'horizontale, bouton ×2, colonne « liquide » | [`suivi/interface.md`](suivi/interface.md) |
+| 2026-08-14 → 16 | Vision RTS globale, puis ouverture du chantier trajectoires : onze décisions de gameplay, **Lots A/B/C/D** (statistiques de vol, vaisseau mobile, UI de lancement, aperçu du trajet + caméra qui suit — un Starship vole pour de vrai en jeu), mode N-corps retiré | [`conception/concept_jeu.md`](conception/concept_jeu.md), [`conception/trajectoires.md`](conception/trajectoires.md), [`suivi/trajectoires.md`](suivi/trajectoires.md) |

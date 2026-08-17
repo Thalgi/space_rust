@@ -54,6 +54,19 @@ pub struct Fiche {
     /// sa propre orbite de quelques centièmes d'UA.
     pub distance_ua: f32,
     pub habitabilite: Habitabilite,
+    /// Un vaisseau **pilotable**, prêt à s'élancer — voir
+    /// [`crate::astre::Astre::pilotable`]. Décide si le panneau montre le
+    /// bouton LANCER (`docs/conception/trajectoires.md` §4 décision 8).
+    pub pilotable: bool,
+}
+
+/// Rectangle du bouton LANCER (ou du statut « choisir une destination »),
+/// ancré en **bas** du panneau `r` — pas sous la dernière ligne de texte,
+/// dont le nombre varie selon la catégorie et l'habitabilité.
+pub fn bouton_lancer(r: Rect) -> Rect {
+    const MARGE: f32 = 10.0;
+    const HAUTEUR: f32 = 28.0;
+    Rect::new(r.x + MARGE, r.y + r.h - HAUTEUR - MARGE, r.w - 2.0 * MARGE, HAUTEUR)
 }
 
 /// Rectangle du panneau, **en bas à droite**.
@@ -75,6 +88,47 @@ pub fn rectangle(ecran: Vec2) -> Rect {
     let h = (ecran.y * 0.42).clamp(150.0, 320.0);
     let bas = ecran.y - super::bandeau::BAS_OUTILS - MARGE;
     Rect::new(ecran.x - l - MARGE, (bas - h).max(MARGE), l, h)
+}
+
+/// Durée de l'ouverture/fermeture du panneau, en secondes. Un quart de
+/// seconde : assez pour se voir glisser, pas assez pour se sentir attendre.
+const DUREE_ANIM: f32 = 0.25;
+
+/// Fait avancer la progression d'ouverture (`actuel`, 0 = fermé à 1 =
+/// ouvert) vers sa cible (`ouvert`), à vitesse constante **dans le temps**
+/// (`dt`), et la borne à `[0, 1]`.
+///
+/// Vitesse constante plutôt que fonction du temps écoulé : sans état à
+/// tenir d'une frame à l'autre (juste `actuel`), la fermeture repart
+/// toujours de la progression réellement atteinte, y compris si on rouvre
+/// avant la fin d'une fermeture — pas de saut.
+pub fn avancer_ouverture(actuel: f32, ouvert: bool, dt: f32) -> f32 {
+    let cible = if ouvert { 1.0 } else { 0.0 };
+    let pas = (dt / DUREE_ANIM).max(0.0);
+    if actuel < cible {
+        (actuel + pas).min(cible)
+    } else {
+        (actuel - pas).max(cible)
+    }
+}
+
+/// Ease-in-out (« smoothstep ») : accélère puis ralentit, plutôt qu'une
+/// vitesse constante qui donnerait un départ et un arrêt secs — c'est ce qui
+/// fait qu'un glissement se sent « gracieux » plutôt que mécanique.
+pub fn ease_in_out(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Décalage horizontal du panneau pour une progression `t` (0 = totalement
+/// hors écran à droite, 1 = à sa place de repos `rect_repos`).
+///
+/// Glisse depuis le bord droit de l'écran : le panneau part **entièrement**
+/// hors champ (pas juste masqué au ras de son propre bord), pour que l'œil
+/// le voie vraiment entrer plutôt que se matérialiser sur place.
+pub fn decalage_horizontal(rect_repos: Rect, ecran_largeur: f32, t: f32) -> f32 {
+    let hors_ecran = ecran_largeur - rect_repos.x;
+    hors_ecran * (1.0 - ease_in_out(t))
 }
 
 /// Nom lisible d'une catégorie.
@@ -102,6 +156,7 @@ pub fn fiche(sys: &Systeme, idx: usize) -> Option<Fiche> {
         rayon: sys.rayon_de(idx).unwrap_or(0.0),
         distance_ua,
         habitabilite: habitabilite(sys, categorie, distance_ua),
+        pilotable: sys.pilotable_de(idx),
     })
 }
 
@@ -298,6 +353,47 @@ mod tests {
         assert!(fiche(&sys, 9999).is_none());
     }
 
+    // La fiche lit vraiment `pilotable` à travers `Systeme` — pas figé à
+    // `false` : sans quoi le bouton LANCER ne s'afficherait jamais, quel que
+    // soit l'astre.
+    #[test]
+    fn la_fiche_reporte_le_pilotable_de_lastre() {
+        let mut sys = avec_soleil();
+        let ordinaire = poser(&mut sys, Categorie::Engin, 1.0, None, None);
+        assert!(!fiche(&sys, ordinaire).unwrap().pilotable);
+
+        struct VaisseauEssai {
+            base: CorpsBase,
+        }
+        impl Astre for VaisseauEssai {
+            fn categorie(&self) -> Categorie {
+                Categorie::Engin
+            }
+            fn corps(&self) -> &CorpsBase {
+                &self.base
+            }
+            fn corps_mut(&mut self) -> &mut CorpsBase {
+                &mut self.base
+            }
+            fn draw(&mut self, _cam: &CameraInfo) {}
+            fn update(&mut self, _dt: f32) {}
+            fn pilotable(&self) -> bool {
+                true
+            }
+        }
+        let idx = sys.ajouter(Box::new(VaisseauEssai { base: CorpsBase::new(Vec3::ZERO, 1.0, 1.0) }));
+        assert!(fiche(&sys, idx).unwrap().pilotable);
+    }
+
+    // Le bouton LANCER tient dans le panneau, pas au-delà de son bord bas.
+    #[test]
+    fn le_bouton_lancer_tient_dans_le_panneau() {
+        let r = Rect::new(700.0, 100.0, 250.0, 300.0);
+        let b = bouton_lancer(r);
+        assert!(b.x >= r.x && b.x + b.w <= r.x + r.w, "déborde horizontalement");
+        assert!(b.y >= r.y && b.y + b.h <= r.y + r.h, "déborde du panneau");
+    }
+
     // Le panneau tient **dans l'écran**, ne recouvre ni la colonne de gauche,
     // ni le bandeau de ressources, ni la bande d'outils du bas. Chacun de ces
     // recouvrements ferait se disputer les clics — et c'est précisément ce qui
@@ -336,5 +432,61 @@ mod tests {
         for h in [Habitabilite::Habitable, Habitabilite::TropChaud, Habitabilite::TropFroid, Habitabilite::SansObjet] {
             assert!(!h.libelle().is_empty(), "{h:?}");
         }
+    }
+
+    // **La progression avance vers sa cible, à vitesse constante dans le
+    // temps** — et jamais au-delà : sans le `.min`/`.max`, une frame lente
+    // (un `dt` généreux) la ferait dépasser 1 ou passer sous 0.
+    #[test]
+    fn la_progression_avance_vers_sa_cible_sans_la_depasser() {
+        let mi_course = avancer_ouverture(0.0, true, DUREE_ANIM * 0.5);
+        assert!((mi_course - 0.5).abs() < 1e-4, "à mi-durée : {mi_course}");
+        assert_eq!(avancer_ouverture(0.9, true, DUREE_ANIM * 10.0), 1.0, "ne doit pas dépasser 1");
+        assert_eq!(avancer_ouverture(0.1, false, DUREE_ANIM * 10.0), 0.0, "ne doit pas dépasser 0");
+    }
+
+    // **Rouvrir avant la fin d'une fermeture ne fait pas sauter la
+    // progression** : elle repart de là où elle en est réellement, pas de 0
+    // ni de 1 — sinon le panneau sauterait visiblement au lieu de glisser.
+    #[test]
+    fn changer_de_cible_en_cours_de_route_ne_fait_pas_sauter() {
+        let mi_fermeture = avancer_ouverture(1.0, false, DUREE_ANIM * 0.5); // ~0.5, en fermeture
+        let reouvert = avancer_ouverture(mi_fermeture, true, 0.0); // dt nul : lecture seule
+        assert!((reouvert - mi_fermeture).abs() < 1e-6, "un dt nul ne doit rien bouger");
+    }
+
+    // **`ease_in_out` est symétrique et va bien de 0 à 1** — sans quoi le
+    // panneau n'atteindrait jamais tout à fait sa place de repos, ou
+    // partirait déjà décalé.
+    #[test]
+    fn ease_in_out_va_de_0_a_1_et_reste_symetrique() {
+        assert_eq!(ease_in_out(0.0), 0.0);
+        assert_eq!(ease_in_out(1.0), 1.0);
+        assert!((ease_in_out(0.5) - 0.5).abs() < 1e-4, "devrait être symétrique au milieu");
+        // Hors bornes : ramené dans [0, 1], jamais une extrapolation folle.
+        assert_eq!(ease_in_out(-1.0), 0.0);
+        assert_eq!(ease_in_out(2.0), 1.0);
+    }
+
+    // **`ease_in_out` accélère puis ralentit** : la progression au premier
+    // quart doit être plus lente qu'une ligne droite, celle du dernier quart
+    // aussi — sinon ce ne serait qu'une identité déguisée, pas un
+    // assouplissement.
+    #[test]
+    fn ease_in_out_accelere_puis_ralentit() {
+        assert!(ease_in_out(0.25) < 0.25, "devrait démarrer plus lentement qu'une ligne droite");
+        assert!(ease_in_out(0.75) > 0.75, "devrait ralentir avant l'arrivée");
+    }
+
+    // **Le panneau part entièrement hors écran à t=0**, et à sa place de
+    // repos exacte à t=1 — les deux bornes qui font tout le glissement.
+    #[test]
+    fn le_decalage_va_de_hors_ecran_a_la_place_de_repos() {
+        let repos = Rect::new(700.0, 100.0, 250.0, 300.0);
+        let largeur_ecran = 1000.0_f32;
+        let d0 = decalage_horizontal(repos, largeur_ecran, 0.0);
+        assert!((repos.x + d0 - largeur_ecran).abs() < 1e-3, "à t=0, le panneau doit commencer hors écran");
+        let d1 = decalage_horizontal(repos, largeur_ecran, 1.0);
+        assert_eq!(d1, 0.0, "à t=1, le panneau doit être à sa place de repos");
     }
 }

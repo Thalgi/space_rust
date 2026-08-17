@@ -20,6 +20,7 @@ mod stellaire;
 mod soleil;
 mod sprites;
 mod systeme;
+mod transit;
 mod ui;
 mod vaisseau;
 
@@ -31,10 +32,15 @@ use ecran::{
 use macroquad::prelude::*;
 
 fn window_conf() -> Conf {
+    // Fenêtre agrandie sous `CAPTURE` : une icône de sélecteur fait 20 à
+    // 50 px à l'écran à la taille normale — illisible pour juger un contour
+    // d'un pixel ou un débordement d'anneau au bord d'une case. Sans effet
+    // sur le jeu normal.
+    let capture = std::env::var("CAPTURE").is_ok();
     Conf {
         window_title: "Systeme solaire".to_owned(),
-        window_width: 1000,
-        window_height: 700,
+        window_width: if capture { 2000 } else { 1000 },
+        window_height: if capture { 1400 } else { 700 },
         ..Default::default()
     }
 }
@@ -83,6 +89,16 @@ async fn main() {
     }
     let mut echantillons: Vec<f32> = Vec::new();
     let debut = get_time();
+
+    // Capture d'écran ponctuelle (facultative) : `CAPTURE=<chemin.png>` ouvre
+    // la Skymap (système solaire) et exporte l'écran après quelques frames de
+    // chauffe (icônes du sélecteur comprises), pour une vérification visuelle
+    // sans main sur la souris.
+    let capture = std::env::var("CAPTURE").ok();
+    if capture.is_some() {
+        etat = Etat::Skymap(Box::new(Skymap::new()));
+    }
+    let mut frames_capture = 0u32;
 
     loop {
         match &mut etat {
@@ -187,6 +203,17 @@ async fn main() {
             }
             if ecoule > 10.0 {
                 imprimer_profil(profil.as_deref().unwrap_or(""), &mut echantillons);
+                return;
+            }
+        }
+
+        if let Some(chemin) = &capture {
+            frames_capture += 1;
+            // Quelques frames de chauffe : le premier rendu d'une icône
+            // (cache vide) prend une frame de plus que les suivantes.
+            if frames_capture == 300 {
+                get_screen_data().export_png(chemin);
+                println!("CAPTURE {chemin}");
                 return;
             }
         }

@@ -1,3 +1,4 @@
+use crate::astre::CameraInfo;
 use crate::camera::Camera;
 use crate::fond::Fond;
 use crate::genese::{
@@ -10,7 +11,7 @@ use super::{bandeau, fiche, liste, selecteur};
 use crate::menu::{ActionMenu, Menu};
 use crate::rendu::{Rendu, RenduStandard};
 use crate::starmap::Destination;
-use crate::systeme::{ModePhysique, Systeme};
+use crate::systeme::Systeme;
 use crate::{planete, soleil};
 use macroquad::prelude::*;
 
@@ -55,6 +56,13 @@ pub struct Skymap {
     tresorerie: bandeau::Tresorerie,
     /// Cible de rendu du portrait d'astre (panneau de droite).
     vignette: super::vignette::Vignette,
+    /// Icônes du sélecteur (colonne de gauche), une par astre déjà rencontré.
+    ///
+    /// **Doit être vidé chaque fois que `sys` est remplacé** (nouveau preset,
+    /// graine aléatoire, hot-reload) : les icônes sont indexées par position
+    /// dans `sys.astres`, et cet index ne désigne plus le même corps une fois
+    /// le système reconstruit.
+    icones: super::icone::IconesAstres,
     /// Astre dont le panneau de droite est ouvert.
     ///
     /// Distinct du **focus camera** : la camera suit un astre, le panneau en
@@ -63,6 +71,21 @@ pub struct Skymap {
     /// tard de consulter une planete sans deplacer la vue
     /// (`conception/interface.md` 4.1).
     fiche_ouverte: Option<usize>,
+    /// Progression du glissement du panneau, 0 (fermé) à 1 (ouvert) — voir
+    /// `fiche::avancer_ouverture`.
+    fiche_anim: f32,
+    /// Dernier astre affiché par le panneau — distinct de `fiche_ouverte`,
+    /// qui redevient `None` dès la fermeture demandée : le panneau doit
+    /// continuer à montrer **son** contenu pendant qu'il glisse encore hors
+    /// champ, plutôt que de disparaître d'un coup pendant que l'animation
+    /// tourne encore.
+    fiche_affiche: Option<usize>,
+    /// Vaisseau **armé** pour un lancement (bouton LANCER cliqué) — le
+    /// prochain clic sur un autre astre devient sa destination
+    /// (`docs/conception/trajectoires.md` §4 décision 8). `None` en usage
+    /// normal ; jamais persistant au-delà d'un clic (succès, échec silencieux
+    /// sur une destination non prédictible, ou annulation par reclic/vide).
+    lancement: Option<usize>,
 }
 
 impl Skymap {
@@ -91,7 +114,11 @@ impl Skymap {
             selecteur_replie: false,
             tresorerie: bandeau::Tresorerie::demo(),
             vignette: super::vignette::Vignette::new(),
+            icones: super::icone::IconesAstres::new(),
             fiche_ouverte: None,
+            fiche_anim: 0.0,
+            fiche_affiche: None,
+            lancement: None,
         }
     }
 
@@ -144,15 +171,19 @@ impl Skymap {
                 let (s, i) = construire_systeme(self.seed);
                 self.sys = s;
                 self.info = i;
+                self.icones = super::icone::IconesAstres::new();
                 self.appliquer_vue();
             }
             if is_key_pressed(KeyCode::R) {
                 // Hot-reload : recompile les shaders et reconstruit à l'identique.
+                // Les icônes aussi : c'est justement pour voir un shader retouché
+                // que R existe, une icône restée en cache le manquerait.
                 planete::vider_cache_materials();
                 soleil::vider_cache_materials();
                 let (s, i) = self.reconstruire();
                 self.sys = s;
                 self.info = i;
+                self.icones = super::icone::IconesAstres::new();
                 self.fond.recharger_material();
             }
             if is_key_pressed(KeyCode::Space) {
@@ -200,8 +231,22 @@ impl Skymap {
         let haut = bandeau::hauteur_occupee(ecran);
         let sur_ui = sur_menu
             || bandeau::rectangle(ecran).contains(m)
-            || liste::zone_active(ecran, self.selecteur_replie, haut).contains(m)
-            || (self.fiche_ouverte.is_some() && fiche::rectangle(ecran).contains(m));
+            || liste::zone_active_echelle_bouton(
+                ecran, self.selecteur_replie, haut, selecteur::PART_LARGEUR_COLONNE, selecteur::ECHELLE_BOUTON_REPLI,
+            ).contains(m)
+            || (self.fiche_anim > 0.0 && fiche::rectangle(ecran).contains(m));
+
+        // Bouton LANCER de la fiche affichée, si c'est un vaisseau pilotable
+        // pas déjà armé — inclus dans `sur_ui` ci-dessus (couvert par le
+        // rectangle du panneau tout entier), donc pas de zone à y ajouter :
+        // juste le clic à traiter.
+        if clic && self.lancement.is_none() {
+            if let Some(idx) = self.fiche_affiche {
+                if self.sys.pilotable_de(idx) && fiche::bouton_lancer(fiche::rectangle(ecran)).contains(m) {
+                    self.lancement = Some(idx);
+                }
+            }
+        }
 
         // Le **calcul** de la colonne se fait ici, tôt, parce que la caméra en
         // dépend. Le **dessin**, lui, attend la passe interface : dessiné
@@ -210,17 +255,15 @@ impl Skymap {
         // (`suivi/stations.md` F.7).
         let choix = self.selecteur_input(ecran, haut, m, clic);
         if let Some(idx) = choix {
-            self.cam.set_focus(idx);
-            self.fiche_ouverte = Some(idx);
+            if let Some(idx_vaisseau) = self.lancement {
+                self.tenter_lancement(idx_vaisseau, idx);
+            } else {
+                self.cam.set_focus(idx);
+                self.fiche_ouverte = Some(idx);
+            }
         }
 
         self.cam.input_orbite(sur_ui);
-        // Synchronise le mode physique avec le bouton (idempotent : hand-off au seul changement).
-        self.sys.regler_mode(if self.menu.phys_rails {
-            ModePhysique::SurRails
-        } else {
-            ModePhysique::NCorps
-        });
         let dt_sim = if self.pause { 0.0 } else { dt * self.vitesse };
         // L'animation des astres suit le temps RÉEL : le multiplicateur existe
         // pour faire tourner les orbites, pas pour accélérer les éruptions, qui
@@ -232,11 +275,22 @@ impl Skymap {
         let target = self.cam.cible(&self.sys);
         let (cam_info, cam3d) = self.cam.construire(target, aspect);
         if clic && !sur_ui {
-            // Cliquer un astre l'ouvre ; cliquer le vide referme. Pas de croix
-            // ni d'Echap : Echap sert deja a quitter l'ecran, et lui confier un
-            // second role selon qu'un panneau est ouvert serait un etat cache
-            // (`conception/interface.md` 4.1).
-            self.fiche_ouverte = self.cam.pick(&self.sys, &cam_info, aspect);
+            let pick = self.cam.pick(&self.sys, &cam_info, aspect);
+            if let Some(idx_vaisseau) = self.lancement {
+                // Armé : ce clic choisit la destination (astre touché) ou
+                // annule (clic dans le vide) — jamais une ouverture de fiche
+                // normale tant que l'armement n'est pas résolu.
+                match pick {
+                    Some(idx) => self.tenter_lancement(idx_vaisseau, idx),
+                    None => self.lancement = None,
+                }
+            } else {
+                // Cliquer un astre l'ouvre ; cliquer le vide referme. Pas de croix
+                // ni d'Echap : Echap sert deja a quitter l'ecran, et lui confier un
+                // second role selon qu'un panneau est ouvert serait un etat cache
+                // (`conception/interface.md` 4.1).
+                self.fiche_ouverte = pick;
+            }
         }
         // L'astre a pu disparaitre sous le panneau : changement de systeme par
         // G, R ou un preset. Un index perime designerait un autre corps.
@@ -244,6 +298,16 @@ impl Skymap {
             self.fiche_ouverte = None;
         }
 
+        // Anime le glissement du panneau vers sa cible (ouvert/fermé), et
+        // retient le dernier astre affiché : `fiche_ouverte` redevient
+        // `None` dès la fermeture demandée, mais le panneau doit continuer à
+        // montrer son contenu pendant qu'il glisse encore hors champ.
+        self.fiche_anim = fiche::avancer_ouverture(self.fiche_anim, self.fiche_ouverte.is_some(), dt);
+        if self.fiche_ouverte.is_some() {
+            self.fiche_affiche = self.fiche_ouverte;
+        }
+
+        let previsualisation = self.previsualisation_trajectoire(&cam_info, aspect, m);
         self.rendu
             .rendre(
                 cam3d,
@@ -256,6 +320,7 @@ impl Skymap {
                     lunes: self.menu.orbites_lunes,
                     zone: self.menu.zone,
                     focus: self.cam.focus(),
+                    previsualisation,
                 },
             );
 
@@ -283,10 +348,72 @@ impl Skymap {
         let ecran_ui = vec2(screen_width(), screen_height());
         self.bandeau_dessiner(ecran_ui);
         self.selecteur_dessiner(ecran_ui, bandeau::hauteur_occupee(ecran_ui), m);
-        self.fiche_dessiner(ecran_ui);
+        self.fiche_dessiner(ecran_ui, m);
         self.menu.dessiner(m, &self.presets, self.cam.focus_actif(),
             bandeau::strip_outils(ecran_ui), bandeau::hauteur_occupee(ecran_ui));
         false
+    }
+
+    /// Tente de lancer `idx_vaisseau` (armé, `self.lancement == Some(idx_vaisseau)`)
+    /// vers `idx_destination`. Désarme dans tous les cas — succès, échec
+    /// silencieux (destination sans position prédictible, voir
+    /// `Systeme::calculer_trajectoire`), ou reclic sur le vaisseau lui-même
+    /// (annulation) : jamais d'état « armé » qui survit à ce clic.
+    ///
+    /// Un lancement réussi bascule aussi la caméra sur le vaisseau (Lot D,
+    /// `docs/conception/trajectoires.md` §6) : `Camera::cible` relit
+    /// `Systeme::position(idx)` chaque frame, quel que soit ce qui la fait
+    /// bouger (orbite ou trajet) — suivre un mobile ne demande donc **rien**
+    /// de plus qu'un focus, la mécanique existait déjà pour les astres en
+    /// orbite.
+    fn tenter_lancement(&mut self, idx_vaisseau: usize, idx_destination: usize) {
+        self.lancement = None;
+        if idx_destination == idx_vaisseau {
+            return; // reclic sur le vaisseau armé : annule, ne vise pas lui-même
+        }
+        if let Some(traj) = self.trajectoire_vers(idx_vaisseau, idx_destination) {
+            if self.sys.lancer(idx_vaisseau, traj) {
+                self.cam.set_focus(idx_vaisseau);
+            }
+        }
+    }
+
+    /// Le trajet qu'un lancement **immédiat** de `idx_vaisseau` vers
+    /// `idx_destination` produirait — factorisé entre le lancement réel
+    /// ([`Self::tenter_lancement`]) et son aperçu
+    /// ([`Self::previsualisation_trajectoire`]) : les deux doivent tomber
+    /// sur exactement la même formule, sans quoi l'arc affiché avant le
+    /// clic mentirait sur celui qu'on obtient après.
+    fn trajectoire_vers(
+        &self,
+        idx_vaisseau: usize,
+        idx_destination: usize,
+    ) -> Option<crate::systeme::trajectoire::Trajectoire> {
+        let depart = self.sys.position(idx_vaisseau);
+        let t_depart = self.sys.temps();
+        let vitesse = self.sys.stats_vol_de(idx_vaisseau).map_or(0.0, |s| s.vitesse);
+        self.sys.calculer_trajectoire(idx_destination, depart, t_depart, vitesse, Vec3::Y)
+    }
+
+    /// Aperçu du trajet en cours d'armement (Lot D,
+    /// `docs/conception/trajectoires.md` §6) : l'arc qu'un lancement
+    /// immédiat vers l'astre **survolé** par la souris produirait. `None`
+    /// hors armement, souris dans le vide, ou survol du vaisseau armé
+    /// lui-même (viser soi-même n'a pas de sens).
+    ///
+    /// Le survol passe par `Systeme::pick` directement (`&self`, sans effet
+    /// de bord) plutôt que par `Camera::pick`, qui **déplace le focus** —
+    /// un simple survol ne doit ni recentrer la caméra ni ouvrir de fiche,
+    /// juste dessiner un arc d'essai.
+    fn previsualisation_trajectoire(&self, cam_info: &CameraInfo, aspect: f32, m: Vec2) -> Option<Vec<Vec3>> {
+        let idx_vaisseau = self.lancement?;
+        let ecran = vec2(screen_width(), screen_height());
+        let dir = crate::camera::rayon_ecran(m, ecran, cam_info, aspect);
+        let idx_destination = self.sys.pick(cam_info.pos, dir)?;
+        if idx_destination == idx_vaisseau {
+            return None;
+        }
+        Some(self.trajectoire_vers(idx_vaisseau, idx_destination)?.polyligne(48))
     }
 
     /// Entrees et clic de la colonne. Rend l'astre choisi, s'il y en a un.
@@ -294,16 +421,18 @@ impl Skymap {
     /// Ne dessine rien : appele **tot** dans la frame, avant le rendu 3D, parce
     /// que la camera a besoin de savoir si la souris est prise.
     fn selecteur_input(&mut self, ecran: Vec2, haut: f32, souris: Vec2, clic: bool) -> Option<usize> {
-        if clic && liste::bouton_repli(ecran).contains(souris) {
+        if clic && liste::bouton_repli_echelle(ecran, selecteur::ECHELLE_BOUTON_REPLI).contains(souris) {
             self.selecteur_replie = !self.selecteur_replie;
             return None; // le clic a servi au bouton, pas a une selection
         }
         if self.selecteur_replie || !clic {
             return None;
         }
-        let col = liste::colonne_items_depuis(ecran, haut);
+        let col = liste::colonne_items_depuis_echelle_bouton(
+            ecran, haut, selecteur::PART_LARGEUR_COLONNE, selecteur::ECHELLE_BOUTON_REPLI,
+        );
         let entrees = selecteur::entrees(&self.sys);
-        let i = liste::item_sous_curseur(col, entrees.len(), souris)?;
+        let i = liste::item_sous_curseur_echelle_bas(col, entrees.len(), souris, selecteur::ECHELLE_LIGNE)?;
         // Le barycentre est une ligne d'arbre, pas un astre : rien a cadrer.
         entrees[i].idx
     }
@@ -336,10 +465,20 @@ impl Skymap {
     }
 
     /// Panneau de droite. **Passe interface uniquement**, comme la colonne.
-    fn fiche_dessiner(&mut self, ecran: Vec2) {
-        let Some(idx) = self.fiche_ouverte else { return };
+    ///
+    /// Glisse depuis le bord droit (`fiche_anim`, `fiche::decalage_horizontal`)
+    /// plutôt que d'apparaître/disparaître d'un coup, et montre `fiche_affiche`
+    /// — pas `fiche_ouverte`, qui redevient `None` dès la fermeture demandée —
+    /// pour garder son contenu pendant qu'il glisse encore hors champ.
+    fn fiche_dessiner(&mut self, ecran: Vec2, m: Vec2) {
+        if self.fiche_anim <= 0.0 {
+            return; // completement ferme : rien a dessiner
+        }
+        let Some(idx) = self.fiche_affiche else { return };
         let Some(f) = fiche::fiche(&self.sys, idx) else { return };
-        let r = fiche::rectangle(ecran);
+        let repos = fiche::rectangle(ecran);
+        let decalage = fiche::decalage_horizontal(repos, ecran.x, self.fiche_anim);
+        let r = Rect::new(repos.x + decalage, repos.y, repos.w, repos.h);
         crate::ui::minitel_panel(r, &f.designation);
 
         // Vignette : l'astre **reellement rendu**, dans sa propre cible de
@@ -373,27 +512,83 @@ impl Skymap {
         if f.habitabilite != Habitabilite::SansObjet {
             ligne(f.habitabilite.libelle().to_string(), teinte_hab, &mut y);
         }
+
+        // Bouton LANCER (ou statut d'armement) : un vaisseau pilotable
+        // seulement (décision 8, `docs/conception/trajectoires.md` §4). Le
+        // clic lui-même est traité dans `frame()`, pas ici — passe dessin
+        // uniquement, comme le reste de cette fonction.
+        if f.pilotable {
+            let bouton = fiche::bouton_lancer(r);
+            if self.lancement == Some(idx) {
+                crate::ui::minitel_ligne(bouton, "CHOISIR UNE DESTINATION...", m);
+            } else {
+                crate::ui::minitel_ligne(bouton, "LANCER", m);
+            }
+        }
     }
 
-    /// Dessin de la colonne. **Passe interface uniquement.**
-    fn selecteur_dessiner(&self, ecran: Vec2, haut: f32, souris: Vec2) {
+    /// Fond et bordure de la colonne, en style « liquide » — sur demande, un
+    /// premier essai à ajuster : un dégradé vertical approché par bandes
+    /// (plus opaque et légèrement teinté cyan en haut, comme un reflet de
+    /// surface, s'effaçant vers le bas) plutôt qu'un aplat, un ménisque net
+    /// tout en haut, et une bordure **grise à 30 % d'opacité** — le cyan
+    /// plein d'origine est retiré, pas juste éclairci.
+    fn colonne_fond_liquide(col: Rect) {
+        const BANDES: i32 = 16;
+        for i in 0..BANDES {
+            let t = i as f32 / (BANDES - 1) as f32; // 0 en haut, 1 en bas
+            let h_bande = col.h / BANDES as f32;
+            let alpha = 0.85 - 0.25 * t;
+            let cyan = 0.06 * (1.0 - t);
+            draw_rectangle(
+                col.x,
+                col.y + h_bande * i as f32,
+                col.w,
+                h_bande + 1.0,
+                Color::new(0.02, 0.03 + cyan, 0.12 + cyan, alpha),
+            );
+        }
+        // Ménisque : un filet clair au tout premier bord, comme la surface
+        // d'un liquide qui accroche la lumière.
+        draw_rectangle(col.x, col.y, col.w, 2.0, Color::new(0.5, 0.85, 0.9, 0.4));
+        draw_rectangle_lines(col.x, col.y, col.w, col.h, 1.0, Color::new(0.5, 0.5, 0.5, 0.3));
+    }
+
+    /// Dessin de la colonne. **Passe interface uniquement** (au sens de
+    /// `conception/assembleur.md` §10.9 : ce qui se décide reste dans
+    /// `selecteur`/`liste`) — sauf l'icône elle-même, qui a besoin d'un rendu
+    /// 3D différé et donc de `&mut self` pour son cache (`self.icones`).
+    fn selecteur_dessiner(&mut self, ecran: Vec2, haut: f32, souris: Vec2) {
         let cyan = Color::new(0.0, 0.85, 0.85, 1.0);
-        let bouton = liste::bouton_repli(ecran);
+        let bouton = liste::bouton_repli_echelle(ecran, selecteur::ECHELLE_BOUTON_REPLI);
 
         if !self.selecteur_replie {
-            let col = liste::colonne_items_depuis(ecran, haut);
+            let col = liste::colonne_items_depuis_echelle_bouton(
+                ecran, haut, selecteur::PART_LARGEUR_COLONNE, selecteur::ECHELLE_BOUTON_REPLI,
+            );
             let entrees = selecteur::entrees(&self.sys);
             let n = entrees.len();
-            draw_rectangle(col.x, col.y, col.w, col.h, Color::new(0.02, 0.03, 0.12, 0.85));
-            draw_rectangle_lines(col.x, col.y, col.w, col.h, 1.0, Color::new(0.0, 0.5, 0.5, 0.9));
 
-            let h = liste::hauteur_ligne(col, n);
-            let taille = (h * 0.62).clamp(crate::police::TAILLE_MIN, 18.0);
+            // --- Complète le cache d'icônes, avant tout dessin 2D ---
+            //
+            // Une seule icône manquante rendue par frame (`completer` le
+            // garantit) : une bascule de caméra 3D vers une cible hors écran,
+            // suivie d'une **seconde** dans la même frame, ressort blanche —
+            // mesuré à l'écran, voir `ecran/icone.rs`. La boucle de dessin qui
+            // suit n'en déclenche plus aucune, elle ne fait que lire
+            // (`IconesAstres::prete`) : le peuplement se termine sur quelques
+            // frames plutôt que de tenter tout d'un coup.
+            self.icones.completer(&mut self.sys, entrees.iter().filter_map(|e| e.idx));
+
+            Self::colonne_fond_liquide(col);
+
+            let h = liste::hauteur_ligne_echelle(col, n, selecteur::ECHELLE_LIGNE);
+            let taille = (h * 0.34).clamp(crate::police::TAILLE_MIN, 18.0);
             let focus = self.cam.focus();
             for (i, e) in entrees.iter().enumerate() {
-                let r = liste::ligne(col, n, i);
-                if r.y + r.h > col.y + col.h {
-                    break; // deborde : on n'ecrit pas sous la colonne
+                let r = liste::ligne_echelle_bas(col, n, i, selecteur::ECHELLE_LIGNE);
+                if r.y < col.y {
+                    continue; // deborde par le haut : rien a ecrire au-dessus de la colonne
                 }
                 if r.contains(souris) {
                     draw_rectangle(r.x, r.y, r.w, r.h, Color::new(0.0, 0.45, 0.45, 0.35));
@@ -402,35 +597,60 @@ impl Skymap {
                     draw_rectangle_lines(r.x, r.y, r.w, r.h, 1.0, cyan);
                 }
 
-                // --- Trait d'arbre, a gauche de la pastille ---
+                // Une planète se decale d'une tabulation sous son etoile —
+                // comme dans un fichier texte, pour que la colonne se lise
+                // d'un coup d'œil comme une liste **sous** le Soleil.
+                let indent = if e.profondeur > 0 { selecteur::INDENT_TAB } else { 0.0 };
+                let rayon_plein = selecteur::rayon_icone(h, Some(true));
+                let cx = r.x + 4.0 + indent + rayon_plein;
+                let mi = r.y + r.h * 0.5;
+
+                // --- Trait d'arbre, a droite de l'icone ---
                 //
                 // Une racine n'en a pas ; un fils recoit un coude, et le
                 // **dernier** un coude ferme, faute de quoi le trait vertical
                 // descendrait sous la derniere planete vers rien.
-                let retrait = 4.0 + e.profondeur as f32 * 11.0;
-                let rayon = (h * 0.26).clamp(3.0, 7.0);
-                let cx = r.x + retrait + rayon;
-                let mi = r.y + r.h * 0.5;
+                let arbre_x = cx + rayon_plein + 5.0;
                 if e.profondeur > 0 {
                     let trait_col = Color::new(0.0, 0.55, 0.55, 0.85);
-                    let bx = r.x + 4.0 + rayon;
                     let bas = if e.branche == selecteur::Branche::Dernier { mi } else { r.y + r.h };
-                    draw_line(bx, r.y, bx, bas, 1.0, trait_col);
-                    draw_line(bx, mi, cx - rayon - 1.0, mi, 1.0, trait_col);
+                    draw_line(arbre_x, r.y, arbre_x, bas, 1.0, trait_col);
+                    draw_line(cx + rayon_plein + 1.0, mi, arbre_x, mi, 1.0, trait_col);
                 }
 
-                let teinte = match e.idx {
-                    Some(i) => selecteur::teinte_astre(&self.sys, i, e.categorie),
-                    // Le barycentre n'est pas un corps : un petit reperage creux.
-                    None => Color::new(0.35, 0.45, 0.5, 1.0),
-                };
-                if e.idx.is_some() {
-                    draw_circle(cx, mi, rayon, teinte);
-                } else {
-                    draw_circle_lines(cx, mi, rayon * 0.8, 1.0, teinte);
+                match e.idx {
+                    Some(i) => {
+                        let rayon = selecteur::rayon_icone(h, self.sys.gazeuse_de(i));
+                        match self.icones.prete(i) {
+                            Some(tex) => {
+                                // Une cible d'astre à anneau est plus grande
+                                // qu'une cible standard (`icone::cote_gazeuse`)
+                                // — l'échelle de dessin doit suivre, sinon ce
+                                // surplus de pixels (l'anneau) se retrouve
+                                // compressé dans la même case au lieu d'en
+                                // déborder. Voir `ecran/icone.rs`.
+                                let echelle = super::icone::echelle_dessin(tex.width());
+                                let cote = rayon * 2.0 * echelle;
+                                draw_texture_ex(
+                                    tex,
+                                    cx - cote * 0.5,
+                                    mi - cote * 0.5,
+                                    WHITE,
+                                    DrawTextureParams { dest_size: Some(vec2(cote, cote)), ..Default::default() },
+                                )
+                            }
+                            // Pas encore rendue (peuplement en cours, une par
+                            // frame) ou astre sans rayon : repli sur l'ancienne
+                            // pastille de couleur plutôt que rien.
+                            None => draw_circle(cx, mi, rayon, selecteur::teinte_astre(&self.sys, i, e.categorie)),
+                        }
+                    }
+                    // Le barycentre n'est pas un corps, donc pas d'icone : un
+                    // petit reperage creux, comme avant.
+                    None => draw_circle_lines(cx, mi, rayon_plein * 0.8, 1.0, Color::new(0.35, 0.45, 0.5, 1.0)),
                 }
 
-                let tx = cx + rayon + 4.0;
+                let tx = arbre_x + 5.0;
                 let dispo = r.x + r.w - tx - 3.0;
                 let t = liste::tronquer(&e.libelle, dispo, taille as u16);
                 crate::police::texte(&t, tx, r.y + r.h * 0.5 + taille * 0.32, taille, WHITE);
@@ -444,7 +664,10 @@ impl Skymap {
             if survol { Color::new(0.0, 0.45, 0.45, 0.9) } else { Color::new(0.02, 0.03, 0.12, 0.9) });
         draw_rectangle_lines(bouton.x, bouton.y, bouton.w, bouton.h, 1.0, cyan);
         let signe = if self.selecteur_replie { ">>" } else { "<<" };
-        crate::police::texte(signe, bouton.x + 4.0, bouton.y + bouton.h * 0.72, 18.0, cyan);
+        // Le signe grandit avec le bouton, sinon il flotte, minuscule, dans
+        // un bouton deux fois plus grand que lui.
+        let taille_signe = 18.0 * selecteur::ECHELLE_BOUTON_REPLI;
+        crate::police::texte(signe, bouton.x + bouton.w * 0.18, bouton.y + bouton.h * 0.72, taille_signe, cyan);
     }
 
     /// Applique la vue par défaut du système : focalise l'étoile hôte (systèmes type S,
@@ -566,6 +789,11 @@ impl Skymap {
                 std::process::exit(0);
             }
         }
+        // Toutes les branches sauf Retour/Quitter remplacent `self.sys` — vider
+        // sans conditionner à laquelle est la garantie qui ne peut pas rater la
+        // prochaine ajoutée. Inoffensif là où `sys` n'a pas bougé : les icônes
+        // se re-rendent, identiques, à la prochaine ligne dessinée.
+        self.icones = super::icone::IconesAstres::new();
     }
 }
 

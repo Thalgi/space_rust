@@ -833,7 +833,14 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
     // --- Première passe de variantes nommées (presets de paramètres) ---
     // Monde type Terre : océans + continents verts + déserts (zones sèches) + calottes
     // polaires + montagnes + rivières + nuages -> toute la diversité de notre planète.
-    push("Terre", tellurique(vec3(0.5, 0.42, 0.3), vec3(0.4, 0.34, 0.26), vec3(0.07, 0.32, 0.7), 0.62, 1.0, 0.5, 0.8, bleu).avec_vegetation(vec3(0.16, 0.5, 0.18), 0.82).avec_relief(0.65).avec_rivieres(0.55).avec_dunes(0.3).avec_nuages(0.42, blanc));
+    //
+    // `eau = 0,71`, la vraie fraction d'océan terrestre (62 % sous-estimait
+    // la vraie planète). Ce n'était **pas** la cause d'une Terre trop verte
+    // dans l'icône du sélecteur — remonter `eau` jusqu'à 0,78 n'y changeait
+    // quasiment rien, la vraie cause étant ailleurs (le terrain se génère de
+    // façon asynchrone, et l'icône pouvait figer un repli capté avant la fin
+    // du job — voir `Astre::rendu_pret`, corrigé dans `ecran/icone.rs`).
+    push("Terre", tellurique(vec3(0.5, 0.42, 0.3), vec3(0.4, 0.34, 0.26), vec3(0.07, 0.32, 0.7), 0.71, 1.0, 0.5, 0.8, bleu).avec_vegetation(vec3(0.16, 0.5, 0.18), 0.82).avec_relief(0.65).avec_rivieres(0.55).avec_dunes(0.3).avec_nuages(0.42, blanc));
 
     // Mélange de styles (un seul preset cumule plusieurs axes) : lune type Pandora.
     push("Pandora", tellurique(vec3(0.2, 0.4, 0.3), vec3(0.22, 0.3, 0.26), vec3(0.06, 0.34, 0.55), 0.7, 0.0, 0.42, 0.9, bleu).avec_vegetation(vec3(0.14, 0.52, 0.32), 0.95).avec_relief(0.85).avec_rivieres(0.4).avec_biolum(0.9).avec_nuages(0.4, blanc));
@@ -1093,11 +1100,11 @@ mod tests_noms_presets {
             }
             // Exceptions légitimes : les corps qui ne passent **pas** par
             // `ajouter_planete` — l'étoile hôte, Pandora (construite en ligne)
-            // et l'ISS (un `EnginOrbital`, pas une planète). Chacune se
-            // reconnaît à un nom de liaison explicite, pour que la liste reste
-            // lisible plutôt que d'être une passoire.
+            // et les `EnginOrbital` (l'ISS, le Starship posté — pas des
+            // planètes). Chacune se reconnaît à un nom de liaison explicite,
+            // pour que la liste reste lisible plutôt que d'être une passoire.
             assert!(
-                l.contains("soleil") || l.contains("idx_pandora") || l.contains("idx_iss"),
+                l.contains("soleil") || l.contains("idx_pandora") || l.contains("idx_iss") || l.contains("idx_starship"),
                 "presets.rs:{} nomme une planète après coup : « {l} » — le nom                  doit entrer par `ajouter_planete(.., Some(\"…\"))`",
                 i + 1
             );

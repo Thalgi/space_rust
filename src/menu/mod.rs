@@ -28,8 +28,6 @@ pub struct Menu {
     pub orbites_etoiles: bool, // orbites des étoiles (systèmes multiples)
     pub orbites_lunes: bool,   // orbites des lunes, autour de leur planète
     pub zone: bool,
-    /// Mode physique des planètes : `true` = sur rails (analytique), `false` = N-corps.
-    pub phys_rails: bool,
 }
 
 impl Menu {
@@ -42,7 +40,6 @@ impl Menu {
             orbites_etoiles: true,
             orbites_lunes: false, // nombreuses : encombrantes par défaut
             zone: true,
-            phys_rails: true,
         }
     }
 
@@ -58,20 +55,17 @@ impl Menu {
 
     /// Largeur des bascules, dans l'ordre ou elles se suivent.
     ///
-    /// Les QUATRE premieres sont les calques de lecture (RING/PLANET,
-    /// RING/STAR, RING/MOONS, ZONE/HABITABLE) : des « doubles carres », un mot
-    /// par etage. La cinquieme, PHYS, reste une bascule a une ligne — elle ne
-    /// dit pas un calque mais un mode de simulation.
-    const LARGEURS: [f32; 5] = [76.0, 76.0, 76.0, 88.0, 150.0];
-    /// Hauteur d'une bascule a une ligne (PHYS, MENU, RETOUR).
+    /// Les quatre sont les calques de lecture (RING/PLANET, RING/STAR,
+    /// RING/MOONS, ZONE/HABITABLE) : des « doubles carres », un mot par
+    /// etage.
+    const LARGEURS: [f32; 4] = [76.0, 76.0, 76.0, 88.0];
+    /// Hauteur d'une bascule a une ligne (MENU, RETOUR).
     const HAUT_BTN: f32 = 26.0;
     /// Hauteur d'un double carre : deux etages plus le filet.
     ///
     /// La bande d'outils fait `bandeau::BAS_OUTILS` = 56 px ; 44 plus 4 de marge
     /// haute laissent 8 px sous le bouton, de quoi ne pas coller au bord.
     const HAUT_DOUBLE: f32 = 44.0;
-    /// Nombre de bascules a deux etages, en tete de bande.
-    pub(super) const N_CALQUES: usize = 4;
 
     /// Rectangle de la bascule `i` dans la bande d'outils.
     ///
@@ -84,21 +78,17 @@ impl Menu {
         let total: f32 = Self::LARGEURS.iter().sum::<f32>() + JEU * (Self::LARGEURS.len() - 1) as f32;
         let k = if total > bande.w && bande.w > 0.0 { bande.w / total } else { 1.0 };
         let x = bande.x + Self::LARGEURS.iter().take(i).map(|l| (l + JEU) * k).sum::<f32>();
-        // Les calques sont hauts, PHYS reste bas — et tous alignes sur le MEME
-        // bord superieur, sinon la bande a l'air de flotter.
-        let h = if i < Self::N_CALQUES { Self::HAUT_DOUBLE } else { Self::HAUT_BTN };
-        Rect::new(x, bande.y + 4.0, Self::LARGEURS[i] * k, h)
+        Rect::new(x, bande.y + 4.0, Self::LARGEURS[i] * k, Self::HAUT_DOUBLE)
     }
 
     /// Les bascules, pour les tests de mise en page.
     #[cfg(test)]
-    fn bascules(outils: Rect) -> [Rect; 5] {
+    fn bascules(outils: Rect) -> [Rect; 4] {
         [
             Self::btn(outils, 0),
             Self::btn(outils, 1),
             Self::btn(outils, 2),
             Self::btn(outils, 3),
-            Self::btn(outils, 4),
         ]
     }
 
@@ -150,12 +140,11 @@ impl Menu {
         outils: Rect,
         haut: f32,
     ) -> (bool, Option<ActionMenu>) {
-        let (bo, boe, bl, bz, bp, bn, re) = (
+        let (bo, boe, bl, bz, bn, re) = (
             Self::btn(outils, 0),
             Self::btn(outils, 1),
             Self::btn(outils, 2),
             Self::btn(outils, 3),
-            Self::btn(outils, 4),
             Self::bouton(outils),
             Self::retour(outils),
         );
@@ -170,8 +159,6 @@ impl Menu {
                 self.orbites_lunes = !self.orbites_lunes;
             } else if bz.contains(m) {
                 self.zone = !self.zone;
-            } else if bp.contains(m) {
-                self.phys_rails = !self.phys_rails;
             } else if bn.contains(m) {
                 self.ouvert = !self.ouvert;
             } else if focus && re.contains(m) {
@@ -188,7 +175,6 @@ impl Menu {
         let sur_ui = bo.contains(m)
             || boe.contains(m)
             || bz.contains(m)
-            || bp.contains(m)
             || bn.contains(m)
             || (focus && re.contains(m))
             || (self.ouvert && mr.contains(m));
@@ -273,7 +259,7 @@ mod tests_mise_en_page {
     fn les_calques_sont_a_peu_pres_carres() {
         for (l, h) in [(640.0_f32, 480.0_f32), (1000.0, 700.0), (1920.0, 1080.0)] {
             let b = Menu::bascules(strip(l, h));
-            for (i, r) in b.iter().take(Menu::N_CALQUES).enumerate() {
+            for (i, r) in b.iter().enumerate() {
                 let rapport = r.w / r.h;
                 assert!(
                     (0.7..=2.2).contains(&rapport),
@@ -282,14 +268,6 @@ mod tests_mise_en_page {
                     r.h
                 );
             }
-            // Et ils sont plus HAUTS que la bascule a une ligne qui les suit.
-            let phys = b[Menu::N_CALQUES];
-            assert!(
-                b[0].h > phys.h,
-                "un calque ({}) n'est pas plus haut que PHYS ({})",
-                b[0].h,
-                phys.h
-            );
             // Tous alignes sur le meme bord superieur.
             for (i, r) in b.iter().enumerate() {
                 assert!((r.y - b[0].y).abs() < 1e-3, "bascule {i} desalignee");

@@ -11,6 +11,7 @@ mod designation;
 mod enveloppes;
 mod fiche;
 mod fils;
+mod icone;
 pub(crate) mod liste;
 mod galerie;
 mod galerie_disques;

@@ -58,17 +58,17 @@ impl Entree {
 ///
 /// Quatre décisions :
 ///
-/// 1. **Ni lunes, ni ceintures.** Le preset solaire compte 16 lunes pour 9
-///    planètes : listées, elles noient la structure du système, qui est ce que
-///    cette colonne sert à lire. Les ceintures, elles, ne sont pas
-///    sélectionnables dans la vue (`Systeme::pick` les ignore).
+/// 1. **Ni lunes, ni ceintures, ni engins.** Le preset solaire compte 16
+///    lunes pour 9 planètes : listées, elles noient la structure du système,
+///    qui est ce que cette colonne sert à lire. Les ceintures, elles, ne sont
+///    pas sélectionnables dans la vue (`Systeme::pick` les ignore). Les
+///    engins (l'ISS) sont des objets du joueur, pas des astres : ce sélecteur
+///    est celui des **planètes**, pas un inventaire.
 /// 2. **La hiérarchie vient du foyer**, pas de la distance. Une planète de
 ///    type S se range sous son étoile hôte, une circumbinaire sous le
 ///    barycentre. C'est la seule chose qui rende lisible un système multiple.
 /// 3. **Le barycentre n'apparaît que s'il le faut** : à une seule étoile, tout
 ///    se range sous elle et une racine « BARYCENTRE » n'apprendrait rien.
-/// 4. **Les engins restent listés** (l'ISS sous la Terre) : ce sont les objets
-///    du joueur, pas du décor.
 pub fn entrees(sys: &Systeme) -> Vec<Entree> {
     let mut v: Vec<Entree> = Vec::new();
 
@@ -77,28 +77,31 @@ pub fn entrees(sys: &Systeme) -> Vec<Entree> {
         .collect();
     let multiple = etoiles.len() > 1;
 
-    // Corps qui orbitent directement une racine : une planète (jamais une lune,
-    // qui a un `parent`), plus les engins que le joueur a mis en orbite.
-    let orbite_directement = |i: usize| {
-        matches!(sys.categorie_de(i), Some(Categorie::Planete) | Some(Categorie::Engin))
-    };
+    // Corps qui orbitent directement une racine : une planète (jamais une
+    // lune, qui a un `parent`). Les engins n'y figurent pas — voir la
+    // décision 1 ci-dessus.
+    let orbite_directement = |i: usize| matches!(sys.categorie_de(i), Some(Categorie::Planete));
 
-    // Enfants d'une racine, classés par distance à l'astre central.
+    // Enfants d'une racine, classés par distance à l'astre central — sauf
+    // Pluton, toujours en dernier.
+    //
+    // Son orbite, très excentrique, la fait parfois passer plus près du
+    // Soleil que Neptune (ce que le jeu modélise avec la vraie excentricité,
+    // 0,249) : un tri à la pure distance la ferait alors sauter avant
+    // Neptune dans la colonne selon l'instant, plutôt que de rester à sa
+    // place conventionnelle en bout de liste.
     let enfants = |foyer_attendu: Option<usize>| -> Vec<usize> {
         let centre = foyer_attendu.map_or(Vec3::ZERO, |e| sys.position(e));
         let mut v: Vec<usize> = (0..sys.nb_astres())
             .filter(|i| orbite_directement(*i))
-            .filter(|i| {
-                // Un engin suit son porteur ; une planète suit son foyer.
-                let racine = match sys.categorie_de(*i) {
-                    Some(Categorie::Engin) => sys.parent_de(*i).and_then(|p| racine_de(sys, p, multiple)),
-                    _ => racine_de(sys, *i, multiple),
-                };
-                racine == foyer_attendu
-            })
+            .filter(|i| racine_de(sys, *i, multiple) == foyer_attendu)
             .collect();
         v.sort_by(|a, b| {
-            (sys.position(*a) - centre).length().total_cmp(&(sys.position(*b) - centre).length())
+            let pa = sys.designation(*a) == "Pluton";
+            let pb = sys.designation(*b) == "Pluton";
+            pa.cmp(&pb).then_with(|| {
+                (sys.position(*a) - centre).length().total_cmp(&(sys.position(*b) - centre).length())
+            })
         });
         v
     };
@@ -152,6 +155,58 @@ fn racine_de(sys: &Systeme, i: usize, multiple: bool) -> Option<usize> {
         _ if !multiple => (0..sys.nb_astres()).find(|k| sys.categorie_de(*k) == Some(Categorie::Etoile)),
         _ => None,
     }
+}
+
+/// Facteur d'échelle des lignes de la colonne, transmis à
+/// `liste::hauteur_ligne_echelle`/`ligne_echelle`/`item_sous_curseur_echelle`.
+/// Doublé (sur demande) pour laisser respirer l'icône rendue de chaque astre
+/// — une simple pastille de couleur n'en avait pas besoin.
+pub const ECHELLE_LIGNE: f32 = 2.0;
+
+/// Part de la largeur d'écran occupée par la colonne du sélecteur, transmise
+/// à `liste::colonne_items_depuis_echelle`/`colonne_depuis_echelle` — plus
+/// large que `liste::PART_LARGEUR` (10 %, le plafond des **autres**
+/// colonnes, dont la vitrine de composants, qui n'a pas grossi et n'a pas de
+/// raison de suivre).
+///
+/// À 10 %, les icônes doublées ([`ECHELLE_ICONE`]) et le trait d'arbre à
+/// droite de chacune ne laissaient quasiment plus de place au nom : mesuré à
+/// l'écran, « Soleil »/« Mercure »/« Saturne »/« Uranus »/« Neptune »/
+/// « Pluton » (les plus longs) rendaient tous « So… »/« Me… »/etc.
+pub const PART_LARGEUR_COLONNE: f32 = 0.18;
+
+/// Retrait horizontal d'une planète sous son étoile, en pixels — comme une
+/// tabulation dans un fichier texte : ce que la ligne montre (icône, arbre,
+/// nom) se décale d'un bloc plutôt que de rester à l'aplomb de la racine,
+/// pour que la colonne se lise d'un coup d'œil comme une liste **sous** le
+/// Soleil, pas une liste à plat.
+pub const INDENT_TAB: f32 = 20.0;
+
+/// Facteur d'échelle du bouton de repli (`«`/`»`) — doublé sur demande,
+/// transmis à `liste::bouton_repli_echelle`/`zone_active_echelle_bouton`/
+/// `colonne_items_depuis_echelle_bouton`. Propre au sélecteur : le bouton de
+/// la vitrine de composants, qui partage le même module, n'a pas grossi.
+pub const ECHELLE_BOUTON_REPLI: f32 = 2.0;
+
+/// Taille de l'icône d'une **tellurique**, en fraction de celle d'une
+/// **gazeuse** — la moitié : deux mondes de rayons physiques très différents
+/// (une Terre, une Jupiter) ne doivent pas peser pareil dans la colonne. Les
+/// autres catégories (étoile, lune, ceinture, engin) gardent la taille pleine.
+pub const RATIO_TELLURIQUE: f32 = 0.5;
+
+/// Facteur d'agrandissement de **toutes** les icônes, tellurique ou gazeuse
+/// — doublé sur demande, appliqué après le rapport tellurique/gazeuse pour
+/// ne pas y toucher : une tellurique reste la moitié d'une gazeuse, la paire
+/// grandit ensemble.
+pub const ECHELLE_ICONE: f32 = 2.0;
+
+/// Rayon de l'icône d'un astre, en pixels, pour une ligne de hauteur `h`.
+/// `gazeuse` vient de [`crate::systeme::Systeme::gazeuse_de`] ; `None` (ce qui
+/// n'a pas de type planétaire) garde la taille pleine, comme une gazeuse.
+pub fn rayon_icone(h: f32, gazeuse: Option<bool>) -> f32 {
+    let plein = (h * 0.42).clamp(6.0, 16.0);
+    let base = if gazeuse == Some(false) { plein * RATIO_TELLURIQUE } else { plein };
+    base * ECHELLE_ICONE
 }
 
 /// Couleur de repli, quand l'astre n'a pas de teinte propre.
@@ -304,6 +359,24 @@ mod tests {
         assert!(v[1..].iter().all(|e| e.profondeur == 1), "les planètes sont sous l'étoile");
     }
 
+    // **Pluton reste en dernier, même posé plus près du Soleil que Neptune**
+    // — son orbite réelle, très excentrique (0,249), le lui permet vraiment
+    // (voir le commentaire sur `enfants` dans `entrees`) : un tri à la pure
+    // distance le ferait alors sauter devant Neptune selon l'instant.
+    #[test]
+    fn pluton_reste_dernier_meme_plus_proche_que_neptune() {
+        let mut sys = Systeme::new();
+        let etoile = poser(&mut sys, Categorie::Etoile, 0.0, None);
+        let neptune = poser_complet(&mut sys, Categorie::Planete, 300.0, None, Some(Foyer::Barycentre), None);
+        // Pluton posé PLUS PRES que Neptune : la preuve que ce n'est pas la
+        // distance qui le place en dernier.
+        let pluton = poser_complet(&mut sys, Categorie::Planete, 100.0, None, Some(Foyer::Barycentre), None);
+        sys.nommer(neptune, "Neptune");
+        sys.nommer(pluton, "Pluton");
+        let v = entrees(&sys);
+        assert_eq!(idx(&v), vec![Some(etoile), Some(neptune), Some(pluton)], "Pluton devrait rester dernier");
+    }
+
     // **Les lunes ne se listent plus.** Le preset solaire en compte 16 pour 9
     // planètes : listées, elles noient la structure du système, qui est ce que
     // cette colonne sert à lire.
@@ -407,17 +480,15 @@ mod tests {
         assert_eq!(fils, vec![Branche::Fils, Branche::Fils, Branche::Dernier]);
     }
 
-    // Un engin (l'ISS) se range sous **l'étoile de sa planète**, et reste
-    // listé : ce sont les objets du joueur, pas du décor.
+    // Un engin (l'ISS) ne se liste pas : ce sélecteur est celui des
+    // **planètes**, pas un inventaire des objets du joueur.
     #[test]
-    fn un_engin_reste_liste_avec_les_planetes() {
+    fn un_engin_ne_se_liste_pas() {
         let (mut sys, [_, _, pres, ..]) = systeme_essai();
         let iss = poser(&mut sys, Categorie::Engin, 105.0, Some(pres));
         let v = entrees(&sys);
-        assert!(idx(&v).contains(&Some(iss)), "l'engin a disparu de la liste");
-        let e = v.iter().find(|e| e.idx == Some(iss)).unwrap();
-        assert_eq!(e.profondeur, 1);
-        assert_eq!(e.categorie, Categorie::Engin);
+        assert!(!idx(&v).contains(&Some(iss)), "l'engin est listé");
+        assert!(v.iter().all(|e| e.categorie != Categorie::Engin), "une entrée de catégorie engin s'est glissée");
     }
 
     // Chaque entrée porte un libellé **non vide et unique** : deux lignes
@@ -484,10 +555,10 @@ mod tests {
         }
     }
 
-    // Chaque catégorie a une teinte de repli, et **les trois qui se listent se
-    // distinguent**.
+    // Chaque catégorie a une teinte de repli, et elles se distinguent entre
+    // elles — `teinte_categorie` sert aussi hors de ce sélecteur (la fiche).
     #[test]
-    fn les_categories_listees_ont_des_teintes_distinctes() {
+    fn les_categories_ont_des_teintes_distinctes() {
         let couleurs = [
             teinte_categorie(Categorie::Etoile),
             teinte_categorie(Categorie::Planete),
@@ -499,5 +570,43 @@ mod tests {
                 assert!(ecart > 0.2, "deux teintes trop proches : {ecart}");
             }
         }
+    }
+
+    // **Une tellurique se dessine à la moitié d'une gazeuse**, exactement —
+    // c'est la demande, et le point de tout ce mécanisme : sans lui, une Terre
+    // et une Jupiter pèseraient pareil dans la colonne.
+    #[test]
+    fn une_tellurique_fait_la_moitie_dune_gazeuse() {
+        for h in [20.0_f32, 40.0, 64.0] {
+            let gazeuse = rayon_icone(h, Some(true));
+            let tellurique = rayon_icone(h, Some(false));
+            assert!((tellurique / gazeuse - RATIO_TELLURIQUE).abs() < 1e-4, "h={h} : {tellurique} vs {gazeuse}");
+        }
+    }
+
+    // **Ce qui n'a pas de type planétaire garde la taille pleine** — une
+    // étoile ou une lune ne doit pas rétrécir faute d'une réponse gazeuse/
+    // tellurique qu'elle ne peut pas donner.
+    #[test]
+    fn sans_type_planetaire_la_taille_reste_pleine() {
+        let h = 40.0_f32;
+        assert_eq!(rayon_icone(h, None), rayon_icone(h, Some(true)), "None devrait valoir la taille pleine");
+    }
+
+    // **Toutes les icônes doublent, tellurique et gazeuse ensemble** — sur
+    // demande explicite. Le rapport entre les deux (`RATIO_TELLURIQUE`) doit
+    // survivre au doublement, sinon une tellurique cesserait de peser la
+    // moitié d'une gazeuse une fois agrandie.
+    //
+    // ⚠️ Comparé à **2,0 en dur**, pas à `ECHELLE_ICONE` : se mesurer contre
+    // sa propre constante, c'est réciter la formule, et le test suivrait
+    // n'importe quelle valeur qu'on lui donnerait sans jamais rougir.
+    #[test]
+    fn toutes_les_icones_doublent_ensemble() {
+        assert_eq!(ECHELLE_ICONE, 2.0, "la demande était bien un doublement");
+        let h = 40.0_f32;
+        let plein_avant_echelle = (h * 0.42_f32).clamp(6.0, 16.0);
+        assert_eq!(rayon_icone(h, Some(true)), plein_avant_echelle * 2.0);
+        assert_eq!(rayon_icone(h, Some(false)), plein_avant_echelle * RATIO_TELLURIQUE * 2.0);
     }
 }

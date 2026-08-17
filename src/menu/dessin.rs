@@ -47,13 +47,6 @@ impl Menu {
         {
             bascule_double(Self::btn(outils, i), haut_txt, bas_txt, actif, m);
         }
-        // PHYS n'est pas un calque mais un mode de simulation : il garde la
-        // bascule à une ligne, et dit donc son état en toutes lettres.
-        minitel_ligne(
-            Self::btn(outils, Menu::N_CALQUES),
-            if self.phys_rails { "PHYS: SUR RAILS" } else { "PHYS: N-CORPS" },
-            m,
-        );
         minitel_ligne(Self::bouton(outils), "MENU", m);
         if focus {
             minitel_ligne(Self::retour(outils), "RETOUR", m);

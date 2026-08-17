@@ -246,15 +246,15 @@ impl Astre for Planete {
             self.base.position = foyer + o.position(t);
         }
     }
-    fn amorcer_ncorps(&mut self, foyer_pos: Vec3, foyer_vel: Vec3, t: f64) {
-        if let Some(o) = &self.orbite_kep {
-            let (p, v) = o.etat(t);
-            self.base.position = foyer_pos + p;
-            self.base.vitesse = foyer_vel + v;
-        }
-    }
     fn foyer(&self) -> Option<Foyer> {
         Some(self.foyer)
+    }
+    /// Même formule que `maj_rail`, en lecture seule : `None` pour une lune
+    /// (`orbite_kep` n'est posé que pour une planète « sur rails » — une
+    /// lune se déplace par `orbiter_autour`, pas encore couvert ici, voir
+    /// `docs/conception/trajectoires.md` §7).
+    fn position_future(&self, foyer_predit: Vec3, t: f64) -> Option<Vec3> {
+        self.orbite_kep.map(|o| foyer_predit + o.position(t))
     }
     /// Teinte d'ensemble, tirée de l'**apparence réelle** de la planète.
     ///
@@ -268,6 +268,15 @@ impl Astre for Planete {
         } else {
             1.0
         }
+    }
+    fn normale_anneau(&self) -> Option<Vec3> {
+        self.a_un_anneau().then_some(self.app.anneau_normal)
+    }
+    fn rendu_pret(&self) -> bool {
+        self.terrain_pret()
+    }
+    fn gazeuse(&self) -> Option<bool> {
+        Some(self.app.type_p == TypePlanete::Gazeuse)
     }
     fn teinte(&self) -> Option<Vec3> {
         let a = &self.app;

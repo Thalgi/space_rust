@@ -1,3 +1,5 @@
+use crate::systeme::trajectoire::Trajectoire;
+use crate::vaisseau::vol::StatsVol;
 use macroquad::prelude::*;
 
 /// Les différentes catégories d'astres du système.
@@ -124,6 +126,46 @@ pub trait Astre {
         1.0
     }
 
+    /// Normale du plan de l'anneau, si l'astre en a un — `None` sinon.
+    ///
+    /// Sert à cadrer l'icône du sélecteur sous un angle **choisi**, plutôt
+    /// que de subir l'azimut arbitraire dicté par la position orbitale du
+    /// moment : un anneau incliné (Saturne en a vraiment un, ~21° hors de
+    /// l'axe Y) peut, selon d'où on regarde, se présenter presque de face —
+    /// grand, dominant — ou presque de profil, selon un hasard qui n'a rien
+    /// à voir avec ce qui se lit le mieux en 48 px.
+    fn normale_anneau(&self) -> Option<Vec3> {
+        None
+    }
+
+    /// Le rendu de cet astre est-il **définitif** ? Vrai par défaut — la
+    /// plupart des astres n'ont rien à attendre.
+    ///
+    /// Faux tant qu'une tellurique n'a pas fini de générer son terrain (job
+    /// asynchrone, budget limité de générations simultanées — voir
+    /// `Planete::terrain_pret`) : avant ça, son relief/altitude retombe sur
+    /// un texture-espace réservé (le repli « corps non tellurique », voir
+    /// `materiau.rs`), pas la vraie géographie. Un rendu pris **pendant**
+    /// cette fenêtre — une icône du sélecteur, par exemple — figerait ce
+    /// repli pour de bon dans le cache, indépendamment de ce que dit
+    /// vraiment le preset (eau, végétation…) : l'astre en cause a l'air
+    /// définitivement mal généré alors qu'il ne l'était pas **encore**.
+    fn rendu_pret(&self) -> bool {
+        true
+    }
+
+    /// Cette planète est-elle une **géante gazeuse** ? `None` pour ce qui n'a
+    /// pas de type planétaire (étoiles, lunes, ceintures, engins) — l'appelant
+    /// retombe alors sur la taille d'icône par défaut.
+    ///
+    /// Sert au sélecteur, où une tellurique se dessine à la **moitié** de la
+    /// taille d'une gazeuse : deux mondes de rayons physiques très différents
+    /// (une Terre, une Jupiter) ne doivent pas se lire comme deux pastilles de
+    /// même poids visuel.
+    fn gazeuse(&self) -> Option<bool> {
+        None
+    }
+
     /// Rayon **réellement dessiné**, en unités monde, vu depuis `cam_pos`.
     ///
     /// Par défaut le rayon physique : ce que voit l'œil est ce qui existe. Seule
@@ -171,18 +213,73 @@ pub trait Astre {
     /// Place la lune autour de `centre` (position du parent) et avance son orbite.
     fn orbiter_autour(&mut self, _centre: Vec3, _dt: f32) {}
 
+    /// Avance un astre **en transit** (Lot B, `docs/conception/trajectoires.md`) :
+    /// place le corps sur sa trajectoire à l'instant absolu `t` (même
+    /// horloge que `Systeme::temps`). No-op par défaut — seul un vaisseau en
+    /// transit (`VaisseauEnTransit`, `transit.rs`) le fait vraiment.
+    ///
+    /// Ni `orbiter_autour` (incrémental, prend un `dt` et un centre de
+    /// parent) ni `maj_rail` (a besoin d'un foyer) ne conviennent : un
+    /// trajet n'a ni parent unique ni foyer, sa position est entièrement
+    /// déterminée par son départ, sa destination prédite, et l'heure.
+    fn suivre_trajectoire(&mut self, _t: f64) {}
+
     /// Mode « sur rails » : place le corps sur son orbite de Kepler analytique à
     /// l'instant `t`, autour de `foyer` (position de l'astre central). No-op pour
     /// les corps sans orbite de Kepler (étoiles, lunes, ceintures).
     fn maj_rail(&mut self, _foyer: Vec3, _t: f64) {}
 
-    /// Hand-off vers le mode N-corps : amorce position/vitesse depuis l'orbite
-    /// analytique (état vis-viva à `t`), pour partir d'un état cohérent. No-op par défaut.
-    fn amorcer_ncorps(&mut self, _foyer_pos: Vec3, _foyer_vel: Vec3, _t: f64) {}
-
     /// Foyer d'orbite si le corps est une planète « sur rails » (autour d'une étoile
     /// hôte ou du barycentre). `None` par défaut (étoiles, lunes, ceintures).
     fn foyer(&self) -> Option<Foyer> {
+        None
+    }
+
+    /// Position **prédite** au temps absolu `t` (même horloge que
+    /// `Systeme::temps`), **sans muter** l'astre — la même évaluation
+    /// analytique que [`Astre::maj_rail`], mais en lecture seule et
+    /// projetable dans le futur. `foyer_predit` est la position déjà
+    /// résolue du foyer au même instant `t` (l'appelant compose la
+    /// hiérarchie, comme pour `maj_rail`).
+    ///
+    /// `None` par défaut, pour tout ce qui n'a pas d'orbite de Kepler connue
+    /// à cette date : les lunes et les engins (`orbiter_autour`, pas encore
+    /// couverts — voir `docs/conception/trajectoires.md` §7), les étoiles,
+    /// les ceintures. Sert au chantier trajectoires (Lot B) à viser la
+    /// position future d'une cible sur rails.
+    #[allow(dead_code)] // Consommé par Systeme::position_future_de (Lot B), pas encore câblé au jeu.
+    fn position_future(&self, _foyer_predit: Vec3, _t: f64) -> Option<Vec3> {
+        None
+    }
+
+    /// Cet astre est-il un vaisseau **pilotable**, prêt à s'élancer vers une
+    /// destination ? Faux par défaut. Seul `EnginOrbital` (un engin posté,
+    /// `engin.rs`) peut répondre vrai — et seulement s'il a été construit
+    /// via `EnginOrbital::nouveau_pilotable`, pas `nouveau` : une station
+    /// postée (l'ISS, un habitat) ne l'est jamais
+    /// (`docs/conception/trajectoires.md` §4 décision 10).
+    fn pilotable(&self) -> bool {
+        false
+    }
+
+    /// Ses statistiques de vol (`vaisseau::vol`), si [`Self::pilotable`].
+    /// `None` sinon.
+    fn stats_vol(&self) -> Option<StatsVol> {
+        None
+    }
+
+    /// Tente de convertir cet astre en vaisseau en transit sur
+    /// `trajectoire`, s'il est [`Self::pilotable`]. `None` par défaut —
+    /// l'appelant ([`Systeme::lancer`](crate::systeme::Systeme::lancer))
+    /// garde alors l'astre d'origine intact.
+    ///
+    /// `&mut self`, pas `self` : rend le défaut trivialement object-safe
+    /// (pas de coercion `Box<Self> → Box<dyn Astre>` générique à faire
+    /// tenir). Seul `EnginOrbital` le redéfinit
+    /// (`docs/conception/trajectoires.md` §4 décision 8) — en vidant ses
+    /// champs avec `std::mem::take` plutôt qu'en consommant `self` : l'astre
+    /// d'origine, vidé, est de toute façon jeté par l'appelant juste après.
+    fn tenter_lancer(&mut self, _trajectoire: Trajectoire) -> Option<Box<dyn Astre>> {
         None
     }
 }

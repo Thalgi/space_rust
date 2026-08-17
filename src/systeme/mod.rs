@@ -1,23 +1,11 @@
-mod gravite;
 mod rendu;
+pub mod trajectoire;
 
 use crate::astre::{Astre, CameraInfo, Categorie, Foyer};
 use crate::stellaire::ArbreStellaire;
 use macroquad::prelude::*;
 
 pub const G: f32 = 1.0; // constante gravitationnelle
-const SOUS_PAS: usize = 4; // sous-pas de physique par frame (stabilité)
-
-/// Mode de propagation des **planètes**.
-/// - `SurRails` (défaut) : orbites de Kepler analytiques — stable, déterministe.
-/// - `NCorps` : intégration gravitationnelle — dynamique émergente « bac à sable ».
-///
-/// Les étoiles et les lunes restent toujours analytiques, quel que soit le mode.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ModePhysique {
-    SurRails,
-    NCorps,
-}
 
 /// Le système : un ensemble d'astres soumis à la gravité mutuelle.
 pub struct Systeme {
@@ -27,8 +15,6 @@ pub struct Systeme {
     lumiere_manuelle: Option<(Vec3, Vec3)>,
     /// Temps de simulation cumulé (secondes) : sert à l'évaluation analytique `f(t)`.
     temps: f64,
-    /// Mode de propagation des planètes (voir `ModePhysique`).
-    mode: ModePhysique,
     /// Arbre stellaire hiérarchique (systèmes multiples). Absent = étoile unique fixe.
     arbre: Option<ArbreStellaire>,
     /// Vue par défaut suggérée : (astre à focaliser, distance caméra). Utilisé pour
@@ -43,7 +29,7 @@ pub struct Systeme {
 /// positionnels du même type s'intervertissent sans que le compilateur bronche,
 /// et c'est le défaut qu'on venait de corriger sur les deux horloges. Nommés,
 /// ils se lisent à l'appel.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Calques {
     /// Trajectoires des planètes, centrées sur leur foyer stellaire.
     pub planetes: bool,
@@ -60,6 +46,16 @@ pub struct Calques {
     /// lequel appartient au corps qu'on vient de désigner. Voir
     /// `rendu::liee_au_focus` pour ce que « lié » veut dire.
     pub focus: Option<usize>,
+    /// Aperçu de trajet en cours d'armement (Lot D,
+    /// `docs/conception/trajectoires.md` §6) : la polyligne d'une
+    /// [`trajectoire::Trajectoire`] calculée à titre d'essai vers l'astre
+    /// survolé, jamais confirmée. `None` hors armement ou sans destination
+    /// survolée valide — voir `Skymap::previsualisation_trajectoire`.
+    ///
+    /// Ce n'est **pas** un plan de manœuvre (décision 1, `trajectoires.md`
+    /// §4) : rien ici ne se règle, l'arc affiché est celui qu'un lancement
+    /// immédiat produirait, point.
+    pub previsualisation: Option<Vec<Vec3>>,
 }
 
 /// **Horloge de spectacle** : le temps qui fait vivre l'animation propre des
@@ -80,7 +76,6 @@ impl Systeme {
             astres: Vec::new(),
             lumiere_manuelle: None,
             temps: 0.0,
-            mode: ModePhysique::SurRails,
             arbre: None,
             vue: None,
         }
@@ -121,34 +116,6 @@ impl Systeme {
         r
     }
 
-    /// Mode de propagation courant.
-    #[allow(dead_code)] // Lecture du mode de physique : le bouton n-corps n'est pas encore a l'ecran.
-    pub fn mode(&self) -> ModePhysique {
-        self.mode
-    }
-
-    /// Change le mode. Le passage vers N-corps amorce les vitesses des planètes
-    /// depuis leur orbite analytique (hand-off) ; le retour sur rails resnappe
-    /// naturellement à la frame suivante. Idempotent (no-op si mode identique).
-    pub fn regler_mode(&mut self, m: ModePhysique) {
-        if m == self.mode {
-            return;
-        }
-        if m == ModePhysique::NCorps {
-            // Amorce chaque planète depuis son foyer (étoile hôte ou barycentre).
-            let pos: Vec<Vec3> = self.astres.iter().map(|a| a.corps().position).collect();
-            let t = self.temps;
-            for a in &mut self.astres {
-                let f = match a.foyer() {
-                    Some(Foyer::Etoile(i)) => pos.get(i).copied().unwrap_or(Vec3::ZERO),
-                    _ => Vec3::ZERO, // Barycentre / pas de foyer
-                };
-                a.amorcer_ncorps(f, Vec3::ZERO, t); // vitesse du foyer approximée à 0 (sandbox)
-            }
-        }
-        self.mode = m;
-    }
-
     /// Définit une lumière directionnelle de secours (sans étoile dans la scène).
     pub fn set_lumiere(&mut self, pos: Vec3, couleur: Vec3) {
         self.lumiere_manuelle = Some((pos, couleur));
@@ -162,6 +129,27 @@ impl Systeme {
     pub fn ajouter(&mut self, a: Box<dyn Astre>) -> usize {
         self.astres.push(a);
         self.astres.len() - 1
+    }
+
+    /// Lance l'astre `idx` sur `trajectoire`, **au même index** — décision 8
+    /// (`docs/conception/trajectoires.md` §4). Les indices servent de
+    /// références stables ailleurs (foyer, parent, focus caméra, fiche
+    /// ouverte) ; `Vec::remove` + `Vec::insert` au même point remet tout en
+    /// place sans en décaler aucun, malgré le passage par `Astre::
+    /// tenter_lancer` qui a besoin de posséder l'astre un court instant.
+    ///
+    /// Rend `false` (rien ne bouge) si `idx` est hors bornes ou si l'astre
+    /// n'est pas pilotable (`tenter_lancer` rend `None` — voir
+    /// [`Astre::pilotable`]).
+    pub fn lancer(&mut self, idx: usize, trajectoire: trajectoire::Trajectoire) -> bool {
+        if idx >= self.astres.len() {
+            return false;
+        }
+        let mut astre = self.astres.remove(idx);
+        let lance = astre.tenter_lancer(trajectoire);
+        let reussi = lance.is_some();
+        self.astres.insert(idx, lance.unwrap_or(astre));
+        reussi
     }
 
     /// Nombre d'astres. Le sélecteur en a besoin pour parcourir le système.
@@ -200,6 +188,19 @@ impl Systeme {
         self.astres.get(idx).map(|a| a.corps().rayon * a.etendue_visuelle())
     }
 
+    /// Normale du plan de l'anneau de l'astre `idx`, s'il en a un — voir
+    /// [`Astre::normale_anneau`].
+    pub fn normale_anneau_de(&self, idx: usize) -> Option<Vec3> {
+        self.astres.get(idx).and_then(|a| a.normale_anneau())
+    }
+
+    /// Le rendu de l'astre `idx` est-il définitif ? Faux pour un index
+    /// invalide (par prudence : l'appelant doit de toute façon déjà avoir
+    /// vérifié l'index ailleurs) — voir [`Astre::rendu_pret`].
+    pub fn rendu_pret_de(&self, idx: usize) -> bool {
+        self.astres.get(idx).is_some_and(|a| a.rendu_pret())
+    }
+
     /// Position de la lumière principale — l'étoile hôte. La vignette s'en sert
     /// pour se placer du **côté éclairé** : de face contre la lumière on ne
     /// verrait qu'un croissant, et à contre-jour un disque noir.
@@ -229,6 +230,73 @@ impl Systeme {
         self.astres.get(idx).and_then(|a| a.foyer())
     }
 
+    /// Horloge de simulation courante (secondes), la même base que
+    /// [`Systeme::position_future_de`] — sert à calculer une date d'arrivée
+    /// future (`temps() + duree_du_trajet`).
+    #[allow(dead_code)] // Consommé par l'UI de départ du Lot C (trajectoires.md §6), pas encore câblé.
+    pub fn temps(&self) -> f64 {
+        self.temps
+    }
+
+    /// Position **prédite** de l'astre `idx` au temps absolu `t`, sans
+    /// avancer la simulation — voir [`Astre::position_future`]. `None` si
+    /// l'index est invalide ou si l'astre n'a pas d'orbite de Kepler connue
+    /// (lunes, engins, ceintures — voir `docs/conception/trajectoires.md`
+    /// §7).
+    ///
+    /// Le foyer est pris à sa position **actuelle**, pas prédite : correct
+    /// pour une étoile fixe (système simple, le cas par défaut), mais
+    /// approximatif si elle bouge elle-même (système multiple, où l'arbre
+    /// stellaire la déplace) — dette assumée, pas un oubli, voir le même §7.
+    #[allow(dead_code)] // Consommé par le Lot C (trajectoires.md §6), pas encore câblé au jeu.
+    pub fn position_future_de(&self, idx: usize, t: f64) -> Option<Vec3> {
+        let a = self.astres.get(idx)?;
+        let foyer = match a.foyer() {
+            Some(Foyer::Etoile(i)) => self.astres.get(i)?.corps().position,
+            _ => Vec3::ZERO,
+        };
+        a.position_future(foyer, t)
+    }
+
+    /// Résout une [`trajectoire::Trajectoire`] de `depart` vers l'astre
+    /// `destination`, en tenant compte du fait que la cible **bouge**.
+    ///
+    /// Point fixe sur la durée : la position d'arrivée dépend de la durée du
+    /// trajet, qui dépend elle-même de la distance à la position d'arrivée.
+    /// La position prédite est une fonction continue de `t` (jamais
+    /// chaotique, voir `position_future_de`), donc la boucle converge —
+    /// mais **pas forcément vite** : dans le pire cas (cible qui s'éloigne
+    /// droit devant le vaisseau), l'erreur ne se réduit qu'à un facteur
+    /// `vitesse_cible / vitesse_vaisseau` par itération. Mesuré : une cible
+    /// à la moitié de la vitesse du vaisseau demande une quinzaine
+    /// d'itérations pour retomber sous 1 cm d'écart — d'où la marge prise
+    /// ici plutôt qu'un « quelques itérations » optimiste. Le coût reste
+    /// négligeable : chaque itération n'est qu'un appel à
+    /// `position_future_de`, pas une simulation.
+    ///
+    /// `None` si `destination` n'a pas de position prédictible
+    /// (`position_future_de` rend `None` — une lune, un engin, une ceinture,
+    /// pas encore couverts, voir `docs/conception/trajectoires.md` §7).
+    pub fn calculer_trajectoire(
+        &self,
+        destination: usize,
+        depart: Vec3,
+        t_depart: f64,
+        vitesse: f32,
+        normale_plan: Vec3,
+    ) -> Option<trajectoire::Trajectoire> {
+        const ITERATIONS: usize = 24;
+        let mut t_arrivee_estime = t_depart;
+        let mut position_arrivee = self.position_future_de(destination, t_arrivee_estime)?;
+        for _ in 0..ITERATIONS {
+            let distance = (position_arrivee - depart).length();
+            let duree = if vitesse > 1e-4 { (distance / vitesse) as f64 } else { 0.0 };
+            t_arrivee_estime = t_depart + duree;
+            position_arrivee = self.position_future_de(destination, t_arrivee_estime)?;
+        }
+        Some(trajectoire::Trajectoire::nouvelle(depart, position_arrivee, t_depart, vitesse, normale_plan))
+    }
+
     /// Nombre d'étoiles du système. Décide de la forme de l'arbre : à une seule
     /// étoile, tout se range sous elle et le barycentre n'a pas lieu d'être.
     #[allow(dead_code)] // Interrogation gardee par les tests du selecteur ; aucune vue ne la lit.
@@ -245,6 +313,25 @@ impl Systeme {
     /// Rayon de l'astre `idx`, `None` si l'index est invalide.
     pub fn rayon_de(&self, idx: usize) -> Option<f32> {
         self.astres.get(idx).map(|a| a.corps().rayon)
+    }
+
+    /// L'astre `idx` est-il un vaisseau **pilotable** ? Faux si l'index est
+    /// invalide — voir [`Astre::pilotable`].
+    pub fn pilotable_de(&self, idx: usize) -> bool {
+        self.astres.get(idx).is_some_and(|a| a.pilotable())
+    }
+
+    /// Ses statistiques de vol, s'il est pilotable — voir
+    /// [`Astre::stats_vol`].
+    pub fn stats_vol_de(&self, idx: usize) -> Option<crate::vaisseau::vol::StatsVol> {
+        self.astres.get(idx).and_then(|a| a.stats_vol())
+    }
+
+    /// L'astre `idx` est-il une géante gazeuse ? `None` si l'index est
+    /// invalide ou si l'astre n'a pas de type planétaire (étoile, lune,
+    /// ceinture, engin) — voir [`Astre::gazeuse`].
+    pub fn gazeuse_de(&self, idx: usize) -> Option<bool> {
+        self.astres.get(idx).and_then(|a| a.gazeuse())
     }
 
     /// **Luminosité cumulée** de toutes les étoiles du système.
@@ -410,34 +497,22 @@ impl Systeme {
         let t = self.temps;
 
         // Étoiles : positions issues de l'arbre stellaire hiérarchique (barycentres
-        // composés). TOUJOURS analytique, quel que soit le mode -> binaires/multiples
-        // stables. Étoile unique = pas d'arbre -> reste à sa position (origine).
+        // composés). Étoile unique = pas d'arbre -> reste à sa position (origine).
         if let Some(arbre) = self.arbre.take() {
             arbre.evaluer(t, &mut self.astres);
             self.arbre = Some(arbre);
         }
 
-        match self.mode {
-            // Planètes « sur rails » : chacune orbite son foyer (étoile hôte S-type
-            // ou barycentre P-type). Étoiles déjà repositionnées juste au-dessus.
-            ModePhysique::SurRails => {
-                let pos: Vec<Vec3> = self.astres.iter().map(|a| a.corps().position).collect();
-                for a in &mut self.astres {
-                    if a.categorie() == Categorie::Planete {
-                        let f = match a.foyer() {
-                            Some(Foyer::Etoile(i)) => pos.get(i).copied().unwrap_or(Vec3::ZERO),
-                            _ => Vec3::ZERO, // Barycentre
-                        };
-                        a.maj_rail(f, t);
-                    }
-                }
-            }
-            // Planètes en N-corps : intégration (elles ressentent les étoiles mobiles).
-            ModePhysique::NCorps => {
-                let h = dt / SOUS_PAS as f32;
-                for _ in 0..SOUS_PAS {
-                    self.gravite(h);
-                }
+        // Planètes « sur rails » : chacune orbite son foyer (étoile hôte S-type
+        // ou barycentre P-type). Étoiles déjà repositionnées juste au-dessus.
+        let pos: Vec<Vec3> = self.astres.iter().map(|a| a.corps().position).collect();
+        for a in &mut self.astres {
+            if a.categorie() == Categorie::Planete {
+                let f = match a.foyer() {
+                    Some(Foyer::Etoile(i)) => pos.get(i).copied().unwrap_or(Vec3::ZERO),
+                    _ => Vec3::ZERO, // Barycentre
+                };
+                a.maj_rail(f, t);
             }
         }
 
@@ -453,6 +528,12 @@ impl Systeme {
             if let Some(p) = a.parent() {
                 a.orbiter_autour(pos[p], dt);
             }
+        }
+
+        // Vaisseaux en transit (Lot B) : suivent une trajectoire déjà
+        // connue d'avance, ni foyer ni parent à consulter — `t` suffit.
+        for a in &mut self.astres {
+            a.suivre_trajectoire(t);
         }
     }
 
@@ -518,9 +599,31 @@ mod tests_designation {
         /// Cumul des `dt` reçus par `Astre::update` — l'horloge d'animation.
         /// Partagé avec le test, qui ne peut pas lire à travers `Box<dyn Astre>`.
         dt_anim_recu: std::rc::Rc<std::cell::Cell<f32>>,
+        /// Décalage fixe (indépendant de `t`) que `position_future` ajoute
+        /// au foyer reçu, si posé — sert à vérifier que `Systeme` résout et
+        /// transmet le **bon** foyer, sans avoir besoin d'une vraie orbite
+        /// de Kepler pour ça (déjà testée dans `planete/mod.rs`).
+        decalage_futur: Option<Vec3>,
+        /// Dernier `t` reçu par `Astre::suivre_trajectoire` (-1 = jamais
+        /// appelé). Partagé avec le test, même raison que `dt_anim_recu`.
+        t_trajectoire_recu: std::rc::Rc<std::cell::Cell<f64>>,
     }
 
     impl CorpsEssai {
+        /// Construit un `CorpsEssai` sans le ranger dans un `Systeme` — pour
+        /// `Systeme::remplacer`, qui prend l'astre déjà construit.
+        fn neuf(cat: Categorie, x: f32) -> Self {
+            Self {
+                base: CorpsBase::new(vec3(x, 0.0, 0.0), 1.0, 1.0),
+                cat,
+                parent: None,
+                foyer: None,
+                dt_anim_recu: std::rc::Rc::new(std::cell::Cell::new(0.0)),
+                decalage_futur: None,
+                t_trajectoire_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
+            }
+        }
+
         fn poser(sys: &mut Systeme, cat: Categorie, x: f32, parent: Option<usize>) -> usize {
             Self::poser_mouchard(sys, cat, x, parent).0
         }
@@ -539,6 +642,8 @@ mod tests_designation {
                 parent,
                 foyer: None,
                 dt_anim_recu: mouchard.clone(),
+                decalage_futur: None,
+                t_trajectoire_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
             }));
             (idx, mouchard)
         }
@@ -566,6 +671,15 @@ mod tests_designation {
             self.dt_anim_recu.set(self.dt_anim_recu.get() + dt);
         }
         fn draw(&mut self, _cam: &CameraInfo) {}
+        fn position_future(&self, foyer_predit: Vec3, _t: f64) -> Option<Vec3> {
+            self.decalage_futur.map(|d| foyer_predit + d)
+        }
+        /// Enregistre le `t` reçu — sert à vérifier que `Systeme::update`
+        /// appelle vraiment `suivre_trajectoire` sur chaque astre, avec la
+        /// bonne horloge absolue.
+        fn suivre_trajectoire(&mut self, t: f64) {
+            self.t_trajectoire_recu.set(t);
+        }
     }
 
     /// **`attache` réconcilie deux façons d'être en orbite.**
@@ -617,8 +731,259 @@ mod tests_designation {
             parent: sys.astres[idx].parent(),
             foyer: Some(f),
             dt_anim_recu: std::rc::Rc::new(std::cell::Cell::new(0.0)),
+            decalage_futur: None,
+            t_trajectoire_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
         };
         sys.astres[idx] = Box::new(c);
+    }
+
+    // **`position_future_de` compose le bon foyer.** Une planète autour d'une
+    // étoile doit recevoir la position de CETTE étoile, pas d'une autre — le
+    // décalage renvoyé par le corps d'essai le prouve sans avoir besoin d'une
+    // vraie orbite de Kepler (déjà testée dans `planete/mod.rs`).
+    #[test]
+    fn position_future_de_compose_le_bon_foyer() {
+        let mut sys = Systeme::new();
+        let etoile = CorpsEssai::poser(&mut sys, Categorie::Etoile, 100.0, None);
+        let autre_etoile = CorpsEssai::poser(&mut sys, Categorie::Etoile, -100.0, None);
+        let decalage = vec3(5.0, 0.0, 0.0);
+        let planete = sys.ajouter(Box::new(CorpsEssai {
+            base: CorpsBase::new(Vec3::ZERO, 1.0, 1.0),
+            cat: Categorie::Planete,
+            parent: None,
+            foyer: Some(Foyer::Etoile(etoile)),
+            dt_anim_recu: std::rc::Rc::new(std::cell::Cell::new(0.0)),
+            decalage_futur: Some(decalage),
+            t_trajectoire_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
+        }));
+
+        let attendu = sys.position(etoile) + decalage;
+        assert_eq!(sys.position_future_de(planete, 42.0), Some(attendu));
+        assert_ne!(attendu, sys.position(autre_etoile) + decalage, "les deux étoiles ne sont pas au même endroit");
+    }
+
+    // Un foyer barycentrique (P-type) ou un astre sans foyer (une étoile
+    // elle-même) résolvent à l'origine, pas à une étoile au hasard.
+    #[test]
+    fn position_future_de_retombe_sur_lorigine_sans_etoile_hote() {
+        let mut sys = Systeme::new();
+        let decalage = vec3(3.0, 0.0, 0.0);
+        let circumbinaire = sys.ajouter(Box::new(CorpsEssai {
+            base: CorpsBase::new(Vec3::ZERO, 1.0, 1.0),
+            cat: Categorie::Planete,
+            parent: None,
+            foyer: Some(Foyer::Barycentre),
+            dt_anim_recu: std::rc::Rc::new(std::cell::Cell::new(0.0)),
+            decalage_futur: Some(decalage),
+            t_trajectoire_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
+        }));
+        assert_eq!(sys.position_future_de(circumbinaire, 42.0), Some(decalage));
+    }
+
+    // **`Systeme::update` appelle vraiment `suivre_trajectoire`**, avec
+    // l'horloge absolue cumulée (`self.temps`), pas un `dt` brut ni rien du
+    // tout — sinon un vaisseau en transit (Lot B) ne bougerait jamais.
+    #[test]
+    fn update_appelle_suivre_trajectoire_avec_le_temps_absolu() {
+        let mut sys = Systeme::new();
+        let mouchard = std::rc::Rc::new(std::cell::Cell::new(-1.0_f64));
+        sys.ajouter(Box::new(CorpsEssai {
+            base: CorpsBase::new(Vec3::ZERO, 1.0, 1.0),
+            cat: Categorie::Asteroide,
+            parent: None,
+            foyer: None,
+            dt_anim_recu: std::rc::Rc::new(std::cell::Cell::new(0.0)),
+            decalage_futur: None,
+            t_trajectoire_recu: mouchard.clone(),
+        }));
+
+        sys.update(3.0, DtAnimation(0.0));
+        assert_eq!(mouchard.get(), 3.0, "temps absolu attendu après un premier pas de 3.0");
+        sys.update(2.0, DtAnimation(0.0));
+        assert_eq!(mouchard.get(), 5.0, "l'horloge doit cumuler, pas repartir de zéro");
+    }
+
+    // Un astre sans `decalage_futur` (donc sans orbite de Kepler connue —
+    // typiquement une lune, pas encore couverte) rend `None`, pas une
+    // position au hasard.
+    #[test]
+    fn position_future_de_est_absente_sans_orbite_connue() {
+        let mut sys = Systeme::new();
+        let etoile = CorpsEssai::poser(&mut sys, Categorie::Etoile, 0.0, None);
+        let lune = CorpsEssai::poser(&mut sys, Categorie::Lune, 5.0, None);
+        poser_foyer(&mut sys, lune, Foyer::Etoile(etoile));
+        assert_eq!(sys.position_future_de(lune, 42.0), None);
+    }
+
+    // **`calculer_trajectoire` rend un vrai rendez-vous, pas une
+    // approximation** : à l'heure d'arrivée qu'elle calcule, le vaisseau et
+    // la cible sont au MÊME endroit — même si la cible a bougé pendant tout
+    // le trajet. Cible synthétique dédiée (pas le `CorpsEssai` partagé) :
+    // seul ce test a besoin d'une position qui dépend vraiment de `t`.
+    #[test]
+    fn calculer_trajectoire_rend_vraiment_rendez_vous_avec_une_cible_qui_bouge() {
+        struct CibleMobile {
+            base: CorpsBase,
+        }
+        impl Astre for CibleMobile {
+            fn categorie(&self) -> Categorie {
+                Categorie::Planete
+            }
+            fn corps(&self) -> &CorpsBase {
+                &self.base
+            }
+            fn corps_mut(&mut self) -> &mut CorpsBase {
+                &mut self.base
+            }
+            fn draw(&mut self, _cam: &CameraInfo) {}
+            fn update(&mut self, _dt: f32) {}
+            // Dérive à vitesse 1 le long de X : à l'instant `t`, elle est en (t, 0, 0).
+            fn position_future(&self, _foyer_predit: Vec3, t: f64) -> Option<Vec3> {
+                Some(vec3(t as f32, 0.0, 0.0))
+            }
+        }
+
+        let mut sys = Systeme::new();
+        let cible = sys.ajouter(Box::new(CibleMobile { base: CorpsBase::new(Vec3::ZERO, 1.0, 1.0) }));
+
+        let depart = vec3(-100.0, 0.0, 0.0);
+        let traj = sys.calculer_trajectoire(cible, depart, 0.0, 2.0, Vec3::Y).unwrap();
+
+        let t_arrivee = traj.arrivee_a();
+        let position_cible = sys.position_future_de(cible, t_arrivee).unwrap();
+        let position_vaisseau = traj.position(t_arrivee);
+        assert!(
+            (position_vaisseau - position_cible).length() < 1e-2,
+            "rendez-vous manqué : vaisseau à {position_vaisseau}, cible à {position_cible}"
+        );
+    }
+
+    // Une destination sans position prédictible (pas encore couverte —
+    // lune, engin, ceinture) fait échouer le calcul, pas une trajectoire
+    // vers une position arbitraire.
+    #[test]
+    fn calculer_trajectoire_est_absente_sans_destination_predictible() {
+        let mut sys = Systeme::new();
+        let lune = CorpsEssai::poser(&mut sys, Categorie::Lune, 5.0, None);
+        assert!(sys.calculer_trajectoire(lune, Vec3::ZERO, 0.0, 2.0, Vec3::Y).is_none());
+    }
+
+    // **`lancer` garde le même index et transforme vraiment l'astre
+    // pilotable** — sert la décision 8 (`docs/conception/trajectoires.md`
+    // §4) : ne doit décaler aucune référence (foyer, parent) tenue par un
+    // AUTRE astre.
+    #[test]
+    fn lancer_garde_le_meme_index_et_transforme_lastre_pilotable() {
+        struct VaisseauEssai {
+            base: CorpsBase,
+        }
+        impl Astre for VaisseauEssai {
+            fn categorie(&self) -> Categorie {
+                Categorie::Engin
+            }
+            fn corps(&self) -> &CorpsBase {
+                &self.base
+            }
+            fn corps_mut(&mut self) -> &mut CorpsBase {
+                &mut self.base
+            }
+            fn draw(&mut self, _cam: &CameraInfo) {}
+            fn update(&mut self, _dt: f32) {}
+            fn pilotable(&self) -> bool {
+                true
+            }
+            // Le résultat concret importe peu ici (`CorpsEssai` en guise de
+            // « converti ») : ce test vérifie la PLOMBERIE (`Systeme::lancer`
+            // au bon index), pas la conversion elle-même — déjà testée dans
+            // `engin.rs`.
+            fn tenter_lancer(&mut self, _trajectoire: trajectoire::Trajectoire) -> Option<Box<dyn Astre>> {
+                Some(Box::new(CorpsEssai::neuf(Categorie::Asteroide, 1.0)))
+            }
+        }
+
+        let mut sys = Systeme::new();
+        let avant = sys.ajouter(Box::new(VaisseauEssai { base: CorpsBase::new(Vec3::ZERO, 1.0, 1.0) }));
+        let apres_lui = CorpsEssai::poser(&mut sys, Categorie::Planete, 2.0, None);
+        assert_eq!(sys.categorie_de(avant), Some(Categorie::Engin));
+
+        let t = trajectoire::Trajectoire::nouvelle(Vec3::ZERO, Vec3::X, 0.0, 1.0, Vec3::Y);
+        assert!(sys.lancer(avant, t));
+
+        assert_eq!(sys.categorie_de(avant), Some(Categorie::Asteroide), "transformé au même index");
+        assert_eq!(sys.categorie_de(apres_lui), Some(Categorie::Planete), "l'astre suivant n'a pas bougé");
+        assert_eq!(sys.nb_astres(), 2, "aucun astre ajouté ni retiré");
+    }
+
+    // Un astre non pilotable (`CorpsEssai` par défaut) reste inchangé, et
+    // `lancer` le signale en rendant `false` plutôt qu'en échouant en
+    // silence.
+    #[test]
+    fn lancer_echoue_et_ne_change_rien_pour_un_astre_non_pilotable() {
+        let mut sys = Systeme::new();
+        let idx = CorpsEssai::poser(&mut sys, Categorie::Engin, 1.0, None);
+        let t = trajectoire::Trajectoire::nouvelle(Vec3::ZERO, Vec3::X, 0.0, 1.0, Vec3::Y);
+        assert!(!sys.lancer(idx, t));
+        assert_eq!(sys.categorie_de(idx), Some(Categorie::Engin), "inchangé");
+    }
+
+    // Un index hors bornes ne panique pas — no-op silencieux, comme les
+    // autres accesseurs `..._de` de `Systeme`.
+    #[test]
+    fn lancer_hors_bornes_ne_panique_pas() {
+        let mut sys = Systeme::new();
+        CorpsEssai::poser(&mut sys, Categorie::Engin, 1.0, None);
+        let t = trajectoire::Trajectoire::nouvelle(Vec3::ZERO, Vec3::X, 0.0, 1.0, Vec3::Y);
+        assert!(!sys.lancer(99, t));
+        assert_eq!(sys.nb_astres(), 1);
+    }
+
+    // `pilotable_de`/`stats_vol_de` retombent sur les défauts du trait
+    // (`false`/`None`) pour tout astre qui ne les redéfinit pas — un
+    // `CorpsEssai` normal, ou un index invalide.
+    #[test]
+    fn pilotable_de_est_faux_par_defaut() {
+        let mut sys = Systeme::new();
+        let idx = CorpsEssai::poser(&mut sys, Categorie::Engin, 1.0, None);
+        assert!(!sys.pilotable_de(idx));
+        assert_eq!(sys.stats_vol_de(idx), None);
+        assert!(!sys.pilotable_de(999), "index invalide : pas pilotable, pas de panique");
+    }
+
+    // Un astre qui redéfinit `pilotable`/`stats_vol` (comme `EnginOrbital`
+    // pilotable) est bien lu à travers `Box<dyn Astre>` — c'est tout l'enjeu
+    // de les avoir mis sur le trait plutôt que sur le type concret.
+    #[test]
+    fn pilotable_de_lit_vraiment_a_travers_le_trait() {
+        struct VaisseauEssai {
+            base: CorpsBase,
+        }
+        impl Astre for VaisseauEssai {
+            fn categorie(&self) -> Categorie {
+                Categorie::Engin
+            }
+            fn corps(&self) -> &CorpsBase {
+                &self.base
+            }
+            fn corps_mut(&mut self) -> &mut CorpsBase {
+                &mut self.base
+            }
+            fn draw(&mut self, _cam: &CameraInfo) {}
+            fn update(&mut self, _dt: f32) {}
+            fn pilotable(&self) -> bool {
+                true
+            }
+            fn stats_vol(&self) -> Option<crate::vaisseau::vol::StatsVol> {
+                Some(crate::vaisseau::vol::StatsVol { vitesse: 7.0, portee: 8.0, capacite_fret: 9.0 })
+            }
+        }
+
+        let mut sys = Systeme::new();
+        let idx = sys.ajouter(Box::new(VaisseauEssai { base: CorpsBase::new(Vec3::ZERO, 1.0, 1.0) }));
+        assert!(sys.pilotable_de(idx));
+        assert_eq!(
+            sys.stats_vol_de(idx),
+            Some(crate::vaisseau::vol::StatsVol { vitesse: 7.0, portee: 8.0, capacite_fret: 9.0 })
+        );
     }
 
     /// **L'animation des astres ne suit pas l'horloge orbitale.**

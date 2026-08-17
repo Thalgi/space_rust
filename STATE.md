@@ -15,27 +15,34 @@
 > « Où trouver quoi »). **Ne pas recommencer** : un fait qui se raconte va dans
 > un journal, pas ici.
 
-## Reprendre ici (état au 2026-08-14)
+## Reprendre ici (état au 2026-08-16)
 
-**Vérifié** : **644 tests verts**, `cargo clippy --all-targets` à **0
-avertissement**, `docs/reference/fils.md` régénéré.
+**Vérifié** : **719 tests verts**, `cargo clippy --all-targets` à **0
+avertissement**.
 
-**Pas encore commité** : treize fichiers modifiés depuis le dernier commit
-(`73fb924` « torus ») — `generateur.rs`, `catalogue.rs`, `maillage.rs`,
-`main.rs`, `ecran/station.rs`, `soleil/mod.rs`,
-`composant/{jante,tore,hangar}.rs`, `STATE.md`, `docs/suivi/{stations,
-etoiles}.md`, `docs/reference/fils.md`. Chantier Elysium (profilage fps
-compris) + les trois arbitrages visuels tranchés à l'œil (plancher stellaire,
-miroir troué). **Point de commit à signaler** dès que l'utilisateur veut le
-figer.
+**Pas encore commité** depuis le dernier commit (`a0ebb58` « torus &
+elysium complex base complete ») : vingt-deux fichiers modifiés, un supprimé
+(`src/systeme/gravite.rs`, mode N-corps retiré comme code de test), sept
+nouveaux (`src/ecran/icone.rs`, `src/vaisseau/vol.rs`,
+`src/systeme/trajectoire.rs`, `src/transit.rs`,
+`docs/conception/{trajectoires,concept_jeu}.md`,
+`docs/suivi/trajectoires.md`) — `git status --short` pour le détail exact.
+Chantier I.6 (icônes du sélecteur) et lots A/B/C/D du chantier trajectoires
+(voir ci-dessous). **Point de commit à signaler** dès que l'utilisateur veut
+le figer.
 
-### Ce qui a été fait dans la dernière session
+### Ce qui a été fait juste avant l'ouverture du chantier trajectoires
+
+⚠️ Malgré le titre d'origine, **ce n'est plus la dernière session** : quatre
+lots du chantier trajectoires (A/B/C/D, voir plus bas) ont été faits depuis.
+Gardé tel quel — travail réel, toujours pertinent — mais pour « qu'est-ce qui
+vient d'être fait », c'est la section trajectoires ci-dessous qu'il faut lire.
 
 | Chantier | Résultat | Journal |
 |---|---|---|
-| **Complexe Elysium — chantier initial clos** | Jante refermée en anneau complet (6 tronçons), sol/ville corrigés (le sol ne suivait pas la courbe jusqu'au pneu — cause réelle trouvée par mesure, pas par déduction), second anneau au sixième du diamètre de la jante, tout le complexe pivoté face à **Z** et animable au bouton ROTATION, entrée du hangar encadrée dans ses deux variantes, rendu optimisé (grille de vitrage en `ligne` plutôt qu'en `cylindre` : ~146 000 triangles retirés) | [`suivi/stations.md`](docs/suivi/stations.md) Partie F, sessions 2026-08-11 → 2026-08-14 |
-| **Elysium : fps mesuré en jeu** | Harnais `PROFIL=` ajouté ; répartition du coût par famille de composant mesurée (les bras, premier poste) ; `SEGMENTS` baissé 20→12 (18,7→20,0 fps) ; tampons GPU persistants creusés et mis de côté (chantier à part, trop gros/risqué pour cette session) | [`suivi/stations.md`](docs/suivi/stations.md) Partie F, 2026-08-14 |
-| **Trois arbitrages visuels tranchés à l'œil** | Plancher stellaire 8→4 px ; charge/mât « derrière » le miroir bas et « perçant » ses disques — pas des défauts, le miroir est troué en son centre pour le mât | [`suivi/etoiles.md`](docs/suivi/etoiles.md) P.3 bis révisé, [`suivi/stations.md`](docs/suivi/stations.md) |
+| **I.6 — Icônes du sélecteur** | Pastille de couleur remplacée par un vrai rendu 3D en cache, fond transparent + contour d'un pixel, gazeuses toutes à la même taille (l'anneau déborde au lieu de s'y comprimer), Pluton toujours en dernier malgré son orbite excentrique. Corrige au passage un bug de cycle de vie GPU (une `RenderTarget` dont on ne gardait que la texture voyait celle-ci supprimée à la frame suivante) et un plan de coupe caméra trop loin pour les petits corps (Pluton tombait hors champ) | [`suivi/interface.md`](docs/suivi/interface.md) I.6 |
+| **I.6 bis — Anneau, tabulation, panneau animé, Terre** | Azimut de caméra d'un astre à anneau aligné sur sa propre inclinaison (plus l'arbitraire de la position orbitale) + `FOVY_GAZEUSE_DEG` recadré sur Saturne réelle plutôt que le maximum théorique — débordement réduit d'~22 %, pas supprimé (borné par « même taille que Jupiter » + « l'anneau doit déborder »). Tabulation des planètes sous leur étoile. Panneau de droite animé (glissement, ease-in-out). Bug trouvé et corrigé : l'icône de la Terre figeait parfois un repli de terrain **pas encore généré** (génération asynchrone, budget limité) — sans rapport avec la fraction d'eau, qu'un premier réglage avait pourtant fait bouger deux fois en vain | [`suivi/interface.md`](docs/suivi/interface.md) I.6 bis |
+| **I.6 ter — Anneau à plat, bouton de repli ×2, colonne « liquide »** | `cadre_camera` (ex-`azimut_et_elevation`) rend `haut` — la projection de la normale de l'anneau sur le plan perpendiculaire à la vue — au lieu de `Vec3::Y` : le grand axe de l'ellipse est désormais **forcé horizontal à l'écran** quel que soit l'astre ou l'instant. Élévation de caméra généralisée en angle paramétrique (`elevation_anneau_rad`, uniforme pour tout astre à anneau, pas un cas Saturne), **mise à zéro** sur demande explicite : l'anneau se réduit à un trait, ouverture nulle. Bouton ◄ doublé (`selecteur::ECHELLE_BOUTON_REPLI = 2.0`), filé dans les trois usages (dessin/clic/réservation d'espace) via des variantes `_bouton` de `liste.rs`. Fond de colonne remplacé par un dégradé de 16 bandes + ménisque haut ; bordure cyan pleine remplacée par du gris 30 % d'opacité (demandé « for testing », pas un réglage final) | [`suivi/interface.md`](docs/suivi/interface.md) I.6 ter |
 
 ### À faire ensuite, par ordre
 
@@ -93,6 +100,85 @@ figer.
 7. **D-PIX-3/4** (contours Sobel, taille de pixel réglable) et les **comètes**
    (`Categorie::Comete` n'engendre rien).
 
+### Chantier en cours : trajectoires (Lots A, B, C et D faits, 2026-08-15/16)
+
+Faire voyager un vaisseau assemblé (VAB) ou une station déjà en orbite d'un
+astre à un autre — le Starship est **fini depuis le 2026-08-06** et n'a
+toujours nulle part où aller (§10 bis de la bucket list). Conception :
+[`conception/trajectoires.md`](docs/conception/trajectoires.md) (§4, **onze**
+décisions de gameplay désormais — sept le 2026-08-14/15 : trajet automatisé
+sans plan de manœuvre, statistiques de vol en hybride, rendez-vous avec
+cible mobile dès le premier jet — y compris aux cinq points de Lagrange —,
+logistique manuelle d'abord, minuteur de superstructure et saut
+interstellaire de l'ISV **hors périmètre**, colonisation qui consomme le
+vaisseau ; **quatre de plus le 2026-08-15/16** : un vaisseau non en vol est
+« posté » via `EnginOrbital` — orbite d'une planète/lune ou vol stationnaire
+près d'un habitat/station, résout d'où vient le départ d'un trajet ; coût de
+construction non plat + réutilisabilité du Starship croissant avec la
+recherche ; stations postées **non pilotables** mais dotées de PV
+(dégâts d'éruption solaire/astéroïde, réparation) ; **mode N-corps retiré du
+jeu** comme code de test) et
+[`conception/concept_jeu.md`](docs/conception/concept_jeu.md) (vision RTS
+globale). Journal : [`suivi/trajectoires.md`](docs/suivi/trajectoires.md) —
+y compris une liste consolidée de tous les chiffres encore provisoires.
+
+- ✅ **Lot A — Statistiques de vol** : `src/vaisseau/vol.rs`, nouveau.
+  `ClasseVaisseau::Starship` (seul, volontairement — ISV et Jupitris hors
+  scope, voir le journal), `StatsVol` (vitesse/portée/fret) = base de classe
+  + modificateurs des pièces de propulsion (`Raptor`, `Propulseur` axial) et
+  réservoir. Chiffres de base provisoires, nommés. 5 tests, tous
+  red-checkés.
+- ✅ **Lot B — Mobile** : la prédiction (`Astre::position_future`,
+  `Systeme::position_future_de`, `Systeme::temps`), la géométrie de l'arc
+  (`systeme::trajectoire::Trajectoire`, Bézier quadratique, rendez-vous
+  garanti par construction) et le vaisseau mobile lui-même
+  (`transit::VaisseauEnTransit`, `Astre::suivre_trajectoire`, câblé dans
+  `Systeme::update`). 17 tests, tous red-checkés.
+- ✅ **Mode N-corps retiré** (2026-08-16, confirmé « code de test » par
+  l'utilisateur) : `src/systeme/gravite.rs` supprimé, `ModePhysique` et tout
+  son câblage (`Systeme::mode`/`regler_mode`, `Astre::amorcer_ncorps`, le
+  bouton PHYS du menu) retirés — pas juste désactivés. La bande d'outils
+  passe de 5 à 4 bascules, vérifié à l'écran. Retire du même coup la
+  divergence de prédiction en `NCorps` notée dans le Lot B : il n'y a plus
+  qu'un mode, la prémisse de `trajectoires.md` §5 tient sans condition.
+- ✅ **Lot C — Un premier vaisseau qui vole vraiment** (2026-08-16) : bouton
+  LANCER dans la fiche (`fiche::bouton_lancer`, décision 8) + mode armé
+  dans `skymap.rs` (`Skymap::lancement`, `tenter_lancement`) — clic sur le
+  vaisseau, clic sur LANCER, clic sur une destination, il part. Backend :
+  `Systeme::calculer_trajectoire` (résolution par point fixe du rendez-vous
+  avec une cible mobile — convergence **mesurée**, pas supposée : voir le
+  journal pour le cas défavorable qui a fait remonter `ITERATIONS` de 4 à
+  24), `Systeme::lancer`/`Astre::tenter_lancer` (a remplacé
+  `Systeme::remplacer`, qui s'est révélé être la mauvaise primitive —
+  retiré, pas gardé). Un vrai Starship pilotable posté en orbite terrestre
+  (`genese/presets.rs`). ⚠️ **Le clic réel n'a pas été rejoué à l'écran**
+  (`CAPTURE` ne simule pas de clic) — seule la boucle de mise à jour est
+  vérifiée saine sur 300 frames ; toute la logique qui décide est testée à
+  fond. **716 tests verts**, clippy 0 avertissement.
+- ✅ **Lot D — Aperçu du trajet + caméra qui suit** (2026-08-16) :
+  `Trajectoire::polyligne(n)` (échantillonnage de l'arc, coordonnées monde
+  déjà absolues — pas de `centre` à additionner, contrairement à
+  `Orbite::polyligne`), `dessiner_points_ouvert` dans `systeme/rendu.rs`
+  (même technique de semis à espacement écran constant que les orbites,
+  mais **sans** le `% n` qui boucle une polyligne fermée — un arc à sens
+  unique ne doit pas relier son arrivée à son départ). `Calques` porte
+  maintenant `previsualisation: Option<Vec<Vec3>>`, alimenté par
+  `Skymap::previsualisation_trajectoire` : tant qu'un vaisseau est armé
+  (LANCER cliqué), l'astre **survolé** (pas cliqué — `Systeme::pick`,
+  `&self`, aucun effet de bord, pas `Camera::pick` qui déplace le focus)
+  donne un arc d'essai, dessiné en ambre. **Caméra** : `tenter_lancement`
+  appelle `self.cam.set_focus(idx_vaisseau)` après un lancement réussi —
+  et rien de plus n'était nécessaire, `Camera::cible` relit
+  `Systeme::position(idx)` chaque frame quel que soit ce qui la fait bouger
+  (orbite ou trajet), la mécanique de suivi existait déjà. **719 tests
+  verts**, clippy 0 avertissement. ⚠️ Même limite que le Lot C : le clic/
+  survol réel n'a pas pu être rejoué à l'écran (`CAPTURE` ne simule pas la
+  souris) — vérifié par lecture de code (`Camera::cible`/`Systeme::update`)
+  et par les tests unitaires de `polyligne`, pas par capture visuelle de
+  l'arc lui-même.
+- **Suite : Lot E** — arrivée (amarrage, consommation à la colonisation) :
+  un vaisseau arrivé reste immobile pour toujours aujourd'hui.
+
 ### Dettes ouvertes repérées en chemin
 
 - Le **défilement** n'est câblé que dans la vue des composants ; `galerie_disques`
@@ -102,10 +188,12 @@ figer.
 
 ## Commits
 
-Dernier commit : `73fb924` « torus ». Avant lui : `fb7d589` « fix »
-(2026-08-10), `dc0d7bf` « torus ok », `2a042e6` « P4 ok », `7278aa1` « P.1 a
-P.3 ok, plus fix ui ». **Le chantier Elysium de cette session (voir
-ci-dessus) n'est pas dedans** — sept fichiers modifiés, non commités.
+Dernier commit : `a0ebb58` « torus & elysium complex base complete ». Avant
+lui : `73fb924` « torus », `fb7d589` « fix » (2026-08-10), `dc0d7bf` « torus
+ok », `2a042e6` « P4 ok », `7278aa1` « P.1 a P.3 ok, plus fix ui ».
+**Rien depuis n'est dedans** — I.6 (icônes du sélecteur) et les lots A/B/C/D
+du chantier trajectoires, non commités (détail exact du diff en tête de
+fichier, « Reprendre ici »).
 
 Consigne debout : *« no commit i'll say when commit is needed »* — ne jamais
 commiter de soi-même. **Mais signaler les points de commit** : l'utilisateur
@@ -117,7 +205,7 @@ sur un fichier contenant du travail non commité. Pour annuler ses propres
 modifications : ré-éditer les lignes, ou sauvegarder le fichier dans le
 scratchpad **avant** de le toucher (red-checks compris).
 
-État vérifié : **644 tests verts**, **`cargo clippy --all-targets` : 0 avertissement**.
+État vérifié : **719 tests verts**, **`cargo clippy --all-targets` : 0 avertissement**.
 
 ## Chantier courant : finir les planètes et la vue système
 
@@ -156,6 +244,8 @@ chantier a son journal. C'est la correction du travers qui l'avait porté à
 | Géantes gazeuses | [`docs/suivi/geantes_gazeuses.md`](docs/suivi/geantes_gazeuses.md) |
 | La liste globale des fonctionnalités | [`docs/suivi/bucketlist_globale.md`](docs/suivi/bucketlist_globale.md) |
 | Le **pourquoi** de chaque système | [`docs/conception/`](docs/conception/) |
+| **Trajectoires** (vaisseaux/stations mobiles) — Lots A/B/C faits, journal | [`docs/suivi/trajectoires.md`](docs/suivi/trajectoires.md) (conception : [`docs/conception/trajectoires.md`](docs/conception/trajectoires.md)) |
+| **La vision RTS globale** (isolement des ressources, tuiles, recherche, habitats, superstructures, vaisseaux) | [`docs/conception/concept_jeu.md`](docs/conception/concept_jeu.md) |
 
 ## Chantiers en pause
 

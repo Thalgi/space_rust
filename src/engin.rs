@@ -18,6 +18,9 @@
 //! « orbite basse » existera, elle pourra rétablir les proportions.
 
 use crate::astre::{Astre, CameraInfo, Categorie, CorpsBase};
+use crate::systeme::trajectoire::Trajectoire;
+use crate::transit::VaisseauEnTransit;
+use crate::vaisseau::vol::{self, ClasseVaisseau, StatsVol};
 use crate::vaisseau::{EtatStation, MaillageStation};
 use macroquad::prelude::*;
 
@@ -40,6 +43,26 @@ const OMEGA_ISS: f32 = 0.55;
 /// l'orbite se lise comme inclinée et non comme un anneau équatorial.
 const INCLINAISON_ISS: f32 = 51.6 * std::f32::consts::PI / 180.0;
 
+/// Rayon d'orbite du Starship posté, **en rayons de sa planète**. Distinct de
+/// [`ORBITE_ISS`] pour que les deux orbites ne se confondent pas à l'écran —
+/// **provisoire**, comme le reste des chiffres du Lot C
+/// (`docs/suivi/trajectoires.md` § « Placeholders »).
+pub const ORBITE_STARSHIP: f32 = 1.85;
+
+/// Envergure du Starship posté à l'écran, **en rayons de sa planète**. Même
+/// logique d'exagération d'échelle que [`ECHELLE_ISS`] (voir l'en-tête du
+/// module).
+pub const ECHELLE_STARSHIP: f32 = 0.30;
+
+/// Vitesse angulaire, en radians par seconde de simulation — même ordre de
+/// grandeur que l'ISS, pas la vraie orbite d'un Starship en LEO.
+const OMEGA_STARSHIP: f32 = 0.45;
+
+/// Inclinaison de l'orbite, en radians — 28,5°, l'inclinaison réelle d'un
+/// lancement depuis le Kennedy Space Center (Starbase est à une latitude
+/// proche, ~26°). Assez pour se distinguer visuellement de l'ISS (51,6°).
+const INCLINAISON_STARSHIP: f32 = 28.5 * std::f32::consts::PI / 180.0;
+
 /// Un engin construit dans `vaisseau/`, posé en orbite dans `systeme/`.
 pub struct EnginOrbital {
     base: CorpsBase,
@@ -58,10 +81,18 @@ pub struct EnginOrbital {
     /// Rotation propre, pour que la station ne présente pas éternellement la
     /// même face.
     lacet: f32,
+    /// Statistiques de vol si cet engin est un vaisseau **pilotable** —
+    /// `None` pour une station postée (ISS, habitats), qui ne l'est pas
+    /// (`docs/conception/trajectoires.md` §4 décision 10). Calculées une
+    /// fois à la pose, depuis la `Station` d'origine, avant qu'elle ne soit
+    /// cuite en maillage : les pièces ne changent plus une fois posé.
+    vol: Option<(ClasseVaisseau, StatsVol)>,
 }
 
 impl EnginOrbital {
-    /// Met `etat` en orbite autour de l'astre `parent`.
+    /// Met `etat` en orbite autour de l'astre `parent`, **posté** — pas
+    /// pilotable (voir [`Self::nouveau_pilotable`] pour un vaisseau qui
+    /// pourra décoller).
     ///
     /// `rayon_planete` est le rayon monde du parent : tout le dimensionnement
     /// en découle, si bien qu'agrandir la planète emmène sa station avec elle.
@@ -74,6 +105,50 @@ impl EnginOrbital {
         envergure_rel: f32,
         omega: f32,
         inclinaison: f32,
+    ) -> Option<Self> {
+        Self::nouveau_interne(etat, parent, rayon_planete, orbite_rel, envergure_rel, omega, inclinaison, None)
+    }
+
+    /// Comme [`Self::nouveau`], mais **pilotable** : `classe` fixe la base
+    /// de ses statistiques de vol (`vaisseau::vol`), calculées ici une fois
+    /// pour toutes — c'est ce qui permettra à [`Astre::tenter_lancer`] de
+    /// faire décoller ce vaisseau plus tard, sans avoir à reparcourir sa
+    /// `Station` d'origine.
+    #[allow(clippy::too_many_arguments)] // Même géométrie orbitale que `nouveau`, plus la classe pilotée.
+    pub fn nouveau_pilotable(
+        etat: &EtatStation,
+        classe: ClasseVaisseau,
+        parent: usize,
+        rayon_planete: f32,
+        orbite_rel: f32,
+        envergure_rel: f32,
+        omega: f32,
+        inclinaison: f32,
+    ) -> Option<Self> {
+        let station = etat.doit_dessiner()?;
+        let stats = vol::calculer(classe, station);
+        Self::nouveau_interne(
+            etat,
+            parent,
+            rayon_planete,
+            orbite_rel,
+            envergure_rel,
+            omega,
+            inclinaison,
+            Some((classe, stats)),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn nouveau_interne(
+        etat: &EtatStation,
+        parent: usize,
+        rayon_planete: f32,
+        orbite_rel: f32,
+        envergure_rel: f32,
+        omega: f32,
+        inclinaison: f32,
+        vol: Option<(ClasseVaisseau, StatsVol)>,
     ) -> Option<Self> {
         let station = etat.doit_dessiner()?;
         let maillage = MaillageStation::cuire(station);
@@ -96,10 +171,12 @@ impl EnginOrbital {
             q,
             echelle: envergure / rayon_assemblage,
             lacet: 0.0,
+            vol,
         })
     }
 
-    /// L'ISS autour de la Terre, avec les valeurs de ce module.
+    /// L'ISS autour de la Terre, avec les valeurs de ce module. Postée, pas
+    /// pilotable (décision 10).
     pub fn iss(etat: &EtatStation, parent: usize, rayon_planete: f32) -> Option<Self> {
         Self::nouveau(
             etat,
@@ -111,6 +188,22 @@ impl EnginOrbital {
             INCLINAISON_ISS,
         )
     }
+
+    /// Un Starship posté (pilotable) autour de la Terre, avec les valeurs de
+    /// ce module — le premier vaisseau réellement lançable du jeu (Lot C).
+    pub fn starship_pose(etat: &EtatStation, parent: usize, rayon_planete: f32) -> Option<Self> {
+        Self::nouveau_pilotable(
+            etat,
+            ClasseVaisseau::Starship,
+            parent,
+            rayon_planete,
+            ORBITE_STARSHIP,
+            ECHELLE_STARSHIP,
+            OMEGA_STARSHIP,
+            INCLINAISON_STARSHIP,
+        )
+    }
+
 }
 
 impl Astre for EnginOrbital {
@@ -162,6 +255,33 @@ impl Astre for EnginOrbital {
     fn teinte(&self) -> Option<Vec3> {
         Some(vec3(0.78, 0.80, 0.84))
     }
+
+    /// Vrai seulement pour un engin construit via `nouveau_pilotable`.
+    fn pilotable(&self) -> bool {
+        self.vol.is_some()
+    }
+
+    fn stats_vol(&self) -> Option<StatsVol> {
+        self.vol.map(|(_, stats)| stats)
+    }
+
+    /// Décision 8 (`docs/conception/trajectoires.md` §4) : le départ d'un
+    /// trajet est la position courante d'un `EnginOrbital` posté. `None` si
+    /// non pilotable (une station postée, l'ISS par exemple) — rien n'est
+    /// touché. Ne cuit rien de nouveau : le maillage et l'échelle déjà
+    /// calculés à la pose sont **repris tels quels** (`std::mem::take`),
+    /// pas régénérés — seul le mode de mouvement change.
+    fn tenter_lancer(&mut self, trajectoire: Trajectoire) -> Option<Box<dyn Astre>> {
+        self.vol?;
+        let maillage = std::mem::take(&mut self.maillage);
+        Some(Box::new(VaisseauEnTransit::depuis_maillage(
+            maillage,
+            self.echelle,
+            self.base.rayon,
+            self.base.nom,
+            trajectoire,
+        )))
+    }
 }
 
 #[cfg(test)]
@@ -203,5 +323,54 @@ mod tests {
         assert!(q.y > 0.5, "orbite trop plate : q.y = {}", q.y);
         // Et pas polaire non plus.
         assert!(q.z > 0.3, "orbite quasi polaire : q.z = {}", q.z);
+    }
+
+    fn etat_essai() -> EtatStation {
+        EtatStation::Prete(crate::vaisseau::demo_station())
+    }
+
+    // Un engin posé via `nouveau` (pas `nouveau_pilotable`) n'est jamais
+    // pilotable — c'est le cas ISS/habitat par défaut (décision 10).
+    #[test]
+    fn nouveau_nest_jamais_pilotable() {
+        let e = EnginOrbital::nouveau(&etat_essai(), 0, 1.0, 1.5, 0.3, 0.5, 0.5).unwrap();
+        assert!(!e.pilotable());
+        assert_eq!(e.stats_vol(), None);
+    }
+
+    // `nouveau_pilotable` calcule et garde de vraies statistiques de vol —
+    // pas un espace réservé vide.
+    #[test]
+    fn nouveau_pilotable_calcule_les_stats_de_vol() {
+        let etat = etat_essai();
+        let station = etat.doit_dessiner().unwrap();
+        let attendu = vol::calculer(ClasseVaisseau::Starship, station);
+        let e = EnginOrbital::nouveau_pilotable(&etat, ClasseVaisseau::Starship, 0, 1.0, 1.5, 0.3, 0.5, 0.5).unwrap();
+        assert!(e.pilotable());
+        assert_eq!(e.stats_vol(), Some(attendu));
+    }
+
+    // `tenter_lancer` sur un engin **non** pilotable rend `None`, sans
+    // toucher à l'engin — pas de vaisseau en transit fantôme.
+    #[test]
+    fn tenter_lancer_refuse_un_engin_non_pilotable() {
+        let mut e = EnginOrbital::nouveau(&etat_essai(), 0, 1.0, 1.5, 0.3, 0.5, 0.5).unwrap();
+        let t = Trajectoire::nouvelle(Vec3::ZERO, Vec3::X * 10.0, 0.0, 1.0, Vec3::Y);
+        assert!(e.tenter_lancer(t).is_none());
+        assert!(!e.pilotable(), "l'engin d'origine n'a pas dû changer de nature");
+    }
+
+    // `tenter_lancer` sur un engin pilotable réussit, sans recuire le
+    // maillage (même rayon reporté tel quel, position au point de départ).
+    #[test]
+    fn tenter_lancer_reussit_pour_un_engin_pilotable() {
+        let mut e = EnginOrbital::nouveau_pilotable(&etat_essai(), ClasseVaisseau::Starship, 0, 1.0, 1.5, 0.3, 0.5, 0.5).unwrap();
+        let rayon_avant = e.corps().rayon;
+        let depart = Vec3::ZERO;
+        let arrivee = Vec3::X * 20.0;
+        let t = Trajectoire::nouvelle(depart, arrivee, 0.0, 1.0, Vec3::Y);
+        let v = e.tenter_lancer(t).expect("un engin pilotable doit décoller");
+        assert_eq!(v.corps().rayon, rayon_avant, "le rayon d'affichage n'a pas dû changer");
+        assert_eq!(v.corps().position, depart, "part bien du point de départ du trajet");
     }
 }
