@@ -1375,3 +1375,39 @@ son commentaire dit désormais qu'elle est défensive, pas nécessaire.
 
 **731 tests verts** (743 avec le binaire `mhd`), clippy à 0 avertissement.
 La vérification à l'écran des neuf points ci-dessus **reste à faire**.
+
+## ⚠️ Le crash à ×25000 sur une lune de Saturne (2026-09-22)
+
+Signalé en jeu, tout de suite après le passage des orbites de lunes en trait
+large : zoomer sur une lune de Saturne faisait tomber le jeu. **Défaut
+introduit par ce tracé**, pas un défaut ancien.
+
+**La cause, mesurée et non devinée.** `segments_motif` découpait la
+polyligne **sur toute sa longueur projetée**, au pas du motif (22 px). Or à
+fort zoom, une arête d'orbite se projette énorme : test à l'appui, une seule
+arête de 10⁷ px produisait **909 091 segments** — pour une orbite de 96
+arêtes, et à chaque frame. Le `Vec` grossissait jusqu'à épuiser la mémoire.
+
+Le semis de points de V1 (`systeme/rendu.rs`) n'a jamais pu faire ça : son
+pas est un **nombre d'échantillons à sauter**, borné par la taille de la
+polyligne. Le mien était une **longueur en pixels**, bornée par rien. Le
+même calque, deux unités de travail, et une seule tient au zoom.
+
+**Le remède est le bon, pas le petit** : le travail suit désormais la
+longueur **visible**. Chaque arête est découpée au rectangle de l'écran
+(Liang-Barsky), et la part invisible n'est pas parcourue — elle est sautée
+au modulo du cycle (`avancer`, en temps constant), ce qui garde le motif en
+phase. Borner bêtement le nombre de segments aurait masqué le symptôme en
+tronquant l'orbite.
+
+Trois tests neufs, tous red-checkés : le travail reste borné sur une orbite
+géante (celui qui reproduit le crash), rien n'est encré hors écran, et le
+saut au modulo laisse le motif exactement où le parcours l'aurait laissé.
+
+⚠️ **Un sabotage qui ne mord pas, et il avait raison** : remplacer
+`l %= CYCLE` par `l %= CYCLE * 2.0` laisse tout vert — l'écart vaut un cycle
+entier, que la boucle suivante consomme. C'est équivalent, donc le test ne
+peut pas le voir. La vraie cible était l'avance de phase (`l -= reste`
+retiré), et là ça rougit.
+
+**734 tests verts** (746 avec `mhd`), clippy à 0.
