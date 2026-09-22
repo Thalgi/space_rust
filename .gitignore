@@ -4,3 +4,8 @@
 # pas du code. Meme raison que reglages.json.
 /vaisseaux/
 /reglages.json
+
+# Sorties de diagnostic prises a la main (RUST_BACKTRACE, profilage) : elles
+# datent d une session, pas du depot.
+/crash.log
+/bench_terrain.txt
