@@ -17,7 +17,7 @@
 
 ## Reprendre ici (état au 2026-08-16)
 
-**Vérifié** : **727 tests verts**, `cargo clippy --all-targets` à **0
+**Vérifié** : **731 tests verts**, `cargo clippy --all-targets` à **0
 avertissement**.
 
 **Commité et poussé** (`c53bab2` « Chantier trajectoires : lots A-D, icônes
@@ -208,7 +208,7 @@ sur un fichier contenant du travail non commité. Pour annuler ses propres
 modifications : ré-éditer les lignes, ou sauvegarder le fichier dans le
 scratchpad **avant** de le toucher (red-checks compris).
 
-État vérifié : **727 tests verts** (739 avec le binaire `mhd`), **`cargo clippy
+État vérifié : **731 tests verts** (743 avec le binaire `mhd`), **`cargo clippy
 --all-targets` : 0 avertissement** (branche `worktree-skymap-v2-marqueurs`,
 voir la ligne « Branche courante » ci-dessus ; 719 était le compte au moment
 du Lot D, laissé tel quel dans le récit qui suit).

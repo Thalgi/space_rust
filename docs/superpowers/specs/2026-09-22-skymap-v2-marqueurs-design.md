@@ -72,9 +72,9 @@ Fichiers touchés :
 | [src/ecran/accueil.rs](../../../src/ecran/accueil.rs) | modifié | Entrée `("SKYMAP V2 - MARQUEURS", Cible::SkymapV2)` dans `BLOC_ASTRES`, nouvelle variante `Cible::SkymapV2` |
 | [src/main.rs](../../../src/main.rs) | modifié | Variante `Etat::SkymapV2(Box<SkymapV2>)`, branchement dans l'aiguilleur (import, arm du `match` sur `Cible`, arm du `match` sur `Etat`) |
 | [src/systeme/mod.rs](../../../src/systeme/mod.rs) | modifié | Nouvelle méthode `Systeme::lunes_de(parent) -> Vec<usize>` (§6.2) |
-| [src/systeme/rendu.rs](../../../src/systeme/rendu.rs) | modifié | Nouvelle méthode `Systeme::draw_orbites_lunes_de(parent, col, cam)` (§7), appelée par `draw_orbites` |
-| [src/systeme/mod.rs](../../../src/systeme/mod.rs) (`Calques`) | modifié | Champ `lunes_de: Option<usize>` (§6.4) |
-| [src/ecran/skymap.rs](../../../src/ecran/skymap.rs) | **une ligne** | `lunes_de: None` dans le littéral `Calques` — mécanique, comportement V1 inchangé |
+| `src/ecran/trace_orbite.rs` | **nouveau** | Orbites de lunes en trait large pointillé-trait, tracées en 2D (§6.4, §7) |
+| [src/systeme/mod.rs](../../../src/systeme/mod.rs) | modifié | Accesseur `Systeme::orbite_lune_de(idx) -> &[Vec3]` (§7) |
+| ~~`Calques::lunes_de`, `draw_orbites_lunes_de`, la ligne de `skymap.rs`~~ | **retirés** | Remplacés par le tracé 2D — V1 finit strictement intouchée (§6.4) |
 | [src/camera.rs](../../../src/camera.rs) | modifié | Retrait de `#[allow(dead_code)]` sur `projeter_ecran` (premier appelant réel) |
 
 ### 4.2 Module `ecran/marqueur.rs`
@@ -171,6 +171,16 @@ rien à savoir de la catégorie de ce qu'ils manipulent.
   de la base sont à 6,4 px du centre, un cercle de 6 les couperait —, en plus de l'effet de
   survol s'il s'y ajoute. Les deux états sont indépendants (un marqueur peut
   être sélectionné sans être survolé, et réciproquement).
+- **Décalage au-dessus de l'astre** (révisé le 2026-09-22, après retour
+  visuel : « quand on zoome il devrait être offset au-dessus avec un léger
+  écart »). La pointe ne se pose pas sur le centre projeté : elle remonte de
+  `rayon apparent + ECART_PX` (6 px). Le rayon apparent se **mesure** (on
+  projette un point du monde écarté du rayon de l'astre le long de la
+  verticale caméra), il ne se devine pas : un décalage fixe se retrouverait
+  au milieu du disque dès qu'on approche. De loin, le rayon apparent est nul
+  et il ne reste que l'écart. `Marqueur::ecran` porte donc **la pointe**, pas
+  le centre de l'astre — le survol et le clic visent ce qu'on voit ; cliquer
+  le disque lui-même reste possible par le pick 3D.
 - Dessiné en **passe interface**, juste après `self.rendu.rendre(...)` et
   avant bandeau/sélecteur/fiche — ces derniers, dessinés par-dessus,
   recouvrent naturellement tout marqueur qui tomberait sous leur zone (même
@@ -247,47 +257,61 @@ d'abord, `sys.pick` en repli.
 
 ### 6.4 Orbites des lunes
 
-Les orbites sont dessinées **dans** `RenduStandard::rendre` ([src/rendu.rs](../../../src/rendu.rs)),
-sous la caméra 3D et avant les corps : un appel séparé après `rendre` n'aurait
-plus de caméra 3D active et passerait par-dessus les corps. Le ciblage passe
-donc par `Calques`, qui gagne un champ :
+⚠️ **Révisé le 2026-09-22, après retour visuel** (« je voudrais une ligne
+trois fois plus large au style mediumdashdot »). La première version passait
+par un champ `Calques::lunes_de` et un semis de points dessiné dans la passe
+3D de `RenduStandard::rendre`. Elle est **abandonnée** : `draw_line_3d` de
+macroquad n'a pas d'épaisseur — il rend toujours un pixel —, donc un trait
+large est hors de portée de cette passe.
+
+Les orbites de lunes se tracent désormais **en 2D, en passe interface**
+(§7) : la polyligne est projetée à l'écran, puis découpée au motif
+mediumdashdot et tracée avec `draw_line`, qui prend une épaisseur.
+
+Conséquences :
+
+- le champ `Calques::lunes_de` et `Systeme::draw_orbites_lunes_de` sont
+  **retirés** — plus rien ne les appelle ;
+- **V1 redevient strictement intouchée** : la ligne `lunes_de: None` du
+  littéral `Calques` de `skymap.rs` disparaît avec le champ ;
+- V2 passe toujours `lunes: false` à `draw_orbites`, et appelle
+  `trace_orbite::dessiner_orbites_lunes` quand `planete_active` rend
+  `Some(parent)` ;
+- le trait ne passe plus le test de profondeur : il se voit même quand la
+  lune est derrière sa planète. Assumé — il n'apparaît que pour l'astre
+  sélectionné, et sert à dire où chercher la lune.
+
+## 7. `ecran/trace_orbite.rs` (nouveau)
+
+Même partage que `marqueur.rs` : ce qui **décide** est pur et testé, seul le
+tracé touche macroquad.
 
 ```rust
-/// Orbites des lunes de CETTE planète seulement, à pleine opacité —
-/// indépendamment de `lunes` (le calque global). `None` : rien de ciblé.
-pub lunes_de: Option<usize>,
+/// Trait trois fois plus large que le pixel des autres calques.
+pub const EPAISSEUR_PX: f32 = 3.0;
+/// Violet pâle des calques, remonté en opacité (un trait large et transparent bave).
+pub const COL_LUNES: Color = Color::new(0.62, 0.55, 0.90, 0.85);
+/// mediumdashdot, en pixels écran : trait, trou, point, trou.
+const MOTIF: [(f32, bool); 4] = [(12.0, true), (4.0, false), (2.0, true), (4.0, false)];
+
+/// Découpe une polyligne ÉCRAN selon MOTIF, et rend les segments à encrer.
+pub fn segments_motif(points: &[Vec2]) -> Vec<(Vec2, Vec2)>;
+
+/// Trace l'orbite de chaque lune de `parent`. Passe interface.
+pub fn dessiner_orbites_lunes(sys: &Systeme, parent: usize, cam: &CameraInfo, ecran: Vec2, aspect: f32);
 ```
 
-`draw_orbites` appelle `self.draw_orbites_lunes_de(parent, COL_LUNES, cam)`
-quand `lunes_de` est `Some(parent)`. V2 passe toujours `lunes: false` et
-`lunes_de: planete_active(&self.sys, self.fiche_ouverte)`.
+Deux points qui décident du rendu :
 
-⚠️ **Seule retouche de V1** : `Calques` est construit par littéral dans
-`skymap.rs` — il y gagne une ligne `lunes_de: None`, purement mécanique, qui
-laisse son comportement inchangé.
+- le motif **se poursuit d'un sommet de polyligne au suivant** (il ne repart
+  pas de zéro à chaque sommet) : ce qui compte est la longueur parcourue à
+  l'écran, pas le nombre d'échantillons de l'orbite. Sans ça, une orbite
+  échantillonnée fin sortirait en trait plein ;
+- un point **derrière la caméra** coupe la polyligne en deux morceaux, au
+  lieu de les relier par un trait fantôme en travers de l'écran.
 
-## 7. `Systeme::draw_orbites_lunes_de` (nouveau, `systeme/rendu.rs`)
-
-Réutilise directement `dessiner_points` (déjà privée dans ce fichier, aucun
-changement de visibilité nécessaire) :
-
-```rust
-/// Dessine l'orbite de chaque astre enfant direct de `parent`, à pleine
-/// opacité — pas d'atténuation façon `draw_orbites` : appelée seulement
-/// quand `parent` (ou une de ses lunes) est sélectionné, donc jamais en
-/// concurrence visuelle avec d'autres traces.
-pub fn draw_orbites_lunes_de(&self, parent: usize, col: Color, cam: Vec3) {
-    let Some(centre) = self.astres.get(parent).map(|a| a.corps().position) else { return };
-    for a in &self.astres {
-        if a.parent() != Some(parent) { continue; }
-        let pts = a.orbite_lune();
-        if pts.is_empty() { continue; }
-        dessiner_points(pts, centre, col, cam);
-    }
-}
-```
-
-`COL_LUNES` déjà défini dans ce fichier (violet pâle) — réutilisé tel quel.
+Nouvel accesseur `Systeme::orbite_lune_de(idx) -> &[Vec3]` (polyligne
+relative au parent) : le tracé a besoin des points, pas d'un appel de dessin.
 
 ## 8. Tests prévus
 

@@ -1301,9 +1301,77 @@ vérifié à l'écran, à faire par l'utilisateur** :
    bloc de gauche a gagné une ligne).
 9. SKYMAP (V1) : inchangée — « RING / MOONS » y fonctionne toujours.
 
-**727 tests verts** (739 avec le binaire `mhd`), **`cargo clippy
+**727 tests verts** (739 avec le binaire `mhd`) au moment de ce chantier, **`cargo clippy
 --all-targets` à 0 avertissement.** Commits : `16199fa` (Tâche 1 —
 `Systeme::lunes_de`, `Calques::lunes_de`, tracé ciblé des orbites de lunes),
 `a2482f7` (Tâche 2 — cœur de `ecran/marqueur.rs`), `6990661` (Tâche 3 —
 dessin des marqueurs et écran `SkymapV2` branché).
 
+
+## Skymap V2 — retours visuels du 2026-09-22
+
+Deux demandes après avoir vu la V2 tourner, et chacune a buté sur une
+contrainte du moteur qu'il valait mieux constater que contourner.
+
+### Le triangle se posait au centre de la planète
+
+Demandé : « le triangle pointe sur le centre de la planète ; quand on zoome
+il devrait être offset au-dessus avec un léger écart. »
+
+Un décalage **fixe** en pixels ne règle rien : il reste au milieu du disque
+dès qu'on approche. La pointe remonte donc de `rayon apparent + 6 px`, et le
+rayon apparent se **mesure** — on projette un point du monde écarté du rayon
+de l'astre le long de la verticale caméra, et on lit l'écart en pixels. De
+loin, ce rayon est nul et il ne reste que l'écart : le rendu lointain ne
+bouge pas. `Marqueur::ecran` porte désormais **la pointe** et non le centre,
+si bien que le survol et le clic visent ce qu'on voit ; cliquer le disque
+lui-même continue de marcher par le pick 3D.
+
+Test `la_pointe_se_pose_au_dessus_du_disque_apparent` : corps ponctuel
+(écart seul), rayon 1 à 20 unités (≈ 42 px de rayon apparent, calculé à la
+main dans le test), et un corps deux fois plus gros qui monte deux fois plus
+haut. Red-check : décalage ramené à l'écart fixe → rouge.
+
+### Les orbites de lunes en semis de points
+
+Demandé : « une ligne trois fois plus large au style mediumdashdot. »
+
+⚠️ **`draw_line_3d` de macroquad n'a pas d'épaisseur** — il rend toujours un
+pixel. Tout le calque d'orbites de `systeme/rendu.rs` vit avec cette
+contrainte ; un trait large y est donc impossible, et ce n'est pas un
+réglage qui manquait. Le tracé est passé en **2D, en passe interface**
+(`ecran/trace_orbite.rs`) : la polyligne est projetée à l'écran, découpée au
+motif mediumdashdot (trait 12 px, trou 4, point 2, trou 4) et tracée par
+`draw_line`, qui prend une épaisseur.
+
+Ce qui en découle, et qui vaut mieux que le détour initial : le champ
+`Calques::lunes_de` et `Systeme::draw_orbites_lunes_de` (ajoutés au chantier
+précédent) **n'ont plus d'appelant et sont retirés** — donc la ligne
+`lunes_de: None` de `skymap.rs` disparaît avec eux, et **V1 finit
+strictement intouchée**. Prix payé : ce trait ne passe pas le test de
+profondeur, il se voit même quand la lune passe derrière sa planète. Assumé
+— il n'apparaît que pour l'astre sélectionné.
+
+Deux propriétés décident du rendu, et sont testées : le motif **se poursuit
+d'un sommet au suivant** (sinon une orbite échantillonnée fin sort en trait
+plein — c'est la longueur parcourue à l'écran qui compte, pas le nombre de
+points), et il **commence par de l'encre** (sinon deux lunes voisines
+paraissent décalées). Trois red-checks, tous mordants : motif rendu plein,
+motif remis à zéro à chaque sommet, motif démarré sur un trou.
+
+### ⚠️ Un quatrième test écrit puis jeté
+
+`une_polyligne_degeneree_ne_produit_rien` affirmait garder contre deux
+points confondus — « longueur nulle, et pas de boucle infinie ». **Aucun
+sabotage ne le faisait rougir** : retirer la garde de longueur nulle, ou
+celle de `points.len() < 2`, le laissait vert. La raison est que
+`windows(2)` ne rend rien sous deux points, et que `parcouru < longueur` est
+faux d'emblée à longueur nulle — la boucle infinie que je croyais prévenir
+ne pouvait pas exister. Le test décrivait des propriétés vraies que rien
+dans le code ne pouvait casser. Jeté, avec la note qui explique pourquoi à
+l'endroit où il vivait. La garde de longueur nulle, elle, est **gardée**
+comme défense contre un `dir` à NaN si la boucle est un jour réécrite — et
+son commentaire dit désormais qu'elle est défensive, pas nécessaire.
+
+**731 tests verts** (743 avec le binaire `mhd`), clippy à 0 avertissement.
+La vérification à l'écran des neuf points ci-dessus **reste à faire**.

@@ -318,7 +318,6 @@ impl Skymap {
                     planetes: self.menu.orbites,
                     etoiles: self.menu.orbites_etoiles,
                     lunes: self.menu.orbites_lunes,
-                    lunes_de: None,
                     zone: self.menu.zone,
                     focus: self.cam.focus(),
                     previsualisation,

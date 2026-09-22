@@ -17,7 +17,13 @@ use crate::astre::{CameraInfo, Categorie};
 use crate::systeme::Systeme;
 use macroquad::prelude::*;
 
-/// Un marqueur : l'astre qu'il désigne, et où il se projette à l'écran (px).
+/// Un marqueur : l'astre qu'il désigne, et **la pointe de son triangle** à
+/// l'écran (px) — le centre projeté de l'astre, remonté de son rayon
+/// apparent plus [`ECART_PX`] (voir `decalage_px`).
+///
+/// C'est bien la pointe, et pas le centre de l'astre, qui est stockée : le
+/// survol et le clic visent ce qu'on VOIT. Cliquer le disque lui-même reste
+/// possible par le pick 3D, qui n'a pas besoin de marqueur.
 ///
 /// Rien de propre à un type d'astre : un marqueur de planète et un marqueur
 /// de lune sont exactement la même donnée.
@@ -26,6 +32,11 @@ pub struct Marqueur {
     pub idx: usize,
     pub ecran: Vec2,
 }
+
+/// **Écart entre le bord apparent de l'astre et la pointe du triangle**, en
+/// pixels. Assez pour que la pointe ne morde pas le disque, assez peu pour
+/// qu'on lise encore « ce triangle désigne CE corps ».
+pub const ECART_PX: f32 = 6.0;
 
 /// Rayon de détection du survol et du clic, en pixels écran.
 ///
@@ -59,10 +70,40 @@ pub fn marqueurs_pour(
         .into_iter()
         .filter(|&idx| idx < sys.nb_astres())
         .filter_map(|idx| {
-            let p = crate::camera::projeter_ecran(sys.position(idx), ecran, cam, aspect)?;
-            dans_cadre(p, ecran).then_some(Marqueur { idx, ecran: p })
+            let centre = sys.position(idx);
+            let p = crate::camera::projeter_ecran(centre, ecran, cam, aspect)?;
+            // Le cadrage se juge sur le CENTRE de l'astre, pas sur la pointe
+            // décalée : c'est l'astre qui est à l'écran ou non.
+            if !dans_cadre(p, ecran) {
+                return None;
+            }
+            let decalage = decalage_px(sys, idx, centre, p, cam, ecran, aspect);
+            Some(Marqueur { idx, ecran: vec2(p.x, p.y - decalage) })
         })
         .collect()
+}
+
+/// **De combien la pointe du triangle monte au-dessus du centre de l'astre.**
+///
+/// Un décalage fixe en pixels se retrouverait DANS le disque dès qu'on
+/// approche : une planète qui remplit l'écran garderait sa pointe en plein
+/// milieu. On mesure donc le rayon apparent (un point du monde écarté du
+/// rayon de l'astre le long de la verticale caméra, projeté à son tour) et
+/// on ajoute [`ECART_PX`]. De loin, le rayon apparent est nul et il ne
+/// reste que l'écart.
+fn decalage_px(
+    sys: &Systeme,
+    idx: usize,
+    centre: Vec3,
+    centre_ecran: Vec2,
+    cam: &CameraInfo,
+    ecran: Vec2,
+    aspect: f32,
+) -> f32 {
+    let rayon = sys.rayon_de(idx).unwrap_or(0.0);
+    let rayon_px = crate::camera::projeter_ecran(centre + cam.up * rayon, ecran, cam, aspect)
+        .map_or(0.0, |haut| (centre_ecran.y - haut.y).abs());
+    rayon_px + ECART_PX
 }
 
 /// Indices des planètes **racines** : catégorie `Planete` et sans parent.
@@ -127,8 +168,8 @@ pub fn planete_active(sys: &Systeme, selection: Option<usize>) -> Option<usize> 
     }
 }
 
-/// Triangle plein, base 8 px, hauteur 10 px, pointe en bas **sur** le point
-/// projeté — une punaise plantée sur l'astre.
+/// Triangle plein, base 8 px, hauteur 10 px, pointe en bas sur
+/// `Marqueur::ecran` — donc au-dessus de l'astre, dégagée de son disque.
 const DEMI_BASE_PX: f32 = 4.0;
 const HAUTEUR_PX: f32 = 10.0;
 /// Cercle de sélection, centré sur le centre du triangle. 8 et non 6 : les
@@ -239,7 +280,47 @@ mod tests {
 
         assert_eq!(ms.len(), 1, "seul l'astre au centre doit être marqué : {ms:?}");
         assert_eq!(ms[0].idx, centre);
-        assert!(ms[0].ecran.distance(ECRAN * 0.5) < 0.5, "l'origine doit tomber au centre : {:?}", ms[0].ecran);
+        // Même abscisse que l'astre, mais AU-DESSUS de lui (y écran croît vers
+        // le bas) : la pointe ne se pose pas sur le centre.
+        assert!((ms[0].ecran.x - ECRAN.x * 0.5).abs() < 0.5, "décalé horizontalement : {:?}", ms[0].ecran);
+        assert!(ms[0].ecran.y < ECRAN.y * 0.5 - ECART_PX, "la pointe n'est pas remontée : {:?}", ms[0].ecran);
+    }
+
+    /// **La pointe monte avec le disque de l'astre.** Un décalage fixe en
+    /// pixels se retrouverait à l'intérieur d'une planète qu'on approche : ce
+    /// qui compte est le rayon APPARENT, plus l'écart.
+    ///
+    /// Deux corps de rayons différents à la même distance, donc un seul
+    /// paramètre change entre les deux mesures.
+    #[test]
+    fn la_pointe_se_pose_au_dessus_du_disque_apparent() {
+        let cam = camera();
+        let mesurer = |rayon: f32| {
+            let mut sys = Systeme::new();
+            sys.ajouter(Box::new(Corps {
+                base: CorpsBase::new(Vec3::ZERO, 1.0, rayon),
+                cat: Categorie::Planete,
+                parent: None,
+            }));
+            // Hauteur de la pointe au-dessus du centre projeté de l'astre.
+            ECRAN.y * 0.5 - marqueurs_pour(&sys, [0], &cam, ECRAN, ASPECT)[0].ecran.y
+        };
+
+        // Un corps ponctuel : il ne reste que l'écart.
+        assert!((mesurer(0.0) - ECART_PX).abs() < 0.5, "corps ponctuel : {}", mesurer(0.0));
+
+        // Rayon apparent d'un corps d'une unité à 20 unités de distance :
+        // 0.5 · hauteur_écran / (tan(22,5°) · dist) = 350 / (0,4142 · 20) ≈ 42,2 px.
+        let attendu = 0.5 * ECRAN.y / (22.5_f32.to_radians().tan() * 20.0) + ECART_PX;
+        assert!((mesurer(1.0) - attendu).abs() < 1.0, "rayon 1 : {} au lieu de {attendu}", mesurer(1.0));
+
+        // Et un corps deux fois plus gros monte deux fois plus haut, l'écart mis à part.
+        assert!(
+            ((mesurer(2.0) - ECART_PX) - 2.0 * (mesurer(1.0) - ECART_PX)).abs() < 1.0,
+            "le décalage ne suit pas le rayon : {} puis {}",
+            mesurer(1.0),
+            mesurer(2.0)
+        );
     }
 
     // La frontière du cadre, tenue sur le prédicat lui-même : bord

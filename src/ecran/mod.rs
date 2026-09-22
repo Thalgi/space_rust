@@ -26,6 +26,7 @@ pub(crate) mod pixel;
 mod selecteur;
 mod skymap;
 mod skymap_v2;
+mod trace_orbite;
 mod starmap;
 mod station;
 mod vignette;

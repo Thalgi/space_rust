@@ -37,12 +37,6 @@ pub struct Calques {
     pub etoiles: bool,
     /// Orbites des lunes, centrées sur leur planète.
     pub lunes: bool,
-    /// Orbites des lunes de **cette** planète seulement, à pleine opacité —
-    /// indépendamment de [`Self::lunes`], le calque global tout-ou-rien.
-    ///
-    /// C'est ce que la Skymap V2 affiche quand une planète (ou une de ses
-    /// lunes) est sélectionnée. `None` : rien de ciblé.
-    pub lunes_de: Option<usize>,
     /// Anneaux de la zone habitable.
     pub zone: bool,
     /// Astre focalisé par la caméra, s'il y en a un.
@@ -463,6 +457,17 @@ impl Systeme {
             .filter(|(_, a)| a.parent() == Some(parent))
             .map(|(i, _)| i)
             .collect()
+    }
+
+    /// Polyligne d'orbite d'une lune, **relative à son parent** (vide pour
+    /// tout autre astre, ou pour un index invalide) — voir
+    /// [`Astre::orbite_lune`].
+    ///
+    /// Exposée pour le tracé en 2D de la Skymap V2 (`ecran/trace_orbite.rs`),
+    /// qui a besoin des points eux-mêmes et non d'un appel de dessin : un
+    /// trait large ne peut pas se faire en 3D (`draw_line_3d` est à un pixel).
+    pub fn orbite_lune_de(&self, idx: usize) -> &[Vec3] {
+        self.astres.get(idx).map_or(&[], |a| a.orbite_lune())
     }
 
     /// Position d'un astre par index (origine si invalide).

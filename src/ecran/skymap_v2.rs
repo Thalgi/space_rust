@@ -7,7 +7,7 @@ use crate::genese::{
     construire_preset_solaire, construire_preset_tau_ceti, construire_preset_trinaire,
     construire_systeme, sauver_presets, PresetSauve,
 };
-use super::{bandeau, fiche, liste, marqueur, selecteur};
+use super::{bandeau, fiche, liste, marqueur, selecteur, trace_orbite};
 use crate::menu::{ActionMenu, Menu};
 use crate::rendu::{Rendu, RenduStandard};
 use crate::systeme::Systeme;
@@ -306,11 +306,6 @@ impl SkymapV2 {
         }
 
         let previsualisation = self.previsualisation_trajectoire(&cam_info, aspect, m, survole);
-        // Calculé avant l'appel : `&mut self.sys` (ci-dessous) et un
-        // `&self.sys` porté par le littéral `Calques` dans la même liste
-        // d'arguments ne passent pas l'emprunteur — deux emprunts vivants au
-        // même moment sur `self.sys`.
-        let lunes_de = marqueur::planete_active(&self.sys, self.fiche_ouverte);
         self.rendu
             .rendre(
                 cam3d,
@@ -322,19 +317,26 @@ impl SkymapV2 {
                     etoiles: self.menu.orbites_etoiles,
                     // Le calque global tout-ou-rien est coupé en V2 : les
                     // orbites de lunes n'apparaissent que pour la planète
-                    // sélectionnée (spec §6.4), quel que soit le bouton.
+                    // sélectionnée (spec §6.4), quel que soit le bouton — et
+                    // elles se tracent en passe interface (`trace_orbite`),
+                    // pas ici, parce qu'un trait large n'existe pas en 3D.
                     lunes: false,
-                    lunes_de,
                     zone: self.menu.zone,
                     focus: self.cam.focus(),
                     previsualisation,
                 },
             );
 
-        // Marqueurs : passe interface, AVANT bandeau/colonne/fiche, qui les
-        // recouvrent naturellement là où ils se superposent. Recalculés ici
-        // (et non repris du survol) parce que le clic a pu changer la
-        // sélection, donc les lunes à montrer, dans cette même frame.
+        // Orbites des lunes, puis marqueurs : passe interface, AVANT
+        // bandeau/colonne/fiche, qui les recouvrent naturellement là où ils se
+        // superposent. Les orbites d'abord, pour que les triangles restent
+        // au-dessus du trait. Recalculés ici (et non repris du survol) parce
+        // que le clic a pu changer la sélection, donc les lunes à montrer,
+        // dans cette même frame.
+        let ecran_px = vec2(screen_width(), screen_height());
+        if let Some(p) = marqueur::planete_active(&self.sys, self.fiche_ouverte) {
+            trace_orbite::dessiner_orbites_lunes(&self.sys, p, &cam_info, ecran_px, aspect);
+        }
         let marqueurs = self.marqueurs(&cam_info, aspect);
         marqueur::dessiner(&self.sys, &marqueurs, survole, self.fiche_ouverte);
 
