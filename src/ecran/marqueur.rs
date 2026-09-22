@@ -127,6 +127,41 @@ pub fn planete_active(sys: &Systeme, selection: Option<usize>) -> Option<usize> 
     }
 }
 
+/// Triangle plein, base 8 px, hauteur 10 px, pointe en bas **sur** le point
+/// projeté — une punaise plantée sur l'astre.
+const DEMI_BASE_PX: f32 = 4.0;
+const HAUTEUR_PX: f32 = 10.0;
+/// Cercle de sélection, centré sur le centre du triangle. 8 et non 6 : les
+/// coins de la base sont à 6,4 px de ce centre, un cercle de 6 les couperait.
+const RAYON_SELECTION_PX: f32 = 8.0;
+
+/// Dessine les marqueurs. **Passe interface uniquement** — ne décide de rien :
+/// quels marqueurs, lequel est survolé, lequel est sélectionné, tout arrive
+/// déjà tranché.
+///
+/// Teinte : celle de la pastille du sélecteur (`selecteur::teinte_astre`),
+/// pour qu'un même astre ait la même couleur dans la colonne et sur la carte.
+pub fn dessiner(sys: &Systeme, marqueurs: &[Marqueur], survole: Option<usize>, selectionne: Option<usize>) {
+    for m in marqueurs {
+        let cat = sys.categorie_de(m.idx).unwrap_or(Categorie::Planete);
+        let mut c = super::selecteur::teinte_astre(sys, m.idx, cat);
+        let est_survole = survole == Some(m.idx);
+        c.a = if est_survole { 1.0 } else { 0.85 };
+
+        let pointe = m.ecran;
+        let gauche = vec2(pointe.x - DEMI_BASE_PX, pointe.y - HAUTEUR_PX);
+        let droite = vec2(pointe.x + DEMI_BASE_PX, pointe.y - HAUTEUR_PX);
+        draw_triangle(pointe, gauche, droite, c);
+        if est_survole {
+            draw_triangle_lines(pointe, gauche, droite, 1.0, WHITE);
+        }
+        if selectionne == Some(m.idx) {
+            let centre = vec2(pointe.x, pointe.y - HAUTEUR_PX * 0.5);
+            draw_circle_lines(centre.x, centre.y, RAYON_SELECTION_PX, 1.0, Color::new(1.0, 1.0, 1.0, 0.5));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

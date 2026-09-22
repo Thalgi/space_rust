@@ -90,7 +90,6 @@ pub fn rayon_ecran(souris: Vec2, ecran: Vec2, cam: &CameraInfo, aspect: f32) -> 
 /// fantôme désignerait un port dans le dos de l'observateur. C'est le piège
 /// classique de la projection, et il ne se voit pas à l'œil : le port fautif
 /// est simplement celui qu'on n'a pas visé.
-#[allow(dead_code)] // Interaction de l'assembleur (Lot 4) : deja teste, pas encore branche a une vue.
 pub fn projeter_ecran(p: Vec3, ecran: Vec2, cam: &CameraInfo, aspect: f32) -> Option<Vec2> {
     let rel = p - cam.pos;
     let profondeur = rel.dot(cam.forward);

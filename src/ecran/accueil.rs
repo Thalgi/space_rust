@@ -6,6 +6,8 @@ use macroquad::prelude::*;
 pub enum Cible {
     Starmap,
     Skymap,
+    /// Skymap V2 : marqueurs de planètes et de lunes (fork de `Skymap`).
+    SkymapV2,
     Objet,
     Galerie,
     GalerieGaz,
@@ -35,6 +37,7 @@ pub struct Accueil;
 /// Bloc de gauche : exploration et galeries d'astres.
 const BLOC_ASTRES: &[(&str, Cible)] = &[
     ("SKYMAP - SYSTEME COMPLET", Cible::Skymap),
+    ("SKYMAP V2 - MARQUEURS", Cible::SkymapV2),
     ("OBJET CELESTE - VUE ISOLEE", Cible::Objet),
     ("STARMAP - VOISINAGE STELLAIRE", Cible::Starmap),
     ("GALERIE - TYPES TELLURIQUES", Cible::Galerie),
