@@ -12,6 +12,7 @@ mod enveloppes;
 mod fiche;
 mod fils;
 mod icone;
+mod marqueur;
 pub(crate) mod liste;
 mod galerie;
 mod galerie_disques;
