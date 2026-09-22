@@ -37,6 +37,12 @@ pub struct Calques {
     pub etoiles: bool,
     /// Orbites des lunes, centrées sur leur planète.
     pub lunes: bool,
+    /// Orbites des lunes de **cette** planète seulement, à pleine opacité —
+    /// indépendamment de [`Self::lunes`], le calque global tout-ou-rien.
+    ///
+    /// C'est ce que la Skymap V2 affiche quand une planète (ou une de ses
+    /// lunes) est sélectionnée. `None` : rien de ciblé.
+    pub lunes_de: Option<usize>,
     /// Anneaux de la zone habitable.
     pub zone: bool,
     /// Astre focalisé par la caméra, s'il y en a un.
@@ -441,6 +447,22 @@ impl Systeme {
     /// emboîté, sans chevauchement) plutôt qu'à un rayon aléatoire indépendant.
     pub fn nb_lunes(&self, parent: usize) -> usize {
         self.astres.iter().filter(|a| a.parent() == Some(parent)).count()
+    }
+
+    /// **Indices des enfants directs** de `parent` : tout astre dont
+    /// `parent()` le désigne, dans l'ordre de `self.astres`.
+    ///
+    /// Générique à dessein : pas de filtre de catégorie. Une lune en est un
+    /// enfant, mais aussi un engin posté autour de la planète (l'ISS autour de
+    /// la Terre). C'est à l'appelant de choisir ce qu'il garde — les marqueurs
+    /// de la Skymap V2 ne gardent que les lunes.
+    pub fn lunes_de(&self, parent: usize) -> Vec<usize> {
+        self.astres
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| a.parent() == Some(parent))
+            .map(|(i, _)| i)
+            .collect()
     }
 
     /// Position d'un astre par index (origine si invalide).
@@ -1096,6 +1118,29 @@ mod tests_designation {
         assert_ne!(sys.designation(a), sys.designation(b), "deux lunes a la meme distance");
         assert_eq!(sys.designation(a), "I-1");
         assert_eq!(sys.designation(b), "I-2");
+    }
+
+    // **`lunes_de` rend les enfants directs, et seulement eux.** Le filtre
+    // porte sur le PARENT, pas sur la catégorie : c'est ce qui le rend
+    // générique (une station ou un vaisseau posté autour d'une planète en est
+    // aussi l'enfant). Ce sont les appelants qui filtrent par catégorie.
+    #[test]
+    fn lunes_de_rend_les_enfants_directs_et_rien_d_autre() {
+        let mut sys = Systeme::new();
+        let etoile = CorpsEssai::poser(&mut sys, Categorie::Etoile, 0.0, None);
+        let terre = CorpsEssai::poser(&mut sys, Categorie::Planete, 100.0, None);
+        let mars = CorpsEssai::poser(&mut sys, Categorie::Planete, 150.0, None);
+        let lune = CorpsEssai::poser(&mut sys, Categorie::Lune, 101.0, Some(terre));
+        let phobos = CorpsEssai::poser(&mut sys, Categorie::Lune, 151.0, Some(mars));
+        let deimos = CorpsEssai::poser(&mut sys, Categorie::Lune, 152.0, Some(mars));
+        // Un engin posté autour de Mars en est aussi l'enfant direct.
+        let station = CorpsEssai::poser(&mut sys, Categorie::Engin, 153.0, Some(mars));
+
+        assert_eq!(sys.lunes_de(terre), vec![lune]);
+        assert_eq!(sys.lunes_de(mars), vec![phobos, deimos, station]);
+        assert!(sys.lunes_de(etoile).is_empty(), "une planète tient à son étoile par son foyer, pas par parent");
+        assert!(sys.lunes_de(lune).is_empty(), "une lune sans satellite");
+        assert!(sys.lunes_de(999).is_empty(), "index invalide : liste vide, pas de panique");
     }
 
     // Chaque categorie a un repli, et **aucune ne rend une chaine vide** : une

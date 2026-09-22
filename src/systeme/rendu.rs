@@ -61,6 +61,7 @@ impl Systeme {
             planetes: orbites_planetes,
             etoiles: orbites_etoiles,
             lunes: orbites_lunes,
+            lunes_de,
             zone: montrer_zone,
             focus,
             previsualisation,
@@ -144,6 +145,13 @@ impl Systeme {
             }
         }
 
+        // Orbites des lunes d'UNE planète (Skymap V2) : pleine opacité, sans
+        // passer par l'atténuation du focus — elles ne s'affichent que quand
+        // cette planète est sélectionnée, donc toujours en avant.
+        if let Some(parent) = lunes_de {
+            self.draw_orbites_lunes_de(parent, COL_LUNES, cam);
+        }
+
         // Orbites des ÉTOILES (systèmes multiples) : pointillés, teinte stellaire.
         if orbites_etoiles {
             if let Some(arbre) = &self.arbre {
@@ -168,6 +176,28 @@ impl Systeme {
         // départ à tort.
         if let Some(poly) = previsualisation {
             dessiner_points_ouvert(&poly, COL_PREVISUALISATION, cam);
+        }
+    }
+
+    /// Trace l'orbite de chaque enfant direct de `parent`, centrée sur lui.
+    ///
+    /// Même semis de points que les autres calques (`dessiner_points`), donc
+    /// même espacement écran. Seuls les corps qui **ont** une orbite de lune
+    /// (`orbite_lune` non vide) dessinent quelque chose : un engin posté n'en
+    /// porte pas, il ne trace donc rien ici.
+    pub fn draw_orbites_lunes_de(&self, parent: usize, col: Color, cam: Vec3) {
+        let Some(centre) = self.astres.get(parent).map(|a| a.corps().position) else {
+            return;
+        };
+        for a in &self.astres {
+            if a.parent() != Some(parent) {
+                continue;
+            }
+            let pts = a.orbite_lune();
+            if pts.is_empty() {
+                continue;
+            }
+            dessiner_points(pts, centre, col, cam);
         }
     }
 
