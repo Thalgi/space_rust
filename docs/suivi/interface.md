@@ -1195,3 +1195,104 @@ plus simple sous la main ici.
 
 **681 tests verts, `clippy --all-targets` à 0 avertissement.**
 
+## Skymap V2 — marqueurs de planètes et lunes (2026-09-22)
+
+**Le problème.** Dans la Skymap actuelle, les corps sont rendus à leur
+échelle **physique réelle** (dette assumée, voir `STATE.md`) : au cadrage par
+défaut, une planète tellurique fait quelques millièmes d'unité de rayon —
+souvent bien sous le pixel. Rien ne dit où sont les planètes en vue globale
+du système, ni ne permet de cliquer dessus (seule la colonne de gauche, en
+arbre, le permettait). Les lunes ont le même problème en pire, et leurs
+orbites n'existaient qu'en tout-ou-rien via le bouton global ORBITES LUNES,
+jamais liées à une sélection.
+
+**Le choix du fork.** Plutôt que de retoucher la Skymap existante,
+`src/ecran/skymap.rs` est copié tel quel vers `src/ecran/skymap_v2.rs`
+(`SkymapV2`) — V1 reste intouchée, accessible depuis l'accueil à côté de V2
+(« SKYMAP V2 - MARQUEURS »), pour pouvoir juger le résultat à l'œil sans rien
+défaire s'il ne convient pas, et revenir en arrière sans coût si besoin.
+Une seule ligne de V1 a bougé, purement mécanique : le littéral `Calques` de
+`skymap.rs` gagne `lunes_de: None` (nouveau champ du calque, comportement V1
+strictement inchangé).
+
+**Le cœur générique.** `src/ecran/marqueur.rs` (nouveau) ne connaît que des
+indices d'astres, jamais une catégorie : `marqueurs_pour` projette et filtre
+(hors cadre, derrière la caméra) n'importe quelle liste d'indices,
+`plus_proche` fait le hit-test, `dessiner` trace le triangle. Cette
+itération ne l'alimente qu'avec deux familles — planètes racines et lunes
+(`marqueurs_planetes`, `marqueurs_lunes`) — délibérément : étoiles,
+vaisseaux/engins (dont l'ISS), stations et ceintures n'ont aujourd'hui
+**aucun appelant** qui leur construirait un marqueur (spec §9). Les y
+brancher plus tard est un ajout (une fonction de sélection d'indices de
+plus, façon `marqueurs_planetes`), pas une reprise d'architecture.
+
+**Trois corrections au spec, faites en préparant le plan** (avant tout
+code) :
+1. La sélection qui pilote les lunes visibles doit lire `self.fiche_ouverte`
+   et non `fiche_affiche` — ce dernier garde le dernier astre montré pendant
+   que le panneau glisse hors champ et ne redevient jamais `None` ; s'en
+   servir aurait laissé les lunes affichées indéfiniment après une
+   désélection.
+2. Le tracé des orbites de lunes ciblées passe par un nouveau champ de
+   `Calques` (`lunes_de: Option<usize>`), pas par un appel séparé après
+   `rendre` : le tracé des orbites vit **dans** la passe 3D
+   (`RenduStandard::rendre`), sous la caméra ; un appel après coup n'aurait
+   plus de caméra 3D active et serait passé par-dessus les corps.
+3. La sélection d'indices pour les lunes filtre `Categorie::Lune` — pas
+   « tout enfant direct » comme une première version du spec le prenait :
+   l'ISS (`EnginOrbital`, `src/engin.rs`) a la Terre pour parent et aurait
+   sinon reçu un marqueur, hors périmètre. `Systeme::lunes_de` reste
+   générique (tous les enfants directs, même famille que `nb_lunes`) ; c'est
+   `marqueur.rs` qui filtre à l'usage.
+
+**Tests et red-checks.** `Systeme::lunes_de` : 1 test
+(`lunes_de_rend_les_enfants_directs_et_rien_d_autre`), 2 sabotages
+red-checkés (filtre remplacé par une condition de catégorie ; filtre réduit
+à « a un parent ») — les deux rouges comme attendu. `ecran/marqueur.rs` :
+7 tests (bord du cadre inclus/exclu, rejet hors-champ et derrière la caméra,
+sélection planètes racines/lunes avec exclusion de l'ISS, plus-proche avec
+départage par ordre de liste et rayon-bord inclus, planète active sur les
+trois branches), 8 sabotages red-checkés — tous rouges au premier essai,
+aucun test faible détecté, aucun muscle-test nécessaire. `cargo clippy
+--all-targets` à 0 avertissement une fois le branchement complet (les
+`dead_code` transitoires des tâches 1 et 2, le temps que `SkymapV2` et
+`Systeme::draw_orbites_lunes_de` aient un vrai appelant, ont disparu en
+tâche 3).
+
+**Une déviation, à la compilation.** Le spec calculait `lunes_de:
+marqueur::planete_active(&self.sys, self.fiche_ouverte)` à l'intérieur même
+de l'appel `self.rendu.rendre(..., &mut self.sys, Calques { ... })` —
+refusé par l'emprunteur (E0502) : `&mut self.sys` et le `&self.sys` porté
+par le champ `lunes_de` du littéral sont deux emprunts vivants simultanés
+dans le même appel. Calculé dans une variable locale juste avant l'appel à
+la place — même valeur, seule la forme change.
+
+**Vérification à l'écran (Tâche 3, Step 14) : non faite.** Aucun accès
+souris/fenêtre interactif n'était disponible dans l'environnement
+d'implémentation, et le harnais `CAPTURE` n'ouvre que la Skymap V1. **Non
+vérifié à l'écran, à faire par l'utilisateur** :
+1. Au cadrage par défaut, un triangle sur chaque planète du système solaire,
+   de la teinte de sa pastille dans la colonne.
+2. Survol d'un triangle : contour blanc. Clic : la caméra se centre sur la
+   planète et la fiche s'ouvre.
+3. Terre sélectionnée : l'orbite de la Lune apparaît (violet pâle) avec un
+   triangle sur la Lune ; pas de triangle sur l'ISS. Jupiter sélectionnée :
+   ses lunes et leurs orbites.
+4. Clic sur une lune de Jupiter : les triangles des autres lunes de Jupiter
+   restent.
+5. Clic dans le vide : orbites et triangles des lunes disparaissent (la
+   fiche se referme).
+6. Faire pivoter la caméra pour qu'une planète sorte du champ : son triangle
+   disparaît.
+7. Le bouton ORBITES LUNES du menu ne fait plus rien en V2 (voulu, spec
+   §6.4).
+8. Accueil : le bouton QUITTER reste entièrement visible sous PARAMETRES (le
+   bloc de gauche a gagné une ligne).
+9. SKYMAP (V1) : inchangée — ORBITES LUNES y fonctionne toujours.
+
+**727 tests verts** (739 avec le binaire `mhd`), **`cargo clippy
+--all-targets` à 0 avertissement.** Commits : `16199fa` (Tâche 1 —
+`Systeme::lunes_de`, `Calques::lunes_de`, tracé ciblé des orbites de lunes),
+`a2482f7` (Tâche 2 — cœur de `ecran/marqueur.rs`), `6990661` (Tâche 3 —
+dessin des marqueurs et écran `SkymapV2` branché).
+

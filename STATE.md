@@ -17,7 +17,7 @@
 
 ## Reprendre ici (état au 2026-08-16)
 
-**Vérifié** : **719 tests verts**, `cargo clippy --all-targets` à **0
+**Vérifié** : **727 tests verts**, `cargo clippy --all-targets` à **0
 avertissement**.
 
 **Commité et poussé** (`c53bab2` « Chantier trajectoires : lots A-D, icônes
@@ -41,7 +41,11 @@ vient d'être fait », c'est la section trajectoires ci-dessous qu'il faut lire.
 
 ### À faire ensuite, par ordre
 
-1. ⚠️ **Elysium : fps mesuré en jeu, amélioré, encore loin d'être bon.**
+1. **Skymap V2** (marqueurs) : faite, à juger à l'œil contre V1 — garder V2,
+   revenir à V1, ou porter les marqueurs dans V1. Journal :
+   `suivi/interface.md`. Spec :
+   `docs/superpowers/specs/2026-09-22-skymap-v2-marqueurs-design.md`.
+2. ⚠️ **Elysium : fps mesuré en jeu, amélioré, encore loin d'être bon.**
    Harnais de profilage ajouté (`PROFIL=<libellé> ./target/release/solar_game.exe`,
    voir `suivi/stations.md`) : le gain du correctif de vitrage (session
    précédente) **mesuré**, pas estimé — insuffisant seul (18,7 fps moyen sur
@@ -72,7 +76,7 @@ vient d'être fait », c'est la section trajectoires ci-dessous qu'il faut lire.
      tous deux ajoutés ce chantier sans les avoir vus tourner/s'afficher ;
    - le **sol et la ville restent volontairement provisoires** (vert plat sans
      texture, parallélépipèdes bruités) — pas un défaut, juste pas habillé.
-2. ~~⚠️ Trois choses à juger à l'œil (Stanford/étoiles)~~ — **les trois
+3. ~~⚠️ Trois choses à juger à l'œil (Stanford/étoiles)~~ — **les trois
    tranchées** (2026-08-14, jugées en jeu) :
    - le **plancher stellaire** : 8 px faisait un Soleil trop gros, ramené à
      **4 px** (`soleil::PX_MIN`) — occupe désormais 21 % du rayon de l'orbite
@@ -83,16 +87,16 @@ vient d'être fait », c'est la section trajectoires ci-dessous qu'il faut lire.
      `POLE_ECART` inchangé.
    - Détail dans `suivi/etoiles.md` (P.3 bis, révisé) et `suivi/stations.md`
      (« Marge de 1,8 sous le miroir bas »).
-3. **Palette : lister les sous-variantes.** `echantillons()` n'en donne qu'une par
+4. **Palette : lister les sous-variantes.** `echantillons()` n'en donne qu'une par
    `Composant`, si bien qu'`ARC SOUTE`, les postes d'amarrage et `HANGAR FERME`
    sont **inatteignables à l'écran**. Bloque l'étape 5 de l'Endurance.
-4. **Endurance étape 5** : assembler l'anneau à douze avec l'alternance des
+5. **Endurance étape 5** : assembler l'anneau à douze avec l'alternance des
    quatre familles. Puis étape 6 : propulsion et réservoirs arrière.
-5. **Assembleur Lot 8** (décalage) et **Lot 9** (redimensionnement) ; **Lot 6**
+6. **Assembleur Lot 8** (décalage) et **Lot 9** (redimensionnement) ; **Lot 6**
    pour la dette d'enveloppes L1.4, les composites et `PoutreBout`.
-6. **D-INT-2, l'économie** — reporté explicitement trois fois. À ouvrir quand la
+7. **D-INT-2, l'économie** — reporté explicitement trois fois. À ouvrir quand la
    vue système sera close.
-7. **D-PIX-3/4** (contours Sobel, taille de pixel réglable) et les **comètes**
+8. **D-PIX-3/4** (contours Sobel, taille de pixel réglable) et les **comètes**
    (`Categorie::Comete` n'engendre rien).
 
 ### Chantier en cours : trajectoires (Lots A, B, C et D faits, 2026-08-15/16)
