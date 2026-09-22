@@ -153,6 +153,7 @@ impl SkymapV2 {
                 self.sys = s;
                 self.info = i;
                 self.icones = super::icone::IconesAstres::new();
+                self.oublier_selection();
                 self.appliquer_vue();
             }
             if is_key_pressed(KeyCode::R) {
@@ -735,8 +736,24 @@ impl SkymapV2 {
         }
     }
 
+    /// Efface la sélection courante (V2 seulement, `skymap.rs` n'est pas
+    /// touché) : `fiche_ouverte`, `fiche_affiche` et `lancement` désignent un
+    /// astre par **index dans `self.sys`**, et cet index ne désigne plus le
+    /// même corps une fois le système remplacé (G, presets, aléatoire...) —
+    /// contrairement au hot-reload (R), qui reconstruit le **même** système et
+    /// n'appelle donc pas cette méthode.
+    fn oublier_selection(&mut self) {
+        self.fiche_ouverte = None;
+        self.fiche_affiche = None;
+        self.lancement = None;
+    }
+
     /// Applique l'action choisie dans le menu.
     fn appliquer(&mut self, a: ActionMenu) {
+        // Seul `Retour` ne remplace pas `self.sys` (il ne fait que recentrer
+        // la caméra) ; `Quitter` sort du process avant d'atteindre la fin de
+        // cette methode, donc peu importe sa valeur ici.
+        let remplace_systeme = !matches!(&a, ActionMenu::Retour);
         match a {
             ActionMenu::Solaire => {
                 let (s, i) = construire_preset_solaire();
@@ -829,6 +846,9 @@ impl SkymapV2 {
         // prochaine ajoutée. Inoffensif là où `sys` n'a pas bougé : les icônes
         // se re-rendent, identiques, à la prochaine ligne dessinée.
         self.icones = super::icone::IconesAstres::new();
+        if remplace_systeme {
+            self.oublier_selection();
+        }
     }
 }
 

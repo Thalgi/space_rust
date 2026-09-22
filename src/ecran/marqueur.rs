@@ -143,6 +143,9 @@ const RAYON_SELECTION_PX: f32 = 8.0;
 /// pour qu'un même astre ait la même couleur dans la colonne et sur la carte.
 pub fn dessiner(sys: &Systeme, marqueurs: &[Marqueur], survole: Option<usize>, selectionne: Option<usize>) {
     for m in marqueurs {
+        // `unwrap_or` ne se déclenche jamais en pratique : chaque `m.idx`
+        // vient de `marqueurs_pour`, qui filtre déjà `idx < sys.nb_astres()`
+        // avant de construire le marqueur.
         let cat = sys.categorie_de(m.idx).unwrap_or(Categorie::Planete);
         let mut c = super::selecteur::teinte_astre(sys, m.idx, cat);
         let est_survole = survole == Some(m.idx);

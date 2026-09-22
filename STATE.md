@@ -193,6 +193,11 @@ lui : `a0ebb58` « torus & elysium complex base complete », `73fb924`
 « torus », `fb7d589` « fix » (2026-08-10), `dc0d7bf` « torus ok », `2a042e6`
 « P4 ok », `7278aa1` « P.1 a P.3 ok, plus fix ui ».
 
+Branche courante `worktree-skymap-v2-marqueurs` (chantier Skymap V2,
+`docs/suivi/interface.md` § « Skymap V2 — marqueurs de planètes et lunes ») :
+commits `16199fa`..`HEAD`, pas encore fusionnée sur `origin/main` — les deux
+lignes ci-dessus décrivent l'état de `main`, pas celui de cette branche.
+
 Consigne debout : *« no commit i'll say when commit is needed »* — ne jamais
 commiter de soi-même. **Mais signaler les points de commit** : l'utilisateur
 commite aux jalons qu'on lui indique, depuis qu'un `git checkout --` a détruit
@@ -203,7 +208,10 @@ sur un fichier contenant du travail non commité. Pour annuler ses propres
 modifications : ré-éditer les lignes, ou sauvegarder le fichier dans le
 scratchpad **avant** de le toucher (red-checks compris).
 
-État vérifié : **719 tests verts**, **`cargo clippy --all-targets` : 0 avertissement**.
+État vérifié : **727 tests verts** (739 avec le binaire `mhd`), **`cargo clippy
+--all-targets` : 0 avertissement** (branche `worktree-skymap-v2-marqueurs`,
+voir la ligne « Branche courante » ci-dessus ; 719 était le compte au moment
+du Lot D, laissé tel quel dans le récit qui suit).
 
 ## Chantier courant : finir les planètes et la vue système
 

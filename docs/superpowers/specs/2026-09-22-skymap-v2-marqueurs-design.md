@@ -14,8 +14,9 @@ millièmes d'unité de rayon — souvent bien sous le pixel. Deux conséquences 
    elles sont ni ne permet de cliquer dessus — seule la colonne de gauche
    (sélecteur en arbre) permet de les atteindre.
 2. **Les lunes ont le même problème, en pire** : encore plus petites, et leurs
-   orbites ne s'affichent aujourd'hui qu'en tout-ou-rien via un bouton global
-   (`ORBITES LUNES`), jamais liées à une sélection.
+   orbites ne s'affichent aujourd'hui qu'en tout-ou-rien via une bascule
+   globale (le double bouton « RING / MOONS », `src/menu/dessin.rs` ~ligne
+   42), jamais liée à une sélection.
 
 ## 2. Objectif
 
@@ -154,10 +155,14 @@ rien à savoir de la catégorie de ce qu'ils manipulent.
 - **Triangle plein**, taille écran fixe : base 8 px, hauteur 10 px, pointe en
   bas touchant exactement le point projeté (`Marqueur::ecran`), sommet vers
   le haut — comme une punaise plantée sur la position de l'astre.
-- **Couleur** : la teinte propre de l'astre (`Systeme::teinte_de(idx)`, la
-  même source que la pastille du sélecteur — cohérence visuelle, une
-  retouche d'apparence se voit aussitôt aux deux endroits). Repli sur le cyan
-  d'interface (`Color::new(0.0, 0.85, 0.85, 1.0)`) si `teinte_de` rend `None`.
+- **Couleur** : `selecteur::teinte_astre(sys, idx, cat)` — pas un appel direct
+  à `Systeme::teinte_de` (correction au spec, voir la quatrième correction
+  dans `docs/suivi/interface.md`), mais la **même fonction** que la pastille
+  du sélecteur — cohérence visuelle, une retouche d'apparence se voit
+  aussitôt aux deux endroits. Elle éclaircit `teinte_de` (`relever`, plancher
+  0,42, sans délaver une couleur déjà vive) et retombe sur une teinte par
+  catégorie (`teinte_categorie`), pas sur le cyan d'interface, si `teinte_de`
+  rend `None`.
 - **Survol** (curseur à moins de 14 px, §6.1) : contour blanc 1 px + alpha
   plein (1.0). Hors survol, alpha 0.85 (le marqueur reste lisible mais ne
   concurrence pas le corps rendu).

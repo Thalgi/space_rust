@@ -1203,8 +1203,8 @@ défaut, une planète tellurique fait quelques millièmes d'unité de rayon —
 souvent bien sous le pixel. Rien ne dit où sont les planètes en vue globale
 du système, ni ne permet de cliquer dessus (seule la colonne de gauche, en
 arbre, le permettait). Les lunes ont le même problème en pire, et leurs
-orbites n'existaient qu'en tout-ou-rien via le bouton global ORBITES LUNES,
-jamais liées à une sélection.
+orbites n'existaient qu'en tout-ou-rien via la bascule globale « RING /
+MOONS » (`src/menu/dessin.rs`), jamais liées à une sélection.
 
 **Le choix du fork.** Plutôt que de retoucher la Skymap existante,
 `src/ecran/skymap.rs` est copié tel quel vers `src/ecran/skymap_v2.rs`
@@ -1226,8 +1226,8 @@ vaisseaux/engins (dont l'ISS), stations et ceintures n'ont aujourd'hui
 brancher plus tard est un ajout (une fonction de sélection d'indices de
 plus, façon `marqueurs_planetes`), pas une reprise d'architecture.
 
-**Trois corrections au spec, faites en préparant le plan** (avant tout
-code) :
+**Quatre corrections au spec** (trois faites en préparant le plan, avant tout
+code ; la quatrième constatée en relisant l'implémentation) :
 1. La sélection qui pilote les lunes visibles doit lire `self.fiche_ouverte`
    et non `fiche_affiche` — ce dernier garde le dernier astre montré pendant
    que le panneau glisse hors champ et ne redevient jamais `None` ; s'en
@@ -1244,6 +1244,13 @@ code) :
    sinon reçu un marqueur, hors périmètre. `Systeme::lunes_de` reste
    générique (tous les enfants directs, même famille que `nb_lunes`) ; c'est
    `marqueur.rs` qui filtre à l'usage.
+4. Le spec (§5 « Couleur ») disait que le marqueur reprend directement
+   `Systeme::teinte_de(idx)`. Le code appelle en fait
+   `selecteur::teinte_astre(sys, idx, cat)` — la même fonction que la
+   pastille du sélecteur, qui éclaircit `teinte_de` (`relever`) et retombe
+   sur une teinte par catégorie, pas sur le cyan d'interface, si `teinte_de`
+   rend `None` : mieux vaut appeler directement la fonction du sélecteur que
+   reproduire sa logique à côté, avec le risque de diverger plus tard.
 
 **Tests et red-checks.** `Systeme::lunes_de` : 1 test
 (`lunes_de_rend_les_enfants_directs_et_rien_d_autre`), 2 sabotages
@@ -1284,11 +1291,15 @@ vérifié à l'écran, à faire par l'utilisateur** :
    fiche se referme).
 6. Faire pivoter la caméra pour qu'une planète sorte du champ : son triangle
    disparaît.
-7. Le bouton ORBITES LUNES du menu ne fait plus rien en V2 (voulu, spec
-   §6.4).
+7. La bascule « RING / MOONS » du menu ne fait plus rien en V2 (voulu, spec
+   §6.4). Elle continue de changer d'aspect allumée/éteinte au clic (l'état
+   `self.menu.orbites_lunes` bouge toujours) — c'est seulement son effet sur
+   le rendu qui est coupé en V2 (`Calques::lunes` fixé à `false`, voir
+   `skymap_v2.rs`) ; à juger à l'écran par l'utilisateur : une bascule qui
+   s'allume sans rien changer peut sembler cassée même si c'est voulu.
 8. Accueil : le bouton QUITTER reste entièrement visible sous PARAMETRES (le
    bloc de gauche a gagné une ligne).
-9. SKYMAP (V1) : inchangée — ORBITES LUNES y fonctionne toujours.
+9. SKYMAP (V1) : inchangée — « RING / MOONS » y fonctionne toujours.
 
 **727 tests verts** (739 avec le binaire `mhd`), **`cargo clippy
 --all-targets` à 0 avertissement.** Commits : `16199fa` (Tâche 1 —
