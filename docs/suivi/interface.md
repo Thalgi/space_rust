@@ -1411,3 +1411,64 @@ peut pas le voir. La vraie cible était l'avance de phase (`l -= reste`
 retiré), et là ça rougit.
 
 **734 tests verts** (746 avec `mhd`), clippy à 0.
+
+## Skymap V2 — les tirets d'orbite de lune scintillaient (2026-09-23)
+
+Signalé à l'œil : le trait mediumdashdot des orbites de lunes papillote dès
+qu'on bouge la caméra ou que le temps passe, même sans zoomer. Gênant à
+regarder — pas un crash, mais un défaut visuel net.
+
+**La cause, mesurée.** `segments_motif` accumulait la phase du motif en
+longueur **projetée à l'écran** (`avancer`). Cette longueur n'est pas
+invariante : la perspective la déforme dès que la caméra ou la planète
+parente bouge. Mesuré : un seul pixel de glisser souris décalait la phase de
+8,1 px, soit **37 % du cycle de 22 px** ; une seule frame de temps qui passe,
+10,6 px (48 %). D'où le scintillement — le motif « respire » à chaque
+mouvement, même minime. Le contre-exemple du dépôt qui ne strobe pas :
+`dessiner_points` (`systeme/rendu.rs`) ancre ses marques sur des **index
+fixes** de la polyligne monde, jamais sur une mesure écran.
+
+**Le remède : ancrer la phase sur l'abscisse curviligne du monde.** L'orbite
+d'une lune (`Systeme::orbite_lune_de`) est une polyligne fixe dans le monde ;
+la longueur d'arc qu'on y parcourt ne dépend ni de la caméra ni du temps.
+Seule la **taille** d'un tiret (`cycle_monde`, combien d'unités monde pour un
+cycle de 22 px à l'écran) suit le zoom — via la distance caméra → parent, au
+même petit angle que le reste du dépôt (demi-FOV 22,5°). Le découpage en
+tirets (`segments_motif_monde`) se fait donc entièrement en monde, sans
+rien savoir de la caméra ; seule la projection finale (`segments_ecran`)
+touche l'écran, et rogne comme avant (Liang-Barsky, marge de l'épaisseur du
+trait).
+
+⚠️ **`cycle_monde` est quantifié en puissance de deux** (`2^round(log2(x))`).
+Sans ça, il varie en continu pendant un zoom et le glissement revient — côté
+zoom cette fois. Par paliers de ×2, le motif ne se recale que rarement, et
+franchement. Un second garde-fou, `perimetre / 2000`, plafonne le nombre de
+cycles par orbite : c'est lui qui reprend le rôle de l'ancien `avancer` pour
+tenir la contrainte mémoire (le crash à ×25000 documenté juste au-dessus) —
+mais il n'est presque plus jamais nécessaire, puisque le travail suit
+désormais le périmètre de l'orbite (fixe), plus le zoom écran (variable).
+
+**Compromis assumé, à juger à l'œil** : la longueur d'un tiret À L'ÉCRAN
+n'est plus rigoureusement constante. Elle varie un peu avec la perspective
+le long de l'orbite (un tiret loin de l'axe de visée se projette plus court
+qu'un tiret proche), et par paliers avec le zoom (le motif se recale net,
+pas en fondu, à chaque franchissement de puissance de deux). C'est le prix
+de l'absence de strobe.
+
+Neuf tests, tous purs (`camera::base_orbite` pour fabriquer une `CameraInfo`
+sans contexte graphique) : le test qui garde la correction compare, en
+paramètre MONDE (jamais en pixels), les tirets décidés par deux caméras à
+0,005 rad de lacet d'écart — la sensibilité réelle d'un pixel de glisser —
+et les exige identiques. Red-check : une perturbation smooth et modeste de
+`dist` (le genre qu'une régression discrète introduirait) reste **absorbée
+par la quantification** et ne fait pas rougir le test — attendu, c'est le
+but du palier de ×2, vérifié en l'amplifiant jusqu'à confirmer que le test
+réagit bien à un écart réel. La réintroduction **fidèle** du mécanisme
+d'origine (phase accumulée en longueur écran) fait rougir immédiatement
+(187 tirets contre 186 entre les deux caméras). Les autres red-checks
+mordent tous du premier coup, dont celui du garde-fou mémoire : retirer le
+plancher `perimetre / 2000` sur l'orbite géante du test fait planter le
+process par épuisement mémoire (103 Go alloués) — la même signature que le
+crash à ×25000 documenté plus haut, avant même le message d'assertion.
+
+**749 tests verts** (737 + 12 `mhd`), clippy à 0 avertissement.
