@@ -3,15 +3,16 @@
 //! en miniature, et à un coût qu'une colonne de plusieurs dizaines d'entrées
 //! peut se permettre.
 //!
-//! # Pourquoi un cache, à la différence de la vignette
+//! # Un cache par astre, ici comme à la vignette
 //!
-//! [`super::vignette::Vignette`] rend **un seul** astre, celui du panneau
-//! ouvert, et le refait chaque frame — un choix assumé là-bas (une seule
-//! cible, aucune invalidation à guetter). Ici, chaque ligne du sélecteur a la
-//! sienne : les refaire toutes, chaque frame, coûterait un rendu 3D complet
-//! par astre et par image. Comme l'apparence d'un astre ne change pas d'une
-//! frame à l'autre (seule sa position orbitale bouge, pas son visage),
-//! l'icône se rend **une fois** et se garde en texture.
+//! [`super::vignette::Vignette`] suit désormais le même patron : une capture
+//! par astre, gardée tant qu'elle reste valable, plutôt qu'un rendu 3D refait
+//! chaque frame. Ici, la différence tient au **nombre** d'entrées : chaque
+//! ligne du sélecteur a la sienne, quand la vignette n'en montre jamais
+//! qu'une (le panneau ouvert) — les refaire toutes, chaque frame, coûterait
+//! un rendu 3D complet par astre et par image, d'où un peuplement étalé sur
+//! plusieurs frames ([`IconesAstres::completer`]) plutôt qu'un simple
+//! rendu-à-la-demande.
 //!
 //! Le cache vit avec l'écran, pas globalement : changer de système
 //! reconstruit une `Skymap`, donc un nouveau cache — rien à invalider à la

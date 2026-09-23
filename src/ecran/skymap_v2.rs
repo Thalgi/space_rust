@@ -56,7 +56,11 @@ pub struct SkymapV2 {
     /// d'economie dans ce depot (dette D-INT-2). La barre a ete ecrite pour
     /// pouvoir l'attendre : elle affiche une `Tresorerie`, d'ou qu'elle vienne.
     tresorerie: bandeau::Tresorerie,
-    /// Cible de rendu du portrait d'astre (panneau de droite).
+    /// Portrait d'astre du panneau de droite — capturé une fois par astre et
+    /// gardé en cache (voir `ecran/vignette.rs`), pas refait chaque frame.
+    ///
+    /// **Doit être vidé chaque fois que `sys` est remplacé**, même raison et
+    /// mêmes points de vidage que `icones` ci-dessous.
     vignette: super::vignette::Vignette,
     /// Icônes du sélecteur (colonne de gauche), une par astre déjà rencontré.
     ///
@@ -153,19 +157,22 @@ impl SkymapV2 {
                 self.sys = s;
                 self.info = i;
                 self.icones = super::icone::IconesAstres::new();
+                self.vignette = super::vignette::Vignette::new();
                 self.oublier_selection();
                 self.appliquer_vue();
             }
             if is_key_pressed(KeyCode::R) {
                 // Hot-reload : recompile les shaders et reconstruit à l'identique.
-                // Les icônes aussi : c'est justement pour voir un shader retouché
-                // que R existe, une icône restée en cache le manquerait.
+                // Les icônes et la vignette aussi : c'est justement pour voir un
+                // shader retouché que R existe, un cache resté en place le
+                // manquerait.
                 planete::vider_cache_materials();
                 soleil::vider_cache_materials();
                 let (s, i) = self.reconstruire();
                 self.sys = s;
                 self.info = i;
                 self.icones = super::icone::IconesAstres::new();
+                self.vignette = super::vignette::Vignette::new();
                 self.fond.recharger_material();
             }
             if is_key_pressed(KeyCode::Space) {
@@ -846,8 +853,9 @@ impl SkymapV2 {
         // Toutes les branches sauf Retour/Quitter remplacent `self.sys` — vider
         // sans conditionner à laquelle est la garantie qui ne peut pas rater la
         // prochaine ajoutée. Inoffensif là où `sys` n'a pas bougé : les icônes
-        // se re-rendent, identiques, à la prochaine ligne dessinée.
+        // et la vignette se re-capturent, identiques, dès le prochain dessin.
         self.icones = super::icone::IconesAstres::new();
+        self.vignette = super::vignette::Vignette::new();
         if remplace_systeme {
             self.oublier_selection();
         }

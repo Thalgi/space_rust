@@ -1472,3 +1472,84 @@ process par épuisement mémoire (103 Go alloués) — la même signature que le
 crash à ×25000 documenté plus haut, avant même le message d'assertion.
 
 **749 tests verts** (737 + 12 `mhd`), clippy à 0 avertissement.
+
+## Skymap V2 — la vignette se capture une fois, plutôt que chaque frame (2026-09-23)
+
+Demandé à l'œil : « je n'ai pas besoin qu'elle soit mise à jour à chaque
+frame vu que c'est une vue simplifiée [...] du moment qu'on a capturé la
+planète avec 3/4 de sa face au soleil, pas besoin de re-générer la
+vignette. » Le portrait du panneau de droite (`ecran/vignette.rs`) refaisait
+jusqu'ici un rendu 3D complet — sa propre caméra, sa propre cible 192×192,
+son propre passage dans `dessiner_astre` — à **chaque frame** tant que le
+panneau restait ouvert. Un choix documenté dans le fichier lui-même à
+l'époque, jugé trop coûteux à l'usage.
+
+**Le cache suit le patron déjà en place pour les icônes du sélecteur**
+(`ecran/icone.rs`, `IconesAstres`) : une texture par astre, gardée dans une
+`HashMap`, construite depuis les pixels relus d'une `RenderTarget`
+**scratch** réutilisée d'une capture à l'autre — jamais recréée à la volée,
+pour ne pas retomber dans le piège documenté au chantier I.6 (`STATE.md`) :
+une `RenderTarget` dont seule la `Texture2D` survit se fait supprimer par le
+moteur à la frame suivante. Un compteur d'essais (`ESSAIS_MAX`) absorbe le
+même défaut mesuré côté icônes — un second changement de caméra 3D vers une
+cible hors écran dans la **même frame** (ici : un rendu d'icône du sélecteur
+suivi du rendu de la vignette, `selecteur_dessiner` précédant
+`fiche_dessiner`) ressort vide — en retentant au prochain appel plutôt qu'en
+mettant en cache un rendu manqué.
+
+**Règle d'invalidation, identique à celle des icônes** : le cache est vidé
+partout où `self.icones` l'est déjà dans `ecran/skymap_v2.rs` (nouvelle
+graine `G`, hot-reload `R`, tout changement de preset dans `appliquer`) —
+même raison, l'index dans `sys.astres` ne désigne plus le même corps une
+fois le système reconstruit. Et, comme pour les icônes, une capture ne se
+garde que si l'astre est **prêt** (`Systeme::rendu_pret_de`) : une tellurique
+dont le terrain n'a pas fini de générer en tâche de fond retombe sur un
+repli le temps de sa génération, et le capturer aurait figé ce repli pour de
+bon — exactement le bug déjà rencontré sur les icônes (I.6 bis, « l'icône de
+la Terre figeait un repli de terrain pas encore généré »).
+
+**Le cadrage change aussi.** L'ancien placement (« du côté éclairé », plus
+une petite élévation fixe) ne visait rien de précis. La demande fixe un
+objectif géométrique : trois quarts de la sphère éclairés, visibles depuis
+la caméra. La fraction éclairée visible vaut `(1 + cos θ) / 2` pour un angle
+`θ` entre la direction caméra et la direction de la lumière — trois quarts
+donne `cos θ = 0,5`, soit `θ = 60°`. `direction_camera_trois_quarts`
+(fonction pure, sans macroquad) place la caméra à exactement cet angle, par
+rotation déterministe autour de la projection de l'axe monde `Y` sur le plan
+perpendiculaire à la lumière — pas un axe choisi au hasard, et pas un
+placement à l'aveugle « du côté éclairé ». Le recul (`RECUL` / `RECUL_ANNEAU`,
+qui tient compte de l'anneau) est inchangé.
+
+**Ce que la capture fige — compromis assumé, à l'usage de l'utilisateur** :
+la rotation propre de l'astre, sa position orbitale et son éclairage au
+moment de la capture restent figés dans l'image mise en cache tant que
+celle-ci n'est pas invalidée. Le portrait ne suit donc plus le jour/nuit ni
+le déplacement de la planète pendant que le panneau reste ouvert — accepté
+explicitement par l'utilisateur au nom du coût économisé, pour une vue
+qu'il a lui-même qualifiée de simplifiée.
+
+Cinq tests dans `ecran/vignette.rs`, dont trois neufs sur
+`direction_camera_trois_quarts` — fonction pure, testée sans aucun contexte
+graphique (`docs/methode.md` : pas de test de rendu) : l'angle avec la
+lumière vaut exactement 60° sur cinq configurations, dont les deux cas
+dégénérés demandés (étoile et astre confondus, astre à l'origine) ; la
+direction reste toujours unitaire ; le cas confondu ne renvoie jamais un
+vecteur nul et reste déterministe. Tous red-checkés (copie scratchpad,
+sabotage, restauration par copie).
+
+⚠️ **Un sabotage est resté vert, et la garde était ailleurs, pas absente** :
+retirer le repli sur `Vec3::Z` du cas confondu (étoile == astre) ne fait pas
+rougir le test qui porte spécifiquement sur ce cas
+(`astre_et_etoile_confondus_ne_donne_jamais_une_direction_nulle`) — la
+construction de l'axe perpendiculaire évite déjà structurellement le vecteur
+nul, avec ou sans ce repli, donc ce test-là ne peut pas voir la différence.
+Le même sabotage fait en revanche rougir immédiatement
+`la_camera_se_place_a_60_degres_de_la_lumiere` (angle mesuré à 90° au lieu
+de 60° sur le cas confondu) : la suite dans son ensemble tient la garde,
+mais par un autre test que celui dont l'intitulé la promettait. Les deux
+autres sabotages (permutation sin/cos ; suppression de la normalisation
+finale plutôt que de l'intermédiaire, la première tentative étant absorbée
+par le `normalize_or_zero()` final) ont chacun rougi le test visé du premier
+coup.
+
+**752 tests verts** (740 + 12 `mhd`), clippy à 0 avertissement.
