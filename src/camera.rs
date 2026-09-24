@@ -355,3 +355,142 @@ mod tests_base_camera {
         orthonormee("visée nulle", r, u, f);
     }
 }
+
+#[cfg(test)]
+mod tests_precision {
+    use super::*;
+
+    const ECRAN: Vec2 = Vec2::new(1000.0, 700.0);
+    const ASPECT: f32 = 1000.0 / 700.0;
+
+    fn camera(cible: Vec3, dist: f32) -> CameraInfo {
+        let (right, up, forward) = base_orbite(0.8, 0.5);
+        CameraInfo {
+            pos: cible - forward * dist,
+            right,
+            up,
+            forward,
+            light_pos: Vec3::ZERO,
+            light_color: Vec3::ONE,
+            lights_pos: [Vec3::ZERO; 4],
+            lights_color: [Vec3::ZERO; 4],
+        }
+    }
+
+    /// **Le témoin du tremblement** (`docs/conception/repere_flottant.md`).
+    ///
+    /// `Camera::construire` pose `pos = cible - forward·dist` en `f32`. À
+    /// l'échelle héliocentrique, `cible` a un grain (ULP) bien plus gros que
+    /// `dist` : le petit décalage se fait arrondir contre le grand nombre, et
+    /// remonter de la caméra vers sa cible ne redonne pas la cible. Cet écart
+    /// ne dépend pas de `dist`, donc il grandit **en pixels** à mesure qu'on
+    /// approche — c'est ce qui fait sauter une lune d'un pixel à l'autre.
+    ///
+    /// Le test pinne le défaut **tel qu'il est aujourd'hui**, pour que le
+    /// passage en repère relatif ait un chiffre de départ. Il rougira quand ce
+    /// passage sera fait : ce sera le signe que ça a marché, pas une
+    /// régression.
+    /// Position `k` ULP après `r` sur l'axe X — une lune qui avance d'un
+    /// cheveu sur son orbite.
+    fn glisse(r: f32, k: u32) -> Vec3 {
+        let mut x = r;
+        for _ in 0..k {
+            x = f32::from_bits(x.to_bits() + 1);
+        }
+        vec3(x, r * 0.1, -r * 0.3)
+    }
+
+    /// Saut maximal, en pixels, de l'image d'un astre **suivi par la caméra**
+    /// qui avance de quelques ULP. `relatif` : rendre en repère caméra plutôt
+    /// qu'en coordonnées absolues.
+    fn saut_max_px(r: f32, dist: f32, relatif: bool) -> f32 {
+        let (mut pire, mut prec): (f32, Option<Vec2>) = (0.0, None);
+        for k in 0..64 {
+            let cible = glisse(r, k);
+            let cam = camera(cible, dist);
+            // Ce que fait macroquad : une matrice vue-projection en `f32`
+            // (`Camera3D::matrix`), appliquée à des sommets en coordonnées
+            // monde. En repère relatif, caméra et sommet sont translatés de
+            // la même quantité : les grands nombres disparaissent.
+            let (oeil, vise, point) = if relatif {
+                (cam.pos - cible, Vec3::ZERO, Vec3::ZERO)
+            } else {
+                (cam.pos, cible, cible)
+            };
+            let m = Mat4::perspective_rh_gl(45.0_f32.to_radians(), ASPECT, dist * 0.01, dist * 1000.0)
+                * Mat4::look_at_rh(oeil, vise, Vec3::Y);
+            let clip = m * point.extend(1.0);
+            let vu = vec2(
+                (clip.x / clip.w + 1.0) * 0.5 * ECRAN.x,
+                (1.0 - clip.y / clip.w) * 0.5 * ECRAN.y,
+            );
+            if let Some(p) = prec {
+                pire = pire.max(vu.distance(p));
+            }
+            prec = Some(vu);
+        }
+        pire
+    }
+
+    /// **Le témoin du tremblement** (`docs/conception/repere_flottant.md`).
+    ///
+    /// Un astre suivi par la caméra devrait rester rigoureusement immobile à
+    /// l'écran : la caméra bouge exactement comme lui. Il n'en est rien dès
+    /// qu'on s'éloigne du Soleil, parce que la matrice vue-projection est
+    /// construite en `f32` sur des coordonnées **absolues** — à 460 unités,
+    /// deux `f32` voisins sont séparés de 3 × 10⁻⁵ unité, ce qui se voit en
+    /// pixels une fois la caméra à 0,05 unité du corps.
+    ///
+    /// Mesuré ici : **0,6 px à Saturne, 2,7 px à Neptune**, contre 0 en
+    /// repère relatif — le même calcul, translaté de la cible.
+    ///
+    /// ⚠️ Ce test pinne le **défaut**, pas la correction. Il rougira quand le
+    /// rendu passera en repère relatif : ce sera le signe que ça a marché.
+    #[test]
+    fn le_rendu_3d_absolu_fait_sauter_lastre_suivi() {
+        let saturne = 9.58 * crate::etoile::UA;
+        let neptune = 30.0 * crate::etoile::UA;
+
+        assert!(saut_max_px(saturne, 0.05, false) > 0.5, "Saturne : plus de saut, le rendu a changé");
+        assert!(saut_max_px(neptune, 0.05, false) > 2.0, "Neptune : plus de saut, le rendu a changé");
+        // Et le défaut grandit en approchant : c'est ce qui le rend visible.
+        assert!(saut_max_px(saturne, 0.05, false) > saut_max_px(saturne, 0.2, false));
+
+        // La correction, éprouvée avant d'être écrite : en repère relatif, le
+        // même calcul rend l'astre suivi parfaitement immobile.
+        for r in [saturne, neptune] {
+            assert_eq!(saut_max_px(r, 0.05, true), 0.0, "R={r} : le repère relatif ne suffit pas");
+        }
+    }
+
+    /// **Le chemin 2D, lui, ne tremble pas** — c'est pourquoi les marqueurs et
+    /// les orbites de lunes de la Skymap V2 sont stables alors que les corps
+    /// sautent.
+    ///
+    /// `projeter_ecran` soustrait `cam.pos` avant toute division : pour un
+    /// astre suivi, l'écart vaut exactement `forward · dist`, sans grand
+    /// nombre nulle part. Ce test garde cette propriété, pour qu'on ne
+    /// « corrige » pas un chemin déjà sain.
+    #[test]
+    fn la_projection_ecran_ne_fait_pas_sauter_lastre_suivi() {
+        let centre = ECRAN * 0.5;
+        for r in [48.0_f32, 9.58 * crate::etoile::UA, 30.0 * crate::etoile::UA] {
+            let mut prec: Option<Vec2> = None;
+            for k in 0..64 {
+                let cible = glisse(r, k);
+                let cam = camera(cible, 0.05);
+                let vu = projeter_ecran(cible, ECRAN, &cam, ASPECT).expect("devant la caméra");
+                if let Some(p) = prec {
+                    assert_eq!(vu, p, "R={r} : l'astre suivi a sauté à l'écran");
+                }
+                prec = Some(vu);
+            }
+            // Décalage statique assumé : la cible ne tombe pas au pixel près
+            // au centre (0,14 px à Saturne), mais ce décalage ne BOUGE pas,
+            // donc l'œil ne le voit pas. C'est la variation qui gêne.
+            let d = prec.unwrap().distance(centre);
+            assert!(d < 1.0, "R={r} : décalage statique de {d:.2} px, trop gros pour être ignoré");
+        }
+    }
+
+}
