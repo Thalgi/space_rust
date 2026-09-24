@@ -121,17 +121,28 @@ void main() {
         float camp = fbm(d * 16.0 + dec + 50.0);
         col += smoothstep(0.66, 0.72, camp) * teinte * 0.5;
 
-        // Taches actives (venant du CPU) : assombrissement local.
+        // Taches (w > 0, assombrissement) ET flares (w < 0, sursaut lumineux)
+        // partagent le même tableau `spots` -- le signe de `w` les distingue
+        // (voir `eruptions::encoder_flare`), pas un second uniform.
         float dark = 0.0;
+        float flare = 0.0;
         for (int i = 0; i < 8; i++) {
             vec4 s = spots[i];
+            float rayon = abs(s.w);
             if (s.w > 0.0) {
                 float ang = acos(clamp(dot(d, s.xyz), -1.0, 1.0));
-                dark += 1.0 - smoothstep(s.w * 0.4, s.w, ang);
+                dark += 1.0 - smoothstep(rayon * 0.4, rayon, ang);
+            } else if (s.w < 0.0) {
+                float ang = acos(clamp(dot(d, s.xyz), -1.0, 1.0));
+                flare += 1.0 - smoothstep(rayon * 0.4, rayon, ang);
             }
         }
         dark = clamp(dark, 0.0, 1.0);
+        flare = clamp(flare, 0.0, 1.0);
         col *= mix(1.0, 0.30, dark);
+        // Flare : sursaut lumineux localisé -> éclaircit vers un blanc chaud,
+        // au lieu d'assombrir. C'est l'exact inverse de la tache ci-dessus.
+        col = mix(col, vec3(1.0, 0.95, 0.85) + teinte * 0.3, flare * 0.85);
 
         // Bord renforcé (limb brightening) -> anneau lumineux.
         float rim = smoothstep(0.45, 0.0, z);

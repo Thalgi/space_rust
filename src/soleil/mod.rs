@@ -3,14 +3,16 @@ mod materiau;
 mod rendu;
 
 use crate::astre::{Astre, Categorie, CameraInfo, CorpsBase};
-use eruptions::{Boucle, Tache};
+use eruptions::{Boucle, Flare, Tache};
 use macroquad::models::Vertex;
 use macroquad::prelude::*;
 use macroquad::rand::gen_range;
 use materiau::{mat_plasma_partage, mats_soleil};
 use rendu::{texture_halo, TAILLE_HALO};
 
-const MAX_TACHES: usize = 8; // doit correspondre à spots[8] dans le shader
+// Doit correspondre à spots[8] dans le shader. Partagé entre taches ET
+// flares (voir `eruptions::encoder_flare`) : pas de second tableau d'uniforms.
+const MAX_TACHES: usize = 8;
 
 /// **Rayon apparent minimal d'une étoile, en pixels.**
 ///
@@ -61,13 +63,21 @@ pub struct Soleil {
     temps: f32,
     taches: Vec<Tache>,
     boucles: Vec<Boucle>,
+    flares: Vec<Flare>,
     prochaine_tache: f32,
     prochaine_eruption: f32,
+    prochain_flare: f32,
     // Réglages pilotables (sliders), 0..1
     freq: f32,
     forme: f32,
     puissance: f32,
     alea: f32,
+    /// **Activité propre au type d'étoile** (§1.3) : `1,0` par défaut (les
+    /// vues qui n'appellent pas [`Astre::set_eruptions`] gardent leur réglage
+    /// tel quel), dérivée du gabarit par `etoile::activite_type` pour les
+    /// étoiles générées. `set_eruptions` la **module**, ne l'écrase pas —
+    /// sinon la même valeur figée continuerait de s'appliquer à toutes.
+    activite: f32,
     couleur: Vec3,       // teinte de l'étoile (selon son type spectral)
     luminosite: f32,     // intensité lumineuse relative
     couronne: f32,       // extension de la couronne (× rayon) selon le type
@@ -110,12 +120,15 @@ impl Soleil {
             temps: temps_initial(graine),
             taches: Vec::new(),
             boucles: Vec::new(),
+            flares: Vec::new(),
             prochaine_tache: gen_range(0.5, 2.0),
             prochaine_eruption: gen_range(2.0, 4.0),
+            prochain_flare: gen_range(1.5, 4.0),
             freq: 0.5,
             forme: 0.5,
             puissance: 0.5,
             alea: 0.5,
+            activite: 1.0,
             couleur,
             luminosite,
             // Étoile chaude/lumineuse -> couronne plus large et plus irrégulière (vents stellaires).
@@ -154,6 +167,14 @@ impl Soleil {
         self
     }
 
+    /// **Fixe l'activité propre au type d'étoile** (§1.3, `etoile::activite_type`).
+    /// À poser à la génération, avant tout appel à `set_eruptions` : c'est ce
+    /// facteur que celui-ci module au lieu d'écraser.
+    pub fn avec_activite(mut self, activite: f32) -> Self {
+        self.activite = activite.clamp(0.0, 1.0);
+        self
+    }
+
     /// Marque l'étoile comme rémanent compact (pulsar/magnétar/étoile à neutrons) :
     /// aucune zone habitable ne sera tracée (`zone_viable` renvoie `None`).
     pub fn sans_zone_habitable(mut self) -> Self {
@@ -176,6 +197,23 @@ impl Soleil {
         self.couronne_irreg = 0.0;
         self
     }
+
+    /// **Facteur d'éclat courant** : `1,0` hors sursaut, brièvement au-delà
+    /// pendant un flare. C'est la seule trace du lot 3 qui se voit à
+    /// **n'importe quelle échelle** (§1) — le ruban, lui, ne se lit qu'à
+    /// partir de quelques pixels. Suit `self.temps`, la même horloge de
+    /// spectacle que les taches et les boucles, jamais l'horloge orbitale.
+    fn eclat(&self) -> f32 {
+        1.0 + 0.6 * self.flares.iter().map(|f| f.intensite).sum::<f32>().min(1.0)
+    }
+}
+
+/// Combine le réglage global (sliders UI, `Systeme::reglages_etoile`) et
+/// l'activité propre de l'étoile : **module**, ne remplace pas. Écraser
+/// aurait ramené toutes les étoiles au même réglage malgré `activite_type`
+/// (§1.3) — exactement le défaut que ce lot corrige.
+fn moduler(base: f32, activite: f32) -> f32 {
+    (base * activite).clamp(0.0, 1.0)
 }
 
 impl Astre for Soleil {
@@ -205,17 +243,21 @@ impl Astre for Soleil {
             PX_MIN,
         )
     }
+    /// `freq` et `puissance` gouvernent *combien* et *combien fort* l'étoile
+    /// éruptionne : c'est ce que l'activité de type doit moduler. `forme` et
+    /// `alea` ne font que dessiner la silhouette des arches, indépendamment
+    /// du type — ils passent tels quels.
     fn set_eruptions(&mut self, freq: f32, forme: f32, puissance: f32, alea: f32) {
-        self.freq = freq;
+        self.freq = moduler(freq, self.activite);
         self.forme = forme;
-        self.puissance = puissance;
+        self.puissance = moduler(puissance, self.activite);
         self.alea = alea;
     }
     fn lumiere(&self) -> Option<Vec3> {
-        Some(self.couleur * self.luminosite)
+        Some(self.couleur * self.luminosite * self.eclat())
     }
     fn luminosite(&self) -> Option<f32> {
-        Some(self.luminosite)
+        Some(self.luminosite * self.eclat())
     }
     /// Une étoile se résume à sa couleur de corps noir : c'est déjà ce qui la
     /// distingue à l'œil (une naine rouge d'une géante bleue).
@@ -359,5 +401,40 @@ mod tests_graine {
         // Et il couvre vraiment cette plage : un décalage écrasé vers zéro
         // ne désynchroniserait rien.
         assert!(temps_initial(1000.0) - temps_initial(0.0) > 100.0);
+    }
+}
+
+#[cfg(test)]
+mod tests_moduler {
+    use super::moduler;
+
+    /// **La modulation ne doit ni annuler ni inverser la hiérarchie**
+    /// d'`etoile::activite_type` : à réglage égal, l'étoile la plus active
+    /// (une naine M) reste au-dessus de la moins active (une géante).
+    #[test]
+    fn preserve_la_hierarchie_d_activite() {
+        let base = 0.6;
+        let naine_m = moduler(base, 0.9); // activité haute
+        let geante = moduler(base, 0.15); // activité basse (plancher d'`activite_type`)
+        assert!(naine_m > geante, "hiérarchie inversée : naine {naine_m} <= géante {geante}");
+    }
+
+    /// **N'annule pas** : une activité non nulle (même au plancher) laisse
+    /// toujours un réglage non nul passer — une géante flambe rarement, pas
+    /// jamais.
+    #[test]
+    fn n_annule_pas_a_activite_non_nulle() {
+        assert!(moduler(0.5, 0.15) > 0.0);
+    }
+
+    /// Borné comme un réglage 0..1, même si `base` et `activite` le sont déjà.
+    #[test]
+    fn reste_borne() {
+        for base in [0.0_f32, 0.5, 1.0] {
+            for activite in [0.0_f32, 0.15, 1.0] {
+                let m = moduler(base, activite);
+                assert!((0.0..=1.0).contains(&m), "base {base}, activite {activite} -> {m}");
+            }
+        }
     }
 }

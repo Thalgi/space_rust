@@ -2,6 +2,12 @@ use super::{Soleil, MAX_TACHES};
 use macroquad::prelude::*;
 use macroquad::rand::gen_range;
 
+/// Sursauts simultanés au plus : le tableau `spots[8]` est **partagé** avec
+/// les taches (voir [`encoder_flare`]) — ce moteur plafonne pipelines et
+/// uniforms (`docs/suivi/technique.md`), pas de second tableau pour ça. Une
+/// poignée de taches actives plus deux ou trois flares tient large sous 8.
+pub(super) const MAX_FLARES: usize = 3;
+
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum EtatBoucle {
     Montee,
@@ -16,6 +22,17 @@ pub(super) struct Tache {
     pub taille: f32, // rayon angulaire (rad)
     pub age: f32,
     pub vie_max: f32,
+    pub intensite: f32,
+}
+
+/// Sursaut lumineux localisé (flare), ancré sur une tache — repère "surface".
+/// Bref et intense, à l'inverse de la tache qu'il accompagne : il éclaircit
+/// au lieu d'assombrir (voir [`encoder_flare`]).
+pub(super) struct Flare {
+    pub dir: Vec3,
+    pub taille: f32, // rayon angulaire (rad), avant fondu d'intensité
+    pub age: f32,
+    pub duree: f32,
     pub intensite: f32,
 }
 
@@ -34,10 +51,64 @@ pub(super) struct Boucle {
     pub apex_vel: f32, // vitesse d'expansion lors de l'éjection (corde de flux)
 }
 
+/// **Quelle tache porte la prochaine arche.**
+///
+/// Une protubérance se lit *parce qu*'elle relie deux pieds d'une tache ; en
+/// choisit une **active** (`intensite > 0`) quand il y en a, sinon `None` —
+/// l'appelant retombe alors sur un tirage aléatoire (une étoile sans tache
+/// continue d'éruptionner). Parmi plusieurs, la plus intense l'emporte : pas
+/// de tirage ici, donc **déterministe** à liste de taches égale.
+pub(super) fn tache_porteuse(taches: &[Tache]) -> Option<usize> {
+    taches
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| t.intensite > 0.0)
+        .max_by(|(_, a), (_, b)| a.intensite.total_cmp(&b.intensite))
+        .map(|(i, _)| i)
+}
+
+/// Encode le rayon effectif d'une **tache** (assombrissante) dans `spots[i].w`.
+/// **Positif.** Voir [`encoder_flare`] pour l'autre sens de ce même canal.
+pub(super) fn encoder_tache(rayon: f32) -> f32 {
+    rayon
+}
+
+/// Encode le rayon effectif d'un **flare** (éclaircissant) dans `spots[i].w`.
+///
+/// Le moteur plafonne pipelines et uniforms (`docs/suivi/technique.md`) : un
+/// second tableau d'uniforms pour les flares coûterait ce plafond. Le signe
+/// distingue les deux cas dans le tableau `spots[8]` déjà là — **négatif**
+/// pour un flare. Un rayon nul reste neutre dans les deux encodages
+/// (`-0.0 == 0.0` : aucune branche shader ne le lit comme un flare).
+pub(super) fn encoder_flare(rayon: f32) -> f32 {
+    -rayon
+}
+
+// La lecture du canal (le décodage) n'a lieu qu'au fragment shader
+// (`soleil.frag.glsl`), qui duplique forcément cette même logique en GLSL —
+// intestable directement (`docs/methode.md`). Ces deux fonctions n'ont donc
+// pas d'appelant en dehors des tests : elles fixent le contrat que le GLSL
+// doit respecter, et c'est tout ce qu'on peut vérifier ici.
+#[cfg(test)]
+/// Vrai si `w` (canal `spots[i].w`) encode un flare plutôt qu'une tache.
+fn est_flare(w: f32) -> bool {
+    w < 0.0
+}
+
+#[cfg(test)]
+/// Rayon effectif porté par `w`, quel que soit son encodage (tache ou flare).
+fn rayon_effectif(w: f32) -> f32 {
+    w.abs()
+}
+
 impl Soleil {
-    /// Crée une boucle à un endroit aléatoire de la surface (éruptions dispersées).
+    /// Crée une boucle ancrée sur la tache active la plus intense s'il y en a
+    /// une, sinon dispersée au hasard (éruption sans tache visible).
     pub(super) fn declencher_boucle(&mut self) {
-        let centre = dir_aleatoire();
+        let centre = match tache_porteuse(&self.taches) {
+            Some(i) => self.taches[i].dir,
+            None => dir_aleatoire(),
+        };
         let taille_spot: f32 = gen_range(0.12, 0.26);
 
         let p = self.puissance;
@@ -104,6 +175,37 @@ impl Soleil {
             t.intensite = fade_in.min(fade_out);
         }
         self.taches.retain(|t| t.age < t.vie_max);
+
+        // --- Flares : sursaut lumineux localisé, bref, ancré sur une tache ---
+        //
+        // `self.freq` porte déjà l'activité propre au type (`Soleil::set_eruptions`,
+        // §1.3) : une naine M active en enchaîne, une géante rarement. Suit
+        // `self.temps`, alimenté plus haut par `dt` — l'horloge de spectacle
+        // (`DtAnimation`), jamais l'horloge orbitale accélérable.
+        if self.temps >= self.prochain_flare && self.flares.len() < MAX_FLARES {
+            let dir = match tache_porteuse(&self.taches) {
+                Some(i) => self.taches[i].dir,
+                None => dir_aleatoire(),
+            };
+            self.flares.push(Flare {
+                dir,
+                taille: gen_range(0.10, 0.22),
+                age: 0.0,
+                duree: gen_range(0.8, 2.2),
+                intensite: 0.0,
+            });
+            let moy = 6.0 - 4.5 * self.freq;
+            self.prochain_flare = self.temps + (gen_range(0.6, 1.6) * moy).max(0.3);
+        }
+        for f in &mut self.flares {
+            f.age += dt;
+            // Montée quasi immédiate (un sursaut n'a pas la lenteur d'une tache),
+            // retombée sur le reste de sa durée.
+            let fade_in = (f.age / 0.15).clamp(0.0, 1.0);
+            let fade_out = ((f.duree - f.age) / (f.duree * 0.6).max(0.05)).clamp(0.0, 1.0);
+            f.intensite = fade_in.min(fade_out);
+        }
+        self.flares.retain(|f| f.age < f.duree);
 
         // --- Déclenchement des boucles (sur les taches) ---
         if self.temps >= self.prochaine_eruption {
@@ -173,5 +275,69 @@ pub(super) fn dir_aleatoire() -> Vec3 {
         if l2 > 0.0001 && l2 <= 1.0 {
             return p / l2.sqrt();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_tache_porteuse {
+    use super::*;
+
+    fn tache(dir: Vec3, intensite: f32) -> Tache {
+        Tache { dir, taille: 0.2, age: 1.0, vie_max: 10.0, intensite }
+    }
+
+    /// **Une tache active est choisie quand il y en a.** La plus intense
+    /// l'emporte : c'est elle que le regard suit en premier.
+    #[test]
+    fn choisit_la_tache_active_la_plus_intense() {
+        let taches = vec![
+            tache(vec3(1.0, 0.0, 0.0), 0.4),
+            tache(vec3(0.0, 1.0, 0.0), 0.9),
+            tache(vec3(0.0, 0.0, 1.0), 0.1),
+        ];
+        assert_eq!(tache_porteuse(&taches), Some(1));
+    }
+
+    /// **Le repli joue quand il n'y en a pas** : ni taches, ni taches actives
+    /// (toutes en train d'apparaître ou de s'éteindre, intensité nulle) — une
+    /// étoile sans tache visible doit continuer d'éruptionner ailleurs.
+    #[test]
+    fn replie_sur_aucune_quand_rien_n_est_actif() {
+        assert_eq!(tache_porteuse(&[]), None);
+        let taches = vec![tache(vec3(1.0, 0.0, 0.0), 0.0), tache(vec3(0.0, 1.0, 0.0), 0.0)];
+        assert_eq!(tache_porteuse(&taches), None);
+    }
+
+    /// **Déterministe à graine fixée** : même liste, même choix, à chaque appel.
+    #[test]
+    fn deterministe_a_liste_egale() {
+        let taches = vec![tache(vec3(1.0, 0.0, 0.0), 0.5), tache(vec3(0.0, 1.0, 0.0), 0.7)];
+        assert_eq!(tache_porteuse(&taches), tache_porteuse(&taches));
+    }
+}
+
+#[cfg(test)]
+mod tests_encodage_spots {
+    use super::*;
+
+    /// **Tache et flare se distinguent dans la même donnée** : le signe de `w`,
+    /// pas un second tableau (le moteur plafonne les uniforms).
+    #[test]
+    fn le_signe_distingue_tache_et_flare() {
+        let w_tache = encoder_tache(0.2);
+        let w_flare = encoder_flare(0.2);
+        assert!(!est_flare(w_tache), "une tache lue comme un flare");
+        assert!(est_flare(w_flare), "un flare lu comme une tache");
+        assert_eq!(rayon_effectif(w_tache), 0.2);
+        assert_eq!(rayon_effectif(w_flare), 0.2);
+    }
+
+    /// **Un rayon nul reste neutre**, quel que soit l'encodage — sinon un
+    /// flare éteint (intensité retombée à 0) resterait lu comme actif.
+    #[test]
+    fn un_rayon_nul_reste_neutre() {
+        assert!(!est_flare(encoder_tache(0.0)));
+        assert!(!est_flare(encoder_flare(0.0)));
+        assert_eq!(rayon_effectif(encoder_flare(0.0)), 0.0);
     }
 }

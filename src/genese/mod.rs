@@ -73,7 +73,10 @@ fn construire_simple() -> (Systeme, String) {
     let masse_etoile = masse_luminosite(profil.luminosite);
 
     let mut sys = Systeme::new();
-    let soleil = Soleil::new(vec3(0.0, 0.0, 0.0), profil.rayon, profil.couleur, profil.luminosite);
+    let soleil = Soleil::new(vec3(0.0, 0.0, 0.0), profil.rayon, profil.couleur, profil.luminosite)
+        // Naine active ou géante calme (§1.3) : dérivé du même gabarit que la
+        // masse ci-dessus, pas d'un second tirage pour le même fait.
+        .avec_activite(etoile::activite_type(profil.rayon, profil.luminosite));
     let soleil = match profil.couronne as i32 {
         1 => soleil.avec_jets(),
         2 => soleil.avec_vent(),
@@ -569,7 +572,8 @@ fn deployer_noeud(
 ) -> usize {
     match noeud {
         Noeud::Etoile(f) => {
-            let mut s = Soleil::new(Vec3::ZERO, f.rayon, f.couleur, f.luminosite);
+            let mut s = Soleil::new(Vec3::ZERO, f.rayon, f.couleur, f.luminosite)
+                .avec_activite(etoile::activite_type(f.rayon, f.luminosite));
             s = match f.variante {
                 Variante::Normale => s,
                 Variante::Jets => s.avec_jets(),

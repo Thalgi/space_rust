@@ -102,6 +102,19 @@ pub fn zone_habitable(luminosite: f32) -> (f32, f32) {
     (interne, externe)
 }
 
+/// **Taux d'activité éruptive propre au type d'étoile**, dérivé de son gabarit
+/// (rayon, luminosité) — les deux seuls traits que connaît déjà `Soleil::new`,
+/// pas besoin d'un troisième canal pour ce qui n'est qu'un facteur d'échelle.
+///
+/// Une naine M (petite, peu lumineuse) est active ; une géante (grande, très
+/// lumineuse) l'est peu. `gabarit = rayon × √luminosité` croît avec les deux,
+/// et l'activité en décroît — borné à `[0,15 ; 1,0]` : jamais nulle (une
+/// géante flambe rarement, pas jamais), jamais démesurée.
+pub fn activite_type(rayon: f32, luminosite: f32) -> f32 {
+    let gabarit = rayon.max(0.01) * luminosite.max(0.0).sqrt();
+    (1.6 / (1.0 + gabarit)).clamp(0.15, 1.0)
+}
+
 /// Couleur approximative d'un corps noir à `temp` Kelvin (approx. de Tanner Helland).
 pub fn couleur_corps_noir(temp: f32) -> Vec3 {
     let t = temp.clamp(1000.0, 40000.0) / 100.0;
@@ -125,4 +138,42 @@ pub fn couleur_corps_noir(temp: f32) -> Vec3 {
     };
 
     vec3(r / 255.0, g / 255.0, b / 255.0)
+}
+
+#[cfg(test)]
+mod tests_activite {
+    use super::activite_type;
+
+    /// **La hiérarchie qu'on cherche : une naine M dépasse une géante.**
+    /// Gabarits tirés de `ProfilEtoile::aleatoire` (`etoile.rs:46` et `:38`).
+    #[test]
+    fn une_naine_m_est_plus_active_qu_une_geante_rouge() {
+        let naine_m = activite_type(1.3, 0.4);
+        let geante = activite_type(5.5, 4.0);
+        assert!(naine_m > geante, "naine {naine_m} <= géante {geante}");
+    }
+
+    /// Une jeune étoile (T Tauri, petite et modérément lumineuse) reste active,
+    /// pas assommée par sa luminosité un peu plus haute qu'une naine M.
+    #[test]
+    fn une_jeune_etoile_reste_active() {
+        let t_tauri = activite_type(0.9, 1.2);
+        let geante = activite_type(5.5, 4.0);
+        assert!(t_tauri > geante, "T Tauri {t_tauri} <= géante {geante}");
+    }
+
+    /// **Monotone et borné**, tel que réclamé : grossir le rayon (à luminosité
+    /// fixe) ne peut que faire baisser ou stagner l'activité, jamais grimper ;
+    /// et le résultat reste dans `[0,15 ; 1,0]` sur toute la plage tirée par
+    /// `ProfilEtoile::aleatoire`.
+    #[test]
+    fn monotone_et_borne() {
+        let mut precedent = f32::INFINITY;
+        for rayon in [0.4_f32, 0.9, 1.3, 2.0, 3.2, 4.0, 5.5, 7.0] {
+            let a = activite_type(rayon, 1.0);
+            assert!(a <= precedent + 1e-6, "activité remonte à rayon {rayon} : {a} > {precedent}");
+            assert!((0.15..=1.0).contains(&a), "rayon {rayon} -> {a}, hors bornes");
+            precedent = a;
+        }
+    }
 }

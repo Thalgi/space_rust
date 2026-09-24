@@ -1,4 +1,4 @@
-use super::eruptions::EtatBoucle;
+use super::eruptions::{encoder_flare, encoder_tache, EtatBoucle};
 use super::{Soleil, MAX_TACHES};
 use crate::astre::{Astre, CameraInfo};
 use crate::impostor::push_quad;
@@ -23,10 +23,25 @@ impl Soleil {
         self.inds.clear();
         push_quad(&mut self.verts, &mut self.inds, cam, c, r * self.couronne, WHITE);
 
-        // Taches -> uniform array (xyz = direction surface, w = rayon effectif)
+        // Taches ET flares -> même uniform array (xyz = direction surface, w =
+        // rayon effectif SIGNÉ : positif tache assombrissante, négatif flare
+        // éclaircissant — voir `eruptions::encoder_flare`). Un seul tableau
+        // d'uniforms, faute de place pour un second pipeline.
         let mut spots = [Vec4::ZERO; MAX_TACHES];
-        for (i, t) in self.taches.iter().take(MAX_TACHES).enumerate() {
-            spots[i] = vec4(t.dir.x, t.dir.y, t.dir.z, t.taille * t.intensite);
+        let mut n = 0;
+        for t in self.taches.iter() {
+            if n >= MAX_TACHES {
+                break;
+            }
+            spots[n] = vec4(t.dir.x, t.dir.y, t.dir.z, encoder_tache(t.taille * t.intensite));
+            n += 1;
+        }
+        for f in self.flares.iter() {
+            if n >= MAX_TACHES {
+                break;
+            }
+            spots[n] = vec4(f.dir.x, f.dir.y, f.dir.z, encoder_flare(f.taille * f.intensite));
+            n += 1;
         }
 
         // DEUX PASSES sur le même quad et le même shader (voir soleil.frag.glsl) :
