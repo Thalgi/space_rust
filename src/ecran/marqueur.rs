@@ -173,17 +173,22 @@ pub fn planete_active(sys: &Systeme, selection: Option<usize>) -> Option<usize> 
 const DEMI_BASE_PX: f32 = 4.0;
 const HAUTEUR_PX: f32 = 10.0;
 
-/// **Ce qui signale l'astre sélectionné** : sa flèche est saturée, pas
-/// entourée. Un cercle autour du triangle ajoutait un second objet à lire là
-/// où la couleur suffit — et il se confondait avec les disques du décor.
-const SATURATION_SELECTION: f32 = 2.6;
-
-/// Sature une teinte sans toucher à sa luminosité perçue : on s'éloigne du
-/// gris de même luminance, dans la direction de la couleur d'origine.
-fn saturer(c: Color, facteur: f32) -> Color {
-    let gris = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
-    let canal = |v: f32| (gris + (v - gris) * facteur).clamp(0.0, 1.0);
-    Color::new(canal(c.r), canal(c.g), canal(c.b), c.a)
+/// **Les quatre teintes de flèche**, en niveaux de gris : la couleur propre
+/// de l'astre est réservée à sa pastille dans la colonne, la carte se lit en
+/// clair/sombre.
+///
+/// Deux échelons pour la planète (clair → blanc), deux pour la lune (sombre
+/// → clair) : la **sélection** monte d'un cran, et la lune reste toujours en
+/// dessous de sa planète. Un marqueur sélectionné se repère donc à sa
+/// clarté, sans second objet à lire.
+fn teinte_marqueur(est_lune: bool, selectionne: bool) -> Color {
+    let v = match (est_lune, selectionne) {
+        (false, true) => 1.00,  // planète sélectionnée : blanc
+        (false, false) => 0.78, // planète : gris clair
+        (true, true) => 0.78,   // lune sélectionnée : gris clair
+        (true, false) => 0.52,  // lune : gris
+    };
+    Color::new(v, v, v, 1.0)
 }
 
 /// Dessine les marqueurs. **Passe interface uniquement** — ne décide de rien :
@@ -198,12 +203,9 @@ pub fn dessiner(sys: &Systeme, marqueurs: &[Marqueur], survole: Option<usize>, s
         // vient de `marqueurs_pour`, qui filtre déjà `idx < sys.nb_astres()`
         // avant de construire le marqueur.
         let cat = sys.categorie_de(m.idx).unwrap_or(Categorie::Planete);
-        let mut c = super::selecteur::teinte_astre(sys, m.idx, cat);
+        let mut c = teinte_marqueur(cat == Categorie::Lune, selectionne == Some(m.idx));
         let est_survole = survole == Some(m.idx);
         c.a = if est_survole { 1.0 } else { 0.85 };
-        if selectionne == Some(m.idx) {
-            c = saturer(c, SATURATION_SELECTION);
-        }
 
         let pointe = m.ecran;
         let gauche = vec2(pointe.x - DEMI_BASE_PX, pointe.y - HAUTEUR_PX);
