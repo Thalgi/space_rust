@@ -252,6 +252,7 @@ mod tests {
         let (right, up, forward) = base_orbite(0.0, 0.0);
         CameraInfo {
             pos: -forward * 20.0,
+            origine: Vec3::ZERO,
             right,
             up,
             forward,

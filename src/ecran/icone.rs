@@ -406,9 +406,12 @@ impl IconesAstres {
         let (direction, haut) = cadre_camera(vers_lumiere, sys.normale_anneau_de(idx));
         let pos = centre + direction * c.recul;
 
+        // Même repère de rendu relatif que la vignette : l'icône du sélecteur
+        // portraiture un astre héliocentrique, donc elle héritait du même
+        // tremblement (`docs/conception/repere_flottant.md`).
         let cam3d = Camera3D {
-            position: pos,
-            target: centre,
+            position: pos - centre,
+            target: Vec3::ZERO,
             up: haut,
             fovy: c.fovy_deg.to_radians(),
             aspect: Some(1.0),
@@ -428,6 +431,7 @@ impl IconesAstres {
         let up = right.cross(forward).normalize_or_zero();
         let cam = CameraInfo {
             pos,
+            origine: centre,
             right,
             up,
             forward,

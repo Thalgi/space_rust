@@ -234,13 +234,18 @@ impl Astre for EnginOrbital {
             + self.q * (self.rayon_orbite * self.angle.sin());
     }
 
-    fn draw(&mut self, _cam: &CameraInfo) {
+    fn draw(&mut self, cam: &CameraInfo) {
         // La station est cuite autour de son origine : une translation, une
         // mise à l'échelle et un lacet suffisent.
+        //
+        // **Un seul nombre à rendre relatif, et c'est la translation.** Les
+        // milliers de sommets du maillage sont déjà relatifs à l'origine de la
+        // station (`vaisseau/maillage.rs`) : seule cette `Mat4` porte une
+        // coordonnée héliocentrique, donc seule elle a besoin de `rel`.
         let m = Mat4::from_scale_rotation_translation(
             Vec3::splat(self.echelle),
             Quat::from_rotation_y(self.lacet),
-            self.base.position,
+            cam.rel(self.base.position),
         );
         unsafe {
             get_internal_gl().quad_gl.push_model_matrix(m);

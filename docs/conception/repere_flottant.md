@@ -12,6 +12,10 @@
 > §4 compare quatre remèdes, §5 découpe celui qui est recommandé, §6 dit ce
 > qui ne se vérifiera qu'à l'œil, §7 tranche, §8 isole ce que l'utilisateur
 > doit décider lui-même.
+>
+> **§9, ajouté le 2026-09-24, dit ce qui a été fait** — l'option (a) livrée en
+> un seul commit —, ce qui reste faux, et pourquoi deux des six lots du §5 se
+> sont révélés inutiles. Les §1 à §8 restent tels qu'écrits avant le code.
 
 ---
 
@@ -298,3 +302,140 @@ faire passer **toutes** les positions monde par la seule fonction `rel()`.
 4. **Étend-on le harnais de capture** (`CAPTURE_N`, §6) pour pouvoir juger
    autrement qu'à l'œil ? Chantier distinct, utile au-delà de ce défaut,
    jamais un préalable.
+
+---
+
+## 9. Ce qui a été fait — 2026-09-24
+
+> Écrit **après** le chantier, qui a tenu en **un seul commit**. L'étude
+> ci-dessus reste telle qu'elle a été rédigée : elle a servi à décider, et ses
+> chiffres servent encore de référence. Cette section dit ce qui a changé, ce
+> qui reste faux, et où le découpage du §5 s'est trompé.
+
+### 9.1 La règle posée
+
+`CameraInfo` a gagné un champ `origine: Vec3` et une méthode
+`rel(p) = p - origine` (`src/astre.rs`), **source unique** de la conversion.
+La règle tient en deux lignes :
+
+- **`CameraInfo.pos` reste ABSOLU.** `Systeme::pick`, les distances, les LOD
+  (`rayon_dessine`, `px_rayon`, le seuil sub-pixel des débris) et
+  `projeter_ecran` continuent de le lire tel quel, et marchent à l'identique.
+- **Tout ce qui part au GPU passe par `rel()`** : position et cible de la
+  caméra 3D, sommets, centres d'impostor, matrices de modèle, uniformes de
+  position.
+
+`Camera::construire` pose `origine = target` et bâtit son `Camera3D` avec
+`position: pos - origine`, `target: Vec3::ZERO`. Les autres sites posent
+l'origine qui leur convient : `Vec3::ZERO` pour les galeries et pour
+l'assembleur (qui appelle déjà `construire(Vec3::ZERO, …)` — comportement
+inchangé), et la position de l'astre portraituré pour `ecran/vignette.rs` et
+`ecran/icone.rs`, qui portaient le même défaut sans que personne l'ait
+diagnostiqué.
+
+**Aucune ligne de GLSL n'a été réécrite**, comme le §4 (a) l'annonçait : les
+uniformes étaient déjà des `f32`, on leur passe simplement de petits nombres.
+
+### 9.2 Fichiers convertis
+
+`impostor.rs` (`push_quad` prend désormais `&CameraInfo` et convertit
+lui-même — l'oubli devient impossible côté appelant), `planete/mod.rs`,
+`planete/materiau.rs` (`centre`, `lumiere`, `lights_pos[4]`, corps ET
+coquille atmosphérique), `soleil/rendu.rs` (quad du disque, boucles,
+éjections), `disque/mod.rs` (`centre`, `light_pos`, `cam_pos`),
+`disque/voile.rs` (`centre`), `engin.rs` et `transit.rs` (la seule
+translation de la `Mat4` de modèle), `fond.rs`, `systeme/rendu.rs` (orbites
+de planètes et de lunes, pointillés stellaires, cercles de zone habitable,
+aperçu de trajet — tous les `draw_line_3d`), `rendu.rs` (`draw_orbites`
+reçoit le repère entier), `ecran/vignette.rs`, `ecran/icone.rs`, et les trois
+galeries.
+
+`ecran/trace_orbite.rs` **n'a rien eu à changer** : il projette via
+`projeter_ecran`, qui soustrait `cam.pos` avant toute division — le chemin 2D
+était sain, et le rester est gardé par un test. `ecran/skymap.rs` (V1) est
+identique à l'octet près : il profite de la correction par `construire`, sans
+une ligne de diff.
+
+`shaders/station.frag.glsl` n'a pas bougé non plus, et ce n'est pas un oubli :
+son `cam_pos` n'est posé que par `vaisseau::eclairage::avec`, appelé seulement
+par l'assembleur, les briques et l'écran de station — trois vues dont
+l'origine de rendu est `Vec3::ZERO`.
+
+### 9.3 Les tests
+
+Deux garde-fous neufs dans `src/camera.rs`, module `tests_precision`, tous
+deux branchés sur ce que `Camera::construire` produit **vraiment** (la
+`Camera` se fabrique par littéral de struct : `Camera::new` exige un contexte
+graphique, pas le littéral) :
+
+- `la_camera_construite_est_relative_mais_garde_une_position_absolue` :
+  `info.origine == target`, `cam3d.target == Vec3::ZERO`,
+  `cam3d.position.length() ≈ dist`, `info.pos` toujours absolu,
+  `info.rel(cible) == Vec3::ZERO`.
+- `la_camera_construite_immobilise_lastre_suivi` : la mécanique de
+  `saut_max_px` (une cible qui avance de quelques ULP, le pixel où elle
+  atterrit), mais la caméra vient de `construire` et le sommet de
+  `CameraInfo::rel`. **Zéro pixel exactement**, à Saturne, Neptune et Kuiper,
+  aux trois distances les plus serrées.
+
+⚠️ **L'égalité stricte à zéro n'est pas une coquetterie.** Le second sabotage
+du red-check — caméra 3D remise en absolu, origine laissée juste — ne produit
+que **0,00037 px** de saut, parce que `rel(cible)` vaut exactement zéro et que
+seule la pose de l'œil perd des bits. Une tolérance d'un demi-pixel aurait
+laissé ce sabotage vert.
+
+Les deux tests d'origine restent verts, et c'était voulu :
+`le_rendu_3d_absolu_fait_sauter_lastre_suivi` rejoue **sa propre** matrice
+(c'est un fait mathématique sur `f32`, pas une observation de la production) ;
+`la_projection_ecran_ne_fait_pas_sauter_lastre_suivi` garde le chemin 2D.
+Les fabriques de `CameraInfo` à la main (`marqueur.rs`, `designation.rs`,
+`trace_orbite.rs`, `tests_precision`) ont gagné un champ ; aucun test n'a
+disparu ni été affaibli. Totaux : **756 tests verts**, `cargo clippy
+--all-targets` à zéro avertissement.
+
+### 9.4 Ce qui reste faux
+
+**L'escalier des objets non focalisés**, annoncé au §4 (a) et toujours là. Une
+lune qu'on ne suit pas garde la quantification de sa position **stockée**
+(½ ULP de *R*, soit 3,05 × 10⁻⁵ unité à Saturne) : ce n'est plus une gigue
+erratique, c'est une marche régulière à mesure qu'elle avance, ~0,5 px à
+×25 000. Bien moins visible — l'œil pardonne un pas régulier là où il accroche
+un tremblement — mais réel, et **toujours non chiffré à l'œil**. Le remède
+serait l'option (c), stockage `f64` + rendu relatif ; elle ne se justifie que
+si cet escalier se voit, ce qui n'est pas su.
+
+**Rien de ceci ne se vérifie autrement qu'à l'œil** (§6) : aucun harnais GPU,
+et `CAPTURE=` ne produit qu'une image quand un tremblement est par définition
+une différence entre deux frames. Les cas à regarder, par ordre de risque :
+Titan et Triton à fort zoom (le défaut d'origine), le fond stellaire (sphère
+recentrée sur l'œil), les anneaux vus par la tranche et les ceintures
+(uniformes `centre` / `cam_pos` / `light_pos`), une vue **sans astre
+focalisé** (origine = `Vec3::ZERO`, donc chemin nominalement inchangé), les
+objets posés à l'origine même, les vignettes et les icônes du sélecteur, et
+les écrans de galerie et d'assemblage — qui, eux, ne devaient rien changer du
+tout.
+
+### 9.5 Les lots 2 et 3 n'ont pas eu lieu
+
+Le découpage du §5 prévoyait six lots. Le lot 1 (le témoin chiffré) a été
+livré seul, comme prévu. Les autres se sont réduits à **un seul commit**, et
+deux des six se sont révélés **inutiles** :
+
+- **Lot 2** — « `CameraInfo` gagne `origine`, les sites posent `Vec3::ZERO`,
+  comportement bit à bit inchangé » : livrable en théorie, sans intérêt en
+  pratique. Il ajoute un champ mort et une méthode que personne n'appelle ;
+  le seul moyen de vérifier qu'il n'a rien cassé est de faire passer la suite,
+  ce que fait de toute façon le commit qui suit. Une étape qui ne peut rien
+  prouver n'est pas un jalon.
+- **Lot 3** — « `projeter_ecran` passe par `rel()` » : **à ne surtout pas
+  faire.** Le §2 le disait déjà (« `camera.rs:94` : `p - cam.pos`, monde les
+  deux ») sans en tirer la conclusion : ce chemin soustrait *déjà* la position
+  de la caméra, il est sain, et l'origine s'y annulerait des deux côtés. Y
+  toucher n'aurait rien corrigé et aurait risqué de casser marqueurs,
+  désignation et orbites de lunes — les seules choses qui marchaient déjà.
+
+Et surtout, le découpage manquait la contrainte qui décide de tout :
+**le chantier est atomique**. Dès que la caméra passe en relatif, tout dessin
+resté en absolu part à 460 unités hors champ. Livrer les lots 4, 5 et 6
+séparément aurait donné deux états intermédiaires **injouables**. Les lots 1
+et 2 étaient les seuls détachables ; à partir du lot 4, c'est tout ou rien.

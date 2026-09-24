@@ -21,19 +21,27 @@ pub fn source(nom: &str, defaut: &'static str) -> String {
     std::fs::read_to_string(&chemin).unwrap_or_else(|_| defaut.to_string())
 }
 
-/// Empile un quad face-caméra centré sur `centre`, de demi-taille `taille`.
+/// Empile un quad face-caméra centré sur le point **monde** `centre`, de
+/// demi-taille `taille`.
+///
+/// ⚠️ **C'est la fonction qui convertit, pas l'appelant.** Les sommets partent
+/// au GPU : ils doivent être exprimés dans le repère de rendu
+/// (`CameraInfo::rel`). Prendre `cam` entier plutôt que `right`/`up` séparés
+/// rend l'oubli impossible — un quad laissé en coordonnées héliocentriques
+/// absolues partirait à 460 unités hors champ, et rien côté Rust ne le dirait.
+/// Voir `docs/conception/repere_flottant.md`.
 pub fn push_quad(
     verts: &mut Vec<Vertex>,
     inds: &mut Vec<u16>,
+    cam: &CameraInfo,
     centre: Vec3,
-    right: Vec3,
-    up: Vec3,
     taille: f32,
     couleur: Color,
 ) {
+    let centre = cam.rel(centre);
     let i0 = verts.len() as u16;
-    let r = right * taille;
-    let u = up * taille;
+    let r = cam.right * taille;
+    let u = cam.up * taille;
     verts.push(Vertex::new2(centre - r - u, vec2(0.0, 0.0), couleur));
     verts.push(Vertex::new2(centre + r - u, vec2(1.0, 0.0), couleur));
     verts.push(Vertex::new2(centre + r + u, vec2(1.0, 1.0), couleur));

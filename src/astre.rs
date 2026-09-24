@@ -63,6 +63,19 @@ impl CorpsBase {
 #[derive(Clone, Copy)]
 pub struct CameraInfo {
     pub pos: Vec3,
+    /// **Origine du repere de rendu** : le point du monde envoye au GPU comme
+    /// zero. Tout ce qui part vers la carte graphique passe par [`Self::rel`].
+    ///
+    /// Pourquoi : les positions sont des `Vec3` f32 heliocentriques absolues ;
+    /// a 460 unites (Saturne) deux f32 voisins sont separes de 3 x 10^-5 unite.
+    /// La matrice vue-projection de macroquad est batie en f32, si bien qu'un
+    /// astre pourtant SUIVI par la camera sautait a l'ecran -- 0,6 px a
+    /// Saturne, 2,7 px a Neptune a `dist = 0,05`. En posant l'origine sur la
+    /// cible, `p` et `origine` tiennent dans un facteur 2 l'un de l'autre :
+    /// leur difference f32 est alors EXACTE (Sterbenz), et l'astre focalise se
+    /// rend en zero, immobile par construction.
+    /// Voir `docs/conception/repere_flottant.md`.
+    pub origine: Vec3,
     pub right: Vec3,
     pub up: Vec3,
     pub forward: Vec3,     // de la caméra vers la cible
@@ -72,6 +85,33 @@ pub struct CameraInfo {
     // (= light_pos/light_color) ; entrées inutilisées : couleur nulle.
     pub lights_pos: [Vec3; 4],
     pub lights_color: [Vec3; 4],
+}
+
+impl CameraInfo {
+    /// Coordonnee **du repere de rendu** du point monde `p`.
+    ///
+    /// **Source unique** de la conversion : c'est le seul endroit ou une
+    /// position monde devient une position GPU. Le risque de ce chantier est
+    /// la regression silencieuse -- un `centre`, une `lumiere` ou une
+    /// translation de `Mat4` oubliee en absolu ne casse aucun test, elle
+    /// decale seulement un terminateur de planete. Faire passer TOUT par cette
+    /// fonction est le garde-fou (`docs/methode.md`, « une source par fait »).
+    ///
+    /// ⚠️ `pos`, lui, reste **absolu** : le picking, les distances et les LOD
+    /// (`rayon_dessine`, `px_rayon`, seuils sub-pixel des debris) et
+    /// `projeter_ecran` s'appuient dessus.
+    pub fn rel(&self, p: Vec3) -> Vec3 {
+        p - self.origine
+    }
+
+    /// Les quatre positions d'eclairage, rendues au repere de rendu.
+    ///
+    /// Les emplacements inutilises portent une couleur nulle : les translater
+    /// aussi ne change rien au rendu, et evite d'avoir a distinguer ici les
+    /// sources vivantes des mortes.
+    pub fn lights_rel(&self) -> [Vec3; 4] {
+        self.lights_pos.map(|p| self.rel(p))
+    }
 }
 
 /// La "superclasse" : tout ce qui est un astre sait se mettre à jour

@@ -47,10 +47,17 @@ impl Fond {
         self.verts.clear();
         self.inds.clear();
         let echelle = RAYON * 0.0004; // petites étoiles (points)
+        // Centre de la sphère céleste **au repère de rendu** : l'œil, translaté
+        // comme tout ce qui part au GPU. Calculé une fois hors de la boucle —
+        // il ne dépend pas de l'étoile. Sans cette conversion, le champ entier
+        // resterait posé à la coordonnée héliocentrique de la caméra alors que
+        // la caméra 3D, elle, est à l'origine : le ciel se retrouverait à 460
+        // unités derrière le dos de l'observateur.
+        let oeil = cam.rel(cam.pos);
         gl_use_material(&self.mat);
         let mut q = 0;
         for (dir, taille, col) in &self.etoiles {
-            let pos = cam.pos + *dir * RAYON;
+            let pos = oeil + *dir * RAYON;
             let s = *taille * echelle;
             let r2 = cam.right * s;
             let u2 = cam.up * s;

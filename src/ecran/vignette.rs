@@ -260,9 +260,13 @@ impl Vignette {
         let direction = direction_camera_trois_quarts(centre, sys.position_lumiere());
         let pos = centre + direction * recul;
 
+        // Repère de rendu centré sur l'astre portraituré : la vignette portait
+        // exactement le même défaut que la vue système — un corps à 460 unités
+        // du Soleil rendu par une matrice vue-projection `f32` absolue — et le
+        // corriger ici est gratuit (`docs/conception/repere_flottant.md`).
         let cam3d = Camera3D {
-            position: pos,
-            target: centre,
+            position: pos - centre,
+            target: Vec3::ZERO,
             up: Vec3::Y,
             fovy: 45.0_f32.to_radians(),
             aspect: Some(1.0),
@@ -282,6 +286,7 @@ impl Vignette {
         let up = right.cross(forward).normalize_or_zero();
         let cam = CameraInfo {
             pos,
+            origine: centre,
             right,
             up,
             forward,

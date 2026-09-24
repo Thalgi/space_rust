@@ -329,7 +329,7 @@ impl Astre for Planete {
         self.verts.clear();
         self.inds.clear();
         let demi = r * materiau::DISC;
-        crate::impostor::push_quad(&mut self.verts, &mut self.inds, c, cam.right, cam.up, demi, WHITE);
+        crate::impostor::push_quad(&mut self.verts, &mut self.inds, cam, c, demi, WHITE);
 
         let terr = self.terrain_tex.as_ref().map(|(t, nm)| (t, *nm));
         appliquer_uniforms(
@@ -384,7 +384,7 @@ impl Astre for Planete {
         if materiau::atmo_visible(&self.app, cam, c, r) {
             self.verts.clear();
             self.inds.clear();
-            crate::impostor::push_quad(&mut self.verts, &mut self.inds, c, cam.right, cam.up, demi, WHITE);
+            crate::impostor::push_quad(&mut self.verts, &mut self.inds, cam, c, demi, WHITE);
             materiau::appliquer_uniforms_atmo(&self.mat_atmo, &self.app, cam, c, r);
             gl_use_material(&self.mat_atmo);
             let halo = Mesh {

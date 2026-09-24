@@ -220,13 +220,20 @@ impl Disque {
     /// (cible basse résolution du mode pixel).
     pub fn draw_moitie(&mut self, cam: &CameraInfo, moitie: f32) {
         let p = self.base.position;
+        // **Trois points monde pour le GPU.** Le vertex shader des particules
+        // reconstruit l'orbite lui-même (`pos = centre + ...`) puis n'utilise
+        // plus que des DIFFÉRENCES (`pos - centre`, `cam_pos - pos`,
+        // `centre - light_pos`) : les translater tous les trois du même
+        // vecteur laisse le calcul inchangé, et retire les grands nombres.
+        let (p_rel, cam_rel) = (cam.rel(p), cam.rel(cam.pos));
+        let lum_rel = cam.rel(cam.light_pos);
 
         {
             if let Some(mat) = &self.mat {
                 mat.set_uniform("time", self.temps);
                 mat.set_uniform("gm", self.cfg.gm);
                 mat.set_uniform("ecc_max", self.cfg.ecc_max);
-                mat.set_uniform("centre", (p.x, p.y, p.z));
+                mat.set_uniform("centre", (p_rel.x, p_rel.y, p_rel.z));
                 mat.set_uniform("axe_u", (self.axe_u.x, self.axe_u.y, self.axe_u.z));
                 mat.set_uniform("axe_n", (self.axe_n.x, self.axe_n.y, self.axe_n.z));
                 mat.set_uniform("axe_v", (self.axe_v.x, self.axe_v.y, self.axe_v.z));
@@ -234,8 +241,8 @@ impl Disque {
                 mat.set_uniform("cam_up", (cam.up.x, cam.up.y, cam.up.z));
                 mat.set_uniform("viewport_h", viewport_h());
                 mat.set_uniform("px_min", px_min());
-                mat.set_uniform("light_pos", (cam.light_pos.x, cam.light_pos.y, cam.light_pos.z));
-                mat.set_uniform("cam_pos", (cam.pos.x, cam.pos.y, cam.pos.z));
+                mat.set_uniform("light_pos", (lum_rel.x, lum_rel.y, lum_rel.z));
+                mat.set_uniform("cam_pos", (cam_rel.x, cam_rel.y, cam_rel.z));
                 mat.set_uniform("ombre_rayon", self.ombre_rayon);
                 mat.set_uniform("moitie", moitie);
                 gl_use_material(mat);
@@ -264,7 +271,7 @@ impl Disque {
             let f = (cote_lum * cote_cam / 0.05).clamp(-1.0, 1.0); // lissage ±0.05
             let face_lum = 0.775 + 0.225 * f; // 1.0 face éclairée -> 0.55 face nuit
             voile::uniforms_voile(
-                mat, &self.cfg, self.temps, p,
+                mat, &self.cfg, self.temps, p_rel,
                 (self.axe_u, self.axe_n, self.axe_v),
                 tocam, moitie, phases,
                 dir_lum, face_lum, self.ombre_rayon, cam.light_color,

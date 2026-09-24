@@ -54,9 +54,13 @@ impl Systeme {
         }
     }
 
-    /// `cam` : position de l'œil — les traces en points y règlent leur
-    /// espacement (voir `dessiner_points`).
-    pub fn draw_orbites(&self, c: Calques, cam: Vec3) {
+    /// `cam` : le repère caméra entier, et non plus la seule position de
+    /// l'œil. Deux choses en sont tirées, et elles ne parlent pas du même
+    /// repère : `cam.pos` (**monde**) règle l'espacement des traces en points
+    /// (voir `dessiner_points`), `cam.origine` translate les sommets envoyés à
+    /// `draw_line_3d`, comme pour tout le reste du dessin 3D
+    /// (`docs/conception/repere_flottant.md`).
+    pub fn draw_orbites(&self, c: Calques, cam: &CameraInfo) {
         let Calques {
             planetes: orbites_planetes,
             etoiles: orbites_etoiles,
@@ -88,8 +92,8 @@ impl Systeme {
                 }
                 if let Some((interne, externe)) = a.zone_viable() {
                     let c = a.corps().position;
-                    dessiner_cercle(c, interne, vert);
-                    dessiner_cercle(c, externe, vert);
+                    dessiner_cercle(c, interne, vert, cam);
+                    dessiner_cercle(c, externe, vert, cam);
                 }
                 if let Some(l) = a.luminosite() {
                     l_tot += l;
@@ -102,8 +106,8 @@ impl Systeme {
                 let (iw, ow) = (i * crate::etoile::UA, o * crate::etoile::UA);
                 if iw > 2.0 * r_max {
                     let cyan = Color::new(0.3, 0.85, 0.85, 0.4);
-                    dessiner_cercle(Vec3::ZERO, iw, cyan);
-                    dessiner_cercle(Vec3::ZERO, ow, cyan);
+                    dessiner_cercle(Vec3::ZERO, iw, cyan, cam);
+                    dessiner_cercle(Vec3::ZERO, ow, cyan, cam);
                 }
             }
         }
@@ -157,7 +161,7 @@ impl Systeme {
                     None => 1.0,
                 };
                 for poly in arbre.orbites_etoiles(self.temps) {
-                    dessiner_pointilles(&poly, attenue(COL_ETOILES, k));
+                    dessiner_pointilles(&poly, attenue(COL_ETOILES, k), cam);
                 }
             }
         }
@@ -350,7 +354,7 @@ fn pas_points(ecart_px: f32, n: usize) -> usize {
 /// La distance retenue est celle du point le **plus proche** de la caméra, pas
 /// celle du foyer : vue de l'intérieur d'une grande orbite, l'arc proche est à
 /// des ordres de grandeur du foyer, et c'est lui qu'on regarde.
-fn dessiner_points(poly: &[Vec3], centre: Vec3, col: Color, cam: Vec3) {
+fn dessiner_points(poly: &[Vec3], centre: Vec3, col: Color, cam: &CameraInfo) {
     let n = poly.len();
     if n == 0 {
         return;
@@ -360,7 +364,7 @@ fn dessiner_points(poly: &[Vec3], centre: Vec3, col: Color, cam: Vec3) {
     let mut proche = f32::MAX;
     let mut i = 0;
     while i < n {
-        proche = proche.min((centre + poly[i] - cam).length_squared());
+        proche = proche.min((centre + poly[i] - cam.pos).length_squared());
         i += 16;
     }
     let px = px_par_unite(proche.max(0.0).sqrt());
@@ -373,10 +377,12 @@ fn dessiner_points(poly: &[Vec3], centre: Vec3, col: Color, cam: Vec3) {
     // par l'échelle. Les points de l'arc lointain sortent donc plus courts —
     // c'est la perspective, et c'est juste.
     let demi_monde = LONGUEUR_POINT_PX / px.max(1e-6) * 0.5;
+    // Les sommets partent au GPU : repère de rendu. La direction `b - a`, elle,
+    // est une différence — elle ne change pas avec l'origine.
     let mut i = 0;
     while i < n {
-        let a = centre + poly[i];
-        let b = centre + poly[(i + pas) % n];
+        let a = cam.rel(centre + poly[i]);
+        let b = cam.rel(centre + poly[(i + pas) % n]);
         let demi = (b - a).normalize_or_zero() * demi_monde;
         draw_line_3d(a - demi, a + demi, col);
         i += pas;
@@ -390,7 +396,7 @@ fn dessiner_points(poly: &[Vec3], centre: Vec3, col: Color, cam: Vec3) {
 /// rend déjà des coordonnées monde absolues, voir `Trajectoire::position`),
 /// et surtout pas de `% n` — un arc ouvert dont le dernier segment boucle sur
 /// le premier point relierait à tort l'arrivée au départ.
-fn dessiner_points_ouvert(poly: &[Vec3], col: Color, cam: Vec3) {
+fn dessiner_points_ouvert(poly: &[Vec3], col: Color, cam: &CameraInfo) {
     let n = poly.len();
     if n < 2 {
         return;
@@ -398,7 +404,7 @@ fn dessiner_points_ouvert(poly: &[Vec3], col: Color, cam: Vec3) {
     let mut proche = f32::MAX;
     let mut i = 0;
     while i < n {
-        proche = proche.min((poly[i] - cam).length_squared());
+        proche = proche.min((poly[i] - cam.pos).length_squared());
         i += 16;
     }
     let px = px_par_unite(proche.max(0.0).sqrt());
@@ -407,8 +413,8 @@ fn dessiner_points_ouvert(poly: &[Vec3], col: Color, cam: Vec3) {
     let mut i = 0;
     while i + 1 < n {
         let j = (i + pas).min(n - 1);
-        let a = poly[i];
-        let b = poly[j];
+        let a = cam.rel(poly[i]);
+        let b = cam.rel(poly[j]);
         let demi = (b - a).normalize_or_zero() * demi_monde;
         draw_line_3d(a - demi, a + demi, col);
         i += pas;
@@ -417,19 +423,23 @@ fn dessiner_points_ouvert(poly: &[Vec3], col: Color, cam: Vec3) {
 
 /// Trace une polyligne fermée en pointillés fins : on ne dessine qu'une courte
 /// fraction (`FRAC`) de chaque segment -> tirets courts, espacés régulièrement.
-fn dessiner_pointilles(poly: &[Vec3], col: Color) {
+fn dessiner_pointilles(poly: &[Vec3], col: Color, cam: &CameraInfo) {
     const FRAC: f32 = 0.4; // longueur du tiret (fraction du segment) ; le reste = vide
     let n = poly.len();
     for i in 0..n {
-        let a = poly[i];
-        let b = poly[(i + 1) % n];
+        let a = cam.rel(poly[i]);
+        let b = cam.rel(poly[(i + 1) % n]);
         draw_line_3d(a, a + (b - a) * FRAC, col);
     }
 }
 
 /// Trace un cercle dans le plan xz (orbite ou zone habitable).
-fn dessiner_cercle(centre: Vec3, r: f32, col: Color) {
+fn dessiner_cercle(centre: Vec3, r: f32, col: Color, cam: &CameraInfo) {
     let n = 96;
+    // Centre ramené au repère de rendu UNE fois : le cercle de la zone
+    // habitable fait 48 à 1 440 unités de rayon, la soustraction d'origine n'a
+    // aucune raison d'être refaite 96 fois.
+    let centre = cam.rel(centre);
     let mut prec = centre + vec3(r, 0.0, 0.0);
     for i in 1..=n {
         let a = i as f32 / n as f32 * std::f32::consts::TAU;

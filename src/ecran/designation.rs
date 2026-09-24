@@ -151,6 +151,9 @@ mod tests {
         let (right, up, forward) = base_orbite(yaw, pitch);
         CameraInfo {
             pos: -forward * dist,
+            // Même pose que `Camera::construire` : l'origine du rendu est la
+            // cible, ici l'origine du monde.
+            origine: Vec3::ZERO,
             right,
             up,
             forward,

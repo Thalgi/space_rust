@@ -199,18 +199,27 @@ pub(super) fn appliquer_uniforms(
     vortex: Option<&([Vec4; super::vortex::N_VORTEX], [Vec4; super::vortex::N_VORTEX])>,
 ) {
     impostor::uniforms_standard(mat, cam, get_time() as f32, DISC);
-    mat.set_uniform("centre", (c.x, c.y, c.z));
+    // **Positions au repère de rendu.** `c` et les sources de lumière sont des
+    // points monde ; le shader les compare au rayon issu du sommet, qui arrive
+    // lui aussi translaté de `cam.origine`. Les laisser en absolu ferait
+    // reconstruire la sphère à 460 unités du quad. Aucune ligne de GLSL ne
+    // change pour autant : les uniformes sont déjà des `f32`, on leur passe
+    // simplement de petits nombres (`docs/conception/repere_flottant.md`).
+    let centre = cam.rel(c);
+    let lumiere = cam.rel(cam.light_pos);
+    mat.set_uniform("centre", (centre.x, centre.y, centre.z));
     mat.set_uniform("rayon", r);
     // LOD (phase 6) : le shader estompe le micro-détail des gazeuses sur les
-    // petites sphères (galerie, vues système).
+    // petites sphères (galerie, vues système). Mesuré en MONDE (`cam.pos` est
+    // absolu, `c` aussi) : la distance ne dépend pas du repère de rendu.
     mat.set_uniform("px_rayon", px_rayon(cam, c, r));
-    mat.set_uniform("lumiere", (cam.light_pos.x, cam.light_pos.y, cam.light_pos.z));
+    mat.set_uniform("lumiere", (lumiere.x, lumiere.y, lumiere.z));
     mat.set_uniform(
         "light_color",
         (cam.light_color.x, cam.light_color.y, cam.light_color.z),
     );
     // Éclairage multi-source (jusqu'à 4 étoiles ; indice 0 = primaire).
-    mat.set_uniform_array("lights_pos", &cam.lights_pos[..]);
+    mat.set_uniform_array("lights_pos", &cam.lights_rel()[..]);
     mat.set_uniform_array("lights_color", &cam.lights_color[..]);
     // Palette paramétrique des gazeuses : 8 teintes dérivées des couleurs du
     // preset (voir palette.rs) -> plus de couleurs codées en dur dans le .glsl.
@@ -257,14 +266,18 @@ pub(super) fn appliquer_uniforms(
 /// seulement sa géométrie, l'éclairage, et la couleur de l'air.
 pub(super) fn appliquer_uniforms_atmo(mat: &Material, a: &Apparence, cam: &CameraInfo, c: Vec3, r: f32) {
     impostor::uniforms_standard(mat, cam, get_time() as f32, DISC);
-    mat.set_uniform("centre", (c.x, c.y, c.z));
+    // Mêmes positions relatives que le corps : la coquille se pose sur le
+    // limbe, elle doit partager exactement son repère de rendu.
+    let centre = cam.rel(c);
+    let lumiere = cam.rel(cam.light_pos);
+    mat.set_uniform("centre", (centre.x, centre.y, centre.z));
     mat.set_uniform("rayon", r);
-    mat.set_uniform("lumiere", (cam.light_pos.x, cam.light_pos.y, cam.light_pos.z));
+    mat.set_uniform("lumiere", (lumiere.x, lumiere.y, lumiere.z));
     mat.set_uniform(
         "light_color",
         (cam.light_color.x, cam.light_color.y, cam.light_color.z),
     );
-    mat.set_uniform_array("lights_pos", &cam.lights_pos[..]);
+    mat.set_uniform_array("lights_pos", &cam.lights_rel()[..]);
     mat.set_uniform_array("lights_color", &cam.lights_color[..]);
     mat.set_uniform("atmo", (a.atmo.x, a.atmo.y, a.atmo.z));
     mat.set_uniform("atmo_densite", a.atmo_densite);

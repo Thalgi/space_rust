@@ -66,7 +66,7 @@ impl Rendu for RenduStandard {
         set_camera(&cam3d);
         clear_background(BLACK);
         fond.draw(cam); // étoiles lointaines (derrière tout)
-        sys.draw_orbites(calques, cam.pos);
+        sys.draw_orbites(calques, cam);
         set_default_camera();
 
         if self.pixelise() {

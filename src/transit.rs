@@ -95,11 +95,16 @@ impl Astre for VaisseauEnTransit {
         self.base.position = self.trajectoire.position(t);
     }
 
-    fn draw(&mut self, _cam: &CameraInfo) {
-        // Même schéma qu'`EnginOrbital::draw` : translation + échelle. Pas
-        // encore d'orientation pilotée par la trajectoire (attitude) — dette
-        // connue, `trajectoires.md` §3.6.
-        let m = Mat4::from_scale_rotation_translation(Vec3::splat(self.echelle), Quat::IDENTITY, self.base.position);
+    fn draw(&mut self, cam: &CameraInfo) {
+        // Même schéma qu'`EnginOrbital::draw` : translation + échelle, la
+        // translation seule passant au repère de rendu. Pas encore
+        // d'orientation pilotée par la trajectoire (attitude) — dette connue,
+        // `trajectoires.md` §3.6.
+        let m = Mat4::from_scale_rotation_translation(
+            Vec3::splat(self.echelle),
+            Quat::IDENTITY,
+            cam.rel(self.base.position),
+        );
         unsafe {
             get_internal_gl().quad_gl.push_model_matrix(m);
         }

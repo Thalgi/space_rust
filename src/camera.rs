@@ -182,6 +182,13 @@ impl Camera {
         let pos = target - forward * self.dist;
         let info = CameraInfo {
             pos,
+            // **L'origine du rendu, c'est la cible.** Tout ce qui part au GPU
+            // est translate de `-target` (`CameraInfo::rel`), y compris la
+            // camera 3D ci-dessous : l'astre suivi se rend donc pile en zero,
+            // rigoureusement immobile, au lieu de trembler de 0,6 px (Saturne)
+            // a 2,7 px (Neptune) au gre de l'arrondi f32 d'une coordonnee
+            // heliocentrique. Voir `docs/conception/repere_flottant.md`.
+            origine: target,
             right,
             up,
             forward,
@@ -206,8 +213,13 @@ impl Camera {
         // clignoter les surfaces.
         let (z_near, z_far) = (self.dist * 0.01, self.dist * 1000.0);
         let cam3d = Camera3D {
-            position: pos,
-            target,
+            // Camera **relative a l'origine** : `pos - target` vaut exactement
+            // `-forward * dist`, donc quelques centiemes d'unite au lieu de
+            // 460. C'est cette soustraction, faite ici UNE fois sur des
+            // nombres du meme ordre (donc exacte, Sterbenz), qui remplace
+            // celle que la matrice vue-projection ratait a chaque sommet.
+            position: pos - info.origine,
+            target: Vec3::ZERO,
             up: Vec3::Y,
             aspect: Some(aspect),
             z_near,
@@ -367,6 +379,7 @@ mod tests_precision {
         let (right, up, forward) = base_orbite(0.8, 0.5);
         CameraInfo {
             pos: cible - forward * dist,
+            origine: cible,
             right,
             up,
             forward,
@@ -461,6 +474,143 @@ mod tests_precision {
         for r in [saturne, neptune] {
             assert_eq!(saut_max_px(r, 0.05, true), 0.0, "R={r} : le repère relatif ne suffit pas");
         }
+    }
+
+    /// Caméra orbitale de test, **par littéral de struct**.
+    ///
+    /// `Camera::new` lit la position de la souris, donc exige le contexte
+    /// graphique ; le littéral ne le demande pas, et ce module étant enfant de
+    /// `camera`, les champs privés lui sont accessibles. C'est ce qui permet
+    /// d'éprouver la VRAIE `construire` plutôt qu'une copie.
+    fn camera_orbitale(dist: f32) -> Camera {
+        Camera {
+            yaw: 0.8,
+            pitch: 0.5,
+            dist,
+            dist_ref: dist,
+            prec: (0.0, 0.0),
+            focus: None,
+        }
+    }
+
+    /// La matrice vue-projection que macroquad bâtira pour `cam3d`.
+    ///
+    /// Recomposée ici — et seulement ici — parce que `Camera3D::matrix()`
+    /// appelle `screen_width()` sans condition (macroquad 0.4.15,
+    /// `src/camera.rs:246`), donc pas hors fenêtre. Tout ce qui la paramètre
+    /// (`fovy`, plans de coupe, pose de l'œil) est **lu sur la caméra
+    /// produite** : cette fonction ne fabrique rien, elle assemble.
+    fn vue_projection(cam3d: &Camera3D) -> Mat4 {
+        Mat4::perspective_rh_gl(cam3d.fovy, ASPECT, cam3d.z_near, cam3d.z_far)
+            * Mat4::look_at_rh(cam3d.position, cam3d.target, cam3d.up)
+    }
+
+    /// Saut maximal, en pixels, de l'astre suivi — **par le vrai chemin de
+    /// rendu** : `Camera::construire` pour la caméra, `CameraInfo::rel` pour
+    /// le sommet, exactement comme le fait `push_quad`.
+    fn saut_max_px_rendu(r: f32, dist: f32) -> f32 {
+        let cam = camera_orbitale(dist);
+        let (mut pire, mut prec): (f32, Option<Vec2>) = (0.0, None);
+        for k in 0..64 {
+            let cible = glisse(r, k);
+            let (info, cam3d) = cam.construire(cible, ASPECT);
+            let clip = vue_projection(&cam3d) * info.rel(cible).extend(1.0);
+            let vu = vec2(
+                (clip.x / clip.w + 1.0) * 0.5 * ECRAN.x,
+                (1.0 - clip.y / clip.w) * 0.5 * ECRAN.y,
+            );
+            if let Some(p) = prec {
+                pire = pire.max(vu.distance(p));
+            }
+            prec = Some(vu);
+        }
+        pire
+    }
+
+    /// **`Camera::construire` rend une caméra 3D RELATIVE.**
+    ///
+    /// C'est la pièce qui porte toute la correction : l'origine du rendu est
+    /// la cible, la caméra 3D se replie autour de zéro, et `pos` — dont
+    /// dépendent le picking, les distances et les LOD — reste absolu. Les
+    /// trois faits tiennent ensemble ; en éprouver un seul laisserait les
+    /// autres libres de partir.
+    #[test]
+    fn la_camera_construite_est_relative_mais_garde_une_position_absolue() {
+        for r in [0.0_f32, 48.0, 9.58 * crate::etoile::UA, 30.0 * crate::etoile::UA] {
+            for dist in [DIST_MIN, 0.05, 1.0, DIST_DEFAUT] {
+                let cible = vec3(r, r * 0.1, -r * 0.3);
+                let (info, cam3d) = camera_orbitale(dist).construire(cible, ASPECT);
+
+                assert_eq!(info.origine, cible, "R={r} dist={dist} : l'origine n'est pas la cible");
+                assert_eq!(
+                    cam3d.target,
+                    Vec3::ZERO,
+                    "R={r} dist={dist} : la caméra 3D vise encore une coordonnée monde"
+                );
+                // La caméra 3D est à `dist` de l'origine — de l'ordre du
+                // centième d'unité au plus près, JAMAIS des centaines.
+                let l = cam3d.position.length();
+                assert!(
+                    (l - dist).abs() <= 1e-3 * dist.max(1.0),
+                    "R={r} dist={dist} : la caméra 3D est à {l} de l'origine, pas à {dist}"
+                );
+
+                // Et `pos` reste **monde** : c'est lui que lisent `Systeme::pick`,
+                // `rayon_dessine`, `px_rayon` et `projeter_ecran`.
+                let d = info.pos.distance(cible);
+                assert!(
+                    (d - dist).abs() <= 1e-3 * dist.max(1.0),
+                    "R={r} dist={dist} : pos est à {d} de la cible"
+                );
+                assert!(
+                    info.pos.length() >= cible.length() - dist - 1e-3,
+                    "R={r} dist={dist} : pos ({}) a été ramené près de l'origine — il doit rester absolu",
+                    info.pos.length()
+                );
+                // Conséquence utile : `rel` de la cible, c'est zéro pile.
+                assert_eq!(
+                    info.rel(cible),
+                    Vec3::ZERO,
+                    "R={r} dist={dist} : la cible ne tombe pas à l'origine du rendu"
+                );
+            }
+        }
+    }
+
+    /// **L'astre suivi ne saute plus.** C'est le test qui prouve la correction.
+    ///
+    /// Même mécanique que `saut_max_px` — une cible qui avance de quelques
+    /// ULP, le pixel où elle atterrit, l'écart de crête — mais branchée sur ce
+    /// que `Camera::construire` produit VRAIMENT, et sur `CameraInfo::rel`,
+    /// par où passe chaque sommet envoyé au GPU. Rejouer une matrice
+    /// refabriquée à la main ne prouverait rien : ce serait comparer une copie
+    /// à une copie (`docs/methode.md`).
+    ///
+    /// Mesuré avant : 0,6 px à Saturne, 2,7 px à Neptune. Après : zéro, et
+    /// zéro exactement — l'égalité n'est pas optimiste, elle tombe de Sterbenz
+    /// (`cible` et `origine` sont le même nombre, leur différence `f32` est
+    /// donc exacte).
+    #[test]
+    fn la_camera_construite_immobilise_lastre_suivi() {
+        for (nom, r) in [
+            ("Saturne", 9.58 * crate::etoile::UA),
+            ("Neptune", 30.0 * crate::etoile::UA),
+            ("Kuiper", 40.0 * crate::etoile::UA),
+        ] {
+            for dist in [DIST_MIN, 0.05, 0.2] {
+                let saut = saut_max_px_rendu(r, dist);
+                assert_eq!(saut, 0.0, "{nom} à dist={dist} : l'astre suivi saute encore de {saut} px");
+            }
+        }
+
+        // Et le défaut existait bel et bien sur ce cadrage : sans cette ligne,
+        // un rendu qui ne bougerait pour aucune raison (une projection
+        // dégénérée, par exemple) passerait pour une correction.
+        let saturne = 9.58 * crate::etoile::UA;
+        assert!(
+            saut_max_px(saturne, 0.05, false) > 0.5,
+            "le chemin absolu ne tremble plus : ce test ne mesure plus rien"
+        );
     }
 
     /// **Le chemin 2D, lui, ne tremble pas** — c'est pourquoi les marqueurs et

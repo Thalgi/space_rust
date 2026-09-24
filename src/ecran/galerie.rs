@@ -256,6 +256,10 @@ impl Galerie {
             let (right, up, forward) = crate::camera::base_camera(Vec3::ZERO - pos);
             let cam = CameraInfo {
                 pos,
+                // Le sujet est posé à l'origine du monde et la caméra à
+                // quelques unités : aucun grand nombre, donc rien à
+                // translater — comportement inchangé à l'identique.
+                origine: Vec3::ZERO,
                 right,
                 up,
                 forward,

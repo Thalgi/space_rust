@@ -21,7 +21,7 @@ impl Soleil {
         // ---- 1) Corps : quad + shader ----
         self.verts.clear();
         self.inds.clear();
-        push_quad(&mut self.verts, &mut self.inds, c, cam.right, cam.up, r * self.couronne, WHITE);
+        push_quad(&mut self.verts, &mut self.inds, cam, c, r * self.couronne, WHITE);
 
         // Taches -> uniform array (xyz = direction surface, w = rayon effectif)
         let mut spots = [Vec4::ZERO; MAX_TACHES];
@@ -65,7 +65,7 @@ impl Soleil {
             if i + 1 < passes.len() {
                 self.verts.clear();
                 self.inds.clear();
-                push_quad(&mut self.verts, &mut self.inds, c, cam.right, cam.up, r * self.couronne, WHITE);
+                push_quad(&mut self.verts, &mut self.inds, cam, c, r * self.couronne, WHITE);
             }
         }
         gl_use_default_material();
@@ -93,7 +93,7 @@ impl Soleil {
                 let lum = (b.intensite * (0.55 + 0.45 * flow)).clamp(0.0, 1.0);
                 // plasma chaud, additif -> les recouvrements forment un cœur blanc
                 let col = Color::new(1.0, 0.8 + 0.15 * lum, 0.5 + 0.3 * lum, lum);
-                push_quad(&mut self.verts, &mut self.inds, monde, cam.right, cam.up, taille_l, col);
+                push_quad(&mut self.verts, &mut self.inds, cam, monde, taille_l, col);
                 quads += 1;
                 if quads >= QUADS_PAR_LOT {
                     flush(&mut self.verts, &mut self.inds, &self.halo);
@@ -111,7 +111,7 @@ impl Soleil {
                 if !cache_par_sphere(pos, c, r, cam.pos) {
                     let lum = b.intensite.clamp(0.0, 1.0);
                     let col = Color::new(1.0, 0.72, 0.45, lum);
-                    push_quad(&mut self.verts, &mut self.inds, pos, cam.right, cam.up, r * 0.16, col);
+                    push_quad(&mut self.verts, &mut self.inds, cam, pos, r * 0.16, col);
                     quads += 1;
                     if quads >= QUADS_PAR_LOT {
                         flush(&mut self.verts, &mut self.inds, &self.halo);

@@ -75,6 +75,10 @@ pub(super) fn uniforms_voile(
     mat: &Material,
     c: &DisqueConfig,
     temps: f32,
+    // `centre` : centre de l'annulus **au repère de rendu** (`CameraInfo::rel`).
+    // Le vertex shader écrit `gl_Position = Projection * Model * (centre + rel)` :
+    // il lui faut la même origine qu'à la caméra, sinon l'anneau se pose à la
+    // coordonnée héliocentrique de sa planète, loin hors champ.
     centre: Vec3,
     axes: (Vec3, Vec3, Vec3),
     tocam: Vec3,

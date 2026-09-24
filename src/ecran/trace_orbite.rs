@@ -312,6 +312,10 @@ mod tests {
         let (right, up, forward) = crate::camera::base_orbite(yaw, pitch);
         CameraInfo {
             pos: cible - forward * dist,
+            // `Camera::construire` pose l'origine du rendu sur la cible : le
+            // test la pose pareil, faute de quoi il n'éprouverait pas la
+            // caméra que l'écran fabrique vraiment.
+            origine: cible,
             right,
             up,
             forward,
