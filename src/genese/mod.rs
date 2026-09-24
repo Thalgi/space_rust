@@ -28,6 +28,22 @@ use std::f32::consts::TAU;
 
 pub const MASSE_ETOILE: f32 = 1000.0; // masse gravitationnelle (indépendante du rayon visuel)
 
+/// Masse dérivée de la luminosité par la relation masse-luminosité des étoiles
+/// de la séquence principale (L ∝ M^3.5 ⇒ M ∝ L^0.286), bornée entre 0,25× et
+/// 5× `MASSE_ETOILE` pour éviter les extrêmes (naine très pâle, supergéante).
+///
+/// **Source unique** de ce calcul (`docs/methode.md` : une source par fait) —
+/// il ne doit plus être recopié ailleurs. `masse_luminosite(1.0) == MASSE_ETOILE`
+/// exactement, ce qui garde intactes les masses (et donc les périodes
+/// orbitales) de tout système déjà calé sur une luminosité de 1.
+///
+/// Ne s'applique **pas** au trou noir ni à la quasi-étoile (lots suivants) :
+/// leur masse ne vient pas de leur éclat et sera posée explicitement par leur
+/// type plutôt que dérivée d'ici.
+pub(crate) fn masse_luminosite(luminosite: f32) -> f32 {
+    (MASSE_ETOILE * luminosite.powf(0.286)).clamp(0.25 * MASSE_ETOILE, 5.0 * MASSE_ETOILE)
+}
+
 /// Construit un système aléatoire à partir d'une graine. Renvoie aussi un texte d'info.
 /// La multiplicité (1 à 4 étoiles) est dérivée du seed lui-même, ce qui laisse la
 /// séquence RNG du cas mono-étoile intacte (systèmes sauvegardés reproductibles).
@@ -44,6 +60,9 @@ pub fn construire_systeme(seed: u64) -> (Systeme, String) {
 /// Système à une seule étoile (Titius-Bode + ceintures). `srand` déjà appelé.
 fn construire_simple() -> (Systeme, String) {
     let profil = ProfilEtoile::aleatoire();
+    // Masse de l'unique étoile : dérivée de sa luminosité, pas la constante
+    // brute -- une naine froide ne pèse pas comme une géante bleue.
+    let masse_etoile = masse_luminosite(profil.luminosite);
 
     let mut sys = Systeme::new();
     let soleil = Soleil::new(vec3(0.0, 0.0, 0.0), profil.rayon, profil.couleur, profil.luminosite);
@@ -119,7 +138,7 @@ fn construire_simple() -> (Systeme, String) {
 
         let e: f32 = gen_range(0.0, 0.2);
         let incl: f32 = gen_range(0.0, 0.16);
-        let idx = ajouter_planete(&mut sys, a, e, incl, rayon, masse, app, None);
+        let idx = ajouter_planete(&mut sys, masse_etoile, a, e, incl, rayon, masse, app, None);
         precedent = Some((a, rayon));
 
         let n_lunes: i32 = match type_p {
@@ -140,12 +159,12 @@ fn construire_simple() -> (Systeme, String) {
     let bi: f32 = gen_range(2.0, 3.0) * ech;
     let bo: f32 = bi + gen_range(0.6, 1.4) * ech;
     sys.ajouter(Box::new(Disque::new(DisqueConfig::asteroides(
-        900, bi * etoile::UA, bo * etoile::UA, MASSE_ETOILE,
+        900, bi * etoile::UA, bo * etoile::UA, masse_etoile,
     ))));
     let ki: f32 = bo + gen_range(20.0, 30.0) * ech;
     let ko: f32 = ki + gen_range(12.0, 20.0) * ech;
     sys.ajouter(Box::new(Disque::new(DisqueConfig::kuiper(
-        1400, ki * etoile::UA, ko * etoile::UA, MASSE_ETOILE,
+        1400, ki * etoile::UA, ko * etoile::UA, masse_etoile,
     ))));
 
     let info = format!("Etoile {}  -  {} K", profil.nom(), profil.temperature as i32);
@@ -164,8 +183,7 @@ struct Plan {
 /// Tire une étoile-feuille aléatoire. Renvoie (feuille, masse, luminosité).
 fn feuille_alea() -> (Feuille, f32, f32) {
     let p = ProfilEtoile::aleatoire();
-    // Masse approchée par la relation masse-luminosité (L ∝ M^3.5 -> M ∝ L^0.286).
-    let masse = (MASSE_ETOILE * p.luminosite.powf(0.286)).clamp(0.25 * MASSE_ETOILE, 5.0 * MASSE_ETOILE);
+    let masse = masse_luminosite(p.luminosite);
     let var = match p.couronne as i32 {
         1 => Variante::Jets,
         2 => Variante::Vent,
@@ -427,10 +445,15 @@ pub(crate) fn ajouter_planete_autour(
 }
 
 /// Planète autour de l'étoile unique à l'origine (cas mono-étoile).
+///
+/// `masse_etoile` est la masse de CETTE étoile (via `masse_luminosite`, pas la
+/// constante brute) : une planète orbite la masse de son hôte, pas un chiffre
+/// fixe qui ignorerait une naine rouge ou une géante bleue.
 // Meme liste que `ajouter_planete_autour`, foyer en moins.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn ajouter_planete(
     sys: &mut Systeme,
+    masse_etoile: f32,
     a_au: f32,
     e: f32,
     incl: f32,
@@ -439,7 +462,7 @@ pub(crate) fn ajouter_planete(
     app: Apparence,
     nom: Option<&'static str>,
 ) -> usize {
-    ajouter_planete_autour(sys, Foyer::Barycentre, MASSE_ETOILE, a_au, e, incl, rayon, masse, app, nom)
+    ajouter_planete_autour(sys, Foyer::Barycentre, masse_etoile, a_au, e, incl, rayon, masse, app, nom)
 }
 
 /// Cœur du placement d'une lune : la pose sur le prochain créneau orbital dans le
@@ -1669,5 +1692,79 @@ mod tests_coherence_3 {
         // Le cas « vie sans océan » existe vraiment : sans lui, la branche
         // ci-dessus ne serait jamais parcourue et le test ne prouverait rien.
         assert!(vies_aeriennes > 0, "aucune flore aérienne : la règle n'est pas exercée");
+    }
+}
+
+#[cfg(test)]
+mod tests_masse_luminosite {
+    use super::*;
+
+    // **La relation masse-luminosité, seule (pas de contexte graphique).**
+    //
+    // Monotone (une étoile plus lumineuse pèse plus lourd), bornée comme
+    // aujourd'hui (0,25x .. 5x `MASSE_ETOILE`), et surtout **exacte à L=1** :
+    // c'est ce dernier point qui garde le Soleil du preset solaire à sa masse
+    // d'aujourd'hui, donc ses périodes orbitales inchangées.
+    #[test]
+    fn masse_luminosite_est_monotone_bornee_et_exacte_a_un() {
+        // Exacte à L=1 : la source de retro-compatibilité du lot.
+        assert_eq!(
+            masse_luminosite(1.0),
+            MASSE_ETOILE,
+            "masse_luminosite(1.0) doit valoir EXACTEMENT MASSE_ETOILE, sinon le \
+             Soleil du preset solaire change de masse et ses périodes avec"
+        );
+
+        // Monotone : une étoile plus lumineuse est plus massive.
+        let faible = masse_luminosite(0.2);
+        let moyenne = masse_luminosite(1.0);
+        let forte = masse_luminosite(3.0);
+        assert!(faible < moyenne, "{faible} devrait etre < {moyenne} (L=0.2 < L=1)");
+        assert!(moyenne < forte, "{moyenne} devrait etre < {forte} (L=1 < L=3)");
+
+        // Bornée : une luminosité extrême (naine très pâle, supergéante) ne
+        // sort jamais de [0,25x ; 5x] MASSE_ETOILE.
+        let minuscule = masse_luminosite(0.0000001);
+        let enorme = masse_luminosite(1_000_000.0);
+        assert!(
+            minuscule >= 0.25 * MASSE_ETOILE - 0.01,
+            "masse_luminosite(1e-7) = {minuscule} sous le plancher 0,25x"
+        );
+        assert!(
+            enorme <= 5.0 * MASSE_ETOILE + 0.01,
+            "masse_luminosite(1e6) = {enorme} au-dessus du plafond 5x"
+        );
+    }
+
+    // **Une planète orbite la masse de son étoile hôte, pas un chiffre fixe.**
+    //
+    // À la même distance, l'orbite autour d'une étoile peu lumineuse doit être
+    // plus LENTE (mouvement moyen `n` plus faible) qu'autour d'une étoile
+    // brillante -- Kepler 3 : n = sqrt(G·M / a^3), et M dépend de la masse, pas
+    // du hasard. `Orbite` est testée directement, sans `Systeme` ni contexte
+    // graphique (patron `CorpsEssai` de `systeme::tests`, inapplicable ici car
+    // il ne porte pas de masse stellaire).
+    #[test]
+    fn une_planete_orbite_plus_vite_autour_dune_etoile_plus_massive() {
+        let a = 1.0; // même demi-grand axe pour les deux cas
+        let e = 0.0;
+        let a1 = macroquad::prelude::Vec3::X;
+        let q = macroquad::prelude::Vec3::Z;
+
+        let masse_terne = masse_luminosite(0.1); // naine peu lumineuse
+        let masse_brillante = masse_luminosite(4.0); // étoile bien plus brillante
+        assert!(masse_terne < masse_brillante, "les deux masses doivent différer pour que le test soit probant");
+
+        let mu_terne = crate::systeme::G * masse_terne;
+        let mu_brillante = crate::systeme::G * masse_brillante;
+        let orb_terne = crate::orbite::Orbite::new(a, e, a1, q, mu_terne, 0.0);
+        let orb_brillante = crate::orbite::Orbite::new(a, e, a1, q, mu_brillante, 0.0);
+
+        assert!(
+            orb_terne.n < orb_brillante.n,
+            "mouvement moyen autour de l'étoile terne ({}) >= celui de l'étoile \
+             brillante ({}) : la masse de l'hôte n'est plus prise en compte",
+            orb_terne.n, orb_brillante.n
+        );
     }
 }

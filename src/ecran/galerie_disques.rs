@@ -1,7 +1,7 @@
 use crate::astre::{Astre, CameraInfo};
 use crate::disque::{Disque, DisqueConfig};
 use crate::etoile::UA;
-use crate::genese::{preset_gazeuse, preset_tellurique, MASSE_ETOILE};
+use crate::genese::{masse_luminosite, preset_gazeuse, preset_tellurique};
 use crate::planete::Planete;
 use crate::soleil::Soleil;
 use macroquad::prelude::*;
@@ -126,7 +126,9 @@ impl GalerieDisques {
     fn construire(&mut self) {
         srand(self.seed);
         self.cellules.clear();
-        let m = MASSE_ETOILE;
+        // Masse dérivée de la luminosité (source unique avec `genese::feuille_alea`),
+        // au lieu de la constante brute recopiée sans regarder l'étoile associée.
+        let m = masse_luminosite(1.0); // étoile jaune de référence (Soleil, L=1)
 
         // Étoile + disque, vue en surplomb cadrée sur le bord externe.
         let jaune = vec3(1.0, 0.93, 0.78);
@@ -203,7 +205,8 @@ impl GalerieDisques {
         );
         e(
             "Disque protoplanetaire (0.3 - 8 UA)",
-            DisqueConfig::protoplanetaire(5000, 0.3 * UA, 8.0 * UA, m)
+            // T Tauri (L=0.6) : masse propre, pas celle du Soleil de référence.
+            DisqueConfig::protoplanetaire(5000, 0.3 * UA, 8.0 * UA, masse_luminosite(0.6))
                 .avec_lacune_ondulee(0.38, 0.05, 0.92, 0.35)
                 .avec_lacune_ondulee(0.66, 0.06, 0.92, 0.35),
             Soleil::new(Vec3::ZERO, 1.6, orange, 0.6), // T Tauri
@@ -217,7 +220,8 @@ impl GalerieDisques {
         );
         e(
             "Disque protosolaire (0.1 - 6 UA)",
-            DisqueConfig::protosolaire(6000, 0.1 * UA, 6.0 * UA, m),
+            // Protoétoile (L=0.5) : idem, masse propre plutôt que celle du Soleil.
+            DisqueConfig::protosolaire(6000, 0.1 * UA, 6.0 * UA, masse_luminosite(0.5)),
             Soleil::new(Vec3::ZERO, 1.4, orange, 0.5).avec_jets(), // protoétoile
             2.15,
             Vec::new(),

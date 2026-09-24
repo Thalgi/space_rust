@@ -1,7 +1,7 @@
 use super::apparences::{gazeuse, tellurique};
 use super::{
     ajouter_lune, ajouter_lune_reelle, ajouter_planete, ajouter_planete_autour, app_simple,
-    deployer_arbre, preset_gazeuse, preset_tellurique, MASSE_ETOILE,
+    deployer_arbre, masse_luminosite, preset_gazeuse, preset_tellurique, MASSE_ETOILE,
 };
 use crate::astre::Foyer;
 use crate::stellaire::{Feuille, Noeud, Variante};
@@ -236,14 +236,19 @@ fn fige(mut app: Apparence, corps: &str) -> Apparence {
 /// (`disque::tests`) mesure ces mêmes configs. Un effectif gonflé ici fait
 /// bouger le budget là-bas, au lieu de passer inaperçu jusqu'à ce que ça rame.
 pub fn ceintures_solaires() -> Vec<DisqueConfig> {
+    // Le Soleil a une luminosite de 1.0 (voir `construire_preset_solaire`) :
+    // `masse_luminosite(1.0) == MASSE_ETOILE` exactement, donc ce calcul ne
+    // change rien aux configs d'aujourd'hui -- il leur donne juste une source
+    // commune avec `feuille_alea` au lieu de la constante recopiee telle quelle.
+    let masse = masse_luminosite(1.0);
     vec![
-        DisqueConfig::asteroides(900, 2.2 * etoile::UA, 3.3 * etoile::UA, MASSE_ETOILE),
-        DisqueConfig::kuiper(2000, 30.0 * etoile::UA, 48.0 * etoile::UA, MASSE_ETOILE),
+        DisqueConfig::asteroides(900, 2.2 * etoile::UA, 3.3 * etoile::UA, masse),
+        DisqueConfig::kuiper(2000, 30.0 * etoile::UA, 48.0 * etoile::UA, masse),
         // Disque epars : au-dela de Kuiper, orbites excentriques et tres
         // inclinees (c'est de la que viennent les cometes de la famille de
         // Jupiter). Il s'etend reellement jusque vers 1 000 UA -- Sedna monte a
         // 937 a l'aphelie.
-        DisqueConfig::epars(900, 48.0 * etoile::UA, 1000.0 * etoile::UA, MASSE_ETOILE),
+        DisqueConfig::epars(900, 48.0 * etoile::UA, 1000.0 * etoile::UA, masse),
         // Nuage de Oort : coquille **spherique**, pas un disque -- il enveloppe
         // le systeme au lieu de le ceinturer.
         //
@@ -253,7 +258,7 @@ pub fn ceintures_solaires() -> Vec<DisqueConfig> {
         // plus large pour l'apercevoir. Le nuage externe (jusqu'a ~100 000 UA)
         // reste tronque a 20 000 : au-dela, meme le systeme entier tient dans
         // un pixel.
-        DisqueConfig::oort(2600, 2000.0 * etoile::UA, 20000.0 * etoile::UA, MASSE_ETOILE),
+        DisqueConfig::oort(2600, 2000.0 * etoile::UA, 20000.0 * etoile::UA, masse),
     ]
 }
 
@@ -269,6 +274,10 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
         1.0,
     )));
     sys.nommer(soleil, "Soleil");
+    // Masse du Soleil : derivee de SA luminosite (1.0 ci-dessus, pas recopiee)
+    // -- vaut exactement MASSE_ETOILE, donc les periodes des neuf planetes ne
+    // bougent pas.
+    let masse_soleil = masse_luminosite(1.0);
 
     // Apparences tirees des catalogues (source unique avec la galerie) ; on conserve
     // les distances (UA reelles), excentricites, inclinaisons, rayons et masses.
@@ -316,47 +325,47 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
     let rayon_neptune = rayon_monde("Neptune");
     // Mercure, Venus et Pluton ne portent pas de lune : leur indice ne sert a
     // rien, on ne le nomme pas.
-    ajouter_planete(&mut sys, 0.39, 0.205, 7.0 * deg, rayon_monde("Mercure"), 0.3,
+    ajouter_planete(&mut sys, masse_soleil, 0.39, 0.205, 7.0 * deg, rayon_monde("Mercure"), 0.3,
         preset_tellurique("Fer (Mercure)"), Some("Mercure"));
-    ajouter_planete(&mut sys, 0.72, 0.007, 3.4 * deg, rayon_monde("Venus"), 1.0,
+    ajouter_planete(&mut sys, masse_soleil, 0.72, 0.007, 3.4 * deg, rayon_monde("Venus"), 1.0,
         preset_tellurique("Venus (etuve)"), Some("Venus"));
     // Rayon de la Terre : nomme parce que l'ISS s'en sert pour son orbite et son
     // envergure. Recopie, il ferait deriver la station le jour ou la planete
     // change de taille.
     let rayon_terre = rayon_monde("Terre");
-    let terre = ajouter_planete(&mut sys, 1.0, 0.017, 0.0, rayon_terre, 1.0,
+    let terre = ajouter_planete(&mut sys, masse_soleil, 1.0, 0.017, 0.0, rayon_terre, 1.0,
         preset_tellurique("Terre"), Some("Terre"));
     poser(&mut sys, (terre, "Terre"), "Lune", 0, fige(preset_tellurique("Lune"), "Lune"));
-    let mars = ajouter_planete(&mut sys, 1.52, 0.093, 1.85 * deg, rayon_mars, 0.4,
+    let mars = ajouter_planete(&mut sys, masse_soleil, 1.52, 0.093, 1.85 * deg, rayon_mars, 0.4,
         preset_tellurique("Mars"), Some("Mars"));
     // Phobos + Deimos : deux petits corps sombres captures.
     poser(&mut sys, (mars, "Mars"), "Phobos", 0, fige(preset_tellurique("Carbone"), "Phobos"));
     poser(&mut sys, (mars, "Mars"), "Deimos", 1, fige(preset_tellurique("Carbone"), "Deimos"));
-    let jupiter = ajouter_planete(&mut sys, 5.2, 0.049, 1.3 * deg, rayon_jupiter, 20.0,
+    let jupiter = ajouter_planete(&mut sys, masse_soleil, 5.2, 0.049, 1.3 * deg, rayon_jupiter, 20.0,
         preset_gazeuse("Jupiter"), Some("Jupiter"));
     // 4 lunes galileennes (interne -> externe), aspects distincts.
     poser(&mut sys, (jupiter, "Jupiter"), "Io", 0, preset_tellurique("Io (soufre)"));
     poser(&mut sys, (jupiter, "Jupiter"), "Europe", 1, preset_tellurique("Subglaciaire"));
     poser(&mut sys, (jupiter, "Jupiter"), "Ganymede", 2, preset_tellurique("Crevasse"));
     poser(&mut sys, (jupiter, "Jupiter"), "Callisto", 3, fige(preset_tellurique("Lune"), "Callisto"));
-    let saturne = ajouter_planete(&mut sys, 9.58, 0.056, 2.49 * deg, rayon_saturne, 12.0,
+    let saturne = ajouter_planete(&mut sys, masse_soleil, 9.58, 0.056, 2.49 * deg, rayon_saturne, 12.0,
         preset_gazeuse("Saturne"), Some("Saturne"));
     // Encelade, Rhea, Titan (le plus gros), Japet (interne -> externe).
     poser(&mut sys, (saturne, "Saturne"), "Encelade", 0, preset_tellurique("Pics de glace"));
     poser(&mut sys, (saturne, "Saturne"), "Rhea", 1, preset_tellurique("Boule de neige"));
     poser(&mut sys, (saturne, "Saturne"), "Titan", 2, preset_tellurique("Titan"));
     poser(&mut sys, (saturne, "Saturne"), "Japet", 3, fige(preset_tellurique("Carbone"), "Japet"));
-    let uranus = ajouter_planete(&mut sys, 19.2, 0.046, 0.77 * deg, rayon_uranus, 6.0,
+    let uranus = ajouter_planete(&mut sys, masse_soleil, 19.2, 0.046, 0.77 * deg, rayon_uranus, 6.0,
         preset_gazeuse("Uranus"), Some("Uranus"));
     // Ariel, Umbriel, Titania, Oberon (interne -> externe).
     poser(&mut sys, (uranus, "Uranus"), "Ariel", 0, preset_tellurique("Supraglacial"));
     poser(&mut sys, (uranus, "Uranus"), "Umbriel", 1, fige(preset_tellurique("Carbone"), "Umbriel"));
     poser(&mut sys, (uranus, "Uranus"), "Titania", 2, fige(preset_tellurique("Subglaciaire"), "Titania"));
     poser(&mut sys, (uranus, "Uranus"), "Oberon", 3, fige(preset_tellurique("Lune"), "Oberon"));
-    let neptune = ajouter_planete(&mut sys, 30.05, 0.010, 1.77 * deg, rayon_neptune, 6.0,
+    let neptune = ajouter_planete(&mut sys, masse_soleil, 30.05, 0.010, 1.77 * deg, rayon_neptune, 6.0,
         preset_gazeuse("Neptune"), Some("Neptune"));
     poser(&mut sys, (neptune, "Neptune"), "Triton", 0, preset_tellurique("Cryovolcan"));
-    ajouter_planete(&mut sys, 39.5, 0.249, 17.1 * deg, rayon_monde("Pluton"), 0.1,
+    ajouter_planete(&mut sys, masse_soleil, 39.5, 0.249, 17.1 * deg, rayon_monde("Pluton"), 0.1,
         preset_tellurique("Ice Dunes"), Some("Pluton")); // nain glace
 
     // ===== Population de petits corps, du plus proche au plus lointain =====
@@ -408,25 +417,27 @@ pub fn construire_preset_tau_ceti() -> (Systeme, String) {
     let z = Vec3::ZERO;
 
     let mut sys = Systeme::new();
+    let lumi_tau_ceti = 0.52;
     sys.ajouter(Box::new(Soleil::new(
         vec3(0.0, 0.0, 0.0),
         1.8,
         etoile::couleur_corps_noir(5344.0),
-        0.52,
+        lumi_tau_ceti,
     )));
+    let masse_tau_ceti = masse_luminosite(lumi_tau_ceti);
 
     use TypePlanete::Tellurique;
-    ajouter_planete(&mut sys, 0.133, 0.06, 2.0 * deg, 0.45, 2.0,
+    ajouter_planete(&mut sys, masse_tau_ceti, 0.133, 0.06, 2.0 * deg, 0.45, 2.0,
         app_simple(Tellurique, vec3(0.55, 0.5, 0.45), vec3(0.34, 0.31, 0.28), z, 0.0), None);
-    ajouter_planete(&mut sys, 0.243, 0.23, 1.5 * deg, 0.45, 2.0,
+    ajouter_planete(&mut sys, masse_tau_ceti, 0.243, 0.23, 1.5 * deg, 0.45, 2.0,
         app_simple(Tellurique, vec3(0.7, 0.45, 0.3), vec3(0.45, 0.28, 0.2), z, 0.0), None);
-    ajouter_planete(&mut sys, 0.538, 0.18, 1.0 * deg, 0.6, 4.0,
+    ajouter_planete(&mut sys, masse_tau_ceti, 0.538, 0.18, 1.0 * deg, 0.6, 4.0,
         app_simple(Tellurique, vec3(0.3, 0.5, 0.25), vec3(0.4, 0.34, 0.25), vec3(0.1, 0.35, 0.7), 1.0), None);
-    ajouter_planete(&mut sys, 1.34, 0.16, 1.5 * deg, 0.6, 4.0,
+    ajouter_planete(&mut sys, masse_tau_ceti, 1.34, 0.16, 1.5 * deg, 0.6, 4.0,
         app_simple(Tellurique, vec3(0.6, 0.4, 0.3), vec3(0.4, 0.26, 0.2), vec3(0.7, 0.8, 0.9), 0.1), None);
 
     sys.ajouter(Box::new(Disque::new(DisqueConfig::kuiper(
-        1600, 3.0 * etoile::UA, 16.0 * etoile::UA, MASSE_ETOILE,
+        1600, 3.0 * etoile::UA, 16.0 * etoile::UA, masse_tau_ceti,
     ))));
 
     (sys, "Tau Ceti (G8V) - 4 super-Terres".to_string())
@@ -445,20 +456,22 @@ pub fn construire_preset_avatar() -> (Systeme, String) {
 
     let mut sys = Systeme::new();
     // Alpha Centauri A : jumelle du Soleil, légèrement plus lumineuse.
+    let lumi_aca_avatar = 1.5;
     sys.ajouter(Box::new(Soleil::new(
         vec3(0.0, 0.0, 0.0),
         2.05,
         etoile::couleur_corps_noir(5790.0),
-        1.5,
+        lumi_aca_avatar,
     )));
+    let masse_aca_avatar = masse_luminosite(lumi_aca_avatar);
 
     use TypePlanete::Tellurique;
     // Petite tellurique interne brûlée (flavor système).
-    ajouter_planete(&mut sys, 0.55, 0.05, 3.0 * deg, 0.34, 0.4,
+    ajouter_planete(&mut sys, masse_aca_avatar, 0.55, 0.05, 3.0 * deg, 0.34, 0.4,
         app_simple(Tellurique, vec3(0.55, 0.42, 0.32), vec3(0.36, 0.28, 0.22), z, 0.0), None);
 
     // Polyphemus : géante gazeuse bleu-vert dans la zone habitable, avec anneaux.
-    let poly = ajouter_planete(&mut sys, 1.35, 0.03, 1.2 * deg, 1.7, 20.0,
+    let poly = ajouter_planete(&mut sys, masse_aca_avatar, 1.35, 0.03, 1.2 * deg, 1.7, 20.0,
         gazeuse(vec3(0.32, 0.6, 0.58), vec3(0.12, 0.34, 0.42), vec3(0.6, 0.84, 0.78), 5.0, 1.7, vec3(0.4, 0.7, 0.68) * 0.3)
             .avec_jets(0.95)
             .avec_tache(spot, 0.24, vec3(0.88, 0.34, 0.16))
@@ -489,7 +502,7 @@ pub fn construire_preset_avatar() -> (Systeme, String) {
     }
 
     // Géante externe glacée + sa lune.
-    let externe = ajouter_planete(&mut sys, 4.8, 0.05, 1.6 * deg, 1.2, 10.0,
+    let externe = ajouter_planete(&mut sys, masse_aca_avatar, 4.8, 0.05, 1.6 * deg, 1.2, 10.0,
         gazeuse(vec3(0.5, 0.62, 0.74), vec3(0.3, 0.42, 0.56), vec3(0.7, 0.82, 0.92), 4.0, 1.0, vec3(0.5, 0.65, 0.8) * 0.3)
             .avec_brume(0.35, vec3(0.66, 0.78, 0.88))
             .avec_pole(vec3(0.5, 0.6, 0.7)), None);
@@ -497,7 +510,7 @@ pub fn construire_preset_avatar() -> (Systeme, String) {
 
     // Ceinture d'astéroïdes entre Polyphemus et la géante externe.
     sys.ajouter(Box::new(Disque::new(DisqueConfig::asteroides(
-        800, 2.3 * etoile::UA, 3.4 * etoile::UA, MASSE_ETOILE,
+        800, 2.3 * etoile::UA, 3.4 * etoile::UA, masse_aca_avatar,
     ))));
 
     (sys, "Avatar - Pandora / Polyphemus (Alpha Centauri A)".to_string())
@@ -632,25 +645,27 @@ pub fn construire_preset_proxima() -> (Systeme, String) {
 
     let mut sys = Systeme::new();
     // Naine rouge : L réelle ≈ 0.0017, relevée à 0.06 pour un rendu visible.
+    let lumi_proxima = 0.06;
     sys.ajouter(Box::new(Soleil::new(
         vec3(0.0, 0.0, 0.0),
         0.75,
         etoile::couleur_corps_noir(3040.0),
-        0.06,
+        lumi_proxima,
     )));
+    let masse_proxima = masse_luminosite(lumi_proxima);
 
     // Apparences = presets nommés du catalogue.
     // Géante gazeuse proche et chaude (preset « Jupiter chaud »). Rayon réduit (0.85) pour ne pas
     // écraser la petite naine rouge ; ses lunes se dimensionnent sur ce rayon -> plus discrètes.
     let r_gg = 0.85;
-    let gg = ajouter_planete(&mut sys, 0.2, 0.04, 2.0 * deg, r_gg, 8.0, preset_gazeuse("Jupiter chaud"), None);
+    let gg = ajouter_planete(&mut sys, masse_proxima, 0.2, 0.04, 2.0 * deg, r_gg, 8.0, preset_gazeuse("Jupiter chaud"), None);
     for _ in 0..2 {
         ajouter_lune(&mut sys, gg, r_gg);
     }
     // Planète rocheuse 1 : désert aride (preset « Desert »).
-    ajouter_planete(&mut sys, 0.42, 0.1, 3.0 * deg, 0.34, 0.5, preset_tellurique("Desert"), None);
+    ajouter_planete(&mut sys, masse_proxima, 0.42, 0.1, 3.0 * deg, 0.34, 0.5, preset_tellurique("Desert"), None);
     // Planète rocheuse 2 : plus externe, froide, verrouillée par les marées -> monde « eyeball » gelé.
-    ajouter_planete(&mut sys, 0.85, 0.07, 2.0 * deg, 0.4, 0.7, preset_tellurique("Eyeball gele"), None);
+    ajouter_planete(&mut sys, masse_proxima, 0.85, 0.07, 2.0 * deg, 0.4, 0.7, preset_tellurique("Eyeball gele"), None);
 
     (sys, "Proxima Centauri (Avatar) - naine rouge M".to_string())
 }
