@@ -134,6 +134,64 @@ elle n'apparaîtra jamais dans un système multiple. **Ce qui se verra** : la
 pulsation à **n'importe quelle échelle** ; les types « donnée seulement », par
 couleur et taille dès le cadrage par défaut.
 
+## 3 bis. Les types absents du catalogue (2026-09-24)
+
+⚠️ Section ajoutée après relecture : la §3 fait l'inventaire de ce que le
+dépôt **connaît**, pas de ce qu'il **ignore**. Filtre appliqué, posé par
+l'utilisateur : **un type n'entre au catalogue que s'il peut avoir une
+représentation distincte à l'écran.** Un objet qui se rendrait exactement
+comme un type déjà présent n'est pas un type, c'est une étiquette.
+
+**Retenus** — ils se distinguent vraiment :
+
+| Type | Ce qui le rend distinct | Ce qu'il coûte |
+|---|---|---|
+| **Quasi-étoile** (*black hole star*) | Enveloppe de plusieurs milliers de masses solaires chauffée par **accrétion sur un trou noir central**, pas par la fusion : surface très froide (~4 000 K, rouge sombre) pour un rayon de l'ordre de l'**UA**. Un disque stellaire qui dépasse l'orbite d'une planète interne. | Rendu : une supergéante rouge démesurée + la signature du cœur. **Appartient au chantier trou noir (§4)**, pas à côté : c'est le même objet vu du dehors. Attention à `PX_MIN` et à `l_etoile_agrandie_reste_dans_l_orbite_de_mercure` — ce type-là dépasse **vraiment** l'orbite interne, et la garde devra le prévoir. |
+| **Hypergéante / variable lumineuse bleue** (Eta Carinae) | Éjections violentes, nébuleuse bipolaire en sablier. | Le `couronne_type 2` (vent Wolf-Rayet) en fait déjà la moitié ; reste la forme en sablier. |
+| **Étoile Be** | Rotation si rapide que l'étoile s'**aplatit**, entourée d'un **disque de décrétion**. | Le disque existe (`src/disque/`) ; l'aplatissement rejoint §3 ter. Bon rapport : deux pièces déjà là. |
+| **Herbig Ae/Be** | La grande sœur massive de T Tauri. | **Donnée seulement** : même rendu (jets + disque), autre plage de masse. |
+
+**Écartés, faute de représentation distincte** — gardés ici pour qu'on ne
+repose pas la question : étoile à **quarks** et objet de **Thorne-Żytkow**
+(l'une se rend comme une étoile à neutrons, l'autre comme une supergéante
+rouge), **naine noire** (par définition invisible), **blue straggler** (une
+étoile bleue ordinaire au mauvais endroit — c'est une information de
+catalogue, pas un rendu).
+
+## 3 ter. Distinguer les **types** entre eux, et pas seulement les individus
+
+La §2 traite d'un défaut : deux étoiles **du même type** sont jumelles. Il en
+existe un second, distinct, que la graine ne réglera pas : **deux types
+différents partagent la même recette de surface.**
+
+Un type ne fait varier aujourd'hui que la teinte, le rayon, la luminosité et
+la forme de couronne. La granulation, elle, est la même recette pour une
+naine M et une supergéante — alors que leurs cellules de convection
+diffèrent de plusieurs ordres de grandeur (quelques centaines de kilomètres
+contre une fraction du rayon stellaire). Manquent, dans le même esprit :
+
+- **granulation paramétrée** (`gran_scale`/`gran_contraste`), déjà réclamée
+  par `suivi/etoiles.md` ;
+- **assombrissement centre-bord** : le shader fait aujourd'hui l'inverse, il
+  éclaircit le limbe (`suivi/etoiles.md`, « limb darkening vrai ») ;
+- **taux d'activité par type** — c'est le réglage figé du §1.3 ;
+- **aplatissement des rotateurs rapides**, qui sert aussi l'étoile Be.
+
+⚠️ **Conséquence sur l'ordre de travail** : le lot « graine » (§6, lot 1) ne
+répond qu'à la moitié du reproche « les textures sont identiques ». Sans ce
+lot-ci, deux étoiles cesseront d'être jumelles mais une naine M continuera
+de ressembler à une supergéante.
+
+## 3 quater. Les événements (nova, supernova) : hors jeu, et pour la même raison qu'ailleurs
+
+Tranché le 2026-09-24. Le projet a déjà écarté l'évolution temporelle longue
+pour les géantes gazeuses (`conception/geantes_gazeuses.md` §6 bis : on garde
+ce qui est **spatial et statique**, on omet ce qui est un **événement**). La
+même règle s'applique aux étoiles : ni nova, ni supernova, ni cycle
+d'activité pluriannuel. **Pas d'exception.** Gardé sous le coude si le
+gameplay réclame un jour un élément plus dur — une supernova est alors une
+mécanique de jeu (une menace, une échéance), pas un effet visuel de plus.
+
 ## 4. Trous noirs, et le sous-chantier des ceintures de débris
 
 **Ce qui existe.** Une seule branche : `soleil.frag.glsl:61-91`, sous
@@ -197,6 +255,36 @@ CME d'être **hors** du disque central. La lentille ne se lit qu'en approche.
   (`config.rs:240`) et la couronne à jets existent, leur mariage annoncé en
   `ceintures.md` §3.4 n'est pas fait. Même geste, même endroit.
 
+## 5 bis. Le chantier ceintures, au-delà du disque d'accrétion (2026-09-24)
+
+Question posée à la relecture : le sous-chantier ceintures se réduit-il à la
+migration du disque d'accrétion ? **Non.** État constaté dans le code, contre
+le plan de `ceintures.md` §6 :
+
+| Phase de `ceintures.md` §6 | État réel |
+|---|---|
+| 1-3 (particules GPU, voile, nouveaux types) | **faites** |
+| 4 (éclairage) | **faite**, et mieux qu'annoncé : face jour/nuit **et** ombre du corps central sur le voile (`disque_voile.frag.glsl:137-146`) |
+| 5 (génération) | **partielle** — `oort()` est bien posé dans le preset solaire (`presets.rs:256`), mais `protoplanetaire()`/`protosolaire()` n'existent **qu'en galerie** : aucune jeune étoile du jeu ne porte son disque |
+
+Restent donc, par ordre de visibilité :
+
+1. **Les comètes.** `Categorie::Comete` existe (`astre.rs:14`) et **rien ne
+   l'engendre** — la catégorie est morte depuis le début, la bucket list
+   (§5) le note. C'est le manque le plus voyant du lot : une queue orientée
+   à l'opposé de l'étoile est un objet que le joueur cherche des yeux. Le
+   modèle `Disque` ne la couvre pas (une comète est un corps + une traînée,
+   pas un champ) ; c'est du rendu neuf.
+2. **Les disques proto\* dans les systèmes générés** — phase 5 inachevée,
+   et c'est aussi ce qui manque à T Tauri (§5).
+3. **Le disque d'accrétion** du trou noir (§4), qui ne dépend pas de la
+   lentille contrairement à ce qu'annonce `ceintures.md` §7.
+4. **Le remplissage de pixels des voiles**, jamais mesuré : l'instrument
+   existe (touche **V**), la mesure jamais prise. Dette ouverte depuis P.2.
+
+Écartés et confirmés tels : troyens L4/L5 et traînées météoritiques
+(`ceintures.md` §7, écartés à la demande).
+
 ## 6. Ordre de travail proposé
 
 *Chaque lot livre du visible ; aucun ne dépend du suivant.*
@@ -211,6 +299,16 @@ CME d'être **hors** du disque central. La lentille ne se lit qu'en approche.
 | 6 | Supergéante rouge, sous-naine, carbonée, naine brune au tirage | Le tirage cesse de se répéter |
 | 7 | `pulse_amp`/`pulse_freq`, dérivés dans `rayon_dessine` **et donc** dans `Systeme::pick` | Céphéide, Mira, ZZ Ceti d'un coup, visibles à toute échelle |
 | 8 | Lentille **locale** : impostor élargi, UV déviés sur le fond stellaire | L'anneau d'Einstein, en approche — si elle est décidée (§9) |
+
+**Lots ajoutés le 2026-09-24**, à intercaler selon ce qu'on veut voir
+d'abord :
+
+| # | Ce qu'il change | Ce qu'il livre |
+|---|---|---|
+| 9 | **Comètes** (§5 bis) : engendrer `Categorie::Comete`, orbite très excentrique, queue opposée à l'étoile | Le manque le plus voyant des petits corps, et une catégorie morte qui prend enfin vie |
+| 10 | **Distinction entre types** (§3 ter) : `gran_scale`/`gran_contraste`, assombrissement centre-bord, activité par type | Une naine M cesse de ressembler à une supergéante. **Sans lui, le lot 1 ne tient que la moitié de la promesse** |
+| 11 | **Quasi-étoile** (§3 bis), après le trou noir (lots 4-5) | Un objet qu'on n'oublie pas : une enveloppe rouge sombre large comme une orbite, nourrie par un trou noir |
+| 12 | Disques proto\* posés dans les systèmes générés (§5 bis) ; hypergéante, Be, Herbig Ae/Be au tirage | Les jeunes étoiles portent enfin leur disque ; trois types de plus pour peu de rendu neuf |
 
 ## 7. Hors périmètre
 
