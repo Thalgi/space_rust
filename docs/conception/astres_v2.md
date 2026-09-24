@@ -369,6 +369,17 @@ raison**, même consigne que les décisions actées de `STATE.md`.
    (`conception/ceintures.md` §3.2). Un sillon que rien ne creuse est un
    décor qui ment.
 
+5. **La masse gravitationnelle se dérive du type stellaire** — et c'est le
+   **lot 0**, avant tout le reste. `MASSE_ETOILE` vaut aujourd'hui 1000 pour
+   toutes (`bucketlist_globale.md` §9 le note depuis longtemps) ; le trou
+   noir et la quasi-étoile en ont besoin d'une propre. Le faire d'abord
+   plutôt qu'après : une masse « cas particulier » posée pour le seul trou
+   noir serait une **seconde source pour la même grandeur**, exactement le
+   travers qui a coûté le plus cher à ce dépôt (`methode.md`, « une source
+   par fait » ; l'affaire `MASSES_TERRESTRES` de la revue P1). ⚠️ Touche les
+   barycentres des systèmes multiples (`stellaire.rs`) et les périodes
+   orbitales : à faire pendant que rien d'autre n'est en vol.
+
 **Par défaut, faute d'enjeu** (à rouvrir si le rendu déçoit) : une à trois
 comètes par système ; **une seule queue** (poussière), la queue d'ions
 droite restant un raffinement ; quasi-étoile **rare** au tirage et jamais
