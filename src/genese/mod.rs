@@ -1791,4 +1791,59 @@ mod tests_masse_luminosite {
             orb_terne.n, orb_brillante.n
         );
     }
+
+    // ⚠️ Tenté ici et abandonné : faire passer ce test par `ajouter_planete`
+    // (plutôt que par `Orbite` directement, comme ci-dessus) pour emprunter le
+    // vrai chemin de code. Ça ne compile/tourne pas en test : `ajouter_planete`
+    // -> `ajouter_planete_autour` -> `Planete::new` construit un `Material`
+    // (`mat_corps`, `mat_atmo`), qui exige le contexte graphique -- panique
+    // (`THREAD_ID.is_some()`) hors de `macroquad::main`. C'est la même limite
+    // que celle déjà documentée pour `Soleil::new` (`soleil::tests_graine`) :
+    // hors de portée d'un test, pas un oubli.
+
+    // **Un plan circumbinaire (type P) pèse la SOMME des deux étoiles, pas
+    // une seule.**
+    //
+    // `plan_p` combine deux masses -- chacune issue de `masse_luminosite` via
+    // `feuille_alea` -- en une seule `masse_centrale`. Une planète type P
+    // orbite le BARYCENTRE du couple : lui faire perdre la somme (revenir à
+    // `m1` seul, par exemple) sous-pèserait silencieusement l'hôte, puisque
+    // rien d'autre ne reconstruit cette masse pour comparer.
+    #[test]
+    fn plan_p_pese_la_somme_des_deux_etoiles() {
+        let m1 = masse_luminosite(0.3);
+        let m2 = masse_luminosite(2.0);
+        assert!(m1 != m2, "les deux masses doivent différer pour que la somme soit probante");
+
+        let plan = plan_p(10.0, m1, m2, 0.3, 2.0, 0.1);
+
+        assert_eq!(
+            plan.masse_centrale,
+            m1 + m2,
+            "masse_centrale = {} au lieu de m1+m2 = {}",
+            plan.masse_centrale, m1 + m2
+        );
+        // Et elle dépasse chacune des deux prise seule -- sinon la somme se
+        // serait réduite à une seule étoile sans que l'égalité ci-dessus le
+        // capture (une addition qui oublierait m2 resterait \"juste\" à ses
+        // propres yeux si le test ne comparait qu'à lui-même).
+        assert!(plan.masse_centrale > m1.max(m2), "masse_centrale ne dépasse pas la plus lourde des deux étoiles");
+    }
+
+    // **Bornes de `masse_luminosite` à une luminosité nulle.**
+    //
+    // `ProfilEtoile::aleatoire` ne tire jamais L=0 (toutes ses branches posent
+    // une luminosité strictement positive), mais `masse_luminosite` est
+    // `pub(crate)` et sa signature n'exclut pas ce cas : `0.0.powf(0.286)`
+    // vaut exactement `0.0`, sous le plancher -- le `clamp` doit donc y
+    // ramener la masse, et non produire zéro ou un nombre négatif qui
+    // enverrait une étoile de masse nulle à la dérive.
+    #[test]
+    fn masse_luminosite_de_zero_retombe_sur_le_plancher() {
+        assert_eq!(
+            masse_luminosite(0.0),
+            0.25 * MASSE_ETOILE,
+            "luminosité nulle : devrait retomber exactement sur le plancher 0,25x MASSE_ETOILE"
+        );
+    }
 }
