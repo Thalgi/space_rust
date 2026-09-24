@@ -48,6 +48,19 @@ pub fn vider_cache_materials() {
 
 pub struct Soleil {
     pub base: CorpsBase,
+    /// **Graine de surface**, propre à cette étoile.
+    ///
+    /// Sans elle, la granulation du shader est une fonction déterministe de
+    /// la seule direction : **toutes les étoiles portaient exactement le
+    /// même motif**, et deux compagnes d'un binaire étaient jumelles image
+    /// par image. Elle décale les champs de bruit ; le décalage de `temps`
+    /// ci-dessous s'occupe du reste (voir sa doc).
+    graine: f32,
+    /// Horloge d'animation, **décalée d'une étoile à l'autre**.
+    ///
+    /// La graine seule ne suffit pas : deux étoiles de même type
+    /// bouillonneraient au même rythme et verraient naître leurs taches
+    /// ensemble. Partir d'instants différents les désynchronise.
     temps: f32,
     taches: Vec<Tache>,
     boucles: Vec<Boucle>,
@@ -77,9 +90,13 @@ impl Soleil {
         let mats = mats_soleil();
         let mat_plasma = mat_plasma_partage();
 
+        let graine = gen_range(0.0, 1000.0);
         Self {
             base: CorpsBase::new(position, 1000.0, rayon),
-            temps: 0.0,
+            graine,
+            // Décalage tiré du même geste que la graine : deux étoiles
+            // créées dans la même frame ne démarrent pas au même instant.
+            temps: gen_range(0.0, 500.0),
             taches: Vec::new(),
             boucles: Vec::new(),
             prochaine_tache: gen_range(0.5, 2.0),

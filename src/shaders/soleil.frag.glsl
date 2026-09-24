@@ -11,6 +11,7 @@ uniform float couronne_irreg;  // irrégularité (rayons/spicules)
 uniform float couronne_type;   // 0 = halo, 1 = jets bipolaires (pulsar), 2 = vent stellaire (WR)
 uniform vec4 spots[8]; // xyz = direction (repère surface), w = rayon effectif
 uniform float zone;    // 0 = disque de l'étoile (opaque), 1 = couronne (translucide)
+uniform float graine;  // graine de surface, propre à chaque étoile
 
 float hash(vec3 p) {
     p = fract(p * 0.3183099 + 0.1);
@@ -99,10 +100,15 @@ void main() {
         float ca = cos(a); float sa = sin(a);
         vec3 d = vec3(n.x * ca - n.z * sa, n.y, n.x * sa + n.z * ca);
 
+        // Décalage propre à cette étoile : le bruit ci-dessous ne dépend que
+        // de la DIRECTION, donc sans lui toutes les étoiles portent le même
+        // motif de granulation, au pixel près.
+        vec3 dec = vec3(graine, graine * 1.7, graine * 0.3);
+
         // Convection fine et bouillonnante (domain warping animé, rapide).
-        vec3 w = d * 5.0 + vec3(0.0, time * 0.22, time * 0.13);
+        vec3 w = d * 5.0 + dec + vec3(0.0, time * 0.22, time * 0.13);
         vec3 warp = vec3(fbm(w), fbm(w + 5.2), fbm(w + 9.1)) - 0.5;
-        float gran = fbm(d * 11.0 + warp * 1.2 + vec3(0.0, time * 0.30, 0.0));
+        float gran = fbm(d * 11.0 + dec + warp * 1.2 + vec3(0.0, time * 0.30, 0.0));
 
         // Palette dérivée de la couleur de l'étoile : sombre -> teinte -> chaud (vers blanc).
         vec3 cLow = teinte * 0.45;
@@ -112,7 +118,7 @@ void main() {
         col = mix(col, cHot, smoothstep(0.55, 0.78, gran));
 
         // Petits points brillants (campfires).
-        float camp = fbm(d * 16.0 + 50.0);
+        float camp = fbm(d * 16.0 + dec + 50.0);
         col += smoothstep(0.66, 0.72, camp) * teinte * 0.5;
 
         // Taches actives (venant du CPU) : assombrissement local.

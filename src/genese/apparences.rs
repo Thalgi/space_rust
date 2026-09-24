@@ -323,13 +323,14 @@ pub fn apparence_glacee() -> (f32, f32, Apparence) {
         ClasseTaille::Glacee
     };
     let rayon = classe.rayon_aleatoire();
-    (
-        rayon,
-        gen_range(2.0, 5.0),
-        Apparence::new(TypePlanete::Glacee, c1, c2, Vec3::ZERO, 0.0)
-            .avec_atmo(vec3(0.7, 0.85, 1.0) * 0.25)
-            .avec_taille(rayon),
-    )
+    let mut app = Apparence::new(TypePlanete::Glacee, c1, c2, Vec3::ZERO, 0.0)
+        .avec_atmo(vec3(0.7, 0.85, 1.0) * 0.25)
+        .avec_taille(rayon);
+    // Sans ça, `seed` reste à son défaut (0.0) : tous les mondes glacés tirés
+    // partagent la même géographie, contrairement aux telluriques et gazeuses
+    // (voisines ci-dessus) qui tirent chacune la leur.
+    app.seed = gen_range(0.0, 1000.0);
+    (rayon, gen_range(2.0, 5.0), app)
 }
 
 /// HSV -> RGB (h, s, v dans [0,1]).

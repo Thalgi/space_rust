@@ -1662,6 +1662,30 @@ mod tests_coherence_3 {
         }
     }
 
+    /// **Les mondes glacés TIRÉS ne partagent pas une seule géographie.**
+    ///
+    /// Même défaut que ci-dessus, même remède : l'invariant du catalogue
+    /// (`les_graines_du_catalogue_sont_dispersees`) ne couvre que les presets
+    /// écrits à la main. `apparence_glacee` a longtemps oublié de poser
+    /// `app.seed` (contrairement à `apparence_tellurique` et `apparence_gazeuse`,
+    /// ses voisines), si bien que toutes les lunes et planètes glacées tirées
+    /// partageaient le défaut `seed: 0.0` — donc la même géographie.
+    #[test]
+    fn les_mondes_glaces_tires_n_ont_pas_une_seule_geographie() {
+        for graine in [1u64, 7, 42, 1234, 99999] {
+            srand(graine);
+            let mut vues = std::collections::HashSet::new();
+            for _ in 0..20 {
+                let (_, _, a) = apparence_glacee();
+                vues.insert(a.seed.to_bits());
+            }
+            assert!(
+                vues.len() > 1,
+                "graine {graine} : 20 tirages glacés partagent tous la même géographie ({vues:?})"
+            );
+        }
+    }
+
     // ⚠️ Deuxième fois que la règle candidate était **trop stricte** et que le
     // catalogue avait raison. « Pas de végétation sans eau » mordait sur
     // `Lichen` : un lichen pousse sur la roche nue et prend son humidité dans

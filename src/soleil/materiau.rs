@@ -63,6 +63,7 @@ fn uniforms_soleil() -> Vec<UniformDesc> {
         UniformDesc::new("couronne_type", UniformType::Float1),
         UniformDesc::array(UniformDesc::new("spots", UniformType::Float4), super::MAX_TACHES),
         UniformDesc::new("zone", UniformType::Float1),
+        UniformDesc::new("graine", UniformType::Float1),
     ]);
     uniforms
 }

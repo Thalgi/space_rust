@@ -42,6 +42,7 @@ impl Soleil {
             mat.set_uniform("couronne_irreg", self.couronne_irreg);
             mat.set_uniform("couronne_type", self.couronne_type);
             mat.set_uniform("zone", zone);
+            mat.set_uniform("graine", self.graine);
             mat.set_uniform_array("spots", &spots[..]);
 
             gl_use_material(mat);
