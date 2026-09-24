@@ -338,6 +338,44 @@ objet, une naine M) ; que la pulsation ne soit pas épileptique. ⚠️ Au lot 7
 garde `l_etoile_agrandie_reste_dans_l_orbite_de_mercure` (`soleil/mod.rs:246`)
 porte sur le rayon *dessiné* : une pulsation qui le gonfle passe devant elle.
 
+## 8 bis. Tranché le 2026-09-24, avant le lancement du chantier
+
+Quatre décisions prises par l'utilisateur sur les lots ajoutés (9 à 12), plus
+quatre valeurs par défaut posées faute d'enjeu. **Ne pas les rouvrir sans
+raison**, même consigne que les décisions actées de `STATE.md`.
+
+1. **La comète est un objet de jeu, pas un décor.** Cliquable, listée au
+   sélecteur, avec sa fiche, et utilisable comme **destination de vol**. Sa
+   queue n'apparaît qu'à l'approche de l'étoile et s'efface au loin — c'est
+   ce qui la fait vivre, et c'est physiquement juste.
+   ⚠️ **Conséquence technique, à ne pas manquer** : une destination de vol
+   doit avoir une position **prédictible** (`Systeme::calculer_trajectoire`
+   rend `None` sinon — c'est pourquoi une lune n'est aujourd'hui pas une
+   destination valide, `conception/trajectoires.md` §7). La comète doit donc
+   être un astre **sur rails** au sens de `Foyer::Etoile`/`Orbite`, comme une
+   planète, et surtout pas un enfant attaché par `parent`. Ce choix-là
+   conditionne tout le lot.
+2. **La quasi-étoile garde son échelle vraie.** Elle dépasse réellement les
+   orbites internes ; la garde `l_etoile_agrandie_reste_dans_l_orbite_de_mercure`
+   (`soleil/mod.rs:246`) doit apprendre ce type plutôt que l'interdire. Un
+   système autour d'elle n'a pas de planète interne : ce n'est pas un défaut
+   de génération, c'est la conséquence.
+3. **L'assombrissement centre-bord est corrigé pour toutes les étoiles.** Le
+   shader éclaircit aujourd'hui le limbe ; c'est faux pour une photosphère
+   dense, et une photo du Soleil le montre. Le Soleil du preset change donc
+   d'aspect : c'est voulu, et c'est une correction, pas un réglage.
+4. **Les disques protoplanétaires reçoivent leurs proto-planètes**, placées
+   dans leurs sillons — le modèle le prévoit déjà explicitement
+   (`conception/ceintures.md` §3.2). Un sillon que rien ne creuse est un
+   décor qui ment.
+
+**Par défaut, faute d'enjeu** (à rouvrir si le rendu déçoit) : une à trois
+comètes par système ; **une seule queue** (poussière), la queue d'ions
+droite restant un raffinement ; quasi-étoile **rare** au tirage et jamais
+dans un preset écrit à la main ; aplatissement de l'étoile Be porté par un
+**uniform** du shader stellaire, réutilisable ensuite par tout rotateur
+rapide.
+
 ## 9. Ce qui reste à trancher
 
 1. **La lentille : locale ou rien ?** L'accepter locale, c'est accepter que les
