@@ -56,11 +56,8 @@ pub struct Soleil {
     /// par image. Elle décale les champs de bruit ; le décalage de `temps`
     /// ci-dessous s'occupe du reste (voir sa doc).
     graine: f32,
-    /// Horloge d'animation, **décalée d'une étoile à l'autre**.
-    ///
-    /// La graine seule ne suffit pas : deux étoiles de même type
-    /// bouillonneraient au même rythme et verraient naître leurs taches
-    /// ensemble. Partir d'instants différents les désynchronise.
+    /// Horloge d'animation, **décalée d'une étoile à l'autre** — voir
+    /// [`temps_initial`].
     temps: f32,
     taches: Vec<Tache>,
     boucles: Vec<Boucle>,
@@ -84,6 +81,22 @@ pub struct Soleil {
     inds: Vec<u16>,
 }
 
+/// **Instant de départ de l'animation**, dérivé de la graine de l'étoile.
+///
+/// Deux étoiles de même type, démarrées ensemble, bouillonneraient au même
+/// rythme et verraient naître leurs taches en même temps : la graine seule
+/// ne les distingue pas, puisqu'elle ne décale que l'espace, pas le temps.
+///
+/// **Dérivé plutôt que tiré une seconde fois** : « cette étoile est unique »
+/// est *un* fait, il n'a droit qu'à une source (`docs/methode.md`). Et une
+/// dérivation se teste, là où un second `gen_range` exigerait le contexte
+/// graphique.
+fn temps_initial(graine: f32) -> f32 {
+    // Un demi-tour de graine : large devant les rythmes du spectacle (une
+    // tache vit 8 à 16 s), sans partir si loin que les `f32` s'épaississent.
+    graine * 0.5
+}
+
 impl Soleil {
     pub fn new(position: Vec3, rayon: f32, couleur: Vec3, luminosite: f32) -> Self {
         // Materials partagés (clonés) -> un seul pipeline chacun, même en régénérant.
@@ -94,9 +107,7 @@ impl Soleil {
         Self {
             base: CorpsBase::new(position, 1000.0, rayon),
             graine,
-            // Décalage tiré du même geste que la graine : deux étoiles
-            // créées dans la même frame ne démarrent pas au même instant.
-            temps: gen_range(0.0, 500.0),
+            temps: temps_initial(graine),
             taches: Vec::new(),
             boucles: Vec::new(),
             prochaine_tache: gen_range(0.5, 2.0),
@@ -308,5 +319,45 @@ mod tests {
                 "à {dist} : une planète a été planchéiée"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_graine {
+    use super::*;
+
+    /// **Deux étoiles différentes ne démarrent pas au même instant.**
+    ///
+    /// Sans ce décalage, la graine ne sert qu'à décaler le motif dans
+    /// l'espace : les deux surfaces bouillonneraient encore au même rythme,
+    /// et un binaire resterait visiblement jumeau.
+    ///
+    /// ⚠️ Ce qui ne se teste pas ici : que `Soleil::new` **tire** bien une
+    /// graine, et que le shader s'en serve. Construire un `Soleil` crée ses
+    /// materials, donc exige un contexte graphique — aucun test du dépôt ne
+    /// le peut. La correspondance uniform ↔ `.glsl` est gardée ailleurs
+    /// (`materiau.rs`, `uniforms_soleil_correspondent_au_shader`) ; le reste
+    /// se juge à l'œil, en galerie.
+    #[test]
+    fn deux_graines_donnent_deux_instants_de_depart() {
+        assert_ne!(temps_initial(0.0), temps_initial(1.0));
+        assert_ne!(temps_initial(120.0), temps_initial(880.0));
+        // Même graine, même départ : la reconstruction d'un système à graine
+        // fixe doit redonner exactement la même étoile (déterminisme).
+        assert_eq!(temps_initial(42.0), temps_initial(42.0));
+    }
+
+    /// Le décalage reste dans une plage utile : assez large pour désynchroniser
+    /// des rythmes qui se comptent en secondes, assez petit pour que l'horloge
+    /// garde sa précision.
+    #[test]
+    fn le_decalage_reste_dans_une_plage_utile() {
+        for graine in [0.0_f32, 1.0, 500.0, 1000.0] {
+            let t = temps_initial(graine);
+            assert!((0.0..=500.0).contains(&t), "graine {graine} -> {t}, hors plage");
+        }
+        // Et il couvre vraiment cette plage : un décalage écrasé vers zéro
+        // ne désynchroniserait rien.
+        assert!(temps_initial(1000.0) - temps_initial(0.0) > 100.0);
     }
 }
