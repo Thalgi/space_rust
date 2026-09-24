@@ -8,6 +8,17 @@ use macroquad::rand::gen_range;
 /// poignée de taches actives plus deux ou trois flares tient large sous 8.
 pub(super) const MAX_FLARES: usize = 3;
 
+/// **Arches vivantes au plus.** Au-delà, elles cessent de se lire une à une :
+/// leurs billboards additifs se recouvrent et l'étoile se retrouve ceinte
+/// d'un croissant lumineux continu. Quatre laissent voir la forme de chacune.
+pub(super) const MAX_BOUCLES: usize = 4;
+
+/// **Délai minimal entre deux naissances d'arches**, en secondes de
+/// spectacle. Il valait 0,12 s — huit arches par seconde, toutes au même
+/// endroit. Une protubérance monte en ~2 s : en espacer les départs d'au
+/// moins une demi-seconde laisse l'œil suivre chacune.
+pub(super) const CADENCE_MIN: f32 = 0.55;
+
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum EtatBoucle {
     Montee,
@@ -53,18 +64,33 @@ pub(super) struct Boucle {
 
 /// **Quelle tache porte la prochaine arche.**
 ///
-/// Une protubérance se lit *parce qu*'elle relie deux pieds d'une tache ; en
-/// choisit une **active** (`intensite > 0`) quand il y en a, sinon `None` —
-/// l'appelant retombe alors sur un tirage aléatoire (une étoile sans tache
-/// continue d'éruptionner). Parmi plusieurs, la plus intense l'emporte : pas
-/// de tirage ici, donc **déterministe** à liste de taches égale.
-pub(super) fn tache_porteuse(taches: &[Tache]) -> Option<usize> {
-    taches
-        .iter()
-        .enumerate()
-        .filter(|(_, t)| t.intensite > 0.0)
-        .max_by(|(_, a), (_, b)| a.intensite.total_cmp(&b.intensite))
-        .map(|(i, _)| i)
+/// Une protubérance se lit *parce qu*'elle relie deux pieds d'une tache ; on
+/// en choisit une **active** (`intensite > 0`) quand il y en a, sinon `None`
+/// — l'appelant retombe alors sur un tirage aléatoire (une étoile sans tache
+/// continue d'éruptionner).
+///
+/// ⚠️ **Pondéré, et non « la plus intense ».** La première version prenait
+/// systématiquement le maximum : toutes les arches naissaient donc au même
+/// endroit et s'empilaient en un **croissant** informe au lieu de se lire
+/// comme des boucles distinctes — signalé à l'écran. La tache la plus
+/// intense reste la plus probable, mais les autres ont leur part.
+pub(super) fn tache_porteuse(taches: &[Tache], tirage: f32) -> Option<usize> {
+    let total: f32 = taches.iter().map(|t| t.intensite.max(0.0)).sum();
+    if total <= 0.0 {
+        return None; // aucune tache active : l'appelant retombe sur l'aléatoire
+    }
+    // Roue de la fortune pondérée par l'intensité. `tirage` vient de
+    // l'appelant plutôt que d'un `gen_range` interne : la décision reste
+    // pure, donc testable — `macroquad::rand` exige le contexte graphique.
+    let mut seuil = tirage.clamp(0.0, 1.0) * total;
+    for (i, t) in taches.iter().enumerate() {
+        seuil -= t.intensite.max(0.0);
+        if seuil <= 0.0 {
+            return Some(i);
+        }
+    }
+    // Arrondi malheureux en fin de course : la dernière active fait l'affaire.
+    taches.iter().rposition(|t| t.intensite > 0.0)
 }
 
 /// Encode le rayon effectif d'une **tache** (assombrissante) dans `spots[i].w`.
@@ -102,10 +128,10 @@ fn rayon_effectif(w: f32) -> f32 {
 }
 
 impl Soleil {
-    /// Crée une boucle ancrée sur la tache active la plus intense s'il y en a
-    /// une, sinon dispersée au hasard (éruption sans tache visible).
+    /// Crée une boucle ancrée sur une tache active (tirée au poids de son
+    /// intensité) s'il y en a une, sinon dispersée au hasard.
     pub(super) fn declencher_boucle(&mut self) {
-        let centre = match tache_porteuse(&self.taches) {
+        let centre = match tache_porteuse(&self.taches, gen_range(0.0, 1.0)) {
             Some(i) => self.taches[i].dir,
             None => dir_aleatoire(),
         };
@@ -183,7 +209,7 @@ impl Soleil {
         // `self.temps`, alimenté plus haut par `dt` — l'horloge de spectacle
         // (`DtAnimation`), jamais l'horloge orbitale accélérable.
         if self.temps >= self.prochain_flare && self.flares.len() < MAX_FLARES {
-            let dir = match tache_porteuse(&self.taches) {
+            let dir = match tache_porteuse(&self.taches, gen_range(0.0, 1.0)) {
                 Some(i) => self.taches[i].dir,
                 None => dir_aleatoire(),
             };
@@ -208,15 +234,25 @@ impl Soleil {
         self.flares.retain(|f| f.age < f.duree);
 
         // --- Déclenchement des boucles (sur les taches) ---
-        if self.temps >= self.prochaine_eruption {
+        // ⚠️ **Plafond d'arches vivantes.** Rien ne les bornait : seule leur
+        // extinction les retirait, et le plancher de cadence à 0,12 s
+        // autorisait jusqu'à huit naissances par seconde. Ajouté à l'ancrage
+        // sur une seule tache, ça empilait les arches en un **croissant**
+        // opaque — le défaut signalé à l'écran. Le remède tient en deux
+        // bornes : combien peuvent vivre ensemble, et à quelle cadence au
+        // plus vite.
+        if self.temps >= self.prochaine_eruption && self.boucles.len() < MAX_BOUCLES {
             // Plusieurs éruptions par cycle (dispersées), d'autant plus que freq est haut.
             let n_loops = 1 + (self.freq * 2.5) as usize; // 1..=3
             for _ in 0..n_loops {
+                if self.boucles.len() >= MAX_BOUCLES {
+                    break;
+                }
                 self.declencher_boucle();
             }
             // Fréquence haute -> intervalle court.
             let moy = 3.5 - 3.2 * self.freq;
-            self.prochaine_eruption = self.temps + (gen_range(0.5, 1.5) * moy).max(0.12);
+            self.prochaine_eruption = self.temps + (gen_range(0.5, 1.5) * moy).max(CADENCE_MIN);
         }
 
         // --- Boucles : machine à états ---
@@ -286,16 +322,32 @@ mod tests_tache_porteuse {
         Tache { dir, taille: 0.2, age: 1.0, vie_max: 10.0, intensite }
     }
 
-    /// **Une tache active est choisie quand il y en a.** La plus intense
-    /// l'emporte : c'est elle que le regard suit en premier.
+    /// **Une tache active est choisie quand il y en a**, et le tirage porte
+    /// bien sur toutes : chacune occupe sa part de l'intervalle, à la mesure
+    /// de son intensité.
     #[test]
-    fn choisit_la_tache_active_la_plus_intense() {
+    fn chaque_tache_active_peut_porter_une_arche() {
         let taches = vec![
             tache(vec3(1.0, 0.0, 0.0), 0.4),
             tache(vec3(0.0, 1.0, 0.0), 0.9),
             tache(vec3(0.0, 0.0, 1.0), 0.1),
         ];
-        assert_eq!(tache_porteuse(&taches), Some(1));
+        // Total 1,4 : la première tient [0 ; 0,4/1,4[, la deuxième jusqu'à
+        // 1,3/1,4, la dernière la fin.
+        assert_eq!(tache_porteuse(&taches, 0.1), Some(0));
+        assert_eq!(tache_porteuse(&taches, 0.5), Some(1));
+        assert_eq!(tache_porteuse(&taches, 0.99), Some(2));
+    }
+
+    /// **La plus intense reste la plus probable.** C'est ce qui garde le sens
+    /// physique — une grosse tache porte plus d'arches — sans les y empiler
+    /// toutes, ce que faisait la première version (le « croissant »).
+    #[test]
+    fn la_plus_intense_occupe_la_plus_grande_part() {
+        let taches = vec![tache(vec3(1.0, 0.0, 0.0), 0.1), tache(vec3(0.0, 1.0, 0.0), 0.9)];
+        let parts = (0..100).filter(|k| tache_porteuse(&taches, *k as f32 / 100.0) == Some(1)).count();
+        assert!(parts > 80, "la tache intense ne prend que {parts} % des tirages");
+        assert!(parts < 100, "elle les prend TOUS : c'est le défaut du croissant");
     }
 
     /// **Le repli joue quand il n'y en a pas** : ni taches, ni taches actives
@@ -303,16 +355,20 @@ mod tests_tache_porteuse {
     /// étoile sans tache visible doit continuer d'éruptionner ailleurs.
     #[test]
     fn replie_sur_aucune_quand_rien_n_est_actif() {
-        assert_eq!(tache_porteuse(&[]), None);
+        assert_eq!(tache_porteuse(&[], 0.5), None);
         let taches = vec![tache(vec3(1.0, 0.0, 0.0), 0.0), tache(vec3(0.0, 1.0, 0.0), 0.0)];
-        assert_eq!(tache_porteuse(&taches), None);
+        assert_eq!(tache_porteuse(&taches, 0.5), None);
     }
 
-    /// **Déterministe à graine fixée** : même liste, même choix, à chaque appel.
+    /// **Déterministe à tirage égal** : même liste, même tirage, même choix.
+    /// C'est ce qui rend un système reproductible à graine fixée.
     #[test]
-    fn deterministe_a_liste_egale() {
+    fn deterministe_a_liste_et_tirage_egaux() {
         let taches = vec![tache(vec3(1.0, 0.0, 0.0), 0.5), tache(vec3(0.0, 1.0, 0.0), 0.7)];
-        assert_eq!(tache_porteuse(&taches), tache_porteuse(&taches));
+        assert_eq!(tache_porteuse(&taches, 0.33), tache_porteuse(&taches, 0.33));
+        // Et les bornes du tirage ne sortent jamais de la liste.
+        assert!(tache_porteuse(&taches, 0.0).is_some());
+        assert!(tache_porteuse(&taches, 1.0).is_some());
     }
 }
 

@@ -124,21 +124,36 @@ void main() {
         // Taches (w > 0, assombrissement) ET flares (w < 0, sursaut lumineux)
         // partagent le même tableau `spots` -- le signe de `w` les distingue
         // (voir `eruptions::encoder_flare`), pas un second uniform.
-        float dark = 0.0;
+        float dark = 0.0;   // ombre : le cœur noir de la tache
+        float pen = 0.0;    // pénombre : la couronne filamenteuse autour
         float flare = 0.0;
         for (int i = 0; i < 8; i++) {
             vec4 s = spots[i];
             float rayon = abs(s.w);
+            if (rayon <= 0.0) { continue; }
+            float ang = acos(clamp(dot(d, s.xyz), -1.0, 1.0));
             if (s.w > 0.0) {
-                float ang = acos(clamp(dot(d, s.xyz), -1.0, 1.0));
-                dark += 1.0 - smoothstep(rayon * 0.4, rayon, ang);
-            } else if (s.w < 0.0) {
-                float ang = acos(clamp(dot(d, s.xyz), -1.0, 1.0));
+                // ⚠️ Un seuil sur l'angle seul donne un **disque parfait** —
+                // c'est ce qu'on voyait, et aucune tache réelle n'est ronde.
+                // On module donc le rayon par un bruit pris AUTOUR de la
+                // tache : le contour devient irrégulier, sans coûter un
+                // uniform ni une passe.
+                float bord = 0.78 + 0.34 * fbm(d * 9.0 + s.xyz * 7.0 + dec);
+                // L'ombre (sombre, nette) et sa pénombre (plus claire,
+                // filamenteuse) : deux seuils sur le même champ, comme sur
+                // une vraie tache.
+                dark += 1.0 - smoothstep(rayon * 0.30 * bord, rayon * 0.62 * bord, ang);
+                pen += 1.0 - smoothstep(rayon * 0.60 * bord, rayon * bord, ang);
+            } else {
                 flare += 1.0 - smoothstep(rayon * 0.4, rayon, ang);
             }
         }
         dark = clamp(dark, 0.0, 1.0);
+        pen = clamp(pen, 0.0, 1.0);
         flare = clamp(flare, 0.0, 1.0);
+        // Pénombre d'abord, ombre par-dessus : la seconde est incluse dans la
+        // première, et doit l'emporter là où elles se recouvrent.
+        col *= mix(1.0, 0.62, pen);
         col *= mix(1.0, 0.30, dark);
         // Flare : sursaut lumineux localisé -> éclaircit vers un blanc chaud,
         // au lieu d'assombrir. C'est l'exact inverse de la tache ci-dessus.
