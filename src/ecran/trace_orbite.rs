@@ -46,10 +46,20 @@ use macroquad::prelude::*;
 /// de pixels.
 pub const EPAISSEUR_PX: f32 = 3.0;
 
-/// Teinte des orbites de lunes en V2 : le violet pâle des calques
-/// (`systeme::rendu::COL_LUNES`), remonté en opacité — un trait large et
-/// transparent bave, là où un trait fin se lisait encore.
-pub const COL_LUNES: Color = Color::new(0.62, 0.55, 0.90, 0.85);
+/// Teinte des orbites de lunes en V2 : un **gris** qui se lit sur le noir
+/// sans lui disputer la vedette. Le violet pâle des calques
+/// (`systeme::rendu::COL_LUNES`) tapait trop à l'œil une fois le trait
+/// épaissi — ce tracé documente une orbite, il n'est pas le sujet.
+pub const COL_LUNES: Color = Color::new(0.58, 0.58, 0.62, 0.55);
+
+/// **En dessous de ce rayon apparent, l'orbite ne se dessine pas.**
+///
+/// Dézoomé, l'orbite d'une lune se réduit à quelques dizaines de pixels : le
+/// trait large en fait une **bouée** autour de la planète, illisible et
+/// laide. Plutôt que d'amincir le trait — ce qui rendrait le motif
+/// méconnaissable — on s'efface : à ce zoom-là, la lune n'est de toute façon
+/// pas ce qu'on regarde.
+const RAYON_MIN_PX: f32 = 60.0;
 
 /// Le motif **mediumdashdot**, en proportions d'un [`CYCLE`] : trait long,
 /// trou, point, trou — répété. `true` = on pose de l'encre.
@@ -265,6 +275,17 @@ fn segments_ecran(
     out
 }
 
+/// L'orbite est-elle assez grande à l'écran pour valoir un trait ?
+///
+/// Le rayon apparent se mesure sur le point le plus éloigné du parent, à la
+/// distance caméra→parent — approximation suffisante pour un seuil : une
+/// orbite vue par la tranche est plus plate que ça, mais elle est alors
+/// illisible de toute façon.
+fn orbite_lisible(pts: &[Vec3], dist_parent: f32, ecran_y: f32) -> bool {
+    let rayon = pts.iter().fold(0.0_f32, |m, p| m.max(p.length()));
+    rayon * px_par_unite(ecran_y, dist_parent) >= RAYON_MIN_PX
+}
+
 /// Trace l'orbite de chaque **lune** de `parent`. Passe interface.
 ///
 /// La polyligne d'orbite est relative au parent (`Astre::orbite_lune`), qui
@@ -285,6 +306,9 @@ pub fn dessiner_orbites_lunes(
             continue;
         }
         let pts = sys.orbite_lune_de(idx);
+        if !orbite_lisible(pts, cam.pos.distance(centre), ecran.y) {
+            continue;
+        }
         let monde = tirets_monde(pts, centre, cam, ecran.y);
         for (a, b) in segments_ecran(&monde, centre, cam, ecran, aspect) {
             draw_line(a.x, a.y, b.x, b.y, EPAISSEUR_PX, COL_LUNES);
@@ -371,6 +395,21 @@ mod tests {
             longueur3(&entier),
             longueur3(&morcelee)
         );
+    }
+
+    /// **L'orbite s'efface quand elle devient une bouée.** Dézoomé, un trait
+    /// large sur une orbite de quelques dizaines de pixels entoure la planète
+    /// d'un anneau illisible ; le seuil est en rayon APPARENT, donc il suit
+    /// le zoom comme la taille de l'orbite.
+    #[test]
+    fn une_orbite_trop_petite_a_l_ecran_ne_se_dessine_pas() {
+        let orbite = orbite_circulaire(1.0, 64);
+        // Rayon apparent = rayon monde × px_par_unite(hauteur, distance).
+        let dist_seuil = px_par_unite(ECRAN.y, 1.0) / RAYON_MIN_PX;
+        assert!(orbite_lisible(&orbite, dist_seuil * 0.5, ECRAN.y), "deux fois trop près : visible");
+        assert!(!orbite_lisible(&orbite, dist_seuil * 2.0, ECRAN.y), "deux fois trop loin : effacée");
+        // Et le seuil lui-même compte comme lisible (bord inclus).
+        assert!(orbite_lisible(&orbite, dist_seuil, ECRAN.y), "au seuil exact : visible");
     }
 
     /// Le premier trait démarre **au début** de la polyligne : une orbite ne

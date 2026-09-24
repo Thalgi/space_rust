@@ -6,6 +6,11 @@ use super::{Calques, Systeme};
 /// confondus, et on ne sait plus ce qu'on regarde. Un test tient l'écart
 /// (`les_calques_ne_se_confondent_pas`).
 pub(super) const COL_PLANETES: Color = Color::new(0.13, 0.78, 0.75, 0.75); // sarcelle
+/// Trajectoires planétaires en trait plein (Skymap V2) : un gris **un peu
+/// plus clair** que celui des orbites de lunes
+/// (`ecran::trace_orbite::COL_LUNES`, 0,58), pour que la hiérarchie se lise —
+/// la planète porte la lune.
+const COL_PLEIN: Color = Color::new(0.72, 0.72, 0.76, 0.55);
 pub(super) const COL_ETOILES: Color = Color::new(0.85, 0.80, 0.55, 0.32); // paille, discret
 pub(super) const COL_LUNES: Color = Color::new(0.62, 0.55, 0.90, 0.38); // violet pâle
 pub(super) const COL_ZONE: Color = Color::new(0.30, 0.90, 0.40, 0.45); // vert habitable
@@ -63,6 +68,7 @@ impl Systeme {
     pub fn draw_orbites(&self, c: Calques, cam: &CameraInfo) {
         let Calques {
             planetes: orbites_planetes,
+            planetes_pleines,
             etoiles: orbites_etoiles,
             lunes: orbites_lunes,
             zone: montrer_zone,
@@ -127,7 +133,11 @@ impl Systeme {
                     Some(Foyer::Barycentre) => Vec3::ZERO,
                     None => light,
                 };
-                dessiner_points(pts, centre, attenue(COL_PLANETES, opacite(idx)), cam);
+                if planetes_pleines {
+                    dessiner_plein(pts, centre, attenue(COL_PLEIN, opacite(idx)), cam);
+                } else {
+                    dessiner_points(pts, centre, attenue(COL_PLANETES, opacite(idx)), cam);
+                }
             }
         }
 
@@ -418,6 +428,18 @@ fn dessiner_points_ouvert(poly: &[Vec3], col: Color, cam: &CameraInfo) {
         let demi = (b - a).normalize_or_zero() * demi_monde;
         draw_line_3d(a - demi, a + demi, col);
         i += pas;
+    }
+}
+
+/// Trace une polyligne fermée en **trait plein** : tous les segments, sans
+/// semis. `draw_line_3d` rend un pixel de large, c'est tout ce qu'il sait
+/// faire — d'où un trait fin, mais continu.
+fn dessiner_plein(poly: &[Vec3], centre: Vec3, col: Color, cam: &CameraInfo) {
+    let n = poly.len();
+    for i in 0..n {
+        let a = cam.rel(centre + poly[i]);
+        let b = cam.rel(centre + poly[(i + 1) % n]);
+        draw_line_3d(a, b, col);
     }
 }
 

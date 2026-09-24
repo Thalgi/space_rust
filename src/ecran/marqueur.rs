@@ -36,7 +36,7 @@ pub struct Marqueur {
 /// **Écart entre le bord apparent de l'astre et la pointe du triangle**, en
 /// pixels. Assez pour que la pointe ne morde pas le disque, assez peu pour
 /// qu'on lise encore « ce triangle désigne CE corps ».
-pub const ECART_PX: f32 = 6.0;
+pub const ECART_PX: f32 = 16.0;
 
 /// Rayon de détection du survol et du clic, en pixels écran.
 ///
@@ -172,9 +172,19 @@ pub fn planete_active(sys: &Systeme, selection: Option<usize>) -> Option<usize> 
 /// `Marqueur::ecran` — donc au-dessus de l'astre, dégagée de son disque.
 const DEMI_BASE_PX: f32 = 4.0;
 const HAUTEUR_PX: f32 = 10.0;
-/// Cercle de sélection, centré sur le centre du triangle. 8 et non 6 : les
-/// coins de la base sont à 6,4 px de ce centre, un cercle de 6 les couperait.
-const RAYON_SELECTION_PX: f32 = 8.0;
+
+/// **Ce qui signale l'astre sélectionné** : sa flèche est saturée, pas
+/// entourée. Un cercle autour du triangle ajoutait un second objet à lire là
+/// où la couleur suffit — et il se confondait avec les disques du décor.
+const SATURATION_SELECTION: f32 = 2.6;
+
+/// Sature une teinte sans toucher à sa luminosité perçue : on s'éloigne du
+/// gris de même luminance, dans la direction de la couleur d'origine.
+fn saturer(c: Color, facteur: f32) -> Color {
+    let gris = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    let canal = |v: f32| (gris + (v - gris) * facteur).clamp(0.0, 1.0);
+    Color::new(canal(c.r), canal(c.g), canal(c.b), c.a)
+}
 
 /// Dessine les marqueurs. **Passe interface uniquement** — ne décide de rien :
 /// quels marqueurs, lequel est survolé, lequel est sélectionné, tout arrive
@@ -191,6 +201,9 @@ pub fn dessiner(sys: &Systeme, marqueurs: &[Marqueur], survole: Option<usize>, s
         let mut c = super::selecteur::teinte_astre(sys, m.idx, cat);
         let est_survole = survole == Some(m.idx);
         c.a = if est_survole { 1.0 } else { 0.85 };
+        if selectionne == Some(m.idx) {
+            c = saturer(c, SATURATION_SELECTION);
+        }
 
         let pointe = m.ecran;
         let gauche = vec2(pointe.x - DEMI_BASE_PX, pointe.y - HAUTEUR_PX);
@@ -198,10 +211,6 @@ pub fn dessiner(sys: &Systeme, marqueurs: &[Marqueur], survole: Option<usize>, s
         draw_triangle(pointe, gauche, droite, c);
         if est_survole {
             draw_triangle_lines(pointe, gauche, droite, 1.0, WHITE);
-        }
-        if selectionne == Some(m.idx) {
-            let centre = vec2(pointe.x, pointe.y - HAUTEUR_PX * 0.5);
-            draw_circle_lines(centre.x, centre.y, RAYON_SELECTION_PX, 1.0, Color::new(1.0, 1.0, 1.0, 0.5));
         }
     }
 }

@@ -33,6 +33,13 @@ pub struct Systeme {
 pub struct Calques {
     /// Trajectoires des planètes, centrées sur leur foyer stellaire.
     pub planetes: bool,
+    /// Trajectoires des planètes en **trait plein gris** plutôt qu'en semis
+    /// de points sarcelle (Skymap V2).
+    ///
+    /// Un interrupteur plutôt qu'un changement pur et simple : la V1 est le
+    /// repli tant que la V2 n'est pas adoptée, et elle doit rendre
+    /// exactement comme avant.
+    pub planetes_pleines: bool,
     /// Orbites des étoiles entre elles (systèmes multiples).
     pub etoiles: bool,
     /// Orbites des lunes, centrées sur leur planète.

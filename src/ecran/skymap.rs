@@ -316,6 +316,7 @@ impl Skymap {
                 &mut self.sys,
                 crate::systeme::Calques {
                     planetes: self.menu.orbites,
+                    planetes_pleines: false, // V1 : semis de points, inchangé
                     etoiles: self.menu.orbites_etoiles,
                     lunes: self.menu.orbites_lunes,
                     zone: self.menu.zone,

@@ -321,6 +321,7 @@ impl SkymapV2 {
                 &mut self.sys,
                 crate::systeme::Calques {
                     planetes: self.menu.orbites,
+                    planetes_pleines: true,
                     etoiles: self.menu.orbites_etoiles,
                     // Le calque global tout-ou-rien est coupé en V2 : les
                     // orbites de lunes n'apparaissent que pour la planète
