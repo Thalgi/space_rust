@@ -77,7 +77,15 @@ impl Soleil {
         self.inds.clear();
         let mut quads = 0;
 
-        let taille_l = r * 0.05; // un peu épais : cœur lumineux par accumulation
+        // **Le pinceau, pas l'effet.** Une éjection s'étend sur 5 à 6 rayons
+        // stellaires — 24 px au cadrage par défaut, largement visible. Mais
+        // on la dessinait avec des billboards de `r × 0,05`, soit **0,20 px**
+        // : le rasterizer les avalait, et l'effet entier disparaissait alors
+        // que sa géométrie était bonne. Même remède que les débris
+        // (`disque_particules.vert.glsl`) : plancher en pixels et fondu.
+        let dist = (cam.pos - c).length();
+        let vh = crate::impostor::viewport_h();
+        let (taille_l, fondu_l) = plancher_plasma(r * 0.05, dist, vh);
         for b in &self.boucles {
             let a_w = vers_monde(b.sa, rot);
             let b_w = vers_monde(b.sb, rot);
@@ -93,7 +101,7 @@ impl Soleil {
                 let flow = 0.55 + 0.45 * (t * 16.0 - self.temps * 6.0).sin();
                 let lum = (b.intensite * (0.55 + 0.45 * flow)).clamp(0.0, 1.0);
                 // plasma chaud, additif -> les recouvrements forment un cœur blanc
-                let col = Color::new(1.0, 0.8 + 0.15 * lum, 0.5 + 0.3 * lum, lum);
+                let col = Color::new(1.0, 0.8 + 0.15 * lum, 0.5 + 0.3 * lum, lum * fondu_l);
                 push_quad(&mut self.verts, &mut self.inds, cam, monde, taille_l, col);
                 quads += 1;
                 if quads >= QUADS_PAR_LOT {
@@ -110,9 +118,10 @@ impl Soleil {
                 let b_w = vers_monde(b.sb, rot);
                 let pos = c + point_boucle(a_w, b_w, b.apex, b.skew, 0.5, r);
                 if !cache_par_sphere(pos, c, r, cam.pos) {
+                    let (taille_c, fondu_c) = plancher_plasma(r * 0.16, dist, vh);
                     let lum = b.intensite.clamp(0.0, 1.0);
-                    let col = Color::new(1.0, 0.72, 0.45, lum);
-                    push_quad(&mut self.verts, &mut self.inds, cam, pos, r * 0.16, col);
+                    let col = Color::new(1.0, 0.72, 0.45, lum * fondu_c);
+                    push_quad(&mut self.verts, &mut self.inds, cam, pos, taille_c, col);
                     quads += 1;
                     if quads >= QUADS_PAR_LOT {
                         flush(&mut self.verts, &mut self.inds, &self.halo);
@@ -124,6 +133,41 @@ impl Soleil {
         flush(&mut self.verts, &mut self.inds, &self.halo);
         gl_use_default_material();
     }
+}
+
+/// **Demi-taille écran minimale d'un billboard de plasma.**
+///
+/// En dessous, le quad tombe sous le pixel et le rasterizer l'avale : c'est
+/// ce qui faisait disparaître les éjections alors que leur géométrie
+/// s'étendait sur des dizaines de pixels. Même valeur d'esprit que le
+/// `px_min` des débris, et pour la même raison.
+const PLASMA_PX_MIN: f32 = 1.5;
+
+/// Taille d'un billboard de plasma, plancher appliqué, **et le fondu qui va
+/// avec**.
+///
+/// ⚠️ Le fondu n'est pas une coquetterie. Agrandir un quad sans pâlir
+/// revient à **ajouter de la matière** : en blending additif, une éjection
+/// vue de loin deviendrait une tache blanche plus brillante que de près,
+/// exactement l'inverse de ce qu'on veut. On rend donc à l'alpha ce que le
+/// plancher a pris à la taille.
+fn plancher_plasma(taille: f32, dist: f32, vh: f32) -> (f32, f32) {
+    if taille <= 0.0 {
+        return (taille, 1.0); // rien à dessiner, et pas de division par zéro
+    }
+    let planchee = crate::impostor::rayon_plancher(taille, dist, vh, PLASMA_PX_MIN);
+    // Le quad couvre (planchee/taille)² fois plus de surface ; on lui retire
+    // autant d'éclat, avec un plancher pour qu'il ne s'éteigne jamais tout à
+    // fait — un fil de lumière reste plus lisible que rien.
+    //
+    // ⚠️ Pas de cas particulier « déjà assez gros » : `rayon_plancher` rend
+    // alors la taille **inchangée**, donc le rapport vaut 1 et le fondu
+    // aussi. Une première version en avait un ; le sabotage qui l'a retiré
+    // n'a fait rougir aucun test, et pour cause — il ne servait à rien
+    // (`docs/methode.md` : vérifier qu'un sabotage produit bien le défaut
+    // visé avant d'accuser le test).
+    let rapport = taille / planchee;
+    (planchee, (rapport * rapport).clamp(0.12, 1.0))
 }
 
 /// Passe une direction du repère "surface" (où vivent taches/boucles) au repère monde,
@@ -195,4 +239,58 @@ pub(super) fn texture_halo(taille: usize) -> Texture2D {
     let t = Texture2D::from_rgba8(taille as u16, taille as u16, &bytes);
     t.set_filter(FilterMode::Linear);
     t
+}
+
+#[cfg(test)]
+mod tests_plancher_plasma {
+    use super::*;
+
+    /// Hauteur de fenêtre d'essai (celle du jeu, `main.rs`).
+    const VH: f32 = 700.0;
+    /// Taille d'un billboard de boucle pour une étoile de rayon solaire :
+    /// `r × 0,05`, la valeur du code de dessin.
+    const TAILLE: f32 = 1.116 * 0.05;
+
+    /// **Le pinceau ne descend plus sous le pixel.** C'est tout l'objet du
+    /// lot : l'éjection avait une géométrie large de 24 px et un pinceau de
+    /// 0,20 px — le rasterizer l'avalait, donc elle n'existait pas.
+    #[test]
+    fn un_billboard_trop_fin_est_ramene_au_plancher() {
+        let dist = crate::camera::DIST_DEFAUT;
+        let (planchee, fondu) = plancher_plasma(TAILLE, dist, VH);
+        assert!(planchee > TAILLE, "rien n'a été planchéié : {planchee} vs {TAILLE}");
+        let px = crate::impostor::px_rayon(planchee, dist, VH);
+        assert!(px >= PLASMA_PX_MIN - 1e-3, "toujours sous le plancher : {px} px");
+        assert!(fondu < 1.0, "agrandi sans pâlir : de la matière créée de rien");
+    }
+
+    /// **De près, on ne touche à rien.** Un plancher qui s'appliquerait aussi
+    /// à un billboard déjà gros gonflerait le plasma en approche — l'inverse
+    /// du but.
+    #[test]
+    fn un_billboard_deja_visible_n_est_pas_touche() {
+        let (planchee, fondu) = plancher_plasma(TAILLE, 5.0, VH);
+        assert_eq!(planchee, TAILLE, "taille modifiée alors qu'elle suffisait");
+        assert_eq!(fondu, 1.0, "éclat modifié alors que rien n'a été agrandi");
+    }
+
+    /// **Ce qu'on rend en taille, on le retire en éclat.** Le plasma est
+    /// dessiné en blending **additif** : agrandir sans pâlir rendrait une
+    /// éjection lointaine plus brillante que la même vue de près.
+    #[test]
+    fn le_fondu_compense_la_surface_gagnee() {
+        for dist in [200.0_f32, 600.0, crate::camera::DIST_DEFAUT] {
+            let (planchee, fondu) = plancher_plasma(TAILLE, dist, VH);
+            let rapport = TAILLE / planchee;
+            let attendu = rapport * rapport;
+            assert!(
+                (fondu - attendu).abs() < 1e-3 || fondu == 0.12,
+                "dist {dist} : fondu {fondu}, attendu {attendu}"
+            );
+        }
+        // Et il ne s'éteint jamais tout à fait : un fil de lumière reste plus
+        // lisible que rien du tout.
+        let (_, tres_loin) = plancher_plasma(TAILLE, 30000.0, VH);
+        assert!(tres_loin >= 0.12, "le plasma s'est éteint : {tres_loin}");
+    }
 }
