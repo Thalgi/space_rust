@@ -41,6 +41,14 @@ pub const MASSE_ETOILE: f32 = 1000.0; // masse gravitationnelle (indépendante d
 /// leur masse ne vient pas de leur éclat et sera posée explicitement par leur
 /// type plutôt que dérivée d'ici.
 pub(crate) fn masse_luminosite(luminosite: f32) -> f32 {
+    // ⚠️ `max` et non `clamp` sur l'entrée : une luminosité négative donne un
+    // `powf` NaN, et **NaN traverse `clamp`** — ses comparaisons `<`/`>` sont
+    // fausses des deux côtés, si bien que la borne ne le retient pas. Le cas
+    // est inatteignable aujourd'hui (aucune branche de `ProfilEtoile::aleatoire`
+    // ni aucun preset ne produit ≤ 0), mais les lots trou noir et quasi-étoile
+    // ouvriront ce chemin : une masse NaN contaminerait silencieusement les
+    // barycentres et les périodes de tout le système.
+    let luminosite = luminosite.max(0.0);
     (MASSE_ETOILE * luminosite.powf(0.286)).clamp(0.25 * MASSE_ETOILE, 5.0 * MASSE_ETOILE)
 }
 
@@ -1845,5 +1853,26 @@ mod tests_masse_luminosite {
             0.25 * MASSE_ETOILE,
             "luminosité nulle : devrait retomber exactement sur le plancher 0,25x MASSE_ETOILE"
         );
+    }
+
+    /// **Une luminosité négative ne doit pas rendre NaN.**
+    ///
+    /// `powf` d'un négatif à un exposant fractionnaire rend NaN, et **NaN
+    /// traverse `clamp`** : ses comparaisons sont fausses des deux côtés,
+    /// donc la borne ne le retient pas. Une masse NaN se propagerait
+    /// silencieusement aux barycentres (`stellaire.rs`) et aux périodes de
+    /// tout le système — un astre au mauvais endroit, sans le moindre
+    /// message.
+    ///
+    /// Le cas est inatteignable aujourd'hui (aucune branche de
+    /// `ProfilEtoile::aleatoire` ni aucun preset ne produit ≤ 0), mais les
+    /// lots trou noir et quasi-étoile ouvriront ce chemin.
+    #[test]
+    fn une_luminosite_negative_ne_rend_pas_nan() {
+        for l in [-1.0_f32, -0.001, f32::MIN] {
+            let m = masse_luminosite(l);
+            assert!(m.is_finite(), "luminosité {l} -> masse {m}");
+            assert_eq!(m, 0.25 * MASSE_ETOILE, "luminosité {l} : attendu le plancher");
+        }
     }
 }
