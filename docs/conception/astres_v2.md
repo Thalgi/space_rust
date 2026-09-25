@@ -505,6 +505,34 @@ Deux points à retenir :
   littéraux du `.glsl` à ceux du Rust, et le test d'uniforms existant couvre
   la déclaration.
 
+**3.5** (`impostor::push_ruban`, `rendu::ancrage`) : le **ruban** remplace le
+chapelet de billboards, et les pieds sont **ancrés visuellement**.
+
+- Une bande continue le long de la courbe, dont la largeur s'ouvre
+  perpendiculairement à la course apparente et dont largeur et couleur
+  s'interpolent aux jointures. Ce qui manquait au chapelet, c'est la
+  continuité **longitudinale** : on devinait les pastilles une à une même sur
+  une arche isolée (`astres_v2_boucles.md` §2). Les UV traversent la texture
+  de halo par son **axe médian**, ce qui en donne exactement le profil
+  transversal d'un tube — vif au centre, éteint aux bords — sans texture ni
+  matériau de plus. **Zéro pipeline ajouté**, et deux sommets par point au
+  lieu de quatre.
+- Un ruban coupé derrière l'étoile reprend en un **nouveau brin** : un
+  `continue`, comme sur les billboards, aurait relié les deux bords par-dessus
+  le disque.
+- **Ancrage** (lot D de la recherche) : près d'un pied, le plasma cède la
+  place à la teinte de l'étoile et perd de l'éclat (`ANCRAGE`), et une lueur
+  marque l'articulation avec la surface. Un ruban qui garde tout son éclat
+  jusqu'au bout s'arrête net sur la photosphère et se lit comme posé devant
+  elle ; un ruban qui s'éteint tout à fait n'a plus de pied. Les deux
+  amplitudes se jugent à l'œil.
+
+⚠️ **Ce que 3.5 ne fait pas** : suivre géométriquement une tache qui
+rétrécit. La recherche a tranché que l'ancrage attendu était **visuel** (halo
+et teinte, §5), pas un recalcul des pieds à chaque frame. Le garde-fou contre
+la dérive reste `ANCRAGE_MIN` du sous-lot 3.3 — on n'ancre pas sur une tache
+pâle.
+
 Ce que 3.3 a appris, et qui vaut pour la suite du chantier :
 
 - ⚠️ **Un test dont les cas d'entrée sont choisis à la main peut être une

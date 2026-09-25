@@ -116,25 +116,64 @@ impl Soleil {
             // Le calibre propre à cette boucle-ci : un fil ou un ruban, et
             // **proportionné à sa propre étendue** (voir [`RAPPORT_TUBE`]).
             let (calibre, n) = tube(etendue(a_w, b_w, b.apex, r), b.epaisseur);
+            // Un **ruban** et non plus un chapelet de billboards : la
+            // continuité longitudinale est ce qui manquait le plus — on
+            // devinait les pastilles une à une le long d'une arche isolée
+            // (`astres_v2_boucles.md` §2). Et c'est moins cher : deux sommets
+            // par point au lieu de quatre.
+            let mut brin: Vec<crate::impostor::PointRuban> = Vec::with_capacity(n + 1);
             for i in 0..=n {
                 let t = i as f32 / n as f32;
-                let (taille_l, fondu_l) = plancher_plasma(calibre * galbe(t), dist, vh);
-                let pos = point_boucle(a_w, b_w, profil(b), t, r);
-                let monde = c + pos;
+                let monde = c + point_boucle(a_w, b_w, profil(b), t, r);
                 if cache_par_sphere(monde, c, r, cam.pos) {
-                    continue; // derrière le soleil -> pas visible à travers
+                    // Derrière le soleil : le ruban se coupe ici et reprend
+                    // au premier point revenu en vue. Un `continue` aurait
+                    // relié les deux bords par-dessus l'étoile.
+                    quads += emettre(&mut self.verts, &mut self.inds, cam, &mut brin);
+                    continue;
                 }
+                let (demi, fondu) = plancher_plasma(calibre * galbe(t), dist, vh);
                 // onde de matière qui circule + intensité de la boucle
                 let flow = 0.55 + 0.45 * (t * 16.0 - self.temps * 6.0).sin();
                 let lum = (b.intensite * (0.55 + 0.45 * flow)).clamp(0.0, 1.0);
                 // plasma chaud, additif -> les recouvrements forment un cœur blanc
-                let col = Color::new(1.0, 0.8 + 0.15 * lum, 0.5 + 0.3 * lum, lum * fondu_l);
-                push_quad(&mut self.verts, &mut self.inds, cam, monde, taille_l, col);
-                quads += 1;
-                if quads >= QUADS_PAR_LOT {
-                    flush(&mut self.verts, &mut self.inds, &self.halo);
-                    quads = 0;
+                let chaud = vec3(1.0, 0.8 + 0.15 * lum, 0.5 + 0.3 * lum);
+                // **Ancrage du pied** : près de la surface, le plasma cède la
+                // place à la teinte de l'étoile et perd de l'éclat. Sans ça,
+                // l'arche s'arrête net sur la photosphère et se lit comme
+                // posée devant elle plutôt qu'ancrée dedans.
+                let dedans = ancrage(t);
+                let teinte = self.couleur.lerp(chaud, dedans);
+                let col = Color::new(
+                    teinte.x,
+                    teinte.y,
+                    teinte.z,
+                    lum * fondu * (0.45 + 0.55 * dedans),
+                );
+                brin.push((monde, demi, col));
+            }
+            quads += emettre(&mut self.verts, &mut self.inds, cam, &mut brin);
+            if quads >= QUADS_PAR_LOT {
+                flush(&mut self.verts, &mut self.inds, &self.halo);
+                quads = 0;
+            }
+
+            // Une lueur au pied, qui fait l'articulation avec la surface.
+            for pied in [a_w, b_w] {
+                let monde = c + pied * r;
+                if cache_par_sphere(monde, c, r, cam.pos) {
+                    continue;
                 }
+                let (taille, fondu) = plancher_plasma(calibre * 2.4, dist, vh);
+                let lueur = self.couleur.lerp(vec3(1.0, 0.85, 0.6), 0.5);
+                let a = b.intensite.clamp(0.0, 1.0) * fondu * 0.35;
+                let col = Color::new(lueur.x, lueur.y, lueur.z, a);
+                push_quad(&mut self.verts, &mut self.inds, cam, monde, taille, col);
+                quads += 1;
+            }
+            if quads >= QUADS_PAR_LOT {
+                flush(&mut self.verts, &mut self.inds, &self.halo);
+                quads = 0;
             }
         }
 
@@ -232,6 +271,36 @@ fn profil(b: &super::eruptions::Boucle) -> Profil {
 /// coronale réelle est dix à trente fois plus longue que large ; les fils les
 /// plus fins descendent encore plus bas via `Boucle::epaisseur`.
 const RAPPORT_TUBE: f32 = 0.06;
+
+/// **Longueur sur laquelle un pied se fond dans la surface**, en part du
+/// trajet.
+///
+/// Rend 0 au pied et 1 au-delà. Un ruban qui garde son éclat jusqu'au bout
+/// s'arrête **net** sur la photosphère et se lit comme posé devant elle ;
+/// un ruban qui s'éteint complètement n'a plus de pied du tout. Le fondu
+/// partiel, plus la lueur au pied, donnent la lecture « ça sort de la
+/// surface ». ⚠️ Réglage esthétique (`astres_v2_boucles.md` §5).
+const ANCRAGE: f32 = 0.18;
+
+fn ancrage(t: f32) -> f32 {
+    let bord = t.min(1.0 - t).max(0.0);
+    let u = (bord / ANCRAGE).clamp(0.0, 1.0);
+    u * u * (3.0 - 2.0 * u)
+}
+
+/// Émet le brin courant en ruban et rend le nombre de quads produits, en
+/// vidant le brin. Un brin de moins de deux points ne donne rien.
+fn emettre(
+    verts: &mut Vec<Vertex>,
+    inds: &mut Vec<u16>,
+    cam: &CameraInfo,
+    brin: &mut Vec<crate::impostor::PointRuban>,
+) -> usize {
+    crate::impostor::push_ruban(verts, inds, cam, brin);
+    let quads = brin.len().saturating_sub(1);
+    brin.clear();
+    quads
+}
 
 /// Étendue d'une boucle : la corde entre ses pieds, plus ce que sa hauteur
 /// ajoute au trajet. Approximation grossière d'une longueur d'arc — elle sert
@@ -372,6 +441,30 @@ mod tests_profil_boucle {
             "sommet à {hauteur} au lieu de {}",
             plat().apex * r
         );
+    }
+
+    /// **Le pied se fond dans la surface, sans disparaître.**
+    ///
+    /// Un ruban qui garde tout son éclat jusqu'au bout s'arrête net sur la
+    /// photosphère et se lit comme posé devant elle ; un ruban qui s'éteint
+    /// complètement n'a plus de pied. Le fondu est donc partiel, et
+    /// symétrique — les deux pieds sont des pieds.
+    #[test]
+    fn le_pied_se_fond_dans_la_surface_sans_disparaitre() {
+        assert_eq!(ancrage(0.0), 0.0, "le pied ne se fond pas du tout");
+        assert_eq!(ancrage(1.0), 0.0, "le second pied n'est pas traité comme un pied");
+        assert!((ancrage(0.5) - 1.0).abs() < 1e-6, "le sommet est encore en fondu");
+        // Symétrique, et le fondu est bien fini avant le milieu : sinon toute
+        // l'arche serait pâle, pas seulement ses extrémités.
+        for t in [0.02_f32, 0.1, 0.3, 0.45] {
+            assert!((ancrage(t) - ancrage(1.0 - t)).abs() < 1e-6, "asymétrique en {t}");
+        }
+        assert!((ancrage(ANCRAGE) - 1.0).abs() < 1e-6, "le fondu dépasse sa portée");
+        assert!(ancrage(ANCRAGE * 0.5) < 0.9, "le fondu est trop brusque pour se voir");
+        // Hors bornes : la courbe reste bornée, jamais négative.
+        for t in [-1.0_f32, 0.0, 1.0, 2.0] {
+            assert!((0.0..=1.0).contains(&ancrage(t)), "{t} -> {}", ancrage(t));
+        }
     }
 
     /// **Une petite boucle a un petit tube, et pas plus de billboards qu'il

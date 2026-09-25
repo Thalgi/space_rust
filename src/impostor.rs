@@ -49,6 +49,160 @@ pub fn push_quad(
     inds.extend_from_slice(&[i0, i0 + 1, i0 + 2, i0, i0 + 2, i0 + 3]);
 }
 
+/// Un point d'un ruban : sa position **monde**, sa demi-largeur et sa couleur.
+pub type PointRuban = (Vec3, f32, Color);
+
+/// Empile un **ruban** — une bande continue le long d'une polyligne, dont la
+/// largeur et la couleur varient d'un point à l'autre.
+///
+/// C'est la fonction sœur de [`push_quad`] pour tout ce qui est *filaire* :
+/// un chapelet de quads face-caméra donne de la continuité **radiale** (le
+/// halo de chaque point) mais aucune continuité **longitudinale** — on
+/// devine les pastilles une à une le long d'une arche de plasma. Un ruban
+/// interpole largeur et couleur aux jointures, donc ne montre pas de couture.
+///
+/// La largeur est portée par la normale à la courbe **projetée dans le plan
+/// écran**, ce que `push_quad` ne sait pas faire : lui pose un quad centré,
+/// carré et d'une seule taille.
+///
+/// Les UV traversent la texture par son **milieu** (`u = 0,5`), du bord
+/// inférieur au bord supérieur : sur la texture de halo radiale déjà
+/// utilisée, ça donne exactement le profil transversal d'un tube — vif au
+/// centre, éteint sur les bords — sans texture ni matériau de plus.
+///
+/// Moins de deux points : rien à tracer.
+pub fn push_ruban(
+    verts: &mut Vec<Vertex>,
+    inds: &mut Vec<u16>,
+    cam: &CameraInfo,
+    points: &[PointRuban],
+) {
+    if points.len() < 2 {
+        return;
+    }
+    let i0 = verts.len() as u16;
+    for (i, (pos, demi, couleur)) in points.iter().enumerate() {
+        // Tangente par différence centrée : c'est la direction du ruban ici.
+        let avant = points[i.saturating_sub(1)].0;
+        let apres = points[(i + 1).min(points.len() - 1)].0;
+        // Projetée dans le plan de l'écran, puis tournée d'un quart de tour :
+        // la largeur s'ouvre perpendiculairement à la course apparente. Le
+        // repli couvre le cas où la courbe fuit droit vers la caméra, où la
+        // tangente projetée est nulle.
+        let t = apres - avant;
+        let plan = vec2(t.dot(cam.right), t.dot(cam.up)).normalize_or(Vec2::X);
+        let n = (cam.right * -plan.y + cam.up * plan.x) * *demi;
+        let centre = cam.rel(*pos);
+        verts.push(Vertex::new2(centre - n, vec2(0.5, 0.0), *couleur));
+        verts.push(Vertex::new2(centre + n, vec2(0.5, 1.0), *couleur));
+    }
+    for k in 0..points.len() as u16 - 1 {
+        let (a, b) = (i0 + k * 2, i0 + k * 2 + 2);
+        inds.extend_from_slice(&[a, a + 1, b + 1, a, b + 1, b]);
+    }
+}
+
+#[cfg(test)]
+mod tests_ruban {
+    use super::*;
+
+    fn cam() -> CameraInfo {
+        CameraInfo {
+            pos: vec3(0.0, 0.0, 10.0),
+            origine: Vec3::ZERO,
+            right: Vec3::X,
+            up: Vec3::Y,
+            forward: -Vec3::Z,
+            light_pos: Vec3::ZERO,
+            light_color: Vec3::ONE,
+            lights_pos: [Vec3::ZERO; 4],
+            lights_color: [Vec3::ZERO; 4],
+        }
+    }
+
+    fn ruban(points: &[PointRuban]) -> (Vec<Vertex>, Vec<u16>) {
+        let (mut v, mut i) = (Vec::new(), Vec::new());
+        push_ruban(&mut v, &mut i, &cam(), points);
+        (v, i)
+    }
+
+    /// **Deux sommets par point, et deux triangles par segment** — la bande
+    /// est continue, sans couture ni sommet dupliqué entre segments. C'est ce
+    /// qui la rend aussi **moins chère** que le chapelet de quads qu'elle
+    /// remplace : quatre sommets par point là-bas, deux ici.
+    #[test]
+    fn la_bande_est_continue_et_moins_chere_qu_un_chapelet() {
+        let p: Vec<PointRuban> =
+            (0..5).map(|k| (vec3(k as f32, 0.0, 0.0), 0.2, WHITE)).collect();
+        let (v, i) = ruban(&p);
+        assert_eq!(v.len(), 10, "il faut deux sommets par point");
+        assert_eq!(i.len(), 4 * 6, "quatre segments, deux triangles chacun");
+        // Moins de sommets qu'un quad par point.
+        assert!(v.len() < p.len() * 4);
+        // Tous les indices pointent dans le tableau de sommets.
+        assert!(i.iter().all(|k| (*k as usize) < v.len()), "index hors sommets");
+    }
+
+    /// **La largeur s'ouvre perpendiculairement à la course apparente.** Un
+    /// ruban dont la largeur suivrait la tangente serait invisible de face ;
+    /// c'est toute la différence avec un quad centré, qui n'a pas d'orientation
+    /// à respecter.
+    #[test]
+    fn la_largeur_s_ouvre_en_travers_du_trajet() {
+        // Trajet horizontal à l'écran : la bande doit s'ouvrir verticalement.
+        let p = [
+            (vec3(-1.0, 0.0, 0.0), 0.5, WHITE),
+            (vec3(0.0, 0.0, 0.0), 0.5, WHITE),
+            (vec3(1.0, 0.0, 0.0), 0.5, WHITE),
+        ];
+        let (v, _) = ruban(&p);
+        let (bas, haut) = (v[2].position, v[3].position);
+        assert!((bas.x).abs() < 1e-5 && (haut.x).abs() < 1e-5, "la bande s'ouvre dans le sens du trajet");
+        assert!((haut.y - bas.y).abs() > 0.9, "la bande n'a pas d'épaisseur");
+    }
+
+    /// **Les UV traversent la texture par son milieu**, ce qui donne le profil
+    /// transversal d'un tube sur la texture de halo radiale déjà utilisée —
+    /// vif au centre, éteint aux bords, sans texture ni matériau de plus.
+    #[test]
+    fn les_uv_prennent_la_coupe_du_halo() {
+        let p = [(Vec3::ZERO, 0.3, WHITE), (Vec3::X, 0.3, WHITE)];
+        let (v, _) = ruban(&p);
+        for s in &v {
+            assert_eq!(s.uv.x, 0.5, "l'UV quitte l'axe médian de la texture");
+        }
+        assert_eq!((v[0].uv.y, v[1].uv.y), (0.0, 1.0), "la coupe ne traverse pas");
+    }
+
+    /// **Moins de deux points ne trace rien — pas même un sommet.**
+    ///
+    /// Un ruban est coupé chaque fois qu'il passe derrière l'étoile : les
+    /// brins d'un seul point sont donc courants, pas théoriques. ⚠️ Vérifier
+    /// les seuls indices ne suffit pas — sans sommets, il n'y a pas de
+    /// triangle, mais deux **sommets orphelins** par brin s'accumuleraient
+    /// dans le mesh à chaque frame.
+    #[test]
+    fn un_brin_trop_court_ne_trace_rien() {
+        for brin in [vec![], vec![(Vec3::ZERO, 0.3, WHITE)]] {
+            let (v, i) = ruban(&brin);
+            assert!(i.is_empty(), "un brin de {} point a produit des triangles", brin.len());
+            assert!(v.is_empty(), "un brin de {} point a laissé des sommets", brin.len());
+        }
+    }
+
+    /// **Les sommets partent en coordonnées de rendu**, comme ceux de
+    /// [`push_quad`] : un ruban laissé en absolu partirait hors champ à
+    /// l'échelle héliocentrique (`repere_flottant.md`).
+    #[test]
+    fn les_sommets_passent_par_le_repere_de_rendu() {
+        let mut c = cam();
+        c.origine = vec3(100.0, 0.0, 0.0);
+        let (mut v, mut i) = (Vec::new(), Vec::new());
+        push_ruban(&mut v, &mut i, &c, &[(vec3(100.0, 0.0, 0.0), 0.1, WHITE), (vec3(101.0, 0.0, 0.0), 0.1, WHITE)]);
+        assert!(v[0].position.x.abs() < 1e-4, "sommet resté en absolu : {:?}", v[0].position);
+    }
+}
+
 /// Uniforms communs à tous les corps impostor : temps, repère caméra, et l'échelle
 /// `disc` du disque. `disc` doit valoir la même demi-taille que celle du quad.
 pub fn uniforms_standard(mat: &Material, cam: &CameraInfo, temps: f32, disc: f32) {
