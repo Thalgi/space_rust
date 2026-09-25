@@ -467,10 +467,20 @@ dans la géométrie :
    l'augmente pas — sa moyenne reste à 1. Le cœur d'une éjection suit le même
    calibre.
 
-`MAX_BOUCLES` remonté de 4 à 6 en conséquence : le recouvrement est empêché
-à la source par la répulsion, et une boucle courte est bien plus discrète
-qu'une grande arche. Comme `COS_ARCHES` et `PART_COURTES`, c'est un réglage
-qui se juge à l'œil.
+Le plafond des boucles est **séparé par catégorie** (`MAX_ARCHES = 4`,
+`MAX_COURTES = 12`) : sous un plafond commun, en faire naître plus de petites
+revenait à en voir moins de grandes, alors qu'elles ne coûtent pas la même
+chose à la lecture. Et la **répulsion est relative** — une fraction de
+l'empreinte des deux boucles (`MARGE_ARCHES`) et non un angle fixe : les
+petites boucles se serrent, puisque leurs halos sont petits eux aussi (le
+calibre suit l'étendue, `rendu::RAPPORT_TUBE`). Comme `PART_COURTES`, ce sont
+des réglages qui se jugent à l'œil.
+
+**La galerie d'étoiles passe à 5 colonnes**, cellules dimensionnées sur la
+largeur. Elle divisait la largeur d'écran par 210 px : en 1440p, douze
+étoiles minuscules — et c'est pourtant la seule vue où l'on puisse juger la
+granulation, une tache ou une boucle, rien ne se lisant sous ~10 px de rayon
+(§0).
 
 **3.4** (`poles[6]` en uniform, `soleil.frag.glsl`) : la surface lit enfin le
 champ. Un **voile sombre** là où il est fort — la convection y est bloquée

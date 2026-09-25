@@ -9,16 +9,19 @@ use macroquad::rand::gen_range;
 /// poignée de taches actives plus deux ou trois flares tient large sous 8.
 pub(super) const MAX_FLARES: usize = 3;
 
-/// **Arches vivantes au plus.** Au-delà, elles cessaient de se lire une à
-/// une : leurs billboards additifs se recouvraient et l'étoile se retrouvait
-/// ceinte d'un croissant lumineux continu.
+/// **Grandes arches vivantes au plus.** Au-delà, elles cessaient de se lire
+/// une à une : leurs billboards additifs se recouvraient et l'étoile se
+/// retrouvait ceinte d'un croissant lumineux continu.
+pub(super) const MAX_ARCHES: usize = 4;
+
+/// **Petites boucles vivantes au plus** — un plafond **séparé**.
 ///
-/// Remonté de 4 à 6 : le recouvrement est désormais empêché à la source par
-/// la répulsion ([`COS_ARCHES`]), et la moitié des boucles sont **courtes**
-/// ([`PART_COURTES`]) — bien plus discrètes qu'une grande arche. À 4, on ne
-/// voyait plus que deux grandes arches à la fois. ⚠️ Réglage esthétique, à
-/// rebaisser si le croissant revient.
-pub(super) const MAX_BOUCLES: usize = 6;
+/// Un plafond commun les mettait en concurrence avec les grandes arches : en
+/// faire naître plus revenait à en voir moins. Or elles ne coûtent pas la
+/// même chose à la lecture — une petite boucle est un fil court et fin, une
+/// grande arche traverse la moitié d'une région. C'est pour ça qu'il y en a
+/// deux. ⚠️ Réglage esthétique, comme son voisin.
+pub(super) const MAX_COURTES: usize = 12;
 
 /// **Délai minimal entre deux naissances d'arches**, en secondes de
 /// spectacle. Il valait 0,12 s — huit arches par seconde, toutes au même
@@ -70,6 +73,11 @@ pub(super) struct Boucle {
     /// ruban épais, une boucle ténue un fil. Toutes les boucles avaient la
     /// même — un chapelet de billboards du même gabarit.
     pub epaisseur: f32,
+    /// **Boucle courte** : ses deux pieds sont dans la *même* tache, elle ne
+    /// relie rien. Sa seule utilité en mémoire est de compter à part des
+    /// grandes arches ([`MAX_COURTES`]), pour qu'en faire naître plus ne
+    /// revienne pas à en voir moins.
+    pub courte: bool,
     /// **Inclinaison hors du plan radial**, en part de la hauteur. Une vraie
     /// boucle ne se tient pas droite dans le plan qui contient le centre de
     /// l'étoile : elle penche. Sans ça, deux boucles d'un même groupe
@@ -131,21 +139,38 @@ pub(super) fn region_occupee(taches: &[Tache], sites: &[Site]) -> bool {
         .any(|s| taches.iter().any(|t| t.dir.dot(s.dir) > COS_OCCUPE))
 }
 
-/// **Cosinus de l'angle de répulsion entre deux arches.** ≈ 0,07 rad.
+/// **Distance de répulsion entre deux boucles**, en part de leur empreinte
+/// moyenne.
 ///
-/// Sous cet écart, deux arches ne se lisent plus comme deux : leurs billboards
+/// Trop près, deux boucles ne se lisent plus comme deux : leurs billboards
 /// sont en blending **additif**, donc leurs halos **somment**, et c'est là —
-/// *entre* les arches, jamais dans une seule — que naît le « croissant »
+/// *entre* les boucles, jamais dans une seule — que naît le « croissant »
 /// signalé à l'écran (`astres_v2_boucles.md`). Le lot 3 bis en avait réduit le
-/// nombre et ralenti la cadence : il traitait le symptôme. Voici la cause.
+/// nombre et ralenti la cadence : il traitait le symptôme.
 ///
-/// ⚠️ **Se mesure à l'échelle de l'arcade, pas de la région.** Il valait
-/// 0,22 rad quand les pieds coulissaient sur tout l'écart entre pôles ;
-/// maintenant qu'ils restent dans leur tache, ils ne se déplacent plus que
-/// de ~0,14 rad et **aucune seconde arche n'aurait jamais tenu** — une
-/// arcade d'une seule arche n'est pas une arcade. Réglage esthétique : il
-/// arbitre entre « croissant » et « arche solitaire », et se juge à l'œil.
-const COS_ARCHES: f32 = 0.9975;
+/// ⚠️ **Relative, et non un angle fixe.** Elle valait 0,07 rad pour tout le
+/// monde, ce qui empêchait les petites boucles de se serrer alors que leurs
+/// halos sont petits eux aussi (le calibre suit l'étendue, voir
+/// `rendu::RAPPORT_TUBE`). L'écart qui compte est celui du **tube**, pas
+/// celui de la boucle : d'où une fraction de l'empreinte. Réglage
+/// esthétique, entre « croissant » et « boucle solitaire ».
+const MARGE_ARCHES: f32 = 0.16;
+
+/// **Plus de place pour une boucle de cette catégorie ?**
+///
+/// Les deux catégories comptent **séparément**. Sous un plafond commun,
+/// augmenter la part des petites boucles revenait à voir moins de grandes
+/// arches : elles se disputaient les mêmes places alors qu'elles ne coûtent
+/// pas la même chose à la lecture.
+pub(super) fn categorie_pleine(boucles: &[Boucle], courte: bool) -> bool {
+    let vivantes = boucles.iter().filter(|b| b.courte == courte).count();
+    vivantes >= if courte { MAX_COURTES } else { MAX_ARCHES }
+}
+
+/// Empreinte angulaire d'une boucle : l'écart entre ses deux pieds.
+fn empreinte(a: Vec3, b: Vec3) -> f32 {
+    a.dot(b).clamp(-1.0, 1.0).acos()
+}
 
 /// Direction du sommet d'une arche : le milieu de ses deux pieds. Deux arches
 /// dont les sommets se confondent se recouvrent, quelles que soient leurs
@@ -157,7 +182,11 @@ fn milieu(a: Vec3, b: Vec3) -> Vec3 {
 /// **Cette place est-elle déjà occupée par une arche ?**
 pub(super) fn arche_trop_proche(boucles: &[Boucle], p: &Pieds) -> bool {
     let m = milieu(p.a, p.b);
-    boucles.iter().any(|b| milieu(b.sa, b.sb).dot(m) > COS_ARCHES)
+    let e = empreinte(p.a, p.b);
+    boucles.iter().any(|b| {
+        let ecart = milieu(b.sa, b.sb).dot(m).clamp(-1.0, 1.0).acos();
+        ecart < (e + empreinte(b.sa, b.sb)) * 0.5 * MARGE_ARCHES
+    })
 }
 
 /// **Les deux taches entre lesquelles ancrer une arche** dans la région
@@ -218,7 +247,7 @@ pub(super) fn ancres(champ_de: impl Fn(Vec3) -> f32, taches: &[Ancre]) -> Option
 /// **Part des boucles qui ne relient rien** et retombent dans leur propre
 /// tache. Réglage esthétique : il arbitre entre « toutes les boucles se
 /// ressemblent » et « plus aucune grande arche ». Se juge à l'œil.
-const PART_COURTES: f32 = 0.5;
+const PART_COURTES: f32 = 0.72;
 
 /// **Hauteur d'une arche, À PROPORTION de l'écart de ses pieds.**
 ///
@@ -330,6 +359,11 @@ impl Soleil {
     /// région, il n'y a rien à dessiner, et une étoile calme a le droit
     /// d'être calme.
     pub(super) fn declencher_boucle(&mut self) {
+        // La catégorie se décide d'abord, parce que chacune a **son** plafond.
+        let courte = gen_range(0.0, 1.0) < PART_COURTES;
+        if categorie_pleine(&self.boucles, courte) {
+            return;
+        }
         let Some(i) = tache_porteuse(&self.taches, gen_range(0.0, 1.0)) else {
             return;
         };
@@ -338,8 +372,8 @@ impl Soleil {
         };
         // Aucune place libre dans l'arcade : on n'en ajoute pas. Empiler ici
         // est exactement ce qui faisait le croissant.
-        if let Some(pi) = self.place_libre(paire) {
-            self.pousser_boucle(pi.a, pi.b);
+        if let Some(pi) = self.place_libre(paire, courte) {
+            self.pousser_boucle(pi.a, pi.b, courte);
         }
     }
 
@@ -349,7 +383,7 @@ impl Soleil {
     /// C'est la répulsion sous sa forme utile — l'arche est *déplacée* plutôt
     /// que refusée. Rien de libre (ou région noyée) : `None`, et il ne naît
     /// rien cette fois-ci.
-    fn place_libre(&self, paire: usize) -> Option<Pieds> {
+    fn place_libre(&self, paire: usize, courte: bool) -> Option<Pieds> {
         // Les taches de cette région seulement : une arche ne relie pas deux
         // groupes distincts.
         let ici: Vec<Ancre> = self
@@ -362,12 +396,12 @@ impl Soleil {
             return None;
         }
 
-        // **Une boucle sur deux ne relie rien** : elle repart dans la tache
+        // **Une boucle courte ne relie rien** : elle repart dans la tache
         // d'où elle sort. Sans elles, une étoile n'a que de grandes arches,
         // toutes du même gabarit — l'écart entre deux taches d'une région ne
         // variant presque pas. Ce sont les plus nombreuses dans la réalité,
         // petites et éparses.
-        if gen_range(0.0, 1.0) < PART_COURTES {
+        if courte {
             let anc = ici[(gen_range(0.0, 1.0) * ici.len() as f32) as usize % ici.len()];
             return (0..3).find_map(|_| {
                 let centre = vec2(gen_range(-1.0, 1.0), gen_range(-1.0, 1.0));
@@ -396,7 +430,7 @@ impl Soleil {
     }
 
     /// Donne sa silhouette à une arche ancrée sur `sa`/`sb`, et l'ajoute.
-    fn pousser_boucle(&mut self, sa: Vec3, sb: Vec3) {
+    fn pousser_boucle(&mut self, sa: Vec3, sb: Vec3, courte: bool) {
         let p = self.puissance;
         let f = self.forme;
         let j = 0.3 + 1.7 * self.alea; // amplitude de l'aléa sur la forme
@@ -425,6 +459,7 @@ impl Soleil {
             // pour que le plancher en pixels ait encore quelque chose à
             // relever, haut pour qu'un tube n'avale pas l'étoile.
             epaisseur: (1.0 + gen_range(-0.5, 0.9) * j).clamp(0.45, 2.1),
+            courte,
             etat: EtatBoucle::Montee,
             timer: 0.0,
             tenue_max: gen_range(0.6, 1.8) + gen_range(0.0, 1.0) * j,
@@ -495,13 +530,12 @@ impl Soleil {
         // opaque — le défaut signalé à l'écran. Le remède tient en deux
         // bornes : combien peuvent vivre ensemble, et à quelle cadence au
         // plus vite.
-        if self.temps >= self.prochaine_eruption && self.boucles.len() < MAX_BOUCLES {
+        if self.temps >= self.prochaine_eruption {
             // Plusieurs éruptions par cycle (dispersées), d'autant plus que freq est haut.
+            // Les plafonds sont vérifiés par catégorie dans `declencher_boucle` :
+            // les petites boucles ne prennent pas la place des grandes arches.
             let n_loops = 1 + (self.freq * 2.5) as usize; // 1..=3
             for _ in 0..n_loops {
-                if self.boucles.len() >= MAX_BOUCLES {
-                    break;
-                }
                 self.declencher_boucle();
             }
             // Fréquence haute -> intervalle court.
@@ -662,6 +696,7 @@ mod tests_repulsion {
             skew: 0.0,
             pincee: 0.0,
             epaisseur: 1.0,
+            courte: false,
             inclinaison: 0.0,
             etat: EtatBoucle::Tenue,
             timer: 0.0,
@@ -797,6 +832,71 @@ mod tests_repulsion {
         }
         // Deux pieds confondus donnent un écart nul : la borne basse tient.
         assert_eq!(apex_pour(a, a, 1.0), 0.02);
+    }
+
+    /// **Les petites boucles ne prennent pas la place des grandes arches.**
+    ///
+    /// Sous un plafond commun, en faire naître plus revenait à en voir moins :
+    /// les deux catégories se disputaient les mêmes places alors qu'une petite
+    /// boucle est un fil court et fin, et une grande arche traverse la moitié
+    /// d'une région.
+    #[test]
+    fn chaque_categorie_a_son_propre_plafond() {
+        let courte = || {
+            let mut b = boucle(vec3(1.0, 0.03, 0.0), vec3(1.0, -0.03, 0.0));
+            b.courte = true;
+            b
+        };
+        // Autant de petites boucles qu'il en tient : les arches gardent leurs
+        // places.
+        let pleines: Vec<Boucle> = (0..MAX_COURTES).map(|_| courte()).collect();
+        assert!(categorie_pleine(&pleines, true), "les petites devraient être au complet");
+        assert!(
+            !categorie_pleine(&pleines, false),
+            "les petites boucles ont mangé les places des grandes arches"
+        );
+        // Et réciproquement.
+        let arches: Vec<Boucle> = (0..MAX_ARCHES)
+            .map(|_| boucle(vec3(1.0, 0.3, 0.0), vec3(1.0, -0.3, 0.0)))
+            .collect();
+        assert!(categorie_pleine(&arches, false));
+        assert!(!categorie_pleine(&arches, true), "une arche bloque une petite boucle");
+        // Il y a bien plus de place pour les petites : c'est tout l'objet.
+        const { assert!(MAX_COURTES > MAX_ARCHES) };
+        assert!(!categorie_pleine(&[], true) && !categorie_pleine(&[], false));
+    }
+
+    /// **Deux petites boucles se serrent plus que deux grandes arches.**
+    ///
+    /// La répulsion valait un angle **fixe** pour tout le monde, ce qui
+    /// interdisait aux petites boucles de se grouper alors que leurs halos
+    /// sont petits eux aussi — le calibre suit l'étendue
+    /// (`rendu::RAPPORT_TUBE`). C'est l'écart du **tube** qui compte, pas
+    /// celui de la boucle.
+    #[test]
+    fn une_petite_boucle_se_serre_plus_qu_une_grande_arche() {
+        // Deux boucles côte à côte, séparées de 0,05 rad.
+        let decale = |p: Vec3| (p + vec3(0.0, 0.0, 0.05)).normalize();
+        let petite = |o: f32| {
+            let a = vec3(1.0, 0.03, o).normalize();
+            let b = vec3(1.0, -0.03, o).normalize();
+            (a, b)
+        };
+        let grande = |o: f32| {
+            let a = vec3(1.0, 0.3, o).normalize();
+            let b = vec3(1.0, -0.3, o).normalize();
+            (a, b)
+        };
+        let (pa, pb) = petite(0.0);
+        let (ga, gb) = grande(0.0);
+        assert!(
+            !arche_trop_proche(&[boucle(decale(pa), decale(pb))], &pieds(pa, pb)),
+            "deux petites boucles voisines se repoussent : aucun groupe ne peut se former"
+        );
+        assert!(
+            arche_trop_proche(&[boucle(decale(ga), decale(gb))], &pieds(ga, gb)),
+            "deux grandes arches à la même distance se tolèrent : le croissant revient"
+        );
     }
 
     /// **Les places forment un anneau**, pas un segment : un glissement qui

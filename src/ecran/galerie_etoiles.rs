@@ -3,6 +3,16 @@ use crate::etoile::couleur_corps_noir;
 use crate::soleil::Soleil;
 use macroquad::prelude::*;
 
+/// **Étoiles par ligne.**
+///
+/// C'était une division de la largeur d'écran par 210 px : en 1440p, douze
+/// colonnes, donc douze étoiles minuscules — trop petites pour qu'on y
+/// juge la granulation, une tache ou une boucle, alors que c'est justement
+/// cette vue qui sert à les juger (`astres_v2.md` §0 : rien ne se lit sous
+/// ~10 px de rayon). Un nombre fixe fait grandir les cellules avec l'écran
+/// au lieu de les multiplier.
+const COLONNES: usize = 5;
+
 /// Catalogue des étoiles : (nom, rayon, température K, luminosité, couronne 0=halo 1=jets 2=vent).
 fn catalogue() -> Vec<(&'static str, f32, f32, f32, f32)> {
     vec![
@@ -80,9 +90,13 @@ impl GalerieEtoiles {
         let n = self.cellules.len().max(1);
         let top = 48.0;
         let label_h = 22.0;
-        let cols = ((screen_width() / 210.0).floor() as usize).clamp(1, n);
+        let cols = COLONNES.min(n);
         let cw = screen_width() / cols as f32;
-        let ch = 180.0;
+        // ⚠️ La hauteur de cellule était **fixe** (180 px) alors que la
+        // largeur suit l'écran : en 1440p, chaque étoile se retrouvait dans
+        // une case large et plate, trop petite pour qu'on y voie la
+        // granulation ou une tache. Elle suit maintenant la largeur.
+        let ch = cw * 0.72 + label_h;
         let render_h = ch - label_h;
         let rows = n.div_ceil(cols);
         let h_vue = screen_height() - top;
