@@ -113,9 +113,9 @@ impl Soleil {
         for b in &self.boucles {
             let a_w = vers_monde(b.sa, rot);
             let b_w = vers_monde(b.sb, rot);
-            // Le calibre propre à cette boucle-ci : un fil ou un ruban.
-            let calibre = r * 0.05 * b.epaisseur;
-            let n = 48;
+            // Le calibre propre à cette boucle-ci : un fil ou un ruban, et
+            // **proportionné à sa propre étendue** (voir [`RAPPORT_TUBE`]).
+            let (calibre, n) = tube(etendue(a_w, b_w, b.apex, r), b.epaisseur);
             for i in 0..=n {
                 let t = i as f32 / n as f32;
                 let (taille_l, fondu_l) = plancher_plasma(calibre * galbe(t), dist, vh);
@@ -145,7 +145,8 @@ impl Soleil {
                 let b_w = vers_monde(b.sb, rot);
                 let pos = c + point_boucle(a_w, b_w, profil(b), 0.5, r);
                 if !cache_par_sphere(pos, c, r, cam.pos) {
-                    let (taille_c, fondu_c) = plancher_plasma(r * 0.16 * b.epaisseur, dist, vh);
+                    let (calibre, _) = tube(etendue(a_w, b_w, b.apex, r), b.epaisseur);
+                    let (taille_c, fondu_c) = plancher_plasma(calibre * 3.2, dist, vh);
                     let lum = b.intensite.clamp(0.0, 1.0);
                     let col = Color::new(1.0, 0.72, 0.45, lum * fondu_c);
                     push_quad(&mut self.verts, &mut self.inds, cam, pos, taille_c, col);
@@ -218,6 +219,38 @@ pub(super) struct Profil {
 
 fn profil(b: &super::eruptions::Boucle) -> Profil {
     Profil { apex: b.apex, skew: b.skew, pincee: b.pincee, inclinaison: b.inclinaison }
+}
+
+/// **Élancement d'un tube de plasma** : son épaisseur, en part de sa propre
+/// étendue.
+///
+/// ⚠️ L'épaisseur était `rayon_de_l_étoile × 0,05` — indexée sur l'**étoile**
+/// et non sur la boucle. Une grande arche y trouvait son compte, mais une
+/// petite boucle mesurait à peine plus que son propre tube : 48 billboards
+/// épais empilés sur un dixième de la distance, ce qui en blending additif
+/// donne une **boule** et non une arche — signalé à l'écran. Une boucle
+/// coronale réelle est dix à trente fois plus longue que large ; les fils les
+/// plus fins descendent encore plus bas via `Boucle::epaisseur`.
+const RAPPORT_TUBE: f32 = 0.06;
+
+/// Étendue d'une boucle : la corde entre ses pieds, plus ce que sa hauteur
+/// ajoute au trajet. Approximation grossière d'une longueur d'arc — elle sert
+/// à proportionner, pas à mesurer.
+fn etendue(a: Vec3, b: Vec3, apex: f32, rayon: f32) -> f32 {
+    (b - a).length() * rayon + 1.6 * apex * rayon
+}
+
+/// **Calibre du tube et nombre de billboards** pour une boucle de cette
+/// étendue.
+///
+/// Le nombre n'est pas fixe : il suit l'étendue, de sorte que l'espacement
+/// entre billboards reste le même quelle que soit la taille de la boucle. À
+/// 48 quads pour tout le monde, une petite boucle les recevait sur un
+/// dixième de la distance — en blending additif, ça somme en **boule**.
+fn tube(etendue: f32, epaisseur: f32) -> (f32, usize) {
+    let calibre = etendue * RAPPORT_TUBE * epaisseur.max(0.01);
+    let n = ((etendue / (calibre * 0.6).max(1e-6)).ceil() as usize).clamp(8, 64);
+    (calibre, n)
 }
 
 /// **Galbe du tube le long de la boucle** : pieds serrés, ventre plus large.
@@ -339,6 +372,47 @@ mod tests_profil_boucle {
             "sommet à {hauteur} au lieu de {}",
             plat().apex * r
         );
+    }
+
+    /// **Une petite boucle a un petit tube, et pas plus de billboards qu'il
+    /// n'en faut.**
+    ///
+    /// L'épaisseur était indexée sur le rayon de l'**étoile** : une petite
+    /// boucle mesurait à peine plus que son propre tube, et recevait les 48
+    /// mêmes quads sur un dixième de la distance. En blending additif, ça
+    /// somme en **boule** au lieu de dessiner une arche — signalé à l'écran.
+    #[test]
+    fn une_petite_boucle_a_un_tube_a_sa_mesure() {
+        let (gros, n_gros) = tube(1.2, 1.0);
+        let (petit, n_petit) = tube(0.12, 1.0);
+        assert!(
+            petit < gros * 0.2,
+            "une boucle dix fois plus courte garde un tube de {petit} contre {gros}"
+        );
+        // L'élancement est ce qui se conserve : c'est lui qui fait qu'on lit
+        // un tube et non une boule.
+        assert!((gros / 1.2 - petit / 0.12).abs() < 1e-6, "l'élancement n'est pas conservé");
+        // Et l'espacement des billboards aussi, donc la densité lumineuse.
+        assert_eq!(n_gros, n_petit, "la petite boucle est plus dense que la grande");
+        assert!((8..=64).contains(&n_petit), "{n_petit} billboards");
+    }
+
+    /// **Un fil reste un fil, un ruban reste un ruban**, et un calibre
+    /// aberrant ne fait pas exploser le nombre de quads.
+    #[test]
+    fn l_epaisseur_module_le_tube_sans_l_affoler() {
+        let (fil, n_fil) = tube(1.0, 0.45);
+        let (ruban, n_ruban) = tube(1.0, 2.1);
+        assert!(fil < ruban, "le fil n'est pas plus fin que le ruban");
+        assert!(n_fil > n_ruban, "un tube plus fin demande plus de billboards");
+        for epaisseur in [0.0_f32, 1e-9, 1.0, 50.0] {
+            let (c, n) = tube(1.0, epaisseur);
+            assert!(c > 0.0 && c.is_finite(), "calibre {c} pour epaisseur {epaisseur}");
+            assert!((8..=64).contains(&n), "{n} billboards pour epaisseur {epaisseur}");
+        }
+        // Étendue nulle (deux pieds confondus) : rien ne doit paniquer.
+        let (c, n) = tube(0.0, 1.0);
+        assert!(c.is_finite() && (8..=64).contains(&n), "étendue nulle -> {c}, {n}");
     }
 
     /// **Le tube est plus fin à ses pieds qu'à son ventre**, symétriquement,
