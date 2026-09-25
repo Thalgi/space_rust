@@ -383,9 +383,34 @@ Deux choses que 3.2 a apprises, et qui n'étaient pas prévues :
   l'œil. Le garde-fou `region_occupee` empêche au moins les taches de
   s'empiler aux trois mêmes points jusqu'à saturer `MAX_TACHES`.
 
-**Rien ne change encore à l'écran** au-delà de l'endroit et de la taille des
-taches : c'est 3.4 qui fera lire le champ au shader. C'est voulu — ça isole
-la régression.
+**3.3** (`champ::pieds`, `champ::paire_de`, `Soleil::place_libre`) : une arche
+relie désormais **deux polarités opposées de la même région**, au lieu
+d'enjamber le centre d'une tache sur une tangente **tirée au hasard** — d'où
+l'éventail partant d'un point unique. Les arches coulissent le long de la
+**ligne neutre** (`ETALEMENT`), trois places par région, la première libre
+gagne : c'est l'**arcade**. Et une arche **refuse de naître** à moins de
+0,22 rad d'une autre (`COS_ARCHES`) — la répulsion attaque enfin la cause du
+croissant, les halos additifs qui somment *entre* deux arches voisines, là où
+le lot 3 bis n'en traitait que le symptôme (moins d'arches, plus lentement).
+
+Ce que 3.3 a appris, et qui vaut pour la suite du chantier :
+
+- ⚠️ **Un test dont les cas d'entrée sont choisis à la main peut être une
+  tautologie sans qu'on le voie.** La garde « les deux pieds sont de
+  polarités opposées » restait verte après avoir été *retirée du code* :
+  les trois glissements que le test essayait passaient tous à côté des cas
+  qu'elle attrape. Mesuré ensuite : elle **refuse 5,6 % des ancrages**
+  (2 025 sur 36 000), une région noyée par sa voisine retournant la polarité
+  d'un pied. Le test balaie maintenant une grille et **exige de rencontrer
+  des refus**.
+- **`forme` ne règle plus l'écartement des pieds** : il est celui du champ.
+  Le slider garde son effet sur la hauteur et le biais de l'arche. La
+  variété de silhouette vient désormais du **cisaillement** (les deux pieds
+  coulissent inégalement), pas d'un tirage sur l'écartement.
+
+**Rien ne change encore à l'écran** côté surface : c'est 3.4 qui fera lire le
+champ au shader, et 3.5 qui remplacera le chapelet de billboards par un
+ruban. C'est voulu — ça isole la régression.
 
 ## 7. Hors périmètre
 

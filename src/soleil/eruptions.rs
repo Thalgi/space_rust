@@ -1,4 +1,4 @@
-use super::champ::{self, Site};
+use super::champ::{self, Pieds, Site};
 use super::{Soleil, MAX_TACHES};
 use macroquad::prelude::*;
 use macroquad::rand::gen_range;
@@ -111,6 +111,34 @@ pub(super) fn region_occupee(taches: &[Tache], sites: &[Site]) -> bool {
         .any(|s| taches.iter().any(|t| t.dir.dot(s.dir) > COS_OCCUPE))
 }
 
+/// **Cosinus de l'angle de répulsion entre deux arches.** ≈ 0,22 rad.
+///
+/// Sous cet écart, deux arches ne se lisent plus comme deux : leurs billboards
+/// sont en blending **additif**, donc leurs halos **somment**, et c'est là —
+/// *entre* les arches, jamais dans une seule — que naît le « croissant »
+/// signalé à l'écran (`astres_v2_boucles.md`). Le lot 3 bis en avait réduit le
+/// nombre et ralenti la cadence : il traitait le symptôme. Voici la cause.
+const COS_ARCHES: f32 = 0.976;
+
+/// Direction du sommet d'une arche : le milieu de ses deux pieds. Deux arches
+/// dont les sommets se confondent se recouvrent, quelles que soient leurs
+/// hauteurs.
+fn milieu(a: Vec3, b: Vec3) -> Vec3 {
+    (a + b).normalize_or(a)
+}
+
+/// **Cette place est-elle déjà occupée par une arche ?**
+pub(super) fn arche_trop_proche(boucles: &[Boucle], p: &Pieds) -> bool {
+    let m = milieu(p.a, p.b);
+    boucles.iter().any(|b| milieu(b.sa, b.sb).dot(m) > COS_ARCHES)
+}
+
+/// Ramène un glissement dans `[-1 ; 1]` en l'enroulant : les places d'une
+/// arcade forment un anneau, pas un segment avec des bords où s'entasser.
+fn enrouler(t: f32) -> f32 {
+    (t + 1.0).rem_euclid(2.0) - 1.0
+}
+
 /// Encode le rayon effectif d'une **tache** (assombrissante) dans `spots[i].w`.
 /// **Positif.** Voir [`encoder_flare`] pour l'autre sens de ce même canal.
 pub(super) fn encoder_tache(rayon: f32) -> f32 {
@@ -185,27 +213,69 @@ impl Soleil {
         }
     }
 
-    /// Crée une boucle ancrée sur une tache active (tirée au poids de son
-    /// intensité) s'il y en a une, sinon dispersée au hasard.
+    /// **Crée une arche entre deux polarités opposées** de la région active
+    /// que porte une tache (sous-lot 3.3).
+    ///
+    /// Avant, les deux pieds enjambaient le centre d'une tache sur une
+    /// tangente **tirée au hasard** : toutes les arches d'une même tache
+    /// partaient du même point en éventail, et leurs halos additifs
+    /// sommaient en croissant. Ici, les pieds sont ceux du champ, et une
+    /// arche **refuse de naître** là où une autre vit déjà — la répulsion
+    /// qui attaque la cause et non le symptôme (voir [`COS_ARCHES`]).
+    ///
+    /// Sans région active identifiable (étoile sans tache), l'ancien tirage
+    /// dispersé reprend la main : une étoile continue d'éruptionner.
     pub(super) fn declencher_boucle(&mut self) {
-        let centre = match tache_porteuse(&self.taches, gen_range(0.0, 1.0)) {
-            Some(i) => self.taches[i].dir,
-            None => dir_aleatoire(),
-        };
+        let porteuse = tache_porteuse(&self.taches, gen_range(0.0, 1.0)).map(|i| self.taches[i].dir);
+        if let Some(paire) = porteuse.and_then(|d| champ::paire_de(&self.poles, d)) {
+            // Aucune place libre dans l'arcade : on n'en ajoute pas. Empiler
+            // ici est exactement ce qui faisait le croissant.
+            if let Some(pi) = self.place_libre(paire) {
+                self.pousser_boucle(pi.a, pi.b);
+            }
+            return;
+        }
+
+        let centre = dir_aleatoire();
         let taille_spot: f32 = gen_range(0.12, 0.26);
-
-        let p = self.puissance;
         let f = self.forme;
-        let j = 0.3 + 1.7 * self.alea; // amplitude de l'aléa sur la forme
-
-        // Deux pieds qui enjambent le centre de la tache.
-        // "forme" donne l'écart de base ; "aléa" ajoute du jitter.
+        let j = 0.3 + 1.7 * self.alea;
+        // Deux pieds qui enjambent un centre sans région : "forme" donne
+        // l'écart de base, "aléa" ajoute du jitter.
         let rnd = dir_aleatoire();
         let tang = (rnd - centre * centre.dot(rnd)).normalize_or_zero();
         let half: f32 =
             (taille_spot * (0.4 + f * 0.9 + gen_range(-0.4, 0.6) * j)).clamp(0.05, 1.4);
-        let sa = (centre * half.cos() + tang * half.sin()).normalize();
-        let sb = (centre * half.cos() - tang * half.sin()).normalize();
+        self.pousser_boucle(
+            (centre * half.cos() + tang * half.sin()).normalize(),
+            (centre * half.cos() - tang * half.sin()).normalize(),
+        );
+    }
+
+    /// **Cherche une place libre dans l'arcade** de la région `paire` : trois
+    /// positions le long de la ligne neutre, la première non occupée gagne.
+    ///
+    /// C'est la répulsion sous sa forme utile — l'arche est *déplacée* plutôt
+    /// que refusée. Rien de libre (ou région noyée) : `None`, et il ne naît
+    /// rien cette fois-ci.
+    fn place_libre(&self, paire: usize) -> Option<Pieds> {
+        let depart = gen_range(-1.0, 1.0);
+        // Un pied qui glisse un peu moins que l'autre cisaille l'arche : c'est
+        // ce qui remplace l'ancien écartement tiré au hasard comme source de
+        // variété de silhouette.
+        let cisaille = gen_range(-0.35, 0.35);
+        (0..3).find_map(|k| {
+            let a = enrouler(depart + k as f32 * 0.66);
+            let pi = champ::pieds(&self.poles, paire, (a, enrouler(a + cisaille)))?;
+            (!arche_trop_proche(&self.boucles, &pi)).then_some(pi)
+        })
+    }
+
+    /// Donne sa silhouette à une arche ancrée sur `sa`/`sb`, et l'ajoute.
+    fn pousser_boucle(&mut self, sa: Vec3, sb: Vec3) {
+        let p = self.puissance;
+        let f = self.forme;
+        let j = 0.3 + 1.7 * self.alea; // amplitude de l'aléa sur la forme
 
         // Puissance -> hauteur ; forme -> biais ; aléa -> dispersion hauteur/asymétrie.
         let apex_base = 0.25 + 1.3 * p;
@@ -457,6 +527,71 @@ mod tests_region_occupee {
         assert!(!region_occupee(&[tache(vec3(0.0, 0.0, 1.0))], &sites));
         // Un demi-radian plus loin : deux taches distinctes, pas un doublon.
         assert!(!region_occupee(&[tache(vec3(1.0, 0.55, 0.0))], &sites));
+    }
+}
+
+#[cfg(test)]
+mod tests_repulsion {
+    use super::*;
+
+    fn boucle(sa: Vec3, sb: Vec3) -> Boucle {
+        Boucle {
+            sa: sa.normalize(),
+            sb: sb.normalize(),
+            apex: 1.0,
+            apex_max: 1.0,
+            skew: 0.0,
+            etat: EtatBoucle::Tenue,
+            timer: 0.0,
+            tenue_max: 1.0,
+            rompt: false,
+            intensite: 1.0,
+            apex_vel: 0.0,
+        }
+    }
+
+    fn pieds(a: Vec3, b: Vec3) -> Pieds {
+        Pieds { a: a.normalize(), b: b.normalize() }
+    }
+
+    /// **Deux arches ne naissent pas à la même place.** C'est la cause du
+    /// « croissant » : en blending additif, les halos de deux arches voisines
+    /// somment et forment un arc continu où l'on ne distingue plus rien.
+    #[test]
+    fn une_place_deja_prise_est_refusee() {
+        let vivante = boucle(vec3(1.0, 0.2, 0.0), vec3(1.0, -0.2, 0.0));
+        // Exactement la même place, puis décalée de 0,1 rad : même arche à
+        // l'œil.
+        assert!(arche_trop_proche(&[vivante], &pieds(vec3(1.0, 0.2, 0.0), vec3(1.0, -0.2, 0.0))));
+        assert!(arche_trop_proche(
+            &[boucle(vec3(1.0, 0.2, 0.0), vec3(1.0, -0.2, 0.0))],
+            &pieds(vec3(1.0, 0.2, 0.1), vec3(1.0, -0.2, 0.1))
+        ));
+    }
+
+    /// **Et une place libre le reste** : un refus systématique éteindrait
+    /// l'étoile — plus aucune arche ne naîtrait jamais.
+    #[test]
+    fn une_place_libre_accueille_une_arche() {
+        let p = pieds(vec3(1.0, 0.2, 0.0), vec3(1.0, -0.2, 0.0));
+        assert!(!arche_trop_proche(&[], &p));
+        // De l'autre côté de l'étoile, et à un demi-radian : deux arches
+        // distinctes, qui doivent pouvoir coexister.
+        assert!(!arche_trop_proche(&[boucle(vec3(-1.0, 0.2, 0.0), vec3(-1.0, -0.2, 0.0))], &p));
+        assert!(!arche_trop_proche(&[boucle(vec3(1.0, 0.2, 0.6), vec3(1.0, -0.2, 0.6))], &p));
+    }
+
+    /// **Les places forment un anneau**, pas un segment : un glissement qui
+    /// dépasse revient de l'autre bord au lieu de s'écraser contre lui — sans
+    /// quoi les arches s'entasseraient aux deux extrémités de l'arcade.
+    #[test]
+    fn les_places_de_l_arcade_s_enroulent() {
+        assert!((enrouler(0.4) - 0.4).abs() < 1e-6);
+        assert!((enrouler(1.4) - (-0.6)).abs() < 1e-6);
+        assert!((enrouler(-1.4) - 0.6).abs() < 1e-6);
+        for t in [-3.0_f32, -1.0, 0.0, 1.0, 2.7] {
+            assert!((-1.0..=1.0).contains(&enrouler(t)), "{t} sort de l'arcade");
+        }
     }
 }
 
