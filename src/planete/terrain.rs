@@ -259,7 +259,12 @@ fn frequence_motif(eau_motif: f32) -> f32 {
 pub struct Rng(u64);
 
 impl Rng {
-    fn new(seed: u64) -> Self {
+    /// `pub(crate)` depuis le lot 3.1 du chantier astres : le champ
+    /// magnétique des étoiles (`soleil/champ.rs`) a besoin du **même**
+    /// générateur déterministe. Le réécrire là-bas aurait dupliqué
+    /// SplitMix64 — ce dépôt paie déjà cette dette avec la constante de
+    /// hachage recopiée dans quatre fichiers (`suivi/planetes.md`).
+    pub(crate) fn new(seed: u64) -> Self {
         Self(seed.wrapping_mul(2) | 1)
     }
     fn suivant(&mut self) -> u64 {
@@ -269,7 +274,7 @@ impl Rng {
         z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
         z ^ (z >> 31)
     }
-    fn f32(&mut self) -> f32 {
+    pub(crate) fn f32(&mut self) -> f32 {
         (self.suivant() >> 40) as f32 / (1u64 << 24) as f32
     }
 }

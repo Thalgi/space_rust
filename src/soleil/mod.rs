@@ -1,3 +1,10 @@
+// Consommé par les sous-lots 3.2 (les taches naissent sur les maxima du
+// champ), 3.3 (les pieds d'arche sur deux polarités opposées) et 3.4 (le
+// shader le lit) — voir `docs/conception/astres_v2.md` §6 bis. Livré seul
+// d'abord parce qu'il est **entièrement testable sans contexte graphique**,
+// ce que ses consommateurs ne seront pas.
+#[allow(dead_code)]
+mod champ;
 mod eruptions;
 mod materiau;
 mod rendu;

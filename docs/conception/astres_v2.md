@@ -310,6 +310,57 @@ d'abord :
 | 11 | **Quasi-étoile** (§3 bis), après le trou noir (lots 4-5) | Un objet qu'on n'oublie pas : une enveloppe rouge sombre large comme une orbite, nourrie par un trou noir |
 | 12 | Disques proto\* posés dans les systèmes générés (§5 bis) ; hypergéante, Be, Herbig Ae/Be au tirage | Les jeunes étoiles portent enfin leur disque ; trois types de plus pour peu de rendu neuf |
 
+## 6 bis. Le lot 3, redécoupé en sous-lots (2026-09-24)
+
+Le lot 3 a été livré (arches ancrées sur les taches, flare, activité par
+étoile), puis un **lot 3 bis** a corrigé deux régressions et la rondeur des
+taches. L'utilisateur juge le résultat bon sur les taches, **insuffisant sur
+les boucles**, et a demandé une recherche avant d'aller plus loin. Trois
+documents en sont sortis :
+
+- [`astres_v2_recherche_visuelle.md`](astres_v2_recherche_visuelle.md) — la
+  cible et neuf critères d'acceptation ;
+- [`astres_v2_champ_partage.md`](astres_v2_champ_partage.md) — d'où faire
+  découler taches et arches ;
+- [`astres_v2_boucles.md`](astres_v2_boucles.md) — comment tracer une arche
+  qui se lise comme un tube.
+
+⚠️ **Ce que la recherche a corrigé, et qui change le diagnostic.** Ce
+document affirmait un « champ magnétique » déjà présent dans
+`soleil.frag.glsl` : **il n'existe pas**. Le seul du fichier est celui de la
+branche magnétar, dans la couronne, sur un axe câblé. Il n'y a donc pas
+trois sources qui divergent, mais **deux sources et un trou** : rien ne dit
+où le champ est fort, donc les taches se posent au hasard et les arches
+ailleurs. C'est l'origine de l'effet « autocollant », et aucun réglage de
+forme ne pouvait la corriger.
+
+Second constat, de `astres_v2_boucles.md` : le « croissant » se forme
+**entre** les arches et non dans une seule — le blending additif somme les
+halos de deux arches nées côte à côte. Les bornes du lot 3 bis (moins
+d'arches, cadence plus lente) atténuaient le symptôme, pas la cause.
+
+La suite du lot 3 est donc découpée en cinq sous-lots, **du plus fondateur
+au plus cosmétique**. Chacun se tient seul ; aucun ne dépend du suivant.
+
+| # | Contenu | Ce qu'il livre |
+|---|---|---|
+| **3.1** | Le **champ magnétique** : quelques pôles dérivés de la graine, en Rust pur, interrogeable en tout point de la sphère | Rien à l'écran — mais la source unique qui manquait. Entièrement testable sans contexte graphique |
+| **3.2** | Les **taches naissent sur les maxima** du champ, en **groupes** de tailles inégales (une principale, des suiveuses) | La première moitié du « sticker » : une tache cesse d'être posée au hasard, et cesse d'être seule |
+| **3.3** | Les **pieds d'arche sur deux polarités opposées** du même groupe, plus une **répulsion** entre arches voisines | Le lot qui doit tuer le croissant : des arches alignées en arcade au lieu de rayonner d'un point |
+| **3.4** | Le **shader lit le champ** : assombrissement et étirement de la granulation suivent la même source que les taches | La seconde moitié du « sticker » : la tache appartient enfin à la surface |
+| **3.5** | Le **ruban** à la place du chapelet de billboards, et l'**ancrage visuel** des pieds | Une arche qui se lit comme un tube — et **moins cher** qu'aujourd'hui (32-48 sommets contre 192) |
+
+**Deux risques nommés**, à garder en tête à chaque sous-lot :
+
+1. **Le réglage esthétique n'est pas testable.** Le nombre de pôles et la
+   forme du noyau décident entre « deux taches immobiles », « bouillie » et
+   le retour des taches trop rondes. Ça se juge à l'œil, au-delà d'environ
+   10 px de rayon stellaire.
+2. ⚠️ **Ne pas tirer les pôles au hasard.** Un `gen_range` de plus dans
+   `Soleil::new` décalerait toute la suite de la génération : à graine
+   égale, le système entier changerait. Les pôles se **dérivent** de la
+   graine, comme `temps_initial` (lot 1).
+
 ## 7. Hors périmètre
 
 **Rendre les arches visibles au cadrage par défaut** : tranché et chiffré par
