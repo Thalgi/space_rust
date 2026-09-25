@@ -81,16 +81,34 @@ pub fn push_ruban(
         return;
     }
     let i0 = verts.len() as u16;
+    let mut precedent: Option<Vec2> = None;
     for (i, (pos, demi, couleur)) in points.iter().enumerate() {
         // Tangente par différence centrée : c'est la direction du ruban ici.
         let avant = points[i.saturating_sub(1)].0;
         let apres = points[(i + 1).min(points.len() - 1)].0;
         // Projetée dans le plan de l'écran, puis tournée d'un quart de tour :
-        // la largeur s'ouvre perpendiculairement à la course apparente. Le
-        // repli couvre le cas où la courbe fuit droit vers la caméra, où la
-        // tangente projetée est nulle.
+        // la largeur s'ouvre perpendiculairement à la course apparente.
         let t = apres - avant;
-        let plan = vec2(t.dot(cam.right), t.dot(cam.up)).normalize_or(Vec2::X);
+        let mut plan = vec2(t.dot(cam.right), t.dot(cam.up));
+        // ⚠️ **Là où la courbe fuit vers la caméra, la tangente projetée
+        // s'annule et sa direction n'est plus que du bruit d'arrondi.** La
+        // bande est vue par la tranche à cet endroit : garder l'orientation
+        // précédente est la seule réponse stable.
+        plan = if plan.length_squared() > 1e-12 {
+            plan.normalize()
+        } else {
+            precedent.unwrap_or(Vec2::X)
+        };
+        // ⚠️ **Et on ne laisse jamais l'orientation se retourner d'un point
+        // au suivant.** La tangente projetée change de signe dès que la
+        // courbe passe du « vers la caméra » au « loin d'elle » — au sommet
+        // d'une grande arche, typiquement. La bande se croisait alors en
+        // nœud papillon, ce qui donne une étoile à branches à l'apex : le
+        // défaut signalé à l'écran.
+        if precedent.is_some_and(|p| p.dot(plan) < 0.0) {
+            plan = -plan;
+        }
+        precedent = Some(plan);
         let n = (cam.right * -plan.y + cam.up * plan.x) * *demi;
         let centre = cam.rel(*pos);
         verts.push(Vertex::new2(centre - n, vec2(0.5, 0.0), *couleur));
@@ -172,6 +190,55 @@ mod tests_ruban {
             assert_eq!(s.uv.x, 0.5, "l'UV quitte l'axe médian de la texture");
         }
         assert_eq!((v[0].uv.y, v[1].uv.y), (0.0, 1.0), "la coupe ne traverse pas");
+    }
+
+    /// Le vecteur de largeur au point `i` : ce qui sépare les deux bords.
+    fn largeur(v: &[Vertex], i: usize) -> Vec3 {
+        v[i * 2 + 1].position - v[i * 2].position
+    }
+
+    /// **La bande ne se vrille jamais**, même là où la courbe fuit vers la
+    /// caméra.
+    ///
+    /// La tangente projetée à l'écran change de signe dès que la courbe passe
+    /// du « vers la caméra » au « loin d'elle » — au sommet d'une grande
+    /// arche, typiquement. Sans continuité d'orientation, les deux bords
+    /// s'échangent d'un point au suivant : la bande se croise en nœud
+    /// papillon, ce qui donne une **étoile à branches** à l'apex. Vu à
+    /// l'écran sur une éjection de géante rouge.
+    #[test]
+    fn la_bande_ne_se_vrille_pas_quand_la_courbe_fuit_vers_la_camera() {
+        // ⚠️ Un simple zigzag ne suffit pas : la **différence centrée** en
+        // annule l'alternance, et le test resterait vert en retirant la
+        // garde. Il faut un trajet qui s'enfonce dans l'axe de visée en
+        // dérivant lentement d'un côté puis de l'autre — la tangente projetée
+        // y décroît jusqu'à zéro, puis ressort **à l'envers**.
+        let lateral = [0.0, 0.001, 0.002, 0.001, 0.0, -0.001, -0.002];
+        let p: Vec<PointRuban> = lateral
+            .iter()
+            .enumerate()
+            .map(|(k, x)| (vec3(*x, 0.0, k as f32), 0.3, WHITE))
+            .collect();
+        let (v, _) = ruban(&p);
+        for i in 1..p.len() {
+            let d = largeur(&v, i - 1).normalize().dot(largeur(&v, i).normalize());
+            assert!(d > 0.0, "les bords s'échangent entre les points {} et {i} (dot {d})", i - 1);
+        }
+    }
+
+    /// **Et une courbe qui fuit droit vers la caméra ne produit ni NaN ni
+    /// bande d'épaisseur nulle** : sa tangente projetée est exactement nulle,
+    /// il n'y a plus aucune direction à en tirer.
+    #[test]
+    fn une_courbe_de_face_garde_une_largeur_finie() {
+        let p: Vec<PointRuban> =
+            (0..4).map(|k| (vec3(0.0, 0.0, k as f32), 0.25, WHITE)).collect();
+        let (v, _) = ruban(&p);
+        for i in 0..p.len() {
+            let l = largeur(&v, i);
+            assert!(l.is_finite(), "largeur non finie au point {i} : {l:?}");
+            assert!((l.length() - 0.5).abs() < 1e-5, "largeur {} au point {i}", l.length());
+        }
     }
 
     /// **Moins de deux points ne trace rien — pas même un sommet.**

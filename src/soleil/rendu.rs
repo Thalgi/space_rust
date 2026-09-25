@@ -115,7 +115,11 @@ impl Soleil {
             let b_w = vers_monde(b.sb, rot);
             // Le calibre propre à cette boucle-ci : un fil ou un ruban, et
             // **proportionné à sa propre étendue** (voir [`RAPPORT_TUBE`]).
-            let (calibre, n) = tube(etendue(a_w, b_w, b.apex, r), b.epaisseur);
+            let (calibre, n) = tube(
+                etendue(a_w, b_w, b.apex, r),
+                etendue(a_w, b_w, b.apex.min(b.apex_max), r),
+                b.epaisseur,
+            );
             // Un **ruban** et non plus un chapelet de billboards : la
             // continuité longitudinale est ce qui manquait le plus — on
             // devinait les pastilles une à une le long d'une arche isolée
@@ -184,7 +188,7 @@ impl Soleil {
                 let b_w = vers_monde(b.sb, rot);
                 let pos = c + point_boucle(a_w, b_w, profil(b), 0.5, r);
                 if !cache_par_sphere(pos, c, r, cam.pos) {
-                    let (calibre, _) = tube(etendue(a_w, b_w, b.apex, r), b.epaisseur);
+                    let (calibre, _) = tube(1.0, etendue(a_w, b_w, b.apex.min(b.apex_max), r), b.epaisseur);
                     let (taille_c, fondu_c) = plancher_plasma(calibre * 3.2, dist, vh);
                     let lum = b.intensite.clamp(0.0, 1.0);
                     let col = Color::new(1.0, 0.72, 0.45, lum * fondu_c);
@@ -316,9 +320,16 @@ fn etendue(a: Vec3, b: Vec3, apex: f32, rayon: f32) -> f32 {
 /// entre billboards reste le même quelle que soit la taille de la boucle. À
 /// 48 quads pour tout le monde, une petite boucle les recevait sur un
 /// dixième de la distance — en blending additif, ça somme en **boule**.
-fn tube(etendue: f32, epaisseur: f32) -> (f32, usize) {
-    let calibre = etendue * RAPPORT_TUBE * epaisseur.max(0.01);
-    let n = ((etendue / (calibre * 0.6).max(1e-6)).ceil() as usize).clamp(8, 64);
+/// ⚠️ **Deux étendues, et non une.** `portee` est celle qui fixe l'épaisseur,
+/// `trajet` la distance réellement parcourue. Elles ne diffèrent que pendant
+/// une **éjection** : l'apex y gonfle jusqu'à trois fois sa valeur d'arrivée,
+/// et un tube indexé dessus finissait large comme un dixième de l'étoile. Une
+/// corde de flux qui s'éjecte **s'étire**, elle ne s'épaissit pas — d'où une
+/// épaisseur figée à la portée de l'arche, et un nombre de billboards qui,
+/// lui, suit le trajet pour que la bande reste dense en s'allongeant.
+fn tube(trajet: f32, portee: f32, epaisseur: f32) -> (f32, usize) {
+    let calibre = portee * RAPPORT_TUBE * epaisseur.max(0.01);
+    let n = ((trajet / (calibre * 0.6).max(1e-6)).ceil() as usize).clamp(8, 64);
     (calibre, n)
 }
 
@@ -476,8 +487,8 @@ mod tests_profil_boucle {
     /// somme en **boule** au lieu de dessiner une arche — signalé à l'écran.
     #[test]
     fn une_petite_boucle_a_un_tube_a_sa_mesure() {
-        let (gros, n_gros) = tube(1.2, 1.0);
-        let (petit, n_petit) = tube(0.12, 1.0);
+        let (gros, n_gros) = tube(1.2, 1.2, 1.0);
+        let (petit, n_petit) = tube(0.12, 0.12, 1.0);
         assert!(
             petit < gros * 0.2,
             "une boucle dix fois plus courte garde un tube de {petit} contre {gros}"
@@ -490,21 +501,41 @@ mod tests_profil_boucle {
         assert!((8..=64).contains(&n_petit), "{n_petit} billboards");
     }
 
+    /// **Une corde de flux qui s'éjecte s'étire, elle ne s'épaissit pas.**
+    ///
+    /// Pendant une éjection l'apex gonfle jusqu'à trois fois sa valeur
+    /// d'arrivée. Indexer l'épaisseur dessus donnait un tube large comme un
+    /// dixième de l'étoile au bout de sa course — une masse informe là où il
+    /// fallait un filament étiré.
+    #[test]
+    fn une_ejection_etire_le_tube_au_lieu_de_l_epaissir() {
+        let (pose, _) = tube(1.0, 1.0, 1.0);
+        // Même arche, apex trois fois plus haut : le trajet a triplé, la
+        // portée non.
+        let (ejecte, n_ejecte) = tube(3.0, 1.0, 1.0);
+        assert_eq!(ejecte, pose, "le tube s'est épaissi en s'éjectant");
+        let (_, n_pose) = tube(1.0, 1.0, 1.0);
+        assert!(
+            n_ejecte > n_pose,
+            "le trajet a triplé sans un billboard de plus : la bande se clairsème"
+        );
+    }
+
     /// **Un fil reste un fil, un ruban reste un ruban**, et un calibre
     /// aberrant ne fait pas exploser le nombre de quads.
     #[test]
     fn l_epaisseur_module_le_tube_sans_l_affoler() {
-        let (fil, n_fil) = tube(1.0, 0.45);
-        let (ruban, n_ruban) = tube(1.0, 2.1);
+        let (fil, n_fil) = tube(1.0, 1.0, 0.45);
+        let (ruban, n_ruban) = tube(1.0, 1.0, 2.1);
         assert!(fil < ruban, "le fil n'est pas plus fin que le ruban");
         assert!(n_fil > n_ruban, "un tube plus fin demande plus de billboards");
         for epaisseur in [0.0_f32, 1e-9, 1.0, 50.0] {
-            let (c, n) = tube(1.0, epaisseur);
+            let (c, n) = tube(1.0, 1.0, epaisseur);
             assert!(c > 0.0 && c.is_finite(), "calibre {c} pour epaisseur {epaisseur}");
             assert!((8..=64).contains(&n), "{n} billboards pour epaisseur {epaisseur}");
         }
         // Étendue nulle (deux pieds confondus) : rien ne doit paniquer.
-        let (c, n) = tube(0.0, 1.0);
+        let (c, n) = tube(0.0, 0.0, 1.0);
         assert!(c.is_finite() && (8..=64).contains(&n), "étendue nulle -> {c}, {n}");
     }
 
