@@ -111,14 +111,21 @@ pub(super) fn region_occupee(taches: &[Tache], sites: &[Site]) -> bool {
         .any(|s| taches.iter().any(|t| t.dir.dot(s.dir) > COS_OCCUPE))
 }
 
-/// **Cosinus de l'angle de répulsion entre deux arches.** ≈ 0,22 rad.
+/// **Cosinus de l'angle de répulsion entre deux arches.** ≈ 0,07 rad.
 ///
 /// Sous cet écart, deux arches ne se lisent plus comme deux : leurs billboards
 /// sont en blending **additif**, donc leurs halos **somment**, et c'est là —
 /// *entre* les arches, jamais dans une seule — que naît le « croissant »
 /// signalé à l'écran (`astres_v2_boucles.md`). Le lot 3 bis en avait réduit le
 /// nombre et ralenti la cadence : il traitait le symptôme. Voici la cause.
-const COS_ARCHES: f32 = 0.976;
+///
+/// ⚠️ **Se mesure à l'échelle de l'arcade, pas de la région.** Il valait
+/// 0,22 rad quand les pieds coulissaient sur tout l'écart entre pôles ;
+/// maintenant qu'ils restent dans leur tache, ils ne se déplacent plus que
+/// de ~0,14 rad et **aucune seconde arche n'aurait jamais tenu** — une
+/// arcade d'une seule arche n'est pas une arcade. Réglage esthétique : il
+/// arbitre entre « croissant » et « arche solitaire », et se juge à l'œil.
+const COS_ARCHES: f32 = 0.9975;
 
 /// Direction du sommet d'une arche : le milieu de ses deux pieds. Deux arches
 /// dont les sommets se confondent se recouvrent, quelles que soient leurs
@@ -131,6 +138,33 @@ fn milieu(a: Vec3, b: Vec3) -> Vec3 {
 pub(super) fn arche_trop_proche(boucles: &[Boucle], p: &Pieds) -> bool {
     let m = milieu(p.a, p.b);
     boucles.iter().any(|b| milieu(b.sa, b.sb).dot(m) > COS_ARCHES)
+}
+
+/// **Les deux taches entre lesquelles ancrer une arche** dans la région
+/// `paire` : la plus grosse de chaque polarité.
+///
+/// ⚠️ Les **taches**, pas les pôles. Ancrer sur les pôles paraissait
+/// équivalent — le champ y est maximal, c'est là que les taches naissent —
+/// mais `champ::groupe` écarte les sites trop faibles : une région peut donc
+/// ne porter de tache que d'un côté, et un pied planté sur l'autre pôle
+/// tombait sur une surface vide. Sans compter qu'une tache **meurt** (8 à
+/// 16 s) là où un pôle reste.
+///
+/// `None` s'il manque une polarité : une arche a besoin de deux pieds, et
+/// mieux vaut aucune arche qu'une qui sort de nulle part.
+/// Une tache réduite à ce dont un pied a besoin : sa direction et son rayon
+/// angulaire.
+pub(super) type Ancre = (Vec3, f32);
+
+pub(super) fn ancres(champ_de: impl Fn(Vec3) -> f32, taches: &[Ancre]) -> Option<(Ancre, Ancre)> {
+    let (mut plus, mut moins): (Option<Ancre>, Option<Ancre>) = (None, None);
+    for t in taches {
+        let cible = if champ_de(t.0) > 0.0 { &mut plus } else { &mut moins };
+        if cible.is_none_or(|c| c.1 < t.1) {
+            *cible = Some(*t);
+        }
+    }
+    Some((plus?, moins?))
 }
 
 /// Ramène un glissement dans `[-1 ; 1]` en l'enroulant : les places d'une
@@ -259,14 +293,24 @@ impl Soleil {
     /// que refusée. Rien de libre (ou région noyée) : `None`, et il ne naît
     /// rien cette fois-ci.
     fn place_libre(&self, paire: usize) -> Option<Pieds> {
+        // Les taches de cette région seulement : une arche ne relie pas deux
+        // groupes distincts.
+        let ici: Vec<(Vec3, f32)> = self
+            .taches
+            .iter()
+            .filter(|t| champ::paire_de(&self.poles, t.dir) == Some(paire))
+            .map(|t| (t.dir, t.taille))
+            .collect();
+        let (a, b) = ancres(|d| champ::champ(&self.poles, d), &ici)?;
+
         let depart = gen_range(-1.0, 1.0);
         // Un pied qui glisse un peu moins que l'autre cisaille l'arche : c'est
         // ce qui remplace l'ancien écartement tiré au hasard comme source de
         // variété de silhouette.
         let cisaille = gen_range(-0.35, 0.35);
         (0..3).find_map(|k| {
-            let a = enrouler(depart + k as f32 * 0.66);
-            let pi = champ::pieds(&self.poles, paire, (a, enrouler(a + cisaille)))?;
+            let t = enrouler(depart + k as f32 * 0.66);
+            let pi = champ::pieds(a, b, (t, enrouler(t + cisaille)))?;
             (!arche_trop_proche(&self.boucles, &pi)).then_some(pi)
         })
     }
@@ -560,12 +604,12 @@ mod tests_repulsion {
     #[test]
     fn une_place_deja_prise_est_refusee() {
         let vivante = boucle(vec3(1.0, 0.2, 0.0), vec3(1.0, -0.2, 0.0));
-        // Exactement la même place, puis décalée de 0,1 rad : même arche à
+        // Exactement la même place, puis décalée de 0,04 rad : même arche à
         // l'œil.
         assert!(arche_trop_proche(&[vivante], &pieds(vec3(1.0, 0.2, 0.0), vec3(1.0, -0.2, 0.0))));
         assert!(arche_trop_proche(
             &[boucle(vec3(1.0, 0.2, 0.0), vec3(1.0, -0.2, 0.0))],
-            &pieds(vec3(1.0, 0.2, 0.1), vec3(1.0, -0.2, 0.1))
+            &pieds(vec3(1.0, 0.2, 0.04), vec3(1.0, -0.2, 0.04))
         ));
     }
 
@@ -575,10 +619,39 @@ mod tests_repulsion {
     fn une_place_libre_accueille_une_arche() {
         let p = pieds(vec3(1.0, 0.2, 0.0), vec3(1.0, -0.2, 0.0));
         assert!(!arche_trop_proche(&[], &p));
-        // De l'autre côté de l'étoile, et à un demi-radian : deux arches
-        // distinctes, qui doivent pouvoir coexister.
+        // De l'autre côté de l'étoile, et à 0,1 rad : deux arches d'une même
+        // arcade, qui doivent pouvoir coexister côte à côte.
         assert!(!arche_trop_proche(&[boucle(vec3(-1.0, 0.2, 0.0), vec3(-1.0, -0.2, 0.0))], &p));
-        assert!(!arche_trop_proche(&[boucle(vec3(1.0, 0.2, 0.6), vec3(1.0, -0.2, 0.6))], &p));
+        assert!(!arche_trop_proche(&[boucle(vec3(1.0, 0.2, 0.1), vec3(1.0, -0.2, 0.1))], &p));
+    }
+
+    /// **L'arche s'ancre sur la plus grosse tache de chaque polarité.** Les
+    /// deux pieds appartiennent ainsi à des taches **réelles** — ce que
+    /// l'ancrage sur les pôles ne garantissait pas : `champ::groupe` écarte
+    /// les sites trop faibles, et une tache meurt là où un pôle reste.
+    #[test]
+    fn l_arche_s_ancre_sur_la_plus_grosse_de_chaque_polarite() {
+        let nord = vec3(1.0, 0.0, 0.0);
+        let sud = vec3(-1.0, 0.0, 0.0);
+        // Le champ est positif d'un côté de l'étoile, négatif de l'autre.
+        let champ_de = |d: Vec3| d.dot(nord);
+        let taches = [(nord, 0.1), (nord * 0.99 + vec3(0.0, 0.1, 0.0), 0.3), (sud, 0.2)];
+        let (a, b) = ancres(champ_de, &taches).expect("les deux polarités sont là");
+        assert_eq!(a.1, 0.3, "ce n'est pas la plus grosse du côté positif");
+        assert_eq!(b.1, 0.2, "ce n'est pas la tache du côté négatif");
+    }
+
+    /// **Sans les deux polarités, pas d'arche.** Mieux vaut aucune arche
+    /// qu'une dont un pied sort de nulle part — la régression signalée à
+    /// l'écran.
+    #[test]
+    fn sans_les_deux_polarites_aucune_arche() {
+        let champ_de = |d: Vec3| d.dot(vec3(1.0, 0.0, 0.0));
+        assert!(ancres(champ_de, &[]).is_none());
+        assert!(
+            ancres(champ_de, &[(vec3(1.0, 0.0, 0.0), 0.2), (vec3(0.9, 0.3, 0.0), 0.1)]).is_none(),
+            "une arche a été ancrée avec une seule polarité"
+        );
     }
 
     /// **Les places forment un anneau**, pas un segment : un glissement qui

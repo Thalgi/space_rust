@@ -162,14 +162,20 @@ pub(super) fn groupe(poles: &[Pole], paire: usize) -> Vec<Site> {
     sites
 }
 
-/// **Étalement d'une arcade le long de la ligne neutre**, en radians.
+/// **Part du rayon d'une tache sur laquelle son pied peut coulisser.**
 ///
 /// Les vraies boucles coronales ne rayonnent pas d'un point : elles s'alignent
 /// **côte à côte** le long de la ligne neutre d'une région active, en arcade
-/// (`astres_v2_recherche_visuelle.md`). C'est la longueur de cette ligne
-/// utilisable — trop court, les arches se superposent et leurs halos additifs
-/// somment en croissant ; trop long, elles quittent la région.
-const ETALEMENT: f32 = 0.34;
+/// (`astres_v2_recherche_visuelle.md`). Reste à dire *sur quelle longueur*.
+///
+/// ⚠️ La première version mesurait cet étalement contre la **région**
+/// (0,34 rad, l'échelle de l'écart entre deux pôles). Mesuré ensuite :
+/// **100 % des pieds tombaient hors de leur tache**, à 1,26 rayon du centre
+/// en médiane — signalé à l'écran, « les boucles partent de zones externes
+/// aux taches ». Une tache plafonne à ~0,26 rad de rayon et en vaut souvent
+/// 0,15 : l'arcade se mesure en **rayons de tache**, jamais en écart de
+/// pôles.
+const PART_PIED: f32 = 0.55;
 
 /// Les deux pieds d'une arche, chacun sur une polarité de la même région.
 pub(super) struct Pieds {
@@ -177,35 +183,35 @@ pub(super) struct Pieds {
     pub b: Vec3,
 }
 
-/// **Où ancrer une arche**, dans la région active `paire`.
+/// **Où ancrer une arche**, entre deux taches de polarités opposées.
 ///
-/// Une arche relie deux polarités **opposées** — elle enjambe la ligne
-/// neutre. C'est ce qui manquait : les pieds étaient posés de part et d'autre
-/// du centre d'une tache, sur une tangente **tirée au hasard**, donc dans une
-/// direction que rien ne justifiait ; toutes les arches d'une tache partaient
-/// alors du même point en éventail.
+/// Chaque ancre est une tache : sa direction et son **rayon angulaire**. Une
+/// arche relie deux polarités opposées — elle enjambe la ligne neutre. C'est
+/// ce qui manquait : les pieds étaient posés de part et d'autre du centre
+/// d'une seule tache, sur une tangente **tirée au hasard**, et toutes les
+/// arches partaient donc du même point en éventail.
 ///
-/// `glissement` fait coulisser chaque pied le long de la ligne neutre, dans
-/// `[-1 ; 1]`. Deux valeurs **différentes** cisaillent l'arche : c'est de là
-/// que vient la variété de silhouette, maintenant que l'écartement des pieds
-/// est celui du champ et non plus un tirage.
+/// `glissement` fait coulisser chaque pied dans `[-1 ; 1]`, le long de la
+/// ligne neutre et **à l'intérieur de sa propre tache** ([`PART_PIED`]). Deux
+/// valeurs différentes cisaillent l'arche : c'est de là que vient la variété
+/// de silhouette, maintenant que l'écartement des pieds est celui des taches
+/// et non plus un tirage.
 ///
-/// Rend `None` si la région n'existe pas, ou si elle est noyée au point que
-/// ses deux pieds se retrouveraient de même polarité — il n'y aurait alors
-/// rien à enjamber.
-pub(super) fn pieds(poles: &[Pole], paire: usize, glissement: (f32, f32)) -> Option<Pieds> {
-    let (pa, pb) = (poles.get(paire * 2)?, poles.get(paire * 2 + 1)?);
-    let centre = (pa.dir + pb.dir).try_normalize()?;
-    let axe = (pb.dir - pa.dir).try_normalize()?;
-    // La ligne neutre court perpendiculairement à l'axe des deux polarités.
-    let neutre = centre.cross(axe).try_normalize()?;
-    let glisser = |d: Vec3, t: f32| (d + neutre * (t.clamp(-1.0, 1.0) * ETALEMENT)).normalize_or(d);
-    let a = glisser(pa.dir, glissement.0);
-    let b = glisser(pb.dir, glissement.1);
-    if champ(poles, a) * champ(poles, b) >= 0.0 {
-        return None; // même polarité aux deux bouts : ce n'est pas une arche
-    }
-    Some(Pieds { a, b })
+/// Rend `None` si les deux ancres sont confondues — il n'y aurait rien à
+/// enjamber, et aucune ligne neutre à suivre.
+pub(super) fn pieds(a: (Vec3, f32), b: (Vec3, f32), glissement: (f32, f32)) -> Option<Pieds> {
+    let centre = (a.0 + b.0).try_normalize()?;
+    let axe = (b.0 - a.0).try_normalize()?;
+    // La ligne neutre court perpendiculairement à l'axe qui joint les deux.
+    // Pas de garde ici : `a + b` et `b - a` sont orthogonaux dès que `a` et
+    // `b` sont unitaires (leur produit scalaire vaut |b|² - |a|²), donc leur
+    // produit vectoriel est déjà unitaire — les deux `try_normalize` au-dessus
+    // couvrent les seuls cas dégénérés, ancres confondues ou opposées.
+    let neutre = centre.cross(axe);
+    let glisser = |(d, rayon): (Vec3, f32), t: f32| {
+        (d + neutre * (t.clamp(-1.0, 1.0) * rayon * PART_PIED)).normalize_or(d)
+    };
+    Some(Pieds { a: glisser(a, glissement.0), b: glisser(b, glissement.1) })
 }
 
 /// **À quelle région active appartient cette direction** — celle du pôle le
@@ -431,80 +437,57 @@ mod tests {
         let p = poles(2.0);
         assert!(groupe(&p, NB_PAIRES).is_empty());
         assert!(groupe(&[], 0).is_empty());
-        assert!(pieds(&p, NB_PAIRES, (0.0, 0.0)).is_none());
-        assert!(pieds(&[], 0, (0.0, 0.0)).is_none());
     }
 
-    /// **Une arche enjambe un changement de polarité.** C'est *la* définition
-    /// d'une boucle coronale, et ce que l'ancien code ne garantissait pas :
-    /// ses deux pieds tombaient de part et d'autre d'une tache, sur une
-    /// tangente tirée au hasard — souvent du même côté de la ligne neutre.
-    /// ⚠️ Le balayage est **une grille**, pas trois cas choisis : mesuré, la
-    /// garde refuse **5,6 %** des ancrages possibles (une région noyée par une
-    /// voisine retourne la polarité d'un pied). Trois glissements pris au
-    /// jugé passaient tous à côté, et le test restait vert même en retirant
-    /// la garde.
+    /// **Un pied ne sort jamais de sa tache.** C'est la régression signalée à
+    /// l'écran (« les boucles partent de zones externes aux taches ») :
+    /// l'étalement de l'arcade était mesuré contre l'écart entre pôles
+    /// (0,34 rad) et non contre le rayon d'une tache (~0,15 à 0,26 rad), si
+    /// bien que **100 % des pieds** tombaient dehors, à 1,26 rayon du centre
+    /// en médiane. Un pied hors de sa tache est une arche qui part de nulle
+    /// part.
     #[test]
-    fn les_pieds_enjambent_un_changement_de_polarite() {
-        let (mut ancrees, mut refusees) = (0, 0);
-        for k in 0..40 {
-            let graine = k as f32 * 7.3;
-            let p = poles(graine);
-            for paire in 0..NB_PAIRES {
-                for g in [-1.0_f32, -0.5, 0.0, 0.5, 1.0] {
-                    for h in [-1.0_f32, 0.0, 1.0] {
-                        let Some(pi) = pieds(&p, paire, (g, h)) else {
-                            refusees += 1;
-                            continue;
-                        };
-                        let (ca, cb) = (champ(&p, pi.a), champ(&p, pi.b));
-                        assert!(
-                            ca * cb < 0.0,
-                            "graine {graine}, paire {paire}, {g}/{h} : pieds de même polarité ({ca} et {cb})"
-                        );
-                        ancrees += 1;
-                    }
+    fn le_pied_ne_sort_jamais_de_sa_tache() {
+        let (grosse, petite) = ((vec3(1.0, 0.0, 0.0), 0.26), (vec3(0.6, 0.8, 0.0).normalize(), 0.09));
+        for g in [-1.0_f32, -0.7, -0.2, 0.0, 0.3, 1.0] {
+            for h in [-1.0_f32, 0.0, 1.0] {
+                let pi = pieds(grosse, petite, (g, h)).expect("deux ancres distinctes");
+                for (pied, (centre, rayon), nom) in
+                    [(pi.a, grosse, "grosse"), (pi.b, petite, "petite")]
+                {
+                    let d = centre.dot(pied).clamp(-1.0, 1.0).acos();
+                    assert!(
+                        d <= rayon,
+                        "pied {nom} à {d} rad du centre pour un rayon de {rayon} ({g}/{h})"
+                    );
                 }
             }
         }
-        assert!(ancrees > 0, "aucune arche n'a pu être ancrée : la source est muette");
-        assert!(refusees > 0, "aucun ancrage refusé : la garde n'est plus éprouvée");
     }
 
-    /// **Les deux pieds tombent sur deux pôles différents**, pas deux fois sur
-    /// le même. C'est ce qu'être une arche veut dire, et ça ne dépend pas de la
-    /// garde de polarité ci-dessus : c'est la géométrie de la construction.
+    /// **Mais il coulisse vraiment**, sinon toutes les arches d'une région
+    /// naîtraient au même endroit : c'est l'**arcade** — plusieurs arches
+    /// côte à côte le long de la ligne neutre — au lieu d'un éventail partant
+    /// d'un point unique, cause du « croissant ».
     #[test]
-    fn chaque_pied_a_son_propre_pole() {
-        let p = poles(60.0);
-        let pi = pieds(&p, 0, (0.3, -0.2)).expect("région 0 muette");
-        let plus_proche = |d: Vec3| paire_de(&p, d).map(|_| if p[0].dir.dot(d) > p[1].dir.dot(d) { 0 } else { 1 });
-        assert_eq!(plus_proche(pi.a), Some(0), "le premier pied n'est pas sur le premier pôle");
-        assert_eq!(plus_proche(pi.b), Some(1), "les deux pieds sont sur le même pôle");
-    }
-
-    /// **Le glissement déplace l'arche sans la sortir de sa région.** C'est ce
-    /// qui produit une **arcade** — plusieurs arches côte à côte le long de la
-    /// ligne neutre — au lieu d'un éventail partant d'un point unique, cause
-    /// du « croissant ».
-    #[test]
-    fn le_glissement_etale_l_arcade_sans_quitter_la_region() {
-        let p = poles(21.0);
-        let gauche = pieds(&p, 0, (-1.0, -1.0)).expect("pas de pieds à gauche");
-        let droite = pieds(&p, 0, (1.0, 1.0)).expect("pas de pieds à droite");
+    fn le_glissement_etale_l_arcade() {
+        let (a, b) = ((vec3(1.0, 0.0, 0.0), 0.26), (vec3(0.0, 1.0, 0.0), 0.26));
+        let gauche = pieds(a, b, (-1.0, -1.0)).expect("pas de pieds à gauche");
+        let droite = pieds(a, b, (1.0, 1.0)).expect("pas de pieds à droite");
         let ecart = gauche.a.dot(droite.a).clamp(-1.0, 1.0).acos();
         assert!(
-            ecart > ETALEMENT,
+            ecart > 0.26 * PART_PIED,
             "les deux extrêmes de l'arcade ne sont séparés que de {ecart} rad : rien n'est étalé"
         );
-        // Mais chaque pied reste dans sa région, sinon l'arche ne relierait
-        // plus deux polarités du même groupe.
-        for (pi, nom) in [(&gauche, "gauche"), (&droite, "droite")] {
-            for (pied, pole) in [(pi.a, p[0].dir), (pi.b, p[1].dir)] {
-                let d = pied.dot(pole).clamp(-1.0, 1.0).acos();
-                assert!(d <= ETALEMENT * 1.5, "pied {nom} à {d} rad de son pôle : hors région");
-            }
-        }
+    }
+
+    /// **Deux ancres confondues ne font pas d'arche** : il n'y aurait rien à
+    /// enjamber, et aucune ligne neutre à suivre.
+    #[test]
+    fn deux_ancres_confondues_ne_font_pas_d_arche() {
+        let a = (vec3(1.0, 0.0, 0.0), 0.2);
+        assert!(pieds(a, a, (0.5, -0.5)).is_none());
+        assert!(pieds(a, (-a.0, 0.2), (0.5, -0.5)).is_none(), "deux ancres opposées non plus");
     }
 
     /// **Une direction est rattachée à sa région.** C'est le lien qui manquait

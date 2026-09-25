@@ -393,6 +393,30 @@ gagne : c'est l'**arcade**. Et une arche **refuse de naître** à moins de
 croissant, les halos additifs qui somment *entre* deux arches voisines, là où
 le lot 3 bis n'en traitait que le symptôme (moins d'arches, plus lentement).
 
+⚠️ **Corrigé après retour écran (2026-09-25)** — « les boucles partent de
+zones externes aux taches dans beaucoup de cas ». Non seulement ce n'était
+pas normal, mais c'était **systématique** : mesuré, **100 % des pieds**
+tombaient hors de leur tache, à 1,26 rayon du centre en médiane et jusqu'à
+2,42. Deux fautes, toutes deux d'échelle :
+
+1. **L'étalement de l'arcade était mesuré contre la région** (0,34 rad,
+   l'écart entre deux pôles) alors qu'un pied doit tomber dans une **tache**,
+   dont le rayon plafonne à ~0,26 rad et vaut souvent 0,15. Un pied coulisse
+   désormais dans **une part du rayon de sa propre tache** (`PART_PIED`).
+2. **Les pieds s'ancraient sur les pôles, pas sur les taches vivantes.**
+   Équivalent en apparence — le champ est maximal au pôle, c'est là que les
+   taches naissent — mais `groupe` écarte les sites trop faibles (une région
+   sur dix ne porte de tache que d'un côté), et une tache **meurt** en 8 à
+   16 s là où un pôle reste. `eruptions::ancres` choisit maintenant la plus
+   grosse tache **réelle** de chaque polarité, et **aucune arche ne naît**
+   s'il en manque une : mieux vaut pas d'arche qu'une arche sans pied.
+
+Conséquence en cascade : la répulsion valait 0,22 rad, calibrée sur l'ancien
+étalement. Les pieds ne se déplaçant plus que de ~0,14 rad, **aucune seconde
+arche n'aurait jamais tenu** — et une arcade d'une seule arche n'est pas une
+arcade. Ramenée à 0,07 rad. C'est un **réglage esthétique** : il arbitre
+entre « croissant » et « arche solitaire », et se juge à l'œil.
+
 Ce que 3.3 a appris, et qui vaut pour la suite du chantier :
 
 - ⚠️ **Un test dont les cas d'entrée sont choisis à la main peut être une
