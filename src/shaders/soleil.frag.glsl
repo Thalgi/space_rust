@@ -13,6 +13,19 @@ uniform vec4 spots[8]; // xyz = direction (repère surface), w = rayon effectif
 uniform float zone;    // 0 = disque de l'étoile (opaque), 1 = couronne (translucide)
 uniform float graine;  // graine de surface, propre à chaque étoile
 
+// **Le champ magnétique de l'étoile** (sous-lot 3.4) : xyz = direction d'un
+// pôle (repère surface), w = force SIGNÉE, le signe étant la polarité.
+// C'est la MÊME source que celle où naissent les taches et où s'ancrent les
+// pieds d'arche (`soleil/champ.rs`). Jusqu'ici la surface l'ignorait : la
+// tache était peinte par-dessus une granulation qui ne savait rien d'elle,
+// d'où l'effet d'autocollant.
+uniform vec4 poles[6];
+// ⚠️ Ces deux valeurs sont **dupliquées depuis `soleil/champ.rs`** —
+// `NB_POLES` (taille du tableau ci-dessus) et `PORTEE`. Rien dans le langage
+// ne les tient d'accord : deux tests le font (`materiau.rs`).
+#define NB_POLES 6
+#define PORTEE 0.42
+
 float hash(vec3 p) {
     p = fract(p * 0.3183099 + 0.1);
     p *= 17.0;
@@ -105,10 +118,47 @@ void main() {
         // motif de granulation, au pixel près.
         vec3 dec = vec3(graine, graine * 1.7, graine * 0.3);
 
+        // --- Le champ magnétique, ici ---
+        // Somme de noyaux en cloche, un par pôle : exactement ce que calcule
+        // `champ::champ` côté CPU. `bs` en donne l'intensité signée, `bv` la
+        // direction dominante — de quoi coucher la granulation dans le sens
+        // des lignes de champ.
+        // ⚠️ L'intensité utilisée ici est la somme des |contributions|, et NON
+        // la valeur absolue de la somme signée que calcule `champ::champ`.
+        // Les deux polarités d'une région s'annulent entre elles : la somme
+        // signée passe par zéro **sur la ligne neutre**, c'est-à-dire
+        // précisément entre les deux taches, là où le champ est fort et
+        // couché à l'horizontale. S'y fier éteindrait l'effet au seul endroit
+        // où il compte. La signature reste `bv`, qui donne la direction.
+        float bf = 0.0;
+        vec3 bv = vec3(0.0);
+        for (int i = 0; i < NB_POLES; i++) {
+            vec4 p = poles[i];
+            float ang = acos(clamp(dot(d, p.xyz), -1.0, 1.0));
+            float t = ang / PORTEE;
+            float k = p.w * exp(-t * t);
+            bf += abs(k);
+            bv += p.xyz * k;
+        }
+        // Composante TANGENTE : la direction que suivent les lignes de champ
+        // à la surface. Le `step` évite de normaliser un vecteur nul au
+        // centre d'une région, là où les contributions s'annulent.
+        vec3 bt = bv - d * dot(bv, d);
+        float btl = length(bt);
+        bt = bt / max(btl, 1e-4) * step(1e-4, btl);
+
         // Convection fine et bouillonnante (domain warping animé, rapide).
         vec3 w = d * 5.0 + dec + vec3(0.0, time * 0.22, time * 0.13);
         vec3 warp = vec3(fbm(w), fbm(w + 5.2), fbm(w + 9.1)) - 0.5;
-        float gran = fbm(d * 11.0 + dec + warp * 1.2 + vec3(0.0, time * 0.30, 0.0));
+        // ⚠️ La granulation s'ÉTIRE le long du champ : on comprime la
+        // direction d'échantillonnage dans le sens de `bt`, ce qui allonge
+        // les granules perpendiculairement — le signe visuel de l'émergence,
+        // et ce qui fait qu'une tache a l'air de sortir de la surface au lieu
+        // d'y être collée. Nul là où le champ est faible : la granulation
+        // reste isotrope sur le reste de l'étoile.
+        float etir = 0.6 * smoothstep(0.25, 1.1, bf);
+        vec3 da = d - bt * (dot(d, bt) * etir);
+        float gran = fbm(da * 11.0 + dec + warp * 1.2 + vec3(0.0, time * 0.30, 0.0));
 
         // Palette dérivée de la couleur de l'étoile : sombre -> teinte -> chaud (vers blanc).
         vec3 cLow = teinte * 0.45;
@@ -120,6 +170,13 @@ void main() {
         // Petits points brillants (campfires).
         float camp = fbm(d * 16.0 + dec + 50.0);
         col += smoothstep(0.66, 0.72, camp) * teinte * 0.5;
+
+        // Un champ fort bloque la convection bien AVANT de creuser une tache :
+        // c'est le voile sombre qui entoure un groupe. Sans lui, la tache
+        // s'arrête net sur une surface qui l'ignore — la moitié de l'effet
+        // d'autocollant. Reste léger : l'assombrissement franc, c'est la
+        // tache elle-même, plus bas.
+        col *= mix(1.0, 0.74, smoothstep(0.35, 1.25, bf));
 
         // Taches (w > 0, assombrissement) ET flares (w < 0, sursaut lumineux)
         // partagent le même tableau `spots` -- le signe de `w` les distingue

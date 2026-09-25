@@ -44,6 +44,15 @@ impl Soleil {
             n += 1;
         }
 
+        // Les pôles, tels quels : le shader y lira le même champ que le CPU.
+        // Les deux vivent dans le repère « surface », celui qui tourne avec
+        // l'étoile — comme `spots` juste au-dessus.
+        let champ_uniforme: Vec<Vec4> = self
+            .poles
+            .iter()
+            .map(|p| vec4(p.dir.x, p.dir.y, p.dir.z, p.force))
+            .collect();
+
         // DEUX PASSES sur le même quad et le même shader (voir soleil.frag.glsl) :
         // le disque de l'étoile écrit la profondeur, la couronne non. La couronne
         // vient APRÈS : translucide, elle se dépose sur le disque déjà peint.
@@ -59,6 +68,7 @@ impl Soleil {
             mat.set_uniform("zone", zone);
             mat.set_uniform("graine", self.graine);
             mat.set_uniform_array("spots", &spots[..]);
+            mat.set_uniform_array("poles", &champ_uniforme[..]);
 
             gl_use_material(mat);
             let quad = Mesh {

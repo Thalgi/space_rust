@@ -64,6 +64,10 @@ fn uniforms_soleil() -> Vec<UniformDesc> {
         UniformDesc::array(UniformDesc::new("spots", UniformType::Float4), super::MAX_TACHES),
         UniformDesc::new("zone", UniformType::Float1),
         UniformDesc::new("graine", UniformType::Float1),
+        UniformDesc::array(
+            UniformDesc::new("poles", UniformType::Float4),
+            super::champ::NB_POLES,
+        ),
     ]);
     uniforms
 }
@@ -136,6 +140,44 @@ mod tests {
         let glsl = uniforms_glsl(&[impostor::VERT_IMPOSTOR, FRAG]);
         let rust = uniforms_rust(&uniforms_soleil());
         assert_eq!(glsl, rust, "soleil : GLSL (gauche) vs Rust (droite)");
+    }
+
+    /// Valeur d'un `#define <nom> <valeur>` du shader.
+    fn define(nom: &str) -> Option<String> {
+        let prefixe = format!("#define {nom} ");
+        FRAG
+            .lines()
+            .find_map(|l| l.trim().strip_prefix(&prefixe).map(|v| v.trim().to_string()))
+    }
+
+    /// **Le tableau des pôles a la même taille des deux côtés.**
+    ///
+    /// Le GLSL fixe la sienne en dur (`uniform vec4 poles[6]`) : le langage
+    /// n'a pas de constante partagée avec Rust. Trop court côté shader, les
+    /// derniers pôles sont **silencieusement ignorés** — une région active
+    /// entière disparaîtrait de la surface tout en continuant de porter
+    /// taches et arches côté CPU.
+    #[test]
+    fn le_tableau_des_poles_a_la_meme_taille_des_deux_cotes() {
+        let n = super::super::champ::NB_POLES;
+        assert_eq!(define("NB_POLES").as_deref(), Some(n.to_string().as_str()), "#define NB_POLES");
+        assert!(
+            FRAG.contains(&format!("uniform vec4 poles[{n}];")),
+            "la déclaration du tableau ne suit pas NB_POLES = {n}"
+        );
+    }
+
+    /// **La portée du champ est la même des deux côtés.**
+    ///
+    /// C'est la dette CPU/GPU du dépôt, ici sous sa forme tolérable : une
+    /// constante **géométrique** (`astres_v2_champ_partage.md` §3). Tolérable
+    /// ne veut pas dire libre — si les deux divergent, les taches naissent à
+    /// un endroit et la surface s'assombrit à un autre, ce qui est exactement
+    /// le défaut que le sous-lot 3.4 corrige.
+    #[test]
+    fn la_portee_du_champ_est_la_meme_des_deux_cotes() {
+        let glsl: f32 = define("PORTEE").expect("#define PORTEE absent").parse().expect("littéral");
+        assert_eq!(glsl, super::super::champ::PORTEE, "PORTEE : GLSL vs Rust");
     }
 
     /// **Le disque écrit la profondeur, la couronne non.**

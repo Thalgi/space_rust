@@ -472,6 +472,29 @@ dans la géométrie :
 qu'une grande arche. Comme `COS_ARCHES` et `PART_COURTES`, c'est un réglage
 qui se juge à l'œil.
 
+**3.4** (`poles[6]` en uniform, `soleil.frag.glsl`) : la surface lit enfin le
+champ. Un **voile sombre** là où il est fort — la convection y est bloquée
+bien avant qu'une tache s'y creuse — et une **granulation étirée** dans le
+sens des lignes, obtenue en comprimant la direction d'échantillonnage du
+bruit le long du champ. C'est la seconde moitié du « sticker » : la tache ne
+s'arrête plus net sur une surface qui l'ignore.
+
+Deux points à retenir :
+
+- ⚠️ **L'intensité lue par le shader n'est pas `champ::champ`.** Le GPU somme
+  les **valeurs absolues** des contributions, le CPU garde la somme
+  **signée**. Les deux polarités d'une région s'annulant, la somme signée
+  passe par zéro **sur la ligne neutre** — exactement entre les deux taches,
+  là où le champ est fort et couché à l'horizontale. S'y fier éteignait
+  l'effet au seul endroit où il compte. Mêmes pôles, même noyau, même
+  portée : c'est la question posée qui diffère, polarité d'un côté, intensité
+  de l'autre.
+- **`NB_POLES` et `PORTEE` sont dupliqués en GLSL.** C'est la dette CPU/GPU
+  connue, sous sa forme **tolérable** — des constantes géométriques, pas un
+  `hash` (`astres_v2_champ_partage.md` §3). Deux tests comparent les
+  littéraux du `.glsl` à ceux du Rust, et le test d'uniforms existant couvre
+  la déclaration.
+
 Ce que 3.3 a appris, et qui vaut pour la suite du chantier :
 
 - ⚠️ **Un test dont les cas d'entrée sont choisis à la main peut être une

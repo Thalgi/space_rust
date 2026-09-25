@@ -47,8 +47,20 @@ pub(super) const NB_PAIRES: usize = 3;
 /// cesse de se lire comme un groupe et donne deux taches sans rapport.
 const ECART_PAIRE: f32 = 0.28;
 
+/// Nombre de pôles poussés au shader : c'est la taille du tableau
+/// d'uniforms `poles[]` de `soleil.frag.glsl` (sous-lot 3.4), gardée par
+/// `materiau.rs`.
+pub(super) const NB_POLES: usize = NB_PAIRES * 2;
+
 /// Portée angulaire d'un pôle : au-delà, sa contribution est négligeable.
-const PORTEE: f32 = 0.42;
+///
+/// ⚠️ **Dupliquée dans `soleil.frag.glsl`** (`#define PORTEE`), le shader
+/// évaluant le même champ. C'est la dette CPU/GPU connue du dépôt
+/// (`suivi/planetes.md`), ici sous sa forme **tolérable** : une constante
+/// géométrique, pas un `hash` — un ULP y déplace un lobe d'un millionième de
+/// radian au lieu de changer tout le bruit
+/// (`astres_v2_champ_partage.md` §3). Un test compare les deux littéraux.
+pub(super) const PORTEE: f32 = 0.42;
 
 /// **Champ minimal pour qu'une tache s'y forme.**
 ///
