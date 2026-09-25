@@ -417,6 +417,26 @@ arche n'aurait jamais tenu** — et une arcade d'une seule arche n'est pas une
 arcade. Ramenée à 0,07 rad. C'est un **réglage esthétique** : il arbitre
 entre « croissant » et « arche solitaire », et se juge à l'œil.
 
+⚠️ **Second retour écran (2026-09-25)** — un offset résiduel sur l'origine
+des arches, et « quand une tache disparaît des arches peuvent continuer à
+apparaître ». Deux causes de plus :
+
+3. **Le rayon dessiné n'est pas le rayon nominal.** `rendu.rs` encode pour le
+   shader `taille × intensité` — une tache n'atteint sa taille qu'au sommet
+   de sa vie — pendant que l'ancrage visait `taille`. Pendant l'apparition
+   (1,5 s) et l'extinction (2 s), le pied se retrouvait donc dehors. Les deux
+   lisent maintenant `eruptions::rayon_visible`, **source unique**. Une tache
+   sous `ANCRAGE_MIN` d'intensité ne porte plus d'arche du tout : ses pieds
+   sont fixés à sa naissance, elle rétrécit sous eux. Le suivi **dynamique**
+   des pieds reste au sous-lot 3.5.
+4. **Le repli aléatoire faisait naître des arches sans tache.** Il existait
+   « pour qu'une étoile sans tache continue d'éruptionner » — c'est
+   précisément ce que l'utilisateur a vu. Supprimé, pour les arches **et**
+   pour les flares, qui avaient le même : un sursaut est une reconnexion de
+   champ, il ne flambe pas sur une surface vide. Une étoile calme a le droit
+   d'être calme. `dir_aleatoire` n'avait plus d'appelant et a été supprimée —
+   **plus rien, dans ce fichier, ne se pose au hasard sur la sphère.**
+
 Ce que 3.3 a appris, et qui vaut pour la suite du chantier :
 
 - ⚠️ **Un test dont les cas d'entrée sont choisis à la main peut être une

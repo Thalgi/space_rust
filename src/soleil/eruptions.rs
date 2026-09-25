@@ -156,6 +156,34 @@ pub(super) fn arche_trop_proche(boucles: &[Boucle], p: &Pieds) -> bool {
 /// angulaire.
 pub(super) type Ancre = (Vec3, f32);
 
+/// **Rayon effectivement dessiné d'une tache** : son rayon nominal fondu par
+/// son intensité.
+///
+/// ⚠️ **Source unique.** `rendu.rs` l'encode pour le shader, et les pieds
+/// d'arche s'y posent. Les deux calculaient chacun le leur : le rendu avec
+/// l'intensité, l'ancrage sans — si bien qu'un pied visait le rayon
+/// **nominal** d'une tache qui n'atteint cette taille qu'au sommet de sa vie.
+/// Pendant son apparition (1,5 s) et son extinction (2 s), la tache dessinée
+/// est bien plus petite, et le pied se retrouvait dehors : le « léger offset »
+/// signalé à l'écran.
+pub(super) fn rayon_visible(t: &Tache) -> f32 {
+    t.taille * t.intensite
+}
+
+/// **Intensité minimale pour qu'une tache porte une arche.**
+///
+/// Une tache trop pâle est à peine dessinée, et son ancrage vieillit mal :
+/// les pieds d'une arche sont fixés à sa naissance, alors qu'une tache
+/// mourante continue de rétrécir sous eux. Mieux vaut ne pas y ancrer. (Le
+/// suivi *dynamique* des pieds relève du sous-lot 3.5.)
+const ANCRAGE_MIN: f32 = 0.35;
+
+/// La tache vue par un pied d'arche — `None` si elle est trop pâle pour en
+/// porter un.
+pub(super) fn ancre_de(t: &Tache) -> Option<Ancre> {
+    (t.intensite >= ANCRAGE_MIN).then(|| (t.dir, rayon_visible(t)))
+}
+
 pub(super) fn ancres(champ_de: impl Fn(Vec3) -> f32, taches: &[Ancre]) -> Option<(Ancre, Ancre)> {
     let (mut plus, mut moins): (Option<Ancre>, Option<Ancre>) = (None, None);
     for t in taches {
@@ -257,33 +285,24 @@ impl Soleil {
     /// arche **refuse de naître** là où une autre vit déjà — la répulsion
     /// qui attaque la cause et non le symptôme (voir [`COS_ARCHES`]).
     ///
-    /// Sans région active identifiable (étoile sans tache), l'ancien tirage
-    /// dispersé reprend la main : une étoile continue d'éruptionner.
+    /// ⚠️ **Sans tache, pas d'arche.** Un repli dispersé existait, « pour
+    /// qu'une étoile sans tache continue d'éruptionner » : il faisait naître
+    /// des arches au hasard dès qu'une tache disparaissait — signalé à
+    /// l'écran. Une protubérance *est* l'arche d'une région active ; sans
+    /// région, il n'y a rien à dessiner, et une étoile calme a le droit
+    /// d'être calme.
     pub(super) fn declencher_boucle(&mut self) {
-        let porteuse = tache_porteuse(&self.taches, gen_range(0.0, 1.0)).map(|i| self.taches[i].dir);
-        if let Some(paire) = porteuse.and_then(|d| champ::paire_de(&self.poles, d)) {
-            // Aucune place libre dans l'arcade : on n'en ajoute pas. Empiler
-            // ici est exactement ce qui faisait le croissant.
-            if let Some(pi) = self.place_libre(paire) {
-                self.pousser_boucle(pi.a, pi.b);
-            }
+        let Some(i) = tache_porteuse(&self.taches, gen_range(0.0, 1.0)) else {
             return;
+        };
+        let Some(paire) = champ::paire_de(&self.poles, self.taches[i].dir) else {
+            return;
+        };
+        // Aucune place libre dans l'arcade : on n'en ajoute pas. Empiler ici
+        // est exactement ce qui faisait le croissant.
+        if let Some(pi) = self.place_libre(paire) {
+            self.pousser_boucle(pi.a, pi.b);
         }
-
-        let centre = dir_aleatoire();
-        let taille_spot: f32 = gen_range(0.12, 0.26);
-        let f = self.forme;
-        let j = 0.3 + 1.7 * self.alea;
-        // Deux pieds qui enjambent un centre sans région : "forme" donne
-        // l'écart de base, "aléa" ajoute du jitter.
-        let rnd = dir_aleatoire();
-        let tang = (rnd - centre * centre.dot(rnd)).normalize_or_zero();
-        let half: f32 =
-            (taille_spot * (0.4 + f * 0.9 + gen_range(-0.4, 0.6) * j)).clamp(0.05, 1.4);
-        self.pousser_boucle(
-            (centre * half.cos() + tang * half.sin()).normalize(),
-            (centre * half.cos() - tang * half.sin()).normalize(),
-        );
     }
 
     /// **Cherche une place libre dans l'arcade** de la région `paire` : trois
@@ -295,11 +314,11 @@ impl Soleil {
     fn place_libre(&self, paire: usize) -> Option<Pieds> {
         // Les taches de cette région seulement : une arche ne relie pas deux
         // groupes distincts.
-        let ici: Vec<(Vec3, f32)> = self
+        let ici: Vec<Ancre> = self
             .taches
             .iter()
             .filter(|t| champ::paire_de(&self.poles, t.dir) == Some(paire))
-            .map(|t| (t.dir, t.taille))
+            .filter_map(ancre_de)
             .collect();
         let (a, b) = ancres(|d| champ::champ(&self.poles, d), &ici)?;
 
@@ -373,18 +392,19 @@ impl Soleil {
         // §1.3) : une naine M active en enchaîne, une géante rarement. Suit
         // `self.temps`, alimenté plus haut par `dt` — l'horloge de spectacle
         // (`DtAnimation`), jamais l'horloge orbitale accélérable.
+        // Même règle que les arches : un sursaut est une reconnexion de
+        // champ, il ne flambe pas sur une surface vide. Le repli aléatoire
+        // d'avant posait un éclair lumineux là où rien ne se passait.
         if self.temps >= self.prochain_flare && self.flares.len() < MAX_FLARES {
-            let dir = match tache_porteuse(&self.taches, gen_range(0.0, 1.0)) {
-                Some(i) => self.taches[i].dir,
-                None => dir_aleatoire(),
-            };
-            self.flares.push(Flare {
-                dir,
-                taille: gen_range(0.10, 0.22),
-                age: 0.0,
-                duree: gen_range(0.8, 2.2),
-                intensite: 0.0,
-            });
+            if let Some(i) = tache_porteuse(&self.taches, gen_range(0.0, 1.0)) {
+                self.flares.push(Flare {
+                    dir: self.taches[i].dir,
+                    taille: gen_range(0.10, 0.22),
+                    age: 0.0,
+                    duree: gen_range(0.8, 2.2),
+                    intensite: 0.0,
+                });
+            }
             let moy = 6.0 - 4.5 * self.freq;
             self.prochain_flare = self.temps + (gen_range(0.6, 1.6) * moy).max(0.3);
         }
@@ -463,20 +483,6 @@ impl Soleil {
 fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
     let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
-}
-
-pub(super) fn dir_aleatoire() -> Vec3 {
-    loop {
-        let p = vec3(
-            gen_range(-1.0, 1.0),
-            gen_range(-1.0, 1.0),
-            gen_range(-1.0, 1.0),
-        );
-        let l2 = p.length_squared();
-        if l2 > 0.0001 && l2 <= 1.0 {
-            return p / l2.sqrt();
-        }
-    }
 }
 
 #[cfg(test)]
@@ -639,6 +645,38 @@ mod tests_repulsion {
         let (a, b) = ancres(champ_de, &taches).expect("les deux polarités sont là");
         assert_eq!(a.1, 0.3, "ce n'est pas la plus grosse du côté positif");
         assert_eq!(b.1, 0.2, "ce n'est pas la tache du côté négatif");
+    }
+
+    fn tache(taille: f32, intensite: f32) -> Tache {
+        Tache { dir: vec3(1.0, 0.0, 0.0), taille, age: 1.0, vie_max: 10.0, intensite }
+    }
+
+    /// **Un pied se pose contre le rayon DESSINÉ, pas le rayon nominal.**
+    ///
+    /// Une tache n'atteint sa taille nominale qu'au sommet de sa vie : le
+    /// shader la dessine fondue par son intensité. L'ancrage visait l'autre —
+    /// le « léger offset » signalé à l'écran, qui ne se voyait qu'en début et
+    /// en fin de vie d'une tache.
+    #[test]
+    fn le_pied_vise_le_rayon_dessine() {
+        let pleine = tache(0.24, 1.0);
+        let naissante = tache(0.24, 0.5);
+        assert_eq!(ancre_de(&pleine).unwrap().1, 0.24);
+        assert_eq!(
+            ancre_de(&naissante).unwrap().1,
+            0.12,
+            "le pied vise encore le rayon nominal d'une tache à moitié dessinée"
+        );
+    }
+
+    /// **Une tache trop pâle ne porte pas d'arche.** Ses pieds sont fixés à sa
+    /// naissance, mais elle continue de rétrécir sous eux : l'arche finirait
+    /// par flotter à côté. (Le suivi dynamique des pieds est le sous-lot 3.5.)
+    #[test]
+    fn une_tache_trop_pale_ne_porte_pas_d_arche() {
+        assert!(ancre_de(&tache(0.24, 0.05)).is_none(), "une tache à peine visible porte une arche");
+        assert!(ancre_de(&tache(0.24, 0.0)).is_none());
+        assert!(ancre_de(&tache(0.24, 0.9)).is_some(), "une tache bien installée n'en porte plus");
     }
 
     /// **Sans les deux polarités, pas d'arche.** Mieux vaut aucune arche

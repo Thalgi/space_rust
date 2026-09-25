@@ -1,4 +1,4 @@
-use super::eruptions::{encoder_flare, encoder_tache, EtatBoucle};
+use super::eruptions::{encoder_flare, encoder_tache, rayon_visible, EtatBoucle};
 use super::{Soleil, MAX_TACHES};
 use crate::astre::{Astre, CameraInfo};
 use crate::impostor::push_quad;
@@ -33,7 +33,7 @@ impl Soleil {
             if n >= MAX_TACHES {
                 break;
             }
-            spots[n] = vec4(t.dir.x, t.dir.y, t.dir.z, encoder_tache(t.taille * t.intensite));
+            spots[n] = vec4(t.dir.x, t.dir.y, t.dir.z, encoder_tache(rayon_visible(t)));
             n += 1;
         }
         for f in self.flares.iter() {
