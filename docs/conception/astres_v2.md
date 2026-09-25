@@ -552,6 +552,39 @@ Ce que 3.3 a appris, et qui vaut pour la suite du chantier :
 champ au shader, et 3.5 qui remplacera le chapelet de billboards par un
 ruban. C'est voulu — ça isole la régression.
 
+## 6 ter. Lot 4, livré (2026-09-26)
+
+**On peut rencontrer un trou noir en explorant.** Son rendu existait déjà
+(`Soleil::avec_trou_noir`, mode de couronne 5) et la galerie l'exposait —
+mais **personne ne produisait ce mode** et **personne ne l'attendait** : le
+`match` de `feuille_alea` n'avait pas de bras `5`, qui retombait donc sur
+`Normale` en silence. Un objet entier hors du jeu, sans un message.
+
+Quatre points :
+
+- `etoile::particuliere` est **extrait** du tirage : `gen_range` exige le
+  contexte graphique, donc le tirage ne se teste pas — mais ce qu'on en fait,
+  si. C'est désormais le seul endroit où se décide quels objets exotiques
+  existent, et un test balaie ses bornes pour vérifier qu'aucun type n'est
+  devenu injoignable.
+- Le trou noir tient **un cinquième des particulières**, soit ~1 % des
+  tirages. Bien au-dessus du réel, comme les 5 % de particulières elles-mêmes :
+  le but est la rencontre, pas le recensement.
+- ⚠️ **Sa masse ne se déduit pas de sa luminosité** (`MASSE_TROU_NOIR`). Le
+  peu qu'il rayonne vient du disque d'accrétion, pas d'une photosphère :
+  passé à `masse_luminosite`, il se couchait au **plancher** — l'objet le plus
+  lourd du système pesant un quart de masse stellaire, et des barycentres à
+  l'envers. La valeur dépasse délibérément le plafond de `masse_luminosite`,
+  qui borne les *étoiles*. La garde est un `const assert` : elle échoue à la
+  **compilation**.
+- Il est **rémanent** : pas de zone habitable. Elle se déduit de la
+  luminosité, qui ici décrit un disque d'accrétion — la tracer donnerait un
+  anneau d'eau liquide autour d'un horizon.
+
+Le **lot 5** (disque d'accrétion comme `Disque` à part entière, avec plan,
+tranche et Doppler) reste à faire : ce que le shader dessine aujourd'hui est
+un voile stylisé sans plan propre.
+
 ## 7. Hors périmètre
 
 **Rendre les arches visibles au cadrage par défaut** : tranché et chiffré par

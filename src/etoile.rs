@@ -11,28 +11,49 @@ pub struct ProfilEtoile {
     pub couronne: f32,    // mode de couronne : 0 halo, 1 jets, 2 vent, 3 pulsar, 4 magnétar
 }
 
+/// Un gabarit d'étoile : `(t_min, t_max, rayon, luminosité, nom, couronne)`.
+pub(crate) type Gabarit = (f32, f32, f32, f32, &'static str, f32);
+
+/// Part du tirage réservée aux étoiles **particulières**.
+const PART_PARTICULIERES: f32 = 0.05;
+
+/// **Quelle étoile particulière**, pour un tirage `p` dans `[0 ; 1]`.
+///
+/// Extrait de [`ProfilEtoile::aleatoire`] pour être **testable** :
+/// `macroquad::rand::gen_range` exige le contexte graphique, donc le tirage
+/// lui-même ne se teste pas — mais ce qu'on en fait, si. C'est le seul
+/// endroit du dépôt où se décide quels objets exotiques existent.
+pub(crate) fn particuliere(p: f32) -> Gabarit {
+    // ⚠️ Le trou noir tient **un cinquième** des particulières, soit 1 % de
+    // tous les tirages. C'est bien plus que sa part réelle parmi les objets
+    // stellaires — mais le but est qu'on puisse en **rencontrer un en
+    // explorant**, pas de simuler un recensement. Même esprit que les 5 %
+    // de particulières, déjà très au-dessus du réel.
+    if p < 0.2 {
+        (5500.0, 7500.0, 0.62, 0.4, "Trou noir", 5.0)
+    } else if p < 0.36 {
+        (35000.0, 45000.0, 0.42, 0.25, "Pulsar", 3.0)
+    } else if p < 0.52 {
+        (35000.0, 45000.0, 0.42, 0.2, "Etoile a neutrons", 1.0)
+    } else if p < 0.64 {
+        (35000.0, 45000.0, 0.45, 0.3, "Magnetar", 4.0)
+    } else if p < 0.8 {
+        (38000.0, 45000.0, 1.1, 5.0, "Wolf-Rayet", 2.0)
+    } else if p < 0.92 {
+        (18000.0, 24000.0, 1.4, 6.0, "Supergeante bleue", 2.0)
+    } else {
+        (4000.0, 4600.0, 0.9, 1.2, "T Tauri (jeune)", 1.0)
+    }
+}
+
 impl ProfilEtoile {
     /// Tire une étoile au hasard. Quelques variantes spéciales (géante rouge,
     /// naine blanche) en plus de la séquence principale O–M (M majoritaires).
     pub fn aleatoire() -> Self {
         let v: f32 = gen_range(0.0, 1.0);
         // (t_min, t_max, rayon, luminosité, nom, mode de couronne)
-        let (tmin, tmax, rayon, lumi, nom, couronne) = if v < 0.05 {
-            // Étoiles particulières (rares).
-            let p: f32 = gen_range(0.0, 1.0);
-            if p < 0.2 {
-                (35000.0, 45000.0, 0.42, 0.25, "Pulsar", 3.0)
-            } else if p < 0.4 {
-                (35000.0, 45000.0, 0.42, 0.2, "Etoile a neutrons", 1.0)
-            } else if p < 0.55 {
-                (35000.0, 45000.0, 0.45, 0.3, "Magnetar", 4.0)
-            } else if p < 0.75 {
-                (38000.0, 45000.0, 1.1, 5.0, "Wolf-Rayet", 2.0)
-            } else if p < 0.9 {
-                (18000.0, 24000.0, 1.4, 6.0, "Supergeante bleue", 2.0)
-            } else {
-                (4000.0, 4600.0, 0.9, 1.2, "T Tauri (jeune)", 1.0)
-            }
+        let (tmin, tmax, rayon, lumi, nom, couronne) = if v < PART_PARTICULIERES {
+            particuliere(gen_range(0.0, 1.0))
         } else if v < 0.12 {
             // Géante rouge : énorme, froide, très lumineuse.
             (3000.0, 3900.0, gen_range(4.5, 7.0), gen_range(3.0, 6.0), "Geante rouge", 0.0)
@@ -78,7 +99,15 @@ impl ProfilEtoile {
     /// une zone d'eau liquide) et leurs planètes rescapées orbitent serré
     /// (cf. PSR B1257+12 : 0,19–0,46 UA). Sert à adapter distances et affichage.
     pub fn est_remnant(&self) -> bool {
-        matches!(self.nom, "Pulsar" | "Etoile a neutrons" | "Magnetar")
+        matches!(self.nom, "Pulsar" | "Etoile a neutrons" | "Magnetar" | "Trou noir")
+    }
+
+    /// **Trou noir.** Il se distingue des autres rémanents sur deux points :
+    /// aucune surface ne s'y allume (le moteur d'éruptions s'arrête net, voir
+    /// `eruptions::maj`), et sa **masse ne se déduit pas de sa luminosité**
+    /// (`genese::MASSE_TROU_NOIR`).
+    pub fn est_trou_noir(&self) -> bool {
+        self.nom == "Trou noir"
     }
 }
 
@@ -138,6 +167,82 @@ pub fn couleur_corps_noir(temp: f32) -> Vec3 {
     };
 
     vec3(r / 255.0, g / 255.0, b / 255.0)
+}
+
+#[cfg(test)]
+mod tests_particulieres {
+    use super::*;
+
+    /// Les noms que le tirage des particulières doit savoir produire.
+    const ATTENDUS: [&str; 7] = [
+        "Trou noir",
+        "Pulsar",
+        "Etoile a neutrons",
+        "Magnetar",
+        "Wolf-Rayet",
+        "Supergeante bleue",
+        "T Tauri (jeune)",
+    ];
+
+    fn balayage() -> Vec<&'static str> {
+        (0..1000).map(|k| particuliere(k as f32 / 1000.0).4).collect()
+    }
+
+    /// **Chaque type particulier est atteignable.** Une borne mal posée en
+    /// écarte un **en silence** : son rendu continue d'exister, personne ne le
+    /// rencontre jamais. C'est exactement ce qui est arrivé au trou noir.
+    #[test]
+    fn chaque_type_particulier_est_atteignable() {
+        let vus = balayage();
+        for nom in ATTENDUS {
+            assert!(vus.contains(&nom), "{nom} est injoignable au tirage");
+        }
+        // Et rien d'autre ne sort : un nom inconnu ne serait rattaché à aucun
+        // rendu, ni à `est_remnant`.
+        for nom in &vus {
+            assert!(ATTENDUS.contains(nom), "type inattendu au tirage : {nom}");
+        }
+    }
+
+    /// **On peut rencontrer un trou noir en explorant** — c'est tout l'objet
+    /// du lot. Un cinquième des particulières, donc environ 1 % des étoiles.
+    #[test]
+    fn un_trou_noir_est_rencontrable() {
+        let part = balayage().iter().filter(|n| **n == "Trou noir").count() as f32 / 1000.0;
+        assert!(part > 0.1, "le trou noir ne tient que {part} des particulières : introuvable");
+        assert!(part < 0.35, "il en tient {part} : ce n'est plus une rencontre, c'est la règle");
+        // Sur l'ensemble du tirage, il reste une rareté.
+        let global = part * PART_PARTICULIERES;
+        assert!((0.002..0.02).contains(&global), "{global} de tous les tirages");
+    }
+
+    /// **Un trou noir porte le mode de couronne 5** — celui que
+    /// `Soleil::avec_trou_noir` attend, et sur lequel `eruptions::maj`
+    /// s'arrête (pas de taches sur un horizon).
+    #[test]
+    fn un_trou_noir_porte_son_mode_de_couronne() {
+        let (_, _, _, lumi, nom, couronne) = particuliere(0.0);
+        assert_eq!(nom, "Trou noir");
+        assert_eq!(couronne, 5.0, "le rendu de trou noir ne se déclenchera pas");
+        assert!(lumi > 0.0, "un trou noir tout noir n'éclairerait plus rien de son disque");
+    }
+
+    /// **Et il n'a pas de zone habitable.** Elle se déduit de la luminosité,
+    /// qui ici ne décrit pas une photosphère mais un disque d'accrétion : la
+    /// tracer donnerait un anneau d'eau liquide autour d'un trou noir.
+    #[test]
+    fn un_trou_noir_n_a_pas_de_zone_habitable() {
+        let tn = ProfilEtoile {
+            temperature: 6500.0,
+            couleur: Vec3::ONE,
+            rayon: 0.62,
+            luminosite: 0.4,
+            nom: "Trou noir",
+            couronne: 5.0,
+        };
+        assert!(tn.est_trou_noir());
+        assert!(tn.est_remnant(), "une zone habitable serait tracée autour de l'horizon");
+    }
 }
 
 #[cfg(test)]

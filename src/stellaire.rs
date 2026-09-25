@@ -26,6 +26,10 @@ pub enum Variante {
     Vent,    // Wolf-Rayet / supergéante bleue (vent stellaire)
     Pulsar,  // jets tournants + flash
     Magnetar,
+    /// Trou noir stellaire : horizon noir, anneau de photons, disque
+    /// d'accrétion. Seule variante qui n'éclaire pas par sa surface — sa
+    /// lumière vient du disque.
+    TrouNoir,
 }
 
 /// Étoile-feuille de l'arbre. La **masse** sert au calcul des barycentres.

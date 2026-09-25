@@ -52,6 +52,20 @@ pub(crate) fn masse_luminosite(luminosite: f32) -> f32 {
     (MASSE_ETOILE * luminosite.powf(0.286)).clamp(0.25 * MASSE_ETOILE, 5.0 * MASSE_ETOILE)
 }
 
+/// **Masse d'un trou noir stellaire.**
+///
+/// ⚠️ La relation masse-luminosité **ne s'y applique pas** : un trou noir n'a
+/// pas de photosphère, et le peu qu'il rayonne vient de son disque
+/// d'accrétion. Passé à [`masse_luminosite`], sa faible luminosité le
+/// coucherait au **plancher** — un quart de masse stellaire pour l'objet le
+/// plus lourd du système, et des barycentres à l'envers.
+///
+/// Huit masses de référence : les trous noirs stellaires connus pèsent 5 à
+/// 20 masses solaires. La valeur dépasse délibérément le **plafond** de
+/// `masse_luminosite`, lequel borne les *étoiles* pour écarter naines pâles
+/// et supergéantes extrêmes — une borne qui n'a rien à dire ici.
+pub(crate) const MASSE_TROU_NOIR: f32 = 8.0 * MASSE_ETOILE;
+
 /// Construit un système aléatoire à partir d'une graine. Renvoie aussi un texte d'info.
 /// La multiplicité (1 à 4 étoiles) est dérivée du seed lui-même, ce qui laisse la
 /// séquence RNG du cas mono-étoile intacte (systèmes sauvegardés reproductibles).
@@ -191,17 +205,29 @@ struct Plan {
     a_max: f32,    // demi-grand axe max (UA)
 }
 
-/// Tire une étoile-feuille aléatoire. Renvoie (feuille, masse, luminosité).
-fn feuille_alea() -> (Feuille, f32, f32) {
-    let p = ProfilEtoile::aleatoire();
-    let masse = masse_luminosite(p.luminosite);
-    let var = match p.couronne as i32 {
+/// **Le mode de couronne dit la variante.**
+///
+/// Séparé du tirage pour être testable : `ProfilEtoile::aleatoire` passe par
+/// `gen_range`, qui exige le contexte graphique. ⚠️ Un mode sans bras retombe
+/// sur `Normale` **en silence** — l'étoile perdrait ses jets ou son horizon
+/// sans que rien ne le signale, et c'est exactement ce qui tenait le trou
+/// noir hors du jeu alors que son rendu existait déjà.
+fn variante_de(couronne: f32) -> Variante {
+    match couronne as i32 {
         1 => Variante::Jets,
         2 => Variante::Vent,
         3 => Variante::Pulsar,
         4 => Variante::Magnetar,
+        5 => Variante::TrouNoir,
         _ => Variante::Normale,
-    };
+    }
+}
+
+/// Tire une étoile-feuille aléatoire. Renvoie (feuille, masse, luminosité).
+fn feuille_alea() -> (Feuille, f32, f32) {
+    let p = ProfilEtoile::aleatoire();
+    let masse = if p.est_trou_noir() { MASSE_TROU_NOIR } else { masse_luminosite(p.luminosite) };
+    let var = variante_de(p.couronne);
     (
         Feuille::new(p.rayon, p.couleur, p.luminosite, masse)
             .variante(var)
@@ -580,6 +606,7 @@ fn deployer_noeud(
                 Variante::Vent => s.avec_vent(),
                 Variante::Pulsar => s.avec_pulsar(),
                 Variante::Magnetar => s.avec_magnetar(),
+                Variante::TrouNoir => s.avec_trou_noir(),
             };
             if f.remnant {
                 s = s.sans_zone_habitable(); // pulsar/magnétar/étoile à neutrons : pas de HZ
@@ -1877,6 +1904,69 @@ mod tests_masse_luminosite {
             let m = masse_luminosite(l);
             assert!(m.is_finite(), "luminosité {l} -> masse {m}");
             assert_eq!(m, 0.25 * MASSE_ETOILE, "luminosité {l} : attendu le plancher");
+        }
+    }
+
+    /// **La masse d'un trou noir ne se déduit pas de sa luminosité.**
+    ///
+    /// Le peu qu'il rayonne vient de son disque d'accrétion, pas d'une
+    /// photosphère : passé à `masse_luminosite`, il se coucherait au
+    /// **plancher**, soit l'objet le plus lourd du système pesant un quart de
+    /// masse stellaire — et des barycentres qui tournent à l'envers.
+    #[test]
+    fn un_trou_noir_pese_plus_que_ce_qu_il_rayonne() {
+        // La luminosité du gabarit tiré (`etoile::particuliere`).
+        let par_la_lumiere = masse_luminosite(0.4);
+        assert!(
+            MASSE_TROU_NOIR > par_la_lumiere * 5.0,
+            "un trou noir ({MASSE_TROU_NOIR}) ne pèse guère plus qu'une étoile pâle ({par_la_lumiere})"
+        );
+        // Il dépasse délibérément le plafond des étoiles : celui-ci borne les
+        // naines pâles et les supergéantes, il n'a rien à dire ici.
+        const { assert!(MASSE_TROU_NOIR > 5.0 * MASSE_ETOILE) }; // plafond stellaire non applique
+        // Sans tomber dans l'absurde : un trou noir stellaire, pas un trou
+        // noir supermassif — celui-là relève du lot quasi-étoile.
+        const { assert!(MASSE_TROU_NOIR < 100.0 * MASSE_ETOILE) };
+    }
+}
+
+#[cfg(test)]
+mod tests_variante {
+    use super::*;
+
+    /// **Chaque mode de couronne trouve sa variante.**
+    ///
+    /// ⚠️ Un mode sans bras retombe sur `Normale` **en silence** : l'étoile
+    /// perd ses jets ou son horizon, son rendu existe toujours, et rien ne le
+    /// dit. C'est précisément ce qui tenait le trou noir hors du jeu — le
+    /// mode 5 était produit par personne et attendu par personne.
+    #[test]
+    fn chaque_mode_de_couronne_trouve_sa_variante() {
+        let attendus = [
+            (0.0, Variante::Normale),
+            (1.0, Variante::Jets),
+            (2.0, Variante::Vent),
+            (3.0, Variante::Pulsar),
+            (4.0, Variante::Magnetar),
+            (5.0, Variante::TrouNoir),
+        ];
+        for (mode, attendu) in attendus {
+            assert!(
+                std::mem::discriminant(&variante_de(mode)) == std::mem::discriminant(&attendu),
+                "le mode {mode} ne donne pas la variante attendue"
+            );
+        }
+    }
+
+    /// **Tous les modes du tirage sont couverts.** Le lien se fait par un
+    /// `f32` que rien ne contraint : si `etoile::particuliere` invente un mode
+    /// 6, il devient `Normale` sans un mot.
+    #[test]
+    fn le_tirage_ne_produit_aucun_mode_orphelin() {
+        for k in 0..1000 {
+            let (_, _, _, _, nom, mode) = crate::etoile::particuliere(k as f32 / 1000.0);
+            let orphelin = matches!(variante_de(mode), Variante::Normale) && mode != 0.0;
+            assert!(!orphelin, "{nom} porte le mode {mode}, que personne ne sait traduire");
         }
     }
 }
