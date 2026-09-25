@@ -107,7 +107,7 @@ impl Soleil {
             let n = 48;
             for i in 0..=n {
                 let t = i as f32 / n as f32;
-                let pos = point_boucle(a_w, b_w, b.apex, b.skew, t, r);
+                let pos = point_boucle(a_w, b_w, profil(b), t, r);
                 let monde = c + pos;
                 if cache_par_sphere(monde, c, r, cam.pos) {
                     continue; // derrière le soleil -> pas visible à travers
@@ -131,7 +131,7 @@ impl Soleil {
             if b.etat == EtatBoucle::Rupture {
                 let a_w = vers_monde(b.sa, rot);
                 let b_w = vers_monde(b.sb, rot);
-                let pos = c + point_boucle(a_w, b_w, b.apex, b.skew, 0.5, r);
+                let pos = c + point_boucle(a_w, b_w, profil(b), 0.5, r);
                 if !cache_par_sphere(pos, c, r, cam.pos) {
                     let (taille_c, fondu_c) = plancher_plasma(r * 0.16, dist, vh);
                     let lum = b.intensite.clamp(0.0, 1.0);
@@ -194,15 +194,49 @@ fn vers_monde(s: Vec3, a: f32) -> Vec3 {
 
 /// Point sur l'arche (Bézier quadratique a -> sommet -> b), relatif au centre.
 /// `skew` décale le sommet le long de la ligne des pieds (arches asymétriques).
-fn point_boucle(a: Vec3, b: Vec3, apex: f32, skew: f32, t: f32, rayon: f32) -> Vec3 {
+/// La silhouette d'une boucle, au-delà de sa hauteur : de quoi distinguer
+/// deux boucles de même portée.
+#[derive(Clone, Copy)]
+pub(super) struct Profil {
+    pub apex: f32,
+    pub skew: f32,
+    pub pincee: f32,
+    pub inclinaison: f32,
+}
+
+fn profil(b: &super::eruptions::Boucle) -> Profil {
+    Profil { apex: b.apex, skew: b.skew, pincee: b.pincee, inclinaison: b.inclinaison }
+}
+
+/// Un point de la boucle, en `t ∈ [0 ; 1]` d'un pied à l'autre.
+///
+/// ⚠️ **Cubique, et non quadratique.** Une Bézier à un seul point de
+/// contrôle ne sait dessiner qu'une **parabole** : toutes les boucles
+/// avaient donc exactement la même forme, à l'échelle près — « ça fait très
+/// fonction du second degré », signalé à l'écran. Deux points de contrôle
+/// permettent un col pincé ou un dôme évasé, et une inclinaison hors du plan
+/// radial. Même coût : un polynôme évalué par point.
+///
+/// Le facteur `4/3` conserve le sens d'`apex` : au sommet (`t = 0,5`), la
+/// cubique atteint `3·(h₁ + h₂)/8`, soit exactement `apex × rayon`.
+fn point_boucle(a: Vec3, b: Vec3, p: Profil, t: f32, rayon: f32) -> Vec3 {
     let pa = a * rayon;
     let pb = b * rayon;
     let mid = (pa + pb) * 0.5;
     let outward = mid.normalize_or_zero();
     let along = (pb - pa).normalize_or_zero();
-    let ctrl = mid + outward * (2.0 * apex * rayon) + along * (skew * rayon);
+    let lateral = outward.cross(along);
+    let corde = (pb - pa).length();
+
+    let haut = outward * (4.0 / 3.0 * p.apex * rayon);
+    let penche = lateral * (p.inclinaison * p.apex * rayon);
+    let col = along * (p.pincee * corde);
+    let biais = along * (p.skew * rayon);
+    let c1 = pa + haut + col + biais + penche;
+    let c2 = pb + haut - col + biais + penche;
+
     let u = 1.0 - t;
-    pa * (u * u) + ctrl * (2.0 * u * t) + pb * (t * t)
+    pa * (u * u * u) + c1 * (3.0 * u * u * t) + c2 * (3.0 * u * t * t) + pb * (t * t * t)
 }
 
 /// Vrai si le point `p` est masqué par la sphère (centre `c`, rayon `r`) vu depuis `cam`.
@@ -254,6 +288,59 @@ pub(super) fn texture_halo(taille: usize) -> Texture2D {
     let t = Texture2D::from_rgba8(taille as u16, taille as u16, &bytes);
     t.set_filter(FilterMode::Linear);
     t
+}
+
+#[cfg(test)]
+mod tests_profil_boucle {
+    use super::*;
+
+    fn plat() -> Profil {
+        Profil { apex: 0.4, skew: 0.0, pincee: 0.0, inclinaison: 0.0 }
+    }
+
+    /// **La courbe part d'un pied, arrive à l'autre, et culmine à `apex`.**
+    /// Le passage de la quadratique à la cubique a introduit un facteur
+    /// `4/3` sur les points de contrôle : s'il dérive, toutes les boucles
+    /// changent silencieusement de hauteur.
+    #[test]
+    fn la_courbe_relie_les_pieds_et_culmine_a_l_apex() {
+        let (a, b) = (vec3(1.0, 0.2, 0.0).normalize(), vec3(1.0, -0.2, 0.0).normalize());
+        let r = 2.0;
+        assert!((point_boucle(a, b, plat(), 0.0, r) - a * r).length() < 1e-4, "ne part pas du pied");
+        assert!((point_boucle(a, b, plat(), 1.0, r) - b * r).length() < 1e-4, "n'arrive pas au pied");
+        let sommet = point_boucle(a, b, plat(), 0.5, r);
+        let mid = (a * r + b * r) * 0.5;
+        let hauteur = (sommet - mid).length();
+        assert!(
+            (hauteur - plat().apex * r).abs() < 1e-3,
+            "sommet à {hauteur} au lieu de {}",
+            plat().apex * r
+        );
+    }
+
+    /// **Deux boucles de même portée et de même hauteur ne se ressemblent
+    /// pas.** C'est tout l'objet de la cubique : une quadratique n'a qu'un
+    /// point de contrôle, donc ne sait tracer qu'une parabole, et toutes les
+    /// boucles avaient la même forme à l'échelle près.
+    #[test]
+    fn le_pincement_et_l_inclinaison_changent_la_silhouette() {
+        let (a, b) = (vec3(1.0, 0.25, 0.0).normalize(), vec3(1.0, -0.25, 0.0).normalize());
+        let etroite = Profil { pincee: 0.3, ..plat() };
+        let evasee = Profil { pincee: -0.2, ..plat() };
+        let penchee = Profil { inclinaison: 0.5, ..plat() };
+        // Au quart du parcours, là où la silhouette se joue.
+        let p0 = point_boucle(a, b, plat(), 0.25, 1.0);
+        for (autre, nom) in
+            [(etroite, "pincée"), (evasee, "évasée"), (penchee, "penchée")]
+        {
+            let p = point_boucle(a, b, autre, 0.25, 1.0);
+            assert!((p - p0).length() > 0.01, "la boucle {nom} suit la même courbe que la plate");
+        }
+        // L'inclinaison sort bien du plan radial, les autres non.
+        let normale = a.cross(b).normalize();
+        assert!(point_boucle(a, b, penchee, 0.5, 1.0).dot(normale).abs() > 0.01);
+        assert!(point_boucle(a, b, etroite, 0.5, 1.0).dot(normale).abs() < 1e-4);
+    }
 }
 
 #[cfg(test)]

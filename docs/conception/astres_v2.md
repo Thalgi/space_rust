@@ -437,6 +437,32 @@ apparaître ». Deux causes de plus :
    d'être calme. `dir_aleatoire` n'avait plus d'appelant et a été supprimée —
    **plus rien, dans ce fichier, ne se pose au hasard sur la sphère.**
 
+⚠️ **Troisième retour écran (2026-09-25)** — « les arches ont souvent toutes
+la même taille », « ça fait très fonction du second degré », et la demande de
+**petites boucles qui ne relient pas deux taches**. Trois causes, toutes
+dans la géométrie :
+
+5. **La hauteur était absolue** (`0,25 + 1,3 × puissance`), indépendante de
+   la portée. Comme l'écart entre les deux taches d'une région ne varie
+   guère, toutes les arches montaient à la même altitude au-dessus du même
+   écart : même taille, même forme. C'est désormais le **rapport**
+   hauteur/écart qui se tire (`apex_pour`), jamais la hauteur.
+6. **La courbe était une Bézier quadratique** — un seul point de contrôle,
+   donc littéralement une **parabole**, la même pour toutes à l'échelle
+   près. Passée en **cubique** : deux points de contrôle, d'où un col pincé
+   ou un dôme évasé (`pincee`) et une inclinaison hors du plan radial
+   (`inclinaison`). Même coût, un polynôme par point.
+7. **Toutes les boucles reliaient deux taches.** La moitié d'entre elles
+   (`PART_COURTES`) repartent maintenant **dans leur propre tache**
+   (`champ::pieds_courts`) : petites, éparses, bornées par le rayon de la
+   tache comme un pied d'arche. Ce sont les plus nombreuses dans la réalité,
+   et c'est d'elles que vient l'essentiel de la variété de gabarit.
+
+`MAX_BOUCLES` remonté de 4 à 6 en conséquence : le recouvrement est empêché
+à la source par la répulsion, et une boucle courte est bien plus discrète
+qu'une grande arche. Comme `COS_ARCHES` et `PART_COURTES`, c'est un réglage
+qui se juge à l'œil.
+
 Ce que 3.3 a appris, et qui vaut pour la suite du chantier :
 
 - ⚠️ **Un test dont les cas d'entrée sont choisis à la main peut être une

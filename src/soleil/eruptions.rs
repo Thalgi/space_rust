@@ -9,10 +9,16 @@ use macroquad::rand::gen_range;
 /// poignée de taches actives plus deux ou trois flares tient large sous 8.
 pub(super) const MAX_FLARES: usize = 3;
 
-/// **Arches vivantes au plus.** Au-delà, elles cessent de se lire une à une :
-/// leurs billboards additifs se recouvrent et l'étoile se retrouve ceinte
-/// d'un croissant lumineux continu. Quatre laissent voir la forme de chacune.
-pub(super) const MAX_BOUCLES: usize = 4;
+/// **Arches vivantes au plus.** Au-delà, elles cessaient de se lire une à
+/// une : leurs billboards additifs se recouvraient et l'étoile se retrouvait
+/// ceinte d'un croissant lumineux continu.
+///
+/// Remonté de 4 à 6 : le recouvrement est désormais empêché à la source par
+/// la répulsion ([`COS_ARCHES`]), et la moitié des boucles sont **courtes**
+/// ([`PART_COURTES`]) — bien plus discrètes qu'une grande arche. À 4, on ne
+/// voyait plus que deux grandes arches à la fois. ⚠️ Réglage esthétique, à
+/// rebaisser si le croissant revient.
+pub(super) const MAX_BOUCLES: usize = 6;
 
 /// **Délai minimal entre deux naissances d'arches**, en secondes de
 /// spectacle. Il valait 0,12 s — huit arches par seconde, toutes au même
@@ -55,6 +61,15 @@ pub(super) struct Boucle {
     pub apex: f32,
     pub apex_max: f32,
     pub skew: f32, // décalage latéral du sommet -> arches asymétriques
+    /// **Pincement du col**, en part de l'écart des pieds. Positif : les
+    /// jambes se resserrent et la boucle s'étrangle à la base, silhouette
+    /// haute et étroite. Négatif : elle s'évase en dôme large et bas.
+    pub pincee: f32,
+    /// **Inclinaison hors du plan radial**, en part de la hauteur. Une vraie
+    /// boucle ne se tient pas droite dans le plan qui contient le centre de
+    /// l'étoile : elle penche. Sans ça, deux boucles d'un même groupe
+    /// présentent exactement la même silhouette à la caméra.
+    pub inclinaison: f32,
     pub etat: EtatBoucle,
     pub timer: f32,
     pub tenue_max: f32,
@@ -195,6 +210,24 @@ pub(super) fn ancres(champ_de: impl Fn(Vec3) -> f32, taches: &[Ancre]) -> Option
     Some((plus?, moins?))
 }
 
+/// **Part des boucles qui ne relient rien** et retombent dans leur propre
+/// tache. Réglage esthétique : il arbitre entre « toutes les boucles se
+/// ressemblent » et « plus aucune grande arche ». Se juge à l'œil.
+const PART_COURTES: f32 = 0.5;
+
+/// **Hauteur d'une arche, À PROPORTION de l'écart de ses pieds.**
+///
+/// ⚠️ Elle était **absolue** (`0,25 + 1,3 × puissance`, quelle que soit la
+/// portée) : toutes les arches montaient donc à la même altitude, et comme
+/// l'écart entre les deux taches d'une région ne varie presque pas, elles
+/// avaient toutes **la même taille et la même forme** — signalé à l'écran.
+/// Une boucle courte doit rester basse, une longue arche monter haut : c'est
+/// le rapport qui se tire au sort, pas la hauteur.
+fn apex_pour(sa: Vec3, sb: Vec3, rapport: f32) -> f32 {
+    let ecart = sa.dot(sb).clamp(-1.0, 1.0).acos();
+    (ecart * rapport.max(0.0)).clamp(0.02, 2.6)
+}
+
 /// Ramène un glissement dans `[-1 ; 1]` en l'enroulant : les places d'une
 /// arcade forment un anneau, pas un segment avec des bords où s'entasser.
 fn enrouler(t: f32) -> f32 {
@@ -320,6 +353,29 @@ impl Soleil {
             .filter(|t| champ::paire_de(&self.poles, t.dir) == Some(paire))
             .filter_map(ancre_de)
             .collect();
+        if ici.is_empty() {
+            return None;
+        }
+
+        // **Une boucle sur deux ne relie rien** : elle repart dans la tache
+        // d'où elle sort. Sans elles, une étoile n'a que de grandes arches,
+        // toutes du même gabarit — l'écart entre deux taches d'une région ne
+        // variant presque pas. Ce sont les plus nombreuses dans la réalité,
+        // petites et éparses.
+        if gen_range(0.0, 1.0) < PART_COURTES {
+            let anc = ici[(gen_range(0.0, 1.0) * ici.len() as f32) as usize % ici.len()];
+            return (0..3).find_map(|_| {
+                let centre = vec2(gen_range(-1.0, 1.0), gen_range(-1.0, 1.0));
+                let pi = champ::pieds_courts(
+                    anc,
+                    centre,
+                    gen_range(0.0, std::f32::consts::TAU),
+                    gen_range(0.14, 0.5),
+                )?;
+                (!arche_trop_proche(&self.boucles, &pi)).then_some(pi)
+            });
+        }
+
         let (a, b) = ancres(|d| champ::champ(&self.poles, d), &ici)?;
 
         let depart = gen_range(-1.0, 1.0);
@@ -340,10 +396,10 @@ impl Soleil {
         let f = self.forme;
         let j = 0.3 + 1.7 * self.alea; // amplitude de l'aléa sur la forme
 
-        // Puissance -> hauteur ; forme -> biais ; aléa -> dispersion hauteur/asymétrie.
-        let apex_base = 0.25 + 1.3 * p;
-        let apex_max: f32 =
-            (apex_base * (1.0 + f * 0.3) * (1.0 + gen_range(-0.5, 0.6) * j)).clamp(0.1, 2.6);
+        // Puissance et forme gouvernent le rapport hauteur/écart ; l'aléa le
+        // disperse. L'écart, lui, vient des pieds — voir [`apex_pour`].
+        let rapport = (0.30 + 0.95 * p) * (1.0 + f * 0.3) * (1.0 + gen_range(-0.45, 0.85) * j);
+        let apex_max = apex_pour(sa, sb, rapport);
         let skew = gen_range(-0.8, 0.8) * j * apex_max;
 
         // Plus la boucle est grande, plus elle part dans l'espace.
@@ -356,6 +412,10 @@ impl Soleil {
             apex: 0.0,
             apex_max,
             skew,
+            // Deux tirages de plus, et deux seulement : ce sont eux qui font
+            // que deux boucles de même portée ne se ressemblent pas.
+            pincee: gen_range(-0.22, 0.34) * j,
+            inclinaison: gen_range(-0.55, 0.55) * j,
             etat: EtatBoucle::Montee,
             timer: 0.0,
             tenue_max: gen_range(0.6, 1.8) + gen_range(0.0, 1.0) * j,
@@ -591,6 +651,8 @@ mod tests_repulsion {
             apex: 1.0,
             apex_max: 1.0,
             skew: 0.0,
+            pincee: 0.0,
+            inclinaison: 0.0,
             etat: EtatBoucle::Tenue,
             timer: 0.0,
             tenue_max: 1.0,
@@ -690,6 +752,41 @@ mod tests_repulsion {
             ancres(champ_de, &[(vec3(1.0, 0.0, 0.0), 0.2), (vec3(0.9, 0.3, 0.0), 0.1)]).is_none(),
             "une arche a été ancrée avec une seule polarité"
         );
+    }
+
+    /// **Une boucle courte reste basse, une longue arche monte haut.**
+    ///
+    /// La hauteur était **absolue** : toutes les boucles montaient à la même
+    /// altitude quelle que soit leur portée, et comme l'écart entre les deux
+    /// taches d'une région ne varie presque pas, elles avaient toutes la même
+    /// taille et la même forme — « ça fait très fonction du second degré ».
+    #[test]
+    fn la_hauteur_suit_l_ecart_des_pieds() {
+        let proches = (vec3(1.0, 0.05, 0.0).normalize(), vec3(1.0, -0.05, 0.0).normalize());
+        let lointains = (vec3(1.0, 0.5, 0.0).normalize(), vec3(1.0, -0.5, 0.0).normalize());
+        let courte = apex_pour(proches.0, proches.1, 1.0);
+        let longue = apex_pour(lointains.0, lointains.1, 1.0);
+        assert!(
+            longue > courte * 4.0,
+            "une arche dix fois plus large ne monte qu'à {longue} contre {courte} : la hauteur ne suit pas la portée"
+        );
+        // Et le rapport reste le levier du réglage : à écart égal, une
+        // puissance double monte deux fois plus haut.
+        assert!(apex_pour(proches.0, proches.1, 2.0) > courte * 1.9);
+    }
+
+    /// **La hauteur reste bornée**, même sur des entrées aberrantes : elle
+    /// pilote la géométrie dessinée, un emballement ferait sortir la boucle
+    /// du système.
+    #[test]
+    fn la_hauteur_ne_s_emballe_pas() {
+        let (a, b) = (vec3(1.0, 0.0, 0.0), vec3(-1.0, 0.0, 0.0)); // pieds opposés
+        for rapport in [-5.0_f32, 0.0, 1.0, 100.0] {
+            let h = apex_pour(a, b, rapport);
+            assert!((0.02..=2.6).contains(&h), "rapport {rapport} -> {h}");
+        }
+        // Deux pieds confondus donnent un écart nul : la borne basse tient.
+        assert_eq!(apex_pour(a, a, 1.0), 0.02);
     }
 
     /// **Les places forment un anneau**, pas un segment : un glissement qui

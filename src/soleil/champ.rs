@@ -214,6 +214,44 @@ pub(super) fn pieds(a: (Vec3, f32), b: (Vec3, f32), glissement: (f32, f32)) -> O
     Some(Pieds { a: glisser(a, glissement.0), b: glisser(b, glissement.1) })
 }
 
+/// **Deux pieds dans une SEULE tache** : une boucle courte, qui ne relie
+/// rien et retombe là d'où elle part.
+///
+/// Toutes les boucles ne joignent pas deux taches. Les plus nombreuses sont
+/// **petites et éparses**, ancrées des deux côtés d'une même concentration de
+/// champ. Sans elles, une étoile n'a que des grandes arches, toutes du même
+/// gabarit puisque l'écart entre deux taches ne varie guère.
+///
+/// `centre` place la boucle dans le disque de la tache (coordonnées locales
+/// dans `[-1 ; 1]²`), `angle` l'oriente, `demi` fixe sa demi-longueur en part
+/// du rayon. Tout reste borné par le rayon de la tache : une boucle courte
+/// n'en sort pas plus qu'un pied d'arche.
+pub(super) fn pieds_courts(
+    ancre: (Vec3, f32),
+    centre: Vec2,
+    angle: f32,
+    demi: f32,
+) -> Option<Pieds> {
+    let (dir, rayon) = ancre;
+    let (u, v) = repere(dir)?;
+    let demi = demi.clamp(0.1, 0.5);
+    // Le centre laisse la place aux deux pieds de part et d'autre.
+    let marge = (1.0 - demi).max(0.0);
+    let c = u * (centre.x.clamp(-1.0, 1.0) * marge) + v * (centre.y.clamp(-1.0, 1.0) * marge);
+    let ecart = (u * angle.cos() + v * angle.sin()) * demi;
+    let pose = |o: Vec3| (dir + o * (rayon * PART_PIED)).normalize_or(dir);
+    Some(Pieds { a: pose(c + ecart), b: pose(c - ecart) })
+}
+
+/// Repère tangent à la sphère en `d` — `None` si `d` est dégénéré.
+fn repere(d: Vec3) -> Option<(Vec3, Vec3)> {
+    // Deux références pour éviter le produit vectoriel dégénéré, même piège
+    // que `tangente` et que `camera::base_camera`.
+    let appui = if d.y.abs() > 0.9 { Vec3::X } else { Vec3::Y };
+    let u = d.cross(appui).try_normalize()?;
+    Some((u, d.cross(u).try_normalize()?))
+}
+
 /// **À quelle région active appartient cette direction** — celle du pôle le
 /// plus proche. Sert à retrouver le groupe d'une tache pour y ancrer une
 /// arche : la tache et l'arche cessent ainsi d'être décidées séparément.
@@ -488,6 +526,41 @@ mod tests {
         let a = (vec3(1.0, 0.0, 0.0), 0.2);
         assert!(pieds(a, a, (0.5, -0.5)).is_none());
         assert!(pieds(a, (-a.0, 0.2), (0.5, -0.5)).is_none(), "deux ancres opposées non plus");
+    }
+
+    /// **Une boucle courte ne sort pas de sa tache** — ni son centre, ni ses
+    /// deux pieds. C'est la même règle que pour un pied d'arche : une boucle
+    /// qui déborde part d'une surface vide.
+    #[test]
+    fn une_boucle_courte_reste_dans_sa_tache() {
+        let ancre = (vec3(0.0, 1.0, 0.0), 0.22);
+        for cx in [-1.0_f32, -0.4, 0.0, 1.0] {
+            for angle in [0.0_f32, 1.3, 3.0, 5.9] {
+                for demi in [0.05_f32, 0.3, 0.9] {
+                    let pi = pieds_courts(ancre, vec2(cx, -cx), angle, demi).expect("ancre valide");
+                    for (pied, nom) in [(pi.a, "a"), (pi.b, "b")] {
+                        let d = ancre.0.dot(pied).clamp(-1.0, 1.0).acos();
+                        assert!(
+                            d <= ancre.1,
+                            "pied {nom} à {d} rad pour un rayon de {} ({cx}/{angle}/{demi})",
+                            ancre.1
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// **Et elle a bien deux pieds distincts** : une boucle dont les deux
+    /// extrémités se confondent n'est pas une boucle, elle est invisible.
+    #[test]
+    fn une_boucle_courte_a_deux_pieds_distincts() {
+        let ancre = (vec3(1.0, 0.0, 0.0), 0.2);
+        let pi = pieds_courts(ancre, Vec2::ZERO, 0.7, 0.4).unwrap();
+        let ecart = pi.a.dot(pi.b).clamp(-1.0, 1.0).acos();
+        assert!(ecart > 0.02, "les deux pieds sont confondus ({ecart} rad)");
+        // Et elle reste courte : c'est tout son intérêt face aux grandes arches.
+        assert!(ecart < 2.0 * ancre.1, "boucle « courte » de {ecart} rad");
     }
 
     /// **Une direction est rattachée à sa région.** C'est le lien qui manquait
