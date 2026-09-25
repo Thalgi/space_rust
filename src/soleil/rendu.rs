@@ -125,10 +125,14 @@ impl Soleil {
             // devinait les pastilles une à une le long d'une arche isolée
             // (`astres_v2_boucles.md` §2). Et c'est moins cher : deux sommets
             // par point au lieu de quatre.
+            let courbe = le_long(a_w, b_w, profil(b), r, n);
             let mut brin: Vec<crate::impostor::PointRuban> = Vec::with_capacity(n + 1);
-            for i in 0..=n {
+            for (i, point) in courbe.iter().enumerate() {
+                // `t` est ici la **fraction de trajet**, pas le paramètre de
+                // la cubique : les points sont équidistants le long de la
+                // courbe (voir [`le_long`]).
                 let t = i as f32 / n as f32;
-                let monde = c + point_boucle(a_w, b_w, profil(b), t, r);
+                let monde = c + *point;
                 if cache_par_sphere(monde, c, r, cam.pos) {
                     // Derrière le soleil : le ruban se coupe ici et reprend
                     // au premier point revenu en vue. Un `continue` aurait
@@ -186,7 +190,10 @@ impl Soleil {
             if b.etat == EtatBoucle::Rupture {
                 let a_w = vers_monde(b.sa, rot);
                 let b_w = vers_monde(b.sb, rot);
-                let pos = c + point_boucle(a_w, b_w, profil(b), 0.5, r);
+                // Le milieu du **trajet**, pas le milieu du paramètre : sur
+                // une arche étirée les deux sont très loin l'un de l'autre.
+                let courbe = le_long(a_w, b_w, profil(b), r, 8);
+                let pos = c + courbe[courbe.len() / 2];
                 if !cache_par_sphere(pos, c, r, cam.pos) {
                     let (calibre, _) = tube(1.0, etendue(a_w, b_w, b.apex.min(b.apex_max), r), b.epaisseur);
                     let (taille_c, fondu_c) = plancher_plasma(calibre * 3.2, dist, vh);
@@ -306,6 +313,63 @@ fn emettre(
     quads
 }
 
+/// Sur-échantillonnage utilisé pour mesurer la courbe avant de la reparcourir
+/// à pas constant. Quatre fois suffit : l'erreur d'une corde sur un arc décroît
+/// comme le carré du pas.
+/// **Évasement d une boucle avec la hauteur**, en part de son apex.
+///
+/// Il écarte les deux points de contrôle à mesure que la boucle monte, pour
+/// que son sommet reste un arc et ne devienne pas une pointe. Réglage
+/// esthétique, mais borné par une mesure : le virage entre deux points
+/// consécutifs doit rester sous ~35°, au-delà le ruban montre un coin.
+const EVASEMENT: f32 = 0.45;
+
+const SUR_ECHANTILLON: usize = 4;
+
+/// **Les points d'une boucle, espacés également LE LONG DE LA COURBE.**
+///
+/// ⚠️ Échantillonner uniformément en `t` est le pire choix pour une cubique
+/// étirée. Mesuré sur une arche éjectée (apex 8) : le pas variait d'un
+/// facteur **41** entre les jambes — presque droites, donc gavées de points —
+/// et l'apex, où toute la courbure se concentre et où le trajet tournait de
+/// **82° d'un point au suivant**. Un ruban qui vire de 82° en un segment
+/// montre un **coin**, pas une courbe : c'est l'effet pointu signalé à
+/// l'écran au sommet des grandes arches. Ajouter des points n'y changeait
+/// rien — ils tombaient tous là où la courbe était déjà droite.
+///
+/// On mesure donc la courbe une fois, densément, puis on la reparcourt à pas
+/// constant. L'indice du point devient sa **fraction de trajet**, ce qui est
+/// aussi la bonne variable pour le galbe et le fondu d'ancrage.
+fn le_long(a: Vec3, b: Vec3, p: Profil, rayon: f32, n: usize) -> Vec<Vec3> {
+    let m = (n * SUR_ECHANTILLON).max(2);
+    let brut: Vec<Vec3> =
+        (0..=m).map(|i| point_boucle(a, b, p, i as f32 / m as f32, rayon)).collect();
+    let mut cumul = Vec::with_capacity(brut.len());
+    let mut total = 0.0;
+    cumul.push(0.0);
+    for w in brut.windows(2) {
+        total += (w[1] - w[0]).length();
+        cumul.push(total);
+    }
+    // `is_finite` autant que `> 0` : un trajet NaN traverserait la recherche
+    // ci-dessous sans jamais avancer.
+    if !total.is_finite() || total <= 0.0 {
+        return vec![brut[0]; n + 1]; // boucle dégénérée : rien à parcourir
+    }
+    let mut sortie = Vec::with_capacity(n + 1);
+    let mut j = 0;
+    for i in 0..=n {
+        let vise = total * i as f32 / n as f32;
+        while j + 1 < cumul.len() - 1 && cumul[j + 1] < vise {
+            j += 1;
+        }
+        let (c0, c1) = (cumul[j], cumul[j + 1]);
+        let u = if c1 > c0 { (vise - c0) / (c1 - c0) } else { 0.0 };
+        sortie.push(brut[j].lerp(brut[j + 1], u));
+    }
+    sortie
+}
+
 /// Étendue d'une boucle : la corde entre ses pieds, plus ce que sa hauteur
 /// ajoute au trajet. Approximation grossière d'une longueur d'arc — elle sert
 /// à proportionner, pas à mesurer.
@@ -368,8 +432,17 @@ fn point_boucle(a: Vec3, b: Vec3, p: Profil, t: f32, rayon: f32) -> Vec3 {
     let penche = lateral * (p.inclinaison * p.apex * rayon);
     let col = along * (p.pincee * corde);
     let biais = along * (p.skew * rayon);
-    let c1 = pa + haut + col + biais + penche;
-    let c2 = pb + haut - col + biais + penche;
+    // ⚠️ **Une boucle s'évase en montant.** Sans ce terme, les deux points de
+    // contrôle grimpent côte à côte : mesuré sur une arche éjectée à huit
+    // rayons, ils culminaient à 10,7 unités en restant à 0,3 l'un de l'autre,
+    // et la courbe y faisait demi-tour en **157°** — une pointe, pas un
+    // sommet. C'est l'effet signalé à l'écran, et aucun échantillonnage ne
+    // pouvait le corriger : la pointe était dans la géométrie. Une corde de
+    // flux réelle se dilate en s'élevant, la pression du plasma chutant avec
+    // l'altitude ; ses pieds, eux, restent ancrés.
+    let evase = along * (EVASEMENT * p.apex * rayon);
+    let c1 = pa + haut + col - evase + biais + penche;
+    let c2 = pb + haut - col + evase + biais + penche;
 
     let u = 1.0 - t;
     pa * (u * u * u) + c1 * (3.0 * u * u * t) + c2 * (3.0 * u * t * t) + pb * (t * t * t)
@@ -452,6 +525,51 @@ mod tests_profil_boucle {
             "sommet à {hauteur} au lieu de {}",
             plat().apex * r
         );
+    }
+
+    /// **Aucune boucle ne montre de coin, même éjectée à huit rayons.**
+    ///
+    /// C'est le défaut signalé à l'écran — une pointe au sommet des grandes
+    /// arches — et il tenait à deux causes que ce test mesure d'un coup.
+    ///
+    /// 1. **L'échantillonnage était uniforme en `t`**, ce qui est le pire
+    ///    choix pour une cubique étirée : mesuré, le pas variait d'un facteur
+    ///    **41** entre les jambes presque droites, gavées de points, et
+    ///    l'apex qui les concentrait toute la courbure.
+    /// 2. **La courbe avait une vraie pointe** : les deux points de contrôle
+    ///    montaient côte à côte, et le trajet y virait de **157°**. Aucun
+    ///    échantillonnage ne corrige ça — d'où [`EVASEMENT`].
+    #[test]
+    fn aucune_boucle_ne_montre_de_coin() {
+        let (a, b) = (vec3(1.0, 0.25, 0.0).normalize(), vec3(1.0, -0.25, 0.0).normalize());
+        let r = 1.0;
+        // Jusqu'à 8 : la borne au-delà de laquelle `eruptions` retire une
+        // boucle éjectée.
+        for apex in [0.2_f32, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0] {
+            let p = Profil { apex, skew: 0.1, pincee: 0.2, inclinaison: 0.2 };
+            let (_, n) = tube(etendue(a, b, apex, r), etendue(a, b, apex.min(1.0), r), 1.0);
+            let pts = le_long(a, b, p, r, n);
+            let mut virage: f32 = 0.0;
+            let (mut court, mut long) = (f32::INFINITY, 0.0_f32);
+            for i in 1..pts.len() - 1 {
+                let t0 = (pts[i] - pts[i - 1]).normalize_or_zero();
+                let t1 = (pts[i + 1] - pts[i]).normalize_or_zero();
+                virage = virage.max(t0.dot(t1).clamp(-1.0, 1.0).acos());
+                let l = (pts[i + 1] - pts[i]).length();
+                court = court.min(l);
+                long = long.max(l);
+            }
+            assert!(
+                virage.to_degrees() < 35.0,
+                "apex {apex} : le trajet vire de {:.0}° d'un point au suivant — c'est un coin",
+                virage.to_degrees()
+            );
+            assert!(
+                long / court.max(1e-6) < 1.3,
+                "apex {apex} : le pas varie d'un facteur {:.1} — l'apex est sous-échantillonné",
+                long / court.max(1e-6)
+            );
+        }
     }
 
     /// **Le pied se fond dans la surface, sans disparaître.**
