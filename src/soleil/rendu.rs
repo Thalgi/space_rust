@@ -100,13 +100,15 @@ impl Soleil {
         // (`disque_particules.vert.glsl`) : plancher en pixels et fondu.
         let dist = (cam.pos - c).length();
         let vh = crate::impostor::viewport_h();
-        let (taille_l, fondu_l) = plancher_plasma(r * 0.05, dist, vh);
         for b in &self.boucles {
             let a_w = vers_monde(b.sa, rot);
             let b_w = vers_monde(b.sb, rot);
+            // Le calibre propre à cette boucle-ci : un fil ou un ruban.
+            let calibre = r * 0.05 * b.epaisseur;
             let n = 48;
             for i in 0..=n {
                 let t = i as f32 / n as f32;
+                let (taille_l, fondu_l) = plancher_plasma(calibre * galbe(t), dist, vh);
                 let pos = point_boucle(a_w, b_w, profil(b), t, r);
                 let monde = c + pos;
                 if cache_par_sphere(monde, c, r, cam.pos) {
@@ -133,7 +135,7 @@ impl Soleil {
                 let b_w = vers_monde(b.sb, rot);
                 let pos = c + point_boucle(a_w, b_w, profil(b), 0.5, r);
                 if !cache_par_sphere(pos, c, r, cam.pos) {
-                    let (taille_c, fondu_c) = plancher_plasma(r * 0.16, dist, vh);
+                    let (taille_c, fondu_c) = plancher_plasma(r * 0.16 * b.epaisseur, dist, vh);
                     let lum = b.intensite.clamp(0.0, 1.0);
                     let col = Color::new(1.0, 0.72, 0.45, lum * fondu_c);
                     push_quad(&mut self.verts, &mut self.inds, cam, pos, taille_c, col);
@@ -206,6 +208,17 @@ pub(super) struct Profil {
 
 fn profil(b: &super::eruptions::Boucle) -> Profil {
     Profil { apex: b.apex, skew: b.skew, pincee: b.pincee, inclinaison: b.inclinaison }
+}
+
+/// **Galbe du tube le long de la boucle** : pieds serrés, ventre plus large.
+///
+/// Un tube de flux s'évase en s'élevant, la pression du plasma environnant
+/// chutant avec l'altitude. Sans ce galbe, une boucle est un cylindre de
+/// billboards tous identiques — le « chapelet » qu'on lit à l'écran. La
+/// moyenne reste proche de 1 : le galbe redistribue l'épaisseur, il ne
+/// l'augmente pas.
+fn galbe(t: f32) -> f32 {
+    0.72 + 0.56 * (std::f32::consts::PI * t.clamp(0.0, 1.0)).sin()
 }
 
 /// Un point de la boucle, en `t ∈ [0 ; 1]` d'un pied à l'autre.
@@ -316,6 +329,22 @@ mod tests_profil_boucle {
             "sommet à {hauteur} au lieu de {}",
             plat().apex * r
         );
+    }
+
+    /// **Le tube est plus fin à ses pieds qu'à son ventre**, symétriquement,
+    /// et sans gonfler l'épaisseur moyenne — sinon toutes les boucles
+    /// grossiraient d'un coup.
+    #[test]
+    fn le_galbe_amincit_les_pieds_sans_gonfler_la_boucle() {
+        assert!(galbe(0.0) < galbe(0.5), "le tube n'est pas plus fin à son pied");
+        assert!((galbe(0.0) - galbe(1.0)).abs() < 1e-6, "les deux pieds diffèrent");
+        assert!(galbe(0.25) < galbe(0.5) && galbe(0.25) > galbe(0.0), "le galbe n'est pas régulier");
+        let moyenne: f32 = (0..=100).map(|i| galbe(i as f32 / 100.0)).sum::<f32>() / 101.0;
+        assert!((moyenne - 1.0).abs() < 0.12, "épaisseur moyenne {moyenne} : le galbe n'est pas neutre");
+        // Et rien ne part à zéro : un tube d'épaisseur nulle disparaît.
+        for i in 0..=20 {
+            assert!(galbe(i as f32 / 20.0) > 0.5);
+        }
     }
 
     /// **Deux boucles de même portée et de même hauteur ne se ressemblent

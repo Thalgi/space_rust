@@ -458,6 +458,15 @@ dans la géométrie :
    tache comme un pied d'arche. Ce sont les plus nombreuses dans la réalité,
    et c'est d'elles que vient l'essentiel de la variété de gabarit.
 
+8. **Toutes les boucles avaient la même épaisseur** — `r × 0,05`, constante
+   pour toutes *et* sur toute leur longueur : un chapelet de billboards du
+   même calibre. Chaque boucle porte désormais son **calibre** propre
+   (`Boucle::epaisseur`, du fil ténu au ruban massif) et un **galbe** le long
+   du tube (`rendu::galbe`, pieds serrés et ventre plus large, comme un tube
+   de flux qui s'évase en s'élevant). Le galbe redistribue l'épaisseur, il ne
+   l'augmente pas — sa moyenne reste à 1. Le cœur d'une éjection suit le même
+   calibre.
+
 `MAX_BOUCLES` remonté de 4 à 6 en conséquence : le recouvrement est empêché
 à la source par la répulsion, et une boucle courte est bien plus discrète
 qu'une grande arche. Comme `COS_ARCHES` et `PART_COURTES`, c'est un réglage

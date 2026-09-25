@@ -65,6 +65,11 @@ pub(super) struct Boucle {
     /// jambes se resserrent et la boucle s'étrangle à la base, silhouette
     /// haute et étroite. Négatif : elle s'évase en dôme large et bas.
     pub pincee: f32,
+    /// **Épaisseur du tube**, en part de l'épaisseur de référence. Un tube de
+    /// flux n'a pas de calibre standard : une protubérance massive est un
+    /// ruban épais, une boucle ténue un fil. Toutes les boucles avaient la
+    /// même — un chapelet de billboards du même gabarit.
+    pub epaisseur: f32,
     /// **Inclinaison hors du plan radial**, en part de la hauteur. Une vraie
     /// boucle ne se tient pas droite dans le plan qui contient le centre de
     /// l'étoile : elle penche. Sans ça, deux boucles d'un même groupe
@@ -416,6 +421,10 @@ impl Soleil {
             // que deux boucles de même portée ne se ressemblent pas.
             pincee: gen_range(-0.22, 0.34) * j,
             inclinaison: gen_range(-0.55, 0.55) * j,
+            // Un fil ténu ou un ruban massif, et tout l'entre-deux. Borné bas
+            // pour que le plancher en pixels ait encore quelque chose à
+            // relever, haut pour qu'un tube n'avale pas l'étoile.
+            epaisseur: (1.0 + gen_range(-0.5, 0.9) * j).clamp(0.45, 2.1),
             etat: EtatBoucle::Montee,
             timer: 0.0,
             tenue_max: gen_range(0.6, 1.8) + gen_range(0.0, 1.0) * j,
@@ -652,6 +661,7 @@ mod tests_repulsion {
             apex_max: 1.0,
             skew: 0.0,
             pincee: 0.0,
+            epaisseur: 1.0,
             inclinaison: 0.0,
             etat: EtatBoucle::Tenue,
             timer: 0.0,
