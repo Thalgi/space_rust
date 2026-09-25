@@ -1,15 +1,12 @@
-// Consommé par les sous-lots 3.2 (les taches naissent sur les maxima du
-// champ), 3.3 (les pieds d'arche sur deux polarités opposées) et 3.4 (le
-// shader le lit) — voir `docs/conception/astres_v2.md` §6 bis. Livré seul
-// d'abord parce qu'il est **entièrement testable sans contexte graphique**,
-// ce que ses consommateurs ne seront pas.
-#[allow(dead_code)]
+// La source unique d'où découlent taches (sous-lot 3.2), pieds d'arche (3.3)
+// et assombrissement du shader (3.4) — `docs/conception/astres_v2.md` §6 bis.
 mod champ;
 mod eruptions;
 mod materiau;
 mod rendu;
 
 use crate::astre::{Astre, Categorie, CameraInfo, CorpsBase};
+use champ::Pole;
 use eruptions::{Boucle, Flare, Tache};
 use macroquad::models::Vertex;
 use macroquad::prelude::*;
@@ -65,6 +62,10 @@ pub struct Soleil {
     /// par image. Elle décale les champs de bruit ; le décalage de `temps`
     /// ci-dessous s'occupe du reste (voir sa doc).
     graine: f32,
+    /// **Les pôles magnétiques de cette étoile**, dérivés de [`Self::graine`]
+    /// une fois pour toutes (jamais tirés : voir [`champ::poles`]). C'est de
+    /// là que viennent les régions actives où naissent les taches.
+    poles: Vec<Pole>,
     /// Horloge d'animation, **décalée d'une étoile à l'autre** — voir
     /// [`temps_initial`].
     temps: f32,
@@ -124,6 +125,7 @@ impl Soleil {
         Self {
             base: CorpsBase::new(position, 1000.0, rayon),
             graine,
+            poles: champ::poles(graine),
             temps: temps_initial(graine),
             taches: Vec::new(),
             boucles: Vec::new(),

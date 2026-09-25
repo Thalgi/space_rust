@@ -361,6 +361,32 @@ au plus cosmétique**. Chacun se tient seul ; aucun ne dépend du suivant.
    égale, le système entier changerait. Les pôles se **dérivent** de la
    graine, comme `temps_initial` (lot 1).
 
+**Livrés.** **3.1** (`soleil/champ.rs`) : des paires de pôles de polarités
+opposées dérivées de la graine, et `champ(dir)` signé. **3.2**
+(`champ::groupe` + `Soleil::naitre_groupe`) : une tache ne naît plus seule ni
+n'importe où — une région active naît d'un coup, tache de tête sur une
+polarité, suiveuses sur l'autre et à côté, les trois tailles sorties du champ
+au lieu de trois tirages sans rapport.
+
+Deux choses que 3.2 a apprises, et qui n'étaient pas prévues :
+
+- ⚠️ **Une région peut être noyée par sa voisine.** Les paires étant posées
+  au hasard, un pôle peut tomber près du pôle **opposé** d'une autre paire :
+  le champ s'y annule. Mesuré — un groupe naissait dans un champ **plus
+  faible que la moyenne de la sphère**, c'est-à-dire à nouveau au hasard.
+  D'où `CHAMP_MIN` : sous ce seuil, la région ne fait rien naître et le
+  prochain rendez-vous retente ailleurs. Un groupe compte donc **1 à 3**
+  taches, pas 3.
+- **Les pôles ne bougeant pas, les régions reviennent aux mêmes endroits**
+  pendant toute la session. Assumé ici (`astres_v2_champ_partage.md` §7) ;
+  une dérive lente coûte un float, elle attend qu'on la juge nécessaire à
+  l'œil. Le garde-fou `region_occupee` empêche au moins les taches de
+  s'empiler aux trois mêmes points jusqu'à saturer `MAX_TACHES`.
+
+**Rien ne change encore à l'écran** au-delà de l'endroit et de la taille des
+taches : c'est 3.4 qui fera lire le champ au shader. C'est voulu — ça isole
+la régression.
+
 ## 7. Hors périmètre
 
 **Rendre les arches visibles au cadrage par défaut** : tranché et chiffré par

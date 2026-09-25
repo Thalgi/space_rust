@@ -50,6 +50,17 @@ const ECART_PAIRE: f32 = 0.28;
 /// Portée angulaire d'un pôle : au-delà, sa contribution est négligeable.
 const PORTEE: f32 = 0.42;
 
+/// **Champ minimal pour qu'une tache s'y forme.**
+///
+/// Une tache est de la convection **bloquée** : sous un certain champ, rien
+/// ne bloque rien et la surface reste granuleuse. Le seuil sert surtout de
+/// garde-fou — les paires étant posées au hasard, celle d'une région peut
+/// tomber près d'un pôle opposé d'une autre et s'annuler avec lui. Sans lui,
+/// un groupe naissait dans un champ **plus faible que la moyenne de la
+/// sphère** : une tache à nouveau posée au hasard, exactement ce que ce
+/// sous-lot corrige.
+const CHAMP_MIN: f32 = 0.35;
+
 /// Un pôle magnétique, posé sur la sphère.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Pole {
@@ -101,6 +112,54 @@ pub(super) fn champ(poles: &[Pole], d: Vec3) -> f32 {
             p.force * (-t * t).exp()
         })
         .sum()
+}
+
+/// **Où une tache peut naître**, et sa taille relative.
+///
+/// `poids` vaut `1` pour la plus forte du groupe et décroît pour les autres :
+/// c'est l'intensité du champ au site, normalisée. L'appelant en tire la
+/// taille et la durée de vie — une tache principale est grosse et dure.
+pub(super) struct Site {
+    pub dir: Vec3,
+    pub poids: f32,
+}
+
+/// **Le groupe de taches d'une région active**, trié de la principale à la
+/// plus petite.
+///
+/// Une tache ne naît plus au hasard (`eruptions::dir_aleatoire`) et ne naît
+/// plus seule : une région active porte une **tache de tête** sur une
+/// polarité, une **suiveuse** sur l'autre, et une petite accolée à la
+/// première — la forme la plus simple d'un groupe bipolaire réel
+/// (`astres_v2_recherche_visuelle.md`). Les trois tailles sortent du champ
+/// lui-même, pas d'un tirage : c'est ce qui les rend inégales *et* cohérentes
+/// avec l'endroit où elles se posent.
+///
+/// Rend une liste vide si la paire n'existe pas — l'appelant garde alors son
+/// comportement d'avant.
+pub(super) fn groupe(poles: &[Pole], paire: usize) -> Vec<Site> {
+    let (a, b) = match (poles.get(paire * 2), poles.get(paire * 2 + 1)) {
+        (Some(a), Some(b)) => (a, b),
+        _ => return Vec::new(),
+    };
+    // La troisième penche nettement vers `a` : posée entre les deux, elle
+    // tomberait sur la ligne neutre, là où le champ s'annule — justement là où
+    // une tache ne se forme pas.
+    let accolee = (a.dir * 0.72 + b.dir * 0.28).normalize_or(a.dir);
+    let mut sites: Vec<Site> = [a.dir, b.dir, accolee]
+        .into_iter()
+        .map(|dir| Site { dir, poids: champ(poles, dir).abs() })
+        .filter(|s| s.poids >= CHAMP_MIN)
+        .collect();
+    let fort = sites.iter().map(|s| s.poids).fold(0.0_f32, f32::max);
+    if fort <= 0.0 {
+        return Vec::new(); // région noyée par une voisine : rien n'y naît
+    }
+    for s in &mut sites {
+        s.poids /= fort;
+    }
+    sites.sort_by(|x, y| y.poids.total_cmp(&x.poids));
+    sites
 }
 
 /// Direction unitaire uniformément répartie sur la sphère.
@@ -220,5 +279,102 @@ mod tests {
             assert!(v.is_finite(), "champ non fini en {d:?}");
             assert!(v.abs() <= plafond, "champ {v} au-delà de {plafond}");
         }
+    }
+
+    /// **Un groupe naît là où le champ est fort**, pas n'importe où. C'est
+    /// tout le sous-lot 3.2 : la tache cesse d'être un autocollant posé au
+    /// hasard sur la sphère.
+    #[test]
+    fn un_groupe_naît_sur_les_maxima_du_champ() {
+        let p = poles(11.0);
+        let sites = groupe(&p, 0);
+        assert!(!sites.is_empty(), "la première région active ne donne aucun site");
+        // Référence : le champ moyen sur la sphère, que les sites doivent
+        // dominer largement.
+        let mut rng = Rng::new(5);
+        let moyen: f32 = (0..400).map(|_| champ(&p, direction(&mut rng)).abs()).sum::<f32>() / 400.0;
+        for s in &sites {
+            let ici = champ(&p, s.dir).abs();
+            assert!(
+                ici > moyen * 2.0,
+                "site à {ici} de champ, pour une moyenne de {moyen} : c'est une tache posée au hasard"
+            );
+            assert!((s.dir.length() - 1.0).abs() < 1e-4, "site non unitaire");
+            // ⚠️ Et le site appartient bien à **la région demandée**. Sans
+            // cette garde, `CHAMP_MIN` suffisait à satisfaire l'assertion
+            // ci-dessus : des sites tirés au hasard qui passent le seuil sont
+            // par construction dans un champ fort, mais ne forment plus un
+            // groupe — et le sous-lot 3.3 ne saurait plus où ancrer ses pieds.
+            let a_la_paire = [p[0].dir, p[1].dir]
+                .iter()
+                .map(|d| d.dot(s.dir).clamp(-1.0, 1.0).acos())
+                .fold(f32::INFINITY, f32::min);
+            assert!(
+                a_la_paire <= ECART_PAIRE,
+                "site à {a_la_paire} rad de sa paire : il n'appartient pas à la région"
+            );
+        }
+    }
+
+    /// **Une principale, des suiveuses.** Des taches toutes de même taille
+    /// donneraient un semis régulier, pas un groupe — et le sous-lot 3.3 a
+    /// besoin de savoir laquelle mène pour y ancrer ses arches.
+    #[test]
+    fn le_groupe_a_une_principale_et_des_suiveuses() {
+        let mut vu_accompagne = false;
+        for graine in [1.0_f32, 42.0, 907.5] {
+            for paire in 0..NB_PAIRES {
+                let sites = groupe(&poles(graine), paire);
+                if sites.is_empty() {
+                    continue; // région noyée : légitime, voir `CHAMP_MIN`
+                }
+                assert!((sites[0].poids - 1.0).abs() < 1e-6, "la tête ne porte pas le poids 1");
+                for f in sites.windows(2) {
+                    assert!(
+                        f[0].poids > f[1].poids,
+                        "graine {graine} : deux taches de même poids ({}) — ce n'est plus un groupe",
+                        f[0].poids
+                    );
+                }
+                vu_accompagne |= sites.len() > 1;
+            }
+        }
+        assert!(vu_accompagne, "toutes les taches naissent seules : il n'y a pas de groupe");
+    }
+
+    /// **Une étoile n'est jamais sans région active.** `CHAMP_MIN` écarte les
+    /// paires noyées par une voisine ; s'il les écartait toutes, plus aucune
+    /// tache ne naîtrait et la surface serait morte pour la session entière.
+    #[test]
+    fn chaque_etoile_garde_au_moins_une_region_active() {
+        for k in 0..120 {
+            let graine = k as f32 * 8.3;
+            let p = poles(graine);
+            let total: usize = (0..NB_PAIRES).map(|i| groupe(&p, i).len()).sum();
+            assert!(total > 0, "graine {graine} : aucune tache ne peut naître");
+        }
+    }
+
+    /// **Les deux polarités sont représentées.** C'est la condition du
+    /// sous-lot 3.3 : une arche enjambe un changement de signe. Un groupe
+    /// entièrement d'une polarité ne pourrait porter aucun pied.
+    #[test]
+    fn le_groupe_couvre_les_deux_polarites() {
+        let p = poles(3.5);
+        let sites = groupe(&p, 2);
+        let signes: Vec<f32> = sites.iter().map(|s| champ(&p, s.dir).signum()).collect();
+        assert!(
+            signes.iter().any(|s| *s > 0.0) && signes.iter().any(|s| *s < 0.0),
+            "groupe unipolaire : {signes:?}"
+        );
+    }
+
+    /// **Une région qui n'existe pas ne fait rien naître** : l'appelant tire
+    /// un indice, il ne doit pas paniquer s'il dépasse.
+    #[test]
+    fn une_paire_hors_borne_reste_sans_effet() {
+        let p = poles(2.0);
+        assert!(groupe(&p, NB_PAIRES).is_empty());
+        assert!(groupe(&[], 0).is_empty());
     }
 }

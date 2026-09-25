@@ -1,3 +1,4 @@
+use super::champ::{self, Site};
 use super::{Soleil, MAX_TACHES};
 use macroquad::prelude::*;
 use macroquad::rand::gen_range;
@@ -93,6 +94,23 @@ pub(super) fn tache_porteuse(taches: &[Tache], tirage: f32) -> Option<usize> {
     taches.iter().rposition(|t| t.intensite > 0.0)
 }
 
+/// **Cosinus de l'angle en deçà duquel deux taches se confondent.**
+/// ≈ 0,28 rad : l'ordre de grandeur d'un rayon de tache. Sert à ne pas faire
+/// renaître un groupe là où le précédent vit encore.
+const COS_OCCUPE: f32 = 0.96;
+
+/// **La région est-elle déjà prise ?**
+///
+/// Les pôles étant fixes pour la session, le tirage retombe forcément sur des
+/// régions déjà actives ; sans ce garde-fou, les taches s'empileraient aux
+/// trois mêmes endroits jusqu'à saturer `MAX_TACHES`, et aucune autre région
+/// n'aurait jamais sa chance.
+pub(super) fn region_occupee(taches: &[Tache], sites: &[Site]) -> bool {
+    sites
+        .iter()
+        .any(|s| taches.iter().any(|t| t.dir.dot(s.dir) > COS_OCCUPE))
+}
+
 /// Encode le rayon effectif d'une **tache** (assombrissante) dans `spots[i].w`.
 /// **Positif.** Voir [`encoder_flare`] pour l'autre sens de ce même canal.
 pub(super) fn encoder_tache(rayon: f32) -> f32 {
@@ -128,6 +146,45 @@ fn rayon_effectif(w: f32) -> f32 {
 }
 
 impl Soleil {
+    /// **Fait naître une région active entière** : une tache de tête et ses
+    /// suiveuses, sur les maxima du champ magnétique (sous-lot 3.2).
+    ///
+    /// Avant, une tache naissait seule et n'importe où (`dir_aleatoire`) :
+    /// rien ne la reliait à la surface, d'où l'effet d'**autocollant**. Ici,
+    /// c'est le champ — la même source que liront les arches (3.3) et le
+    /// shader (3.4) — qui décide de l'endroit *et* des tailles.
+    ///
+    /// ⚠️ Les pôles ne bougeant pas de la session, les régions reviennent aux
+    /// mêmes endroits. C'est assumé (`astres_v2_champ_partage.md` §7, « le
+    /// champ doit-il vivre ? ») : une dérive lente coûterait un float, elle
+    /// n'est pas de ce sous-lot.
+    pub(super) fn naitre_groupe(&mut self) {
+        let paire = ((gen_range(0.0, 1.0) * champ::NB_PAIRES as f32) as usize)
+            .min(champ::NB_PAIRES - 1);
+        let sites = champ::groupe(&self.poles, paire);
+        if sites.is_empty() || region_occupee(&self.taches, &sites) {
+            return; // le prochain rendez-vous retentera, ailleurs
+        }
+        // Une seule taille de référence pour tout le groupe : ce sont les
+        // poids du champ qui les rendent inégales, pas trois tirages sans
+        // rapport entre eux.
+        let base = gen_range(0.20, 0.32);
+        let vie = gen_range(8.0, 16.0);
+        for s in sites {
+            if self.taches.len() >= MAX_TACHES {
+                break;
+            }
+            self.taches.push(Tache {
+                dir: s.dir,
+                taille: (base * s.poids).max(0.06),
+                age: 0.0,
+                // Une petite tache se dissout plus vite qu'une grosse.
+                vie_max: vie * (0.55 + 0.45 * s.poids),
+                intensite: 0.0,
+            });
+        }
+    }
+
     /// Crée une boucle ancrée sur une tache active (tirée au poids de son
     /// intensité) s'il y en a une, sinon dispersée au hasard.
     pub(super) fn declencher_boucle(&mut self) {
@@ -185,13 +242,7 @@ impl Soleil {
 
         // --- Taches : apparition / fondu / disparition ---
         if self.temps >= self.prochaine_tache && self.taches.len() < MAX_TACHES {
-            self.taches.push(Tache {
-                dir: dir_aleatoire(),
-                taille: gen_range(0.12, 0.28),
-                age: 0.0,
-                vie_max: gen_range(8.0, 16.0),
-                intensite: 0.0,
-            });
+            self.naitre_groupe();
             self.prochaine_tache = self.temps + gen_range(3.0, 7.0);
         }
         for t in &mut self.taches {
@@ -369,6 +420,43 @@ mod tests_tache_porteuse {
         // Et les bornes du tirage ne sortent jamais de la liste.
         assert!(tache_porteuse(&taches, 0.0).is_some());
         assert!(tache_porteuse(&taches, 1.0).is_some());
+    }
+}
+
+#[cfg(test)]
+mod tests_region_occupee {
+    use super::*;
+
+    fn tache(dir: Vec3) -> Tache {
+        Tache { dir: dir.normalize(), taille: 0.2, age: 1.0, vie_max: 10.0, intensite: 1.0 }
+    }
+
+    fn site(dir: Vec3) -> Site {
+        Site { dir: dir.normalize(), poids: 1.0 }
+    }
+
+    /// **Un groupe ne renaît pas sur lui-même.** Les pôles sont fixes : sans
+    /// ce refus, chaque rendez-vous rechargerait les trois mêmes régions
+    /// jusqu'à saturer `MAX_TACHES`, et la surface se figerait.
+    #[test]
+    fn une_region_qui_porte_deja_une_tache_est_refusee() {
+        let sites = [site(vec3(1.0, 0.0, 0.0)), site(vec3(0.0, 1.0, 0.0))];
+        // Exactement dessus, et un peu à côté (0,15 rad) : même région.
+        assert!(region_occupee(&[tache(vec3(1.0, 0.0, 0.0))], &sites));
+        assert!(region_occupee(&[tache(vec3(1.0, 0.15, 0.0))], &sites));
+        // Et il suffit qu'**une** des taches du groupe soit encore là.
+        assert!(region_occupee(&[tache(vec3(0.0, 1.0, 0.02))], &sites));
+    }
+
+    /// **Et une région libre reste libre** : un refus systématique
+    /// empêcherait toute tache de naître.
+    #[test]
+    fn une_region_eloignee_reste_disponible() {
+        let sites = [site(vec3(1.0, 0.0, 0.0))];
+        assert!(!region_occupee(&[], &sites));
+        assert!(!region_occupee(&[tache(vec3(0.0, 0.0, 1.0))], &sites));
+        // Un demi-radian plus loin : deux taches distinctes, pas un doublon.
+        assert!(!region_occupee(&[tache(vec3(1.0, 0.55, 0.0))], &sites));
     }
 }
 
