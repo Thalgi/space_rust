@@ -543,6 +543,27 @@ mod tests_disque {
         }
     }
 
+    /// **Seul un disque d'accrétion se plie.**
+    ///
+    /// Le pli imite la déviation des rayons autour d'un trou noir : la face
+    /// arrière du disque, physiquement cachée, apparaît au-dessus de lui.
+    /// Appliqué à un anneau de Saturne, il le décollerait de sa planète sans
+    /// aucune raison physique.
+    #[test]
+    fn seul_un_disque_d_accretion_se_plie() {
+        let acc = DisqueConfig::accretion(1.4, 3.0, 1000.0);
+        assert!(acc.pli > 0.0, "sans pli, la silhouette reste celle d'un anneau incliné");
+        // Assez pour enjamber l'astre, pas au point d'en faire une soucoupe.
+        assert!((0.5..2.5).contains(&acc.pli), "amplitude de pli hors du raisonnable : {}", acc.pli);
+        for autre in [
+            DisqueConfig::protosolaire(0, 3.0, 16.0, 1000.0),
+            DisqueConfig::anneau_saturne(1.2, 2.3, Vec3::ONE, 0.0),
+            DisqueConfig::kuiper(10, 2.0, 3.0, 1000.0),
+        ] {
+            assert_eq!(autre.pli, 0.0, "un disque ordinaire se plie");
+        }
+    }
+
     /// **Le profil de température est adouci, et c'est assumé.**
     ///
     /// La valeur physique est 3 — `T ∝ r^(-3/4)` et une émission en `T⁴`.

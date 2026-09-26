@@ -17,6 +17,7 @@ precision highp float;
 varying vec2 vtc;    // (t radial 0..1, ang 0..1)
 varying float vdot;  // dot(position relative, tocam) -> moitiés avant/arrière
 varying vec3 vpos;   // position relative au centre (monde)
+varying float vpli;  // part de pli appliquée ici (0 = à plat)
 
 uniform float time;
 uniform float seed;
@@ -33,6 +34,8 @@ uniform float doppler;     // force du beaming (0 = aucun)
 uniform float bord;        // largeur des bords doux (fraction radiale)
 uniform vec3 axe_n;        // normale du plan
 uniform vec3 tocam;        // du centre vers la caméra
+uniform float pli;         // amplitude du pli (0 = disque plat)
+uniform float pli_signe;   // +1 = arc du dessus, -1 = celui du dessous
 
 float hash21(vec2 p) {
     return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
@@ -52,6 +55,17 @@ float vnoise(vec2 p) {
 void main() {
     // Moitié avant / arrière : l'astre s'intercale entre les deux passes.
     if (moitie * vdot < 0.0) { discard; }
+
+    // **Le second arc ne vit que là où le pli l'a vraiment soulevé.** Sur les
+    // côtés le pli s'annule, et les deux copies de la moitié arrière se
+    // superposent exactement — en additif, une bande deux fois trop brillante
+    // le long de la ligne de raccord. Celle du dessus, elle, se raccorde au
+    // disque plat : c'est la même matière, elle doit rester continue.
+    float part_arc = 1.0;
+    if (pli > 0.001 && pli_signe < 0.0) {
+        part_arc = smoothstep(0.12, 0.55, vpli);
+        if (part_arc < 0.004) { discard; }
+    }
 
     float t = clamp(vtc.x, 0.0, 1.0);        // 0 = bord interne, 1 = externe
     float rr = mix(1.0, r_ratio, t);         // rayon en unités du bord interne
@@ -107,7 +121,7 @@ void main() {
     col.r *= 1.0 - bleuissement * 0.6;
     col *= faisceau;
 
-    float a = clamp(dens * chaleur, 0.0, 1.0) * alpha;
+    float a = clamp(dens * chaleur, 0.0, 1.0) * alpha * part_arc;
     a *= clamp(faisceau, 0.35, 1.8);
     if (a < 0.004) { discard; }
 

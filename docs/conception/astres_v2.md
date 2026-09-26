@@ -642,6 +642,36 @@ disque protosolaire ne se juge pas.
 Ce sont des **sous-lots du lot 5**, pas un lot neuf : le disque d'accrétion
 est son sujet, et il n'est pas fini. Le lot 6 garde son contenu.
 
+**Livrés.** **5.1** : `disque_accretion.frag.glsl` et son pipeline, profil de
+température en puissance (adouci à 1,6 — la valeur physique 3 éteint le bord
+externe au point qu'il disparaît), beaming coloré, turbulence cisaillée,
+blending **additif**. `doppler` quitte le voile partagé, qui redevient le
+shader des anneaux. **5.2** : le **pli** — la moitié arrière du disque
+dessinée **deux fois**, relevée au-dessus puis au-dessous de l'astre, pour
+imiter la silhouette que produit la déviation des rayons.
+
+Trois points du pli, tous vérifiés :
+
+- Le **raccord** se fait tout seul : le pli s'éteint sur les côtés
+  (`smoothstep` sur « à quel point ce point est derrière l'astre »), là où la
+  matière n'a jamais été cachée. L'arc du dessus est donc continu avec le
+  disque plat, sans couture.
+- Le **second arc** (celui du dessous) s'efface là où le pli est faible,
+  sinon les deux copies se superposeraient exactement — en additif, une bande
+  deux fois trop brillante le long du raccord.
+- Le pli **s'annule quand le disque est vu de face** : la normale du plan n'a
+  alors plus de composante à l'écran, et rien n'est caché derrière l'astre.
+  C'est aussi ce qui évite de normaliser un vecteur nul.
+
+⚠️ **La moitié avant ne se plie pas.** Elle n'a jamais été cachée par
+l'astre, donc rien ne la dévie ; la relever décollerait le disque de ses
+propres bords. Et `vdot`, qui choisit la moitié, se calcule **avant** le
+déplacement — sinon un sommet relevé pourrait changer de camp en vol.
+
+**Coût mesuré** : 3 passes d'annulus au lieu de 2, soit ~11 500 sommets par
+frame et par trou noir, contre 25 600 pour un vaisseau. Le pipeline ajouté
+porte le compte à 11 sur 32 (garde `le_nombre_de_shaders_reste_sous_le_plafond`).
+
 ⚠️ **Échelle du disque protosolaire de T Tauri**, question ouverte soulevée à
 l'écran (« je n'aurais pas imaginé un disque aussi grand »). Il fait
 **16 rayons stellaires**, soit 0,28 UA. À comparer : la galerie des disques

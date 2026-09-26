@@ -81,6 +81,16 @@ pub struct DisqueConfig {
     /// on le dit. `0` = pas de profil, c'est le cas de tout ce qui n'est pas
     /// un disque d'accrétion.
     pub temp_exposant: f32,
+    /// **Amplitude du pli** (sous-lot 5.2) : de combien la moitié arrière du
+    /// disque est relevée par-dessus l'astre, en part de son propre rayon.
+    ///
+    /// Imite la silhouette que produit la déviation des rayons autour d'un
+    /// trou noir — la face arrière, physiquement cachée, apparaît au-dessus
+    /// de lui. ⚠️ **Réglage esthétique, et trucage borné** : trop faible,
+    /// l'anneau ne se referme pas ; trop fort, il devient une soucoupe. Rien
+    /// ne le déduit (`astres_v2_disque_accretion.md` §8). `0` = disque plat,
+    /// ce qu'est n'importe quel autre disque.
+    pub pli: f32,
     /// **Ce disque est un disque d'accrétion** : il se dessine avec son
     /// propre shader, additif, et non avec le voile des anneaux.
     pub accretion: bool,
@@ -121,6 +131,7 @@ impl DisqueConfig {
             rotation_voile: 0.02,
             doppler: 0.0,
             temp_exposant: 0.0,
+            pli: 0.0,
             accretion: false,
         }
     }
@@ -152,6 +163,7 @@ impl DisqueConfig {
             // Adouci depuis la valeur physique (3,0) : celle-ci éteint le
             // bord externe au point qu'il disparaît, et on perd le disque.
             temp_exposant: 1.6,
+            pli: 1.15,
             accretion: true,
             ..Self::base(0, interne, externe, masse)
         }

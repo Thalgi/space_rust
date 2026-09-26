@@ -2,6 +2,10 @@
 //! vertex shader que le voile, mais son propre fragment shader et son propre
 //! vocabulaire.
 //!
+//! Le sous-lot 5.2 y a ajouté le **pli** : la moitié arrière du disque
+//! relevée par-dessus et par-dessous l'astre, pour imiter la silhouette que
+//! produit la déviation des rayons. Voir `disque_accretion.vert.glsl`.
+//!
 //! **Pourquoi un shader à part.** Le voile partagé porte celui des anneaux
 //! planétaires — lacunes, arcs, annelets, ombre du corps central — dont rien
 //! ne sert ici, et ne porte aucun des termes d'un disque d'accrétion :
@@ -16,8 +20,25 @@ use crate::impostor;
 use macroquad::miniquad::{BlendFactor, BlendState, BlendValue, Equation};
 use macroquad::prelude::*;
 
-const VERT: &str = include_str!("../shaders/disque_voile.vert.glsl");
+const VERT: &str = include_str!("../shaders/disque_accretion.vert.glsl");
 const FRAG: &str = include_str!("../shaders/disque_accretion.frag.glsl");
+
+/// **Les passes à dessiner** pour une moitié de disque : `(amplitude du pli,
+/// signe)` pour chacune.
+///
+/// La moitié **arrière** se dessine **deux fois**, relevée au-dessus puis
+/// au-dessous de l'astre : c'est le pli. La moitié **avant** reste à plat —
+/// elle n'a jamais été cachée par l'astre, donc rien ne la dévie, et la
+/// relever ferait décoller le disque de ses propres bords.
+///
+/// Un disque sans pli garde une seule passe par moitié, exactement comme
+/// avant le sous-lot 5.2.
+pub(super) fn passes_pli(pli: f32, moitie: f32) -> Vec<(f32, f32)> {
+    if pli <= 0.0 || moitie >= 0.0 {
+        return vec![(0.0, 1.0)];
+    }
+    vec![(pli, 1.0), (pli, -1.0)]
+}
 
 /// Pousse les uniforms du disque d'accrétion.
 // Ce sont les UNIFORMS du shader : les grouper ne ferait que déplacer la
@@ -34,6 +55,8 @@ pub(super) fn uniforms_accretion(
     axes: (Vec3, Vec3, Vec3),
     tocam: Vec3,
     moitie: f32,
+    // `(amplitude, signe)` du pli. `(0, _)` dessine le disque à plat.
+    pli: (f32, f32),
 ) {
     let (u, n, v) = axes;
     mat.set_uniform("time", temps);
@@ -57,6 +80,8 @@ pub(super) fn uniforms_accretion(
     mat.set_uniform("r_ratio", (c.externe / c.interne.max(1e-3)).max(1.001));
     mat.set_uniform("doppler", c.doppler);
     mat.set_uniform("bord", c.voile_bord);
+    mat.set_uniform("pli", pli.0);
+    mat.set_uniform("pli_signe", pli.1);
 }
 
 /// **Déclaration des uniforms. Source unique** : sert à créer le material, et
@@ -81,6 +106,8 @@ fn uniforms_accretion_decl() -> Vec<UniformDesc> {
         UniformDesc::new("r_ratio", UniformType::Float1),
         UniformDesc::new("doppler", UniformType::Float1),
         UniformDesc::new("bord", UniformType::Float1),
+        UniformDesc::new("pli", UniformType::Float1),
+        UniformDesc::new("pli_signe", UniformType::Float1),
     ]
 }
 
@@ -90,7 +117,7 @@ fn uniforms_accretion_decl() -> Vec<UniformDesc> {
 pub(super) fn material_accretion() -> Material {
     load_material(
         ShaderSource::Glsl {
-            vertex: &impostor::source("disque_voile.vert.glsl", VERT),
+            vertex: &impostor::source("disque_accretion.vert.glsl", VERT),
             fragment: &impostor::source("disque_accretion.frag.glsl", FRAG),
         },
         MaterialParams {
@@ -132,5 +159,36 @@ mod tests {
     fn aucun_uniform_d_accretion_n_est_mort() {
         let morts = uniforms_inutilises(&[VERT, FRAG]);
         assert!(morts.is_empty(), "uniforms déclarés mais jamais lus : {morts:?}");
+    }
+
+    /// **Seule la moitié arrière se dédouble, et ses deux arcs sont
+    /// opposés.**
+    ///
+    /// C'est toute la silhouette : la face arrière du disque apparaît
+    /// au-dessus de l'astre **et** au-dessous. Deux arcs de même signe se
+    /// superposeraient — un seul arc, deux fois trop brillant en additif ; et
+    /// plier la moitié avant décollerait le disque de ses propres bords,
+    /// puisqu'elle n'a jamais été cachée.
+    #[test]
+    fn seule_la_moitie_arriere_se_dedouble() {
+        let arriere = passes_pli(1.15, -1.0);
+        assert_eq!(arriere.len(), 2, "la moitié arrière ne donne pas deux arcs");
+        assert!(arriere[0].1 * arriere[1].1 < 0.0, "les deux arcs vont du même côté");
+        assert!(arriere.iter().all(|p| p.0 > 0.0), "un arc dessiné à plat");
+
+        let avant = passes_pli(1.15, 1.0);
+        assert_eq!(avant.len(), 1, "la moitié avant a été dédoublée");
+        assert_eq!(avant[0].0, 0.0, "la moitié avant a été pliée");
+    }
+
+    /// **Un disque sans pli dessine exactement comme avant** : une passe par
+    /// moitié, à plat. Le pli ne doit rien coûter à ce qui ne s'en sert pas.
+    #[test]
+    fn sans_pli_rien_ne_change() {
+        for moitie in [-1.0_f32, 0.0, 1.0] {
+            let p = passes_pli(0.0, moitie);
+            assert_eq!(p.len(), 1, "moitié {moitie} : passe de trop sans pli");
+            assert_eq!(p[0].0, 0.0);
+        }
     }
 }

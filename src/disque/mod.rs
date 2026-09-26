@@ -294,11 +294,28 @@ impl Disque {
             // ni face nuit, ni ombre du corps central, ni teinte d'étoile —
             // ses uniforms n'ont presque rien de commun avec ceux du voile.
             if self.cfg.accretion {
-                accretion::uniforms_accretion(
-                    mat, &self.cfg, self.temps, p_rel,
-                    (self.axe_u, self.axe_n, self.axe_v),
-                    tocam, moitie,
-                );
+                // **La moitié arrière se dessine deux fois**, relevée
+                // au-dessus puis au-dessous de l'astre : c'est le pli
+                // (sous-lot 5.2). La moitié avant reste à plat — elle n'a
+                // jamais été cachée, rien ne la dévie.
+                for pli in accretion::passes_pli(self.cfg.pli, moitie) {
+                    accretion::uniforms_accretion(
+                        mat, &self.cfg, self.temps, p_rel,
+                        (self.axe_u, self.axe_n, self.axe_v),
+                        tocam, moitie, pli,
+                    );
+                    gl_use_material(mat);
+                    for lot in &self.voile_lots {
+                        draw_mesh(lot);
+                    }
+                    // ⚠️ Vidage entre les deux passes : les materials sont
+                    // partagés, `set_uniform` écrit dans le pipeline et non
+                    // dans le clone. Sans ça, la seconde passe imposerait son
+                    // signe de pli à la première (`technique.md` P.2 ter).
+                    vider_lot();
+                }
+                gl_use_default_material();
+                return;
             } else {
                 voile::uniforms_voile(
                     mat, &self.cfg, self.temps, p_rel,
