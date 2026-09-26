@@ -18,6 +18,15 @@ impl Soleil {
         let r = self.rayon_dessine(cam.pos);
         let rot = self.temps * 0.12;
 
+        // **Le disque, moitié arrière d'abord** : l'horizon la masquera.
+        // Même encadrement qu'un anneau planétaire (`planete/mod.rs`), et
+        // pour la même raison — sans lui, un disque translucide dessiné d'un
+        // seul tenant passe devant l'astre qu'il contourne.
+        if let Some(d) = &mut self.disque {
+            d.corps_mut().position = c;
+            d.draw_moitie(cam, -1.0);
+        }
+
         // ---- 1) Corps : quad + shader ----
         self.verts.clear();
         self.inds.clear();
@@ -210,6 +219,11 @@ impl Soleil {
         }
         flush(&mut self.verts, &mut self.inds, &self.halo);
         gl_use_default_material();
+
+        // Moitié avant APRÈS tout le reste : elle passe devant l'horizon.
+        if let Some(d) = &mut self.disque {
+            d.draw_moitie(cam, 1.0);
+        }
     }
 }
 

@@ -581,9 +581,44 @@ Quatre points :
   luminosité, qui ici décrit un disque d'accrétion — la tracer donnerait un
   anneau d'eau liquide autour d'un horizon.
 
-Le **lot 5** (disque d'accrétion comme `Disque` à part entière, avec plan,
-tranche et Doppler) reste à faire : ce que le shader dessine aujourd'hui est
-un voile stylisé sans plan propre.
+## 6 quater. Lot 5, livré (2026-09-26)
+
+**Le disque d'accrétion a un plan.** Il était peint dans le quad de
+l'impostor : une ellipse en coordonnées **écran**, d'inclinaison câblée à
+0,40. Elle présentait donc éternellement la même face — impossible d'en faire
+le tour, impossible de la voir par la tranche, et elle ignorait l'inclinaison
+du système. C'est maintenant un vrai [`Disque`], dessiné en **deux moitiés**
+autour de l'impostor, exactement comme un anneau planétaire (`planete/mod.rs`).
+Ne restent peints dans le shader que l'anneau de photons et l'horizon, qui
+appartiennent vraiment à la sphère.
+
+- **Preset `accretion`** : du gaz, pas des cailloux (aucune particule). Son
+  gradient thermique est **inversé** par rapport aux disques proto\* —
+  blanc-bleu au bord *interne*, orange sombre à l'externe.
+- **Beaming Doppler** (`DisqueConfig::doppler`) : le côté qui vient vers la
+  caméra s'éclaircit, l'autre s'assombrit, d'autant plus fort près du bord
+  interne où la matière tourne le plus vite. C'est le signe qui distingue un
+  disque d'accrétion d'un anneau ; à `0` pour tout le reste, un anneau de
+  Saturne n'ayant aucune raison d'être plus brillant d'un côté. Effet
+  **peint**, pas relativiste (§7).
+- **Le plan est dérivé de la graine** : deux trous noirs ne présentent pas la
+  même face. ⚠️ Dérivé, jamais tiré — même piège que `champ::poles`.
+- **T Tauri porte enfin son disque protosolaire**, via un mode de couronne 6
+  et une `Variante::Proto`. Il partageait le mode 1 avec l'étoile à neutrons,
+  qui n'a que faire d'un berceau de planètes.
+
+⚠️ **Trouvé en chemin : le voile n'avait aucune garde uniforms↔GLSL**, à la
+différence des shaders d'étoile et de planète, alors qu'il en porte près de
+trente. Deux tests ajoutés — correspondance, et absence d'uniform mort.
+Le premier sabotage est passé **à côté de sa cible** (l'indentation avait
+changé avec une extraction) et le vert obtenu ne voulait rien dire : vérifier
+que le sabotage a bien eu lieu fait partie du red-check, pas seulement lire
+la couleur.
+
+**Reste ouvert** : à longue distance l'étoile est agrandie par le plancher en
+pixels (`PX_MIN`) alors que le disque garde sa taille physique — le disque
+passe donc sous l'horizon dessiné. Sans conséquence visible à cette échelle,
+où plus rien ne se lit, mais c'est une incohérence réelle.
 
 ## 7. Hors périmètre
 

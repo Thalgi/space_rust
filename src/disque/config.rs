@@ -65,6 +65,13 @@ pub struct DisqueConfig {
     pub arcs: f32,              // 0 = anneau complet … 1 = arcs isolés (Neptune)
     pub emissif: f32,           // lueur chaude au bord interne (disques proto*)
     pub rotation_voile: f32,    // vitesse angulaire visuelle au bord interne (rad/s)
+    /// **Beaming Doppler** : le côté du disque qui vient vers la caméra
+    /// s'éclaircit, celui qui s'en éloigne s'assombrit. `0` pour tout ce qui
+    /// tourne lentement — un anneau de Saturne n'a aucune raison d'être plus
+    /// brillant d'un côté. Ne prend son sens que sur un disque d'accrétion,
+    /// dont la matière frôle la vitesse de la lumière. Effet **peint**, pas
+    /// relativiste (`astres_v2.md` §7).
+    pub doppler: f32,
 }
 
 impl DisqueConfig {
@@ -100,6 +107,35 @@ impl DisqueConfig {
             arcs: 0.0,
             emissif: 0.0,
             rotation_voile: 0.02,
+            doppler: 0.0,
+        }
+    }
+
+    /// **Disque d'accrétion** d'un trou noir stellaire.
+    ///
+    /// Du gaz, pas des cailloux : aucune particule, tout est dans le voile.
+    /// Le gradient thermique est **radial et inversé** par rapport aux
+    /// disques proto\* — blanc-bleu au bord interne, où la matière chauffe à
+    /// des millions de degrés, orange sombre au bord externe. Il tourne vite
+    /// et il **beame** : c'est ce qui le distingue de tout autre anneau.
+    pub fn accretion(interne: f32, externe: f32, masse: f32) -> Self {
+        Self {
+            voile_alpha: 0.85,
+            // Interne = `couleur2`, externe = `couleur` : la convention des
+            // autres presets, ici avec le chaud au CENTRE.
+            voile_couleur: vec3(1.0, 0.45, 0.12),
+            voile_couleur2: vec3(0.95, 0.98, 1.0),
+            voile_plateau: 1.0,
+            voile_alpha_interne: 1.0,
+            voile_bord: 0.14,
+            // Une turbulence marquée : le gaz d'accrétion n'est pas lisse.
+            granulation: 0.55,
+            gran_seuil: 0.38,
+            gran_freq: vec2(8.0, 0.75),
+            emissif: 1.0,
+            rotation_voile: 0.35,
+            doppler: 0.8,
+            ..Self::base(0, interne, externe, masse)
         }
     }
 

@@ -6,6 +6,7 @@ mod materiau;
 mod rendu;
 
 use crate::astre::{Astre, Categorie, CameraInfo, CorpsBase};
+use crate::disque::{Disque, DisqueConfig};
 use champ::Pole;
 use eruptions::{Boucle, Flare, Tache};
 use macroquad::models::Vertex;
@@ -92,11 +93,47 @@ pub struct Soleil {
     couronne_irreg: f32, // irrégularité (rayons/spicules) de la couronne
     couronne_type: f32,  // 0 = halo, 1 = jets bipolaires (pulsar), 2 = vent (WR)
     zone_hab: bool,      // false = rémanent (pulsar/magnétar/étoile à neutrons) : pas de zone habitable
+    /// **Disque de matière autour de l'étoile** — accrétion d'un trou noir,
+    /// disque protosolaire d'une jeune étoile.
+    ///
+    /// ⚠️ Un vrai [`Disque`], avec un **plan propre** : il se voit donc par
+    /// la tranche quand on tourne autour, et il s'incline comme le reste du
+    /// système. Le trou noir en portait un **peint à plat dans le quad**,
+    /// ellipse d'inclinaison câblée qui présentait éternellement la même face
+    /// à la caméra — impossible de faire le tour, impossible de le voir par
+    /// la tranche.
+    disque: Option<Disque>,
     mats: Vec<Material>,  // un par passe de `PASSES` (disque, puis couronne)
     mat_plasma: Material, // billboards en blending additif (plasma lumineux)
     halo: Texture2D,
     verts: Vec<Vertex>,
     inds: Vec<u16>,
+}
+
+/// **Bornes du disque d'accrétion**, en rayons de l'horizon.
+///
+/// Reprises telles quelles de l'ellipse que le shader peignait — elles
+/// avaient déjà été jugées à l'œil. La dernière orbite stable d'un trou noir
+/// de Schwarzschild vaut 3 rayons, le disque commence donc au-dessus de
+/// l'horizon, jamais dessus.
+const RAYON_ACCRETION: (f32, f32) = (1.4, 3.0);
+
+/// **Bornes du disque protosolaire**, en rayons stellaires. Bien plus large
+/// que le disque d'accrétion : c'est un berceau de planètes, pas une
+/// couronne de gaz surchauffé.
+const RAYON_PROTOSOLAIRE: (f32, f32) = (3.0, 16.0);
+
+/// **Normale du plan d'un disque stellaire, dérivée de la graine.**
+///
+/// ⚠️ Dérivée, jamais tirée : un `gen_range` de plus décalerait tout ce qui
+/// est tiré ensuite et changerait le système entier à graine égale — le même
+/// piège que les pôles magnétiques (`champ::poles`) et `temps_initial`.
+fn normale_disque(graine: f32) -> Vec3 {
+    // Deux angles sans rapport l'un avec l'autre, pris dans la graine.
+    let incl = 0.25 + (graine * 0.37).fract() * 0.9; // ~14° à ~66° de la verticale
+    let lon = (graine * 0.113).fract() * std::f32::consts::TAU;
+    let (si, ci) = incl.sin_cos();
+    vec3(si * lon.cos(), ci, si * lon.sin()).normalize_or(Vec3::Y)
 }
 
 /// **Instant de départ de l'animation**, dérivé de la graine de l'étoile.
@@ -145,6 +182,7 @@ impl Soleil {
             couronne_irreg: ((luminosite - 0.4) / 3.6).clamp(0.0, 1.0),
             couronne_type: 0.0,
             zone_hab: true,
+            disque: None,
             mats,
             mat_plasma,
             halo: texture_halo(TAILLE_HALO),
@@ -204,6 +242,40 @@ impl Soleil {
         self.couronne_type = 5.0;
         self.couronne = 3.4; // place pour le disque d'accrétion
         self.couronne_irreg = 0.0;
+        // Le disque **est** la lumière d'un trou noir : il n'a pas de
+        // photosphère. Il vient donc avec l'objet, jamais séparément.
+        let (r, masse) = (self.base.rayon, self.base.masse);
+        let cfg =
+            DisqueConfig::accretion(r * RAYON_ACCRETION.0, r * RAYON_ACCRETION.1, masse);
+        self.avec_disque(cfg)
+    }
+
+    /// **Disque protosolaire** d'une jeune étoile (T Tauri) : le berceau des
+    /// planètes, encore là.
+    ///
+    /// Beaucoup plus large que le disque d'accrétion d'un trou noir, et sans
+    /// beaming — sa matière est froide et lente. ⚠️ Il reste très en deçà de
+    /// l'échelle réelle (une centaine d'UA) : à cette taille il couvrirait
+    /// tout le système et masquerait ses planètes. Même exagération à
+    /// l'envers que `ECHELLE_CORPS`.
+    pub fn avec_disque_protosolaire(self) -> Self {
+        let (r, masse) = (self.base.rayon, self.base.masse);
+        let cfg = DisqueConfig::protosolaire(
+            0,
+            r * RAYON_PROTOSOLAIRE.0,
+            r * RAYON_PROTOSOLAIRE.1,
+            masse,
+        );
+        self.avec_disque(cfg)
+    }
+
+    /// Pose un disque autour de l'étoile, dans un plan **dérivé de sa
+    /// graine** : deux trous noirs ne présentent pas la même face.
+    pub fn avec_disque(mut self, cfg: DisqueConfig) -> Self {
+        let cfg = cfg.avec_normale(normale_disque(self.graine));
+        let mut d = Disque::new(cfg);
+        d.corps_mut().position = self.base.position;
+        self.disque = Some(d);
         self
     }
 
@@ -370,6 +442,80 @@ mod tests {
                 "à {dist} : une planète a été planchéiée"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_disque {
+    use super::*;
+
+    /// **Chaque étoile présente son disque autrement.** Un plan figé donnerait
+    /// des trous noirs tous vus sous le même angle — et c'est exactement ce
+    /// que faisait l'ellipse peinte dans le quad, d'inclinaison câblée.
+    ///
+    /// ⚠️ **Dérivée, jamais tirée** : un `gen_range` de plus décalerait tout
+    /// ce qui est tiré ensuite, et le système entier changerait à graine
+    /// égale (même piège que `champ::poles` et `temps_initial`).
+    #[test]
+    fn le_plan_du_disque_depend_de_la_graine() {
+        let a = normale_disque(12.5);
+        assert_eq!(a, normale_disque(12.5), "deux reconstructions, deux plans");
+        let b = normale_disque(880.25);
+        assert!(a.dot(b).abs() < 0.999, "deux étoiles, le même plan : {a:?} / {b:?}");
+    }
+
+    /// **Et ce plan est utilisable** : unitaire, jamais dégénéré, et jamais
+    /// couché à plat dans le plan de l'écran — un disque vu strictement par la
+    /// tranche est invisible, un disque vu strictement de face ne montre pas
+    /// qu'il a un plan.
+    #[test]
+    fn le_plan_du_disque_reste_franc() {
+        for k in 0..400 {
+            let graine = k as f32 * 2.51;
+            let n = normale_disque(graine);
+            assert!((n.length() - 1.0).abs() < 1e-4, "graine {graine} : normale non unitaire");
+            let depuis_verticale = n.dot(Vec3::Y).clamp(-1.0, 1.0).acos();
+            assert!(
+                (0.1..1.5).contains(&depuis_verticale),
+                "graine {graine} : disque à {depuis_verticale} rad de la verticale"
+            );
+        }
+    }
+
+    /// **Un disque d'accrétion n'est pas un anneau.** Trois choses l'en
+    /// distinguent, et chacune se perdrait en silence : il est fait de gaz
+    /// (aucune particule), son bord **interne** est le plus chaud — l'inverse
+    /// d'un disque protosolaire vu de l'extérieur — et il **beame**.
+    #[test]
+    fn un_disque_d_accretion_se_distingue_d_un_anneau() {
+        let acc = DisqueConfig::accretion(1.4, 3.0, 1000.0);
+        assert_eq!(acc.nb, 0, "des cailloux dans un disque d'accrétion");
+        assert!(acc.doppler > 0.0, "sans beaming, c'est une collerette symétrique");
+        // `couleur2` est le bord interne : il doit être le plus clair et le
+        // plus bleu des deux.
+        let (interne, externe) = (acc.voile_couleur2, acc.voile_couleur);
+        assert!(
+            interne.z > externe.z,
+            "le bord interne ({interne:?}) n'est pas plus bleu que l'externe ({externe:?})"
+        );
+        assert!(interne.length() > externe.length(), "le bord interne n'est pas le plus chaud");
+        assert!(acc.emissif > 0.0, "un disque d'accrétion qui n'émet pas");
+        // Un anneau planétaire, lui, ne beame pas.
+        assert_eq!(DisqueConfig::anneau_saturne(1.2, 2.3, Vec3::ONE, 0.0).doppler, 0.0);
+        assert_eq!(DisqueConfig::protosolaire(0, 3.0, 16.0, 1000.0).doppler, 0.0);
+    }
+
+    /// **Le disque commence au-dessus de l'horizon, pas dessus.** La dernière
+    /// orbite stable d'un trou noir de Schwarzschild vaut trois rayons ; un
+    /// disque qui mordrait sur l'horizon se lirait comme une collerette collée
+    /// à la sphère.
+    #[test]
+    fn le_disque_d_accretion_degage_l_horizon() {
+        assert!(RAYON_ACCRETION.0 > 1.0, "le disque mord sur l'horizon");
+        assert!(RAYON_ACCRETION.1 > RAYON_ACCRETION.0 * 1.5, "un disque trop fin pour se lire");
+        // Le protosolaire est franchement plus large : ce n'est pas le même
+        // objet, et il ne doit pas se confondre avec lui à l'œil.
+        assert!(RAYON_PROTOSOLAIRE.1 > RAYON_ACCRETION.1 * 3.0);
     }
 }
 

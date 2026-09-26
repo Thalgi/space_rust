@@ -219,6 +219,7 @@ fn variante_de(couronne: f32) -> Variante {
         3 => Variante::Pulsar,
         4 => Variante::Magnetar,
         5 => Variante::TrouNoir,
+        6 => Variante::Proto,
         _ => Variante::Normale,
     }
 }
@@ -607,6 +608,7 @@ fn deployer_noeud(
                 Variante::Pulsar => s.avec_pulsar(),
                 Variante::Magnetar => s.avec_magnetar(),
                 Variante::TrouNoir => s.avec_trou_noir(),
+                Variante::Proto => s.avec_jets().avec_disque_protosolaire(),
             };
             if f.remnant {
                 s = s.sans_zone_habitable(); // pulsar/magnétar/étoile à neutrons : pas de HZ

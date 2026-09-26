@@ -30,6 +30,10 @@ pub enum Variante {
     /// d'accrétion. Seule variante qui n'éclaire pas par sa surface — sa
     /// lumière vient du disque.
     TrouNoir,
+    /// Jeune étoile (T Tauri) : jets bipolaires **et** disque protosolaire.
+    /// Distincte de [`Variante::Jets`], que porte aussi l'étoile à neutrons —
+    /// laquelle n'a rien à faire d'un disque de matière primordiale.
+    Proto,
 }
 
 /// Étoile-feuille de l'arbre. La **masse** sert au calcul des barycentres.

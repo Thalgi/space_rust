@@ -42,7 +42,7 @@ pub(crate) fn particuliere(p: f32) -> Gabarit {
     } else if p < 0.92 {
         (18000.0, 24000.0, 1.4, 6.0, "Supergeante bleue", 2.0)
     } else {
-        (4000.0, 4600.0, 0.9, 1.2, "T Tauri (jeune)", 1.0)
+        (4000.0, 4600.0, 0.9, 1.2, "T Tauri (jeune)", 6.0)
     }
 }
 

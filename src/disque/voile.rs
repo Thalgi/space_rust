@@ -122,7 +122,47 @@ pub(super) fn uniforms_voile(
     mat.set_uniform("face_lum", face_lum);
     mat.set_uniform("ombre_rayon", ombre_rayon);
     mat.set_uniform("lum_couleur", (lum_couleur.x, lum_couleur.y, lum_couleur.z));
+    mat.set_uniform("doppler", c.doppler);
     mat.set_uniform_array("bandes", &c.lacunes[..]);
+}
+
+/// **Déclaration des uniforms du voile. Source unique** : sert à créer le
+/// material, et de référence au test de correspondance avec le `.glsl`.
+///
+/// ⚠️ Un uniform lu par le shader mais absent d'ici vaut **silencieusement
+/// zéro** — aucun message, l'effet disparaît. Le voile n'avait pas cette
+/// garde, à la différence des shaders d'étoile et de planète.
+fn uniforms_voile_decl() -> Vec<UniformDesc> {
+    vec![
+            UniformDesc::new("time", UniformType::Float1),
+            UniformDesc::new("seed", UniformType::Float1),
+            UniformDesc::new("centre", UniformType::Float3),
+            UniformDesc::new("axe_u", UniformType::Float3),
+            UniformDesc::new("axe_n", UniformType::Float3),
+            UniformDesc::new("axe_v", UniformType::Float3),
+            UniformDesc::new("tocam", UniformType::Float3),
+            UniformDesc::new("moitie", UniformType::Float1),
+            UniformDesc::new("alpha", UniformType::Float1),
+            UniformDesc::new("couleur", UniformType::Float3),
+            UniformDesc::new("couleur2", UniformType::Float3),
+            UniformDesc::new("plateau", UniformType::Float1),
+            UniformDesc::new("alpha_interne", UniformType::Float1),
+            UniformDesc::new("bord", UniformType::Float1),
+            UniformDesc::new("granulation", UniformType::Float1),
+            UniformDesc::new("gran_seuil", UniformType::Float1),
+            UniformDesc::new("gran_freq", UniformType::Float2),
+            UniformDesc::new("arcs", UniformType::Float1),
+            UniformDesc::new("emissif", UniformType::Float1),
+            UniformDesc::new("rotation", UniformType::Float1),
+            UniformDesc::new("r_ratio", UniformType::Float1),
+            UniformDesc::new("lacune_phase", UniformType::Float4),
+            UniformDesc::new("dir_lumiere", UniformType::Float3),
+            UniformDesc::new("face_lum", UniformType::Float1),
+            UniformDesc::new("ombre_rayon", UniformType::Float1),
+            UniformDesc::new("lum_couleur", UniformType::Float3),
+            UniformDesc::new("doppler", UniformType::Float1),
+            UniformDesc::array(UniformDesc::new("bandes", UniformType::Float4), 4),
+]
 }
 
 /// Material du voile : alpha blend, sans écriture de profondeur (comme
@@ -134,35 +174,7 @@ pub(super) fn material_voile() -> Material {
             fragment: &impostor::source("disque_voile.frag.glsl", FRAG),
         },
         MaterialParams {
-            uniforms: vec![
-                UniformDesc::new("time", UniformType::Float1),
-                UniformDesc::new("seed", UniformType::Float1),
-                UniformDesc::new("centre", UniformType::Float3),
-                UniformDesc::new("axe_u", UniformType::Float3),
-                UniformDesc::new("axe_n", UniformType::Float3),
-                UniformDesc::new("axe_v", UniformType::Float3),
-                UniformDesc::new("tocam", UniformType::Float3),
-                UniformDesc::new("moitie", UniformType::Float1),
-                UniformDesc::new("alpha", UniformType::Float1),
-                UniformDesc::new("couleur", UniformType::Float3),
-                UniformDesc::new("couleur2", UniformType::Float3),
-                UniformDesc::new("plateau", UniformType::Float1),
-                UniformDesc::new("alpha_interne", UniformType::Float1),
-                UniformDesc::new("bord", UniformType::Float1),
-                UniformDesc::new("granulation", UniformType::Float1),
-                UniformDesc::new("gran_seuil", UniformType::Float1),
-                UniformDesc::new("gran_freq", UniformType::Float2),
-                UniformDesc::new("arcs", UniformType::Float1),
-                UniformDesc::new("emissif", UniformType::Float1),
-                UniformDesc::new("rotation", UniformType::Float1),
-                UniformDesc::new("r_ratio", UniformType::Float1),
-                UniformDesc::new("lacune_phase", UniformType::Float4),
-                UniformDesc::new("dir_lumiere", UniformType::Float3),
-                UniformDesc::new("face_lum", UniformType::Float1),
-                UniformDesc::new("ombre_rayon", UniformType::Float1),
-                UniformDesc::new("lum_couleur", UniformType::Float3),
-                UniformDesc::array(UniformDesc::new("bandes", UniformType::Float4), 4),
-            ],
+            uniforms: uniforms_voile_decl(),
             pipeline_params: PipelineParams {
                 depth_test: Comparison::LessOrEqual,
                 depth_write: false,
@@ -177,4 +189,34 @@ pub(super) fn material_voile() -> Material {
         },
     )
     .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::impostor::verif::{uniforms_glsl, uniforms_inutilises, uniforms_rust};
+
+    /// **Un uniform lu par le `.glsl` mais absent du Rust vaut silencieusement
+    /// zéro** : aucun message, l'effet disparaît.
+    ///
+    /// Le voile n'avait pas cette garde, à la différence des shaders d'étoile
+    /// et de planète — alors qu'il porte près de trente uniforms. Le cas
+    /// concret qui l'a motivée : `doppler`, ajouté pour le beaming du disque
+    /// d'accrétion. Oublié côté Rust, il resterait à 0 et le disque serait un
+    /// anneau symétrique, sans rien qui le dise.
+    #[test]
+    fn uniforms_voile_correspondent_au_shader() {
+        let glsl = uniforms_glsl(&[VERT, FRAG]);
+        let rust = uniforms_rust(&uniforms_voile_decl());
+        assert_eq!(glsl, rust, "voile : GLSL (gauche) vs Rust (droite)");
+    }
+
+    /// **Et aucun uniform déclaré n'est ignoré par le shader** : un réglage
+    /// qui ne fait rien est pire qu'absent — la valeur part bien au GPU et
+    /// n'a aucun effet.
+    #[test]
+    fn aucun_uniform_du_voile_n_est_mort() {
+        let morts = uniforms_inutilises(&[VERT, FRAG]);
+        assert!(morts.is_empty(), "uniforms déclarés mais jamais lus : {morts:?}");
+    }
 }
