@@ -269,6 +269,18 @@ impl Soleil {
         self.avec_disque(cfg)
     }
 
+    /// **Retire le disque que l'astre porte de lui-même.**
+    ///
+    /// Pour la galerie des disques, qui catalogue le disque **à part** et le
+    /// fournit elle-même : sans ça l'astre et la galerie en dessinent chacun
+    /// un, et comme le disque d'accrétion est en blending **additif**, les
+    /// deux s'ajoutent au lieu de se recouvrir — un disque deux fois trop
+    /// brillant, sans rien pour le signaler.
+    pub fn sans_disque(mut self) -> Self {
+        self.disque = None;
+        self
+    }
+
     /// Pose un disque autour de l'étoile, dans un plan **dérivé de sa
     /// graine** : deux trous noirs ne présentent pas la même face.
     pub fn avec_disque(mut self, cfg: DisqueConfig) -> Self {
@@ -503,6 +515,50 @@ mod tests_disque {
         // Un anneau planétaire, lui, ne beame pas.
         assert_eq!(DisqueConfig::anneau_saturne(1.2, 2.3, Vec3::ONE, 0.0).doppler, 0.0);
         assert_eq!(DisqueConfig::protosolaire(0, 3.0, 16.0, 1000.0).doppler, 0.0);
+    }
+
+    /// **Un disque d'accrétion se dessine avec son propre shader**, pas avec
+    /// le voile des anneaux — et il le dit lui-même.
+    ///
+    /// Le drapeau est ce qui choisit le material : oublié, le disque
+    /// retomberait sur le voile, perdrait son profil de température et son
+    /// beaming, et redeviendrait exactement l'anneau qu'on cherche à ne plus
+    /// voir. Sans rien qui le signale, puisque le voile sait dessiner
+    /// n'importe quel annulus.
+    #[test]
+    fn un_disque_d_accretion_reclame_son_propre_shader() {
+        assert!(DisqueConfig::accretion(1.4, 3.0, 1000.0).accretion);
+        assert!(DisqueConfig::accretion(1.4, 3.0, 1000.0).temp_exposant > 0.0);
+        // Et rien d'autre ne le réclame : le voile reste le shader des
+        // anneaux et des disques de matière froide.
+        for autre in [
+            DisqueConfig::protosolaire(0, 3.0, 16.0, 1000.0),
+            DisqueConfig::protoplanetaire(0, 3.0, 16.0, 1000.0),
+            DisqueConfig::anneau_saturne(1.2, 2.3, Vec3::ONE, 0.0),
+            DisqueConfig::asteroides(10, 2.0, 3.0, 1000.0),
+        ] {
+            assert!(!autre.accretion, "un disque ordinaire réclame le shader d'accrétion");
+            assert_eq!(autre.temp_exposant, 0.0, "un profil de température hors accrétion");
+            assert_eq!(autre.doppler, 0.0, "du beaming sur un disque qui tourne lentement");
+        }
+    }
+
+    /// **Le profil de température est adouci, et c'est assumé.**
+    ///
+    /// La valeur physique est 3 — `T ∝ r^(-3/4)` et une émission en `T⁴`.
+    /// Elle éteint si complètement le bord externe qu'il n'en reste rien.
+    /// L'adoucir est un choix ; le laisser à zéro serait le perdre.
+    #[test]
+    fn le_profil_de_temperature_est_adouci_mais_present() {
+        let e = DisqueConfig::accretion(1.4, 3.0, 1000.0).temp_exposant;
+        assert!(e > 0.5, "profil trop plat ({e}) : la galette uniforme revient");
+        assert!(e < 3.0, "profil à la valeur physique ({e}) : le bord externe disparaît");
+        // Ce que ça donne au bord externe, mesuré comme le shader le calcule.
+        let reste = (3.0_f32 / 1.4).powf(-e);
+        assert!(
+            (0.1..0.6).contains(&reste),
+            "le bord externe garde {reste} de l'éclat interne : trop éteint ou trop présent"
+        );
     }
 
     /// **Le disque commence au-dessus de l'horizon, pas dessus.** La dernière

@@ -218,6 +218,25 @@ impl GalerieDisques {
                 (1, corps_lacune("Lave", 2.4)),
             ],
         );
+        // Trou noir stellaire : l'échelle n'est plus l'UA mais le rayon de
+        // l'horizon. L'étoile est ici un vrai trou noir — sans quoi le disque
+        // se jugerait contre une photosphère qui n'existe pas.
+        {
+            let r = 0.62_f32;
+            // `sans_disque` : l objet catalogué ici est celui que la galerie
+            // fournit, pas celui que l astre porte -- en additif, les deux
+            // s ajouteraient.
+            let tn = Soleil::new(Vec3::ZERO, r, vec3(1.0, 0.95, 0.9), 0.4)
+                .avec_trou_noir()
+                .sans_disque();
+            e(
+                "Disque d'accretion (trou noir stellaire)",
+                DisqueConfig::accretion(r * 1.4, r * 3.0, crate::genese::MASSE_TROU_NOIR),
+                tn,
+                2.6,
+                Vec::new(),
+            );
+        }
         e(
             "Disque protosolaire (0.1 - 6 UA)",
             // Protoétoile (L=0.5) : idem, masse propre plutôt que celle du Soleil.

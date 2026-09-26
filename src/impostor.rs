@@ -506,13 +506,19 @@ mod tests {
     fn le_nombre_de_shaders_reste_sous_le_plafond() {
         let sites = sites_de_chargement();
         let total: usize = sites.iter().map(|(_, n)| n).sum();
-        assert_eq!(total, 10, "un shader est arrivé ou parti. Détail : {sites:?}");
+        assert_eq!(total, 11, "un shader est arrivé ou parti. Détail : {sites:?}");
 
         // Décompte réel des pipelines vivants, à tenir à jour avec le précédent :
-        //   9 templates en cache — planète (corps, atmosphère), soleil (disque,
-        //     couronne, plasma), disque (particules, voile), éclairage, palette ;
+        //  10 templates en cache — planète (corps, atmosphère), soleil (disque,
+        //     couronne, plasma), disque (particules, voile, ACCRÉTION),
+        //     éclairage, palette ;
         //   6 par instance — un fond étoilé par écran (5) + le panache (1).
-        const PIPELINES: usize = 9 + 6;
+        //
+        // ⚠️ L'accrétion (sous-lot 5.1) est le dernier arrivé : un disque
+        // d'accrétion n'occulte pas ce qu'il y a derrière lui, il **émet**, et
+        // son blending additif ne se règle pas sur un pipeline partagé avec
+        // les anneaux planétaires.
+        const PIPELINES: usize = 10 + 6;
         const _: () = assert!(
             PIPELINES * 2 <= MAX_PIPELINES,
             "plus de marge sous le plafond de pipelines de macroquad"

@@ -13,6 +13,7 @@
 //!   différentielle). Pour les anneaux planétaires, rendu en deux moitiés
 //!   (uniform `moitie` + discard) autour du corps de la planète.
 
+mod accretion;
 mod config;
 mod voile;
 
@@ -45,6 +46,7 @@ thread_local! {
     // ses réglages à tous les précédents.
     static TPL_PART: RefCell<Option<Material>> = const { RefCell::new(None) };
     static TPL_VOILE: RefCell<Option<Material>> = const { RefCell::new(None) };
+    static TPL_ACCRETION: RefCell<Option<Material>> = const { RefCell::new(None) };
     // Instrument de mesure (voir set_voiles) : allumé par défaut.
     static VOILES: Cell<bool> = const { Cell::new(true) };
 }
@@ -62,6 +64,18 @@ fn mat_voile() -> Material {
     TPL_VOILE.with(|c| {
         if c.borrow().is_none() {
             *c.borrow_mut() = Some(voile::material_voile());
+        }
+        c.borrow().as_ref().unwrap().clone()
+    })
+}
+
+/// Le material du disque d'accrétion, mis en cache comme les autres : le
+/// moteur plafonne à 32 pipelines et `load_material` en consomme un à chaque
+/// appel (`suivi/technique.md` P.2 ter).
+fn mat_accretion() -> Material {
+    TPL_ACCRETION.with(|c| {
+        if c.borrow().is_none() {
+            *c.borrow_mut() = Some(accretion::material_accretion());
         }
         c.borrow().as_ref().unwrap().clone()
     })
@@ -93,6 +107,7 @@ pub fn voiles_actifs() -> bool {
 pub fn vider_cache_materials() {
     TPL_PART.with(|c| *c.borrow_mut() = None);
     TPL_VOILE.with(|c| *c.borrow_mut() = None);
+    TPL_ACCRETION.with(|c| *c.borrow_mut() = None);
 }
 
 /// Hauteur du viewport courant (galerie : hauteur de cellule / facteur pixel).
@@ -164,8 +179,13 @@ impl Disque {
         } else {
             (Vec::new(), None)
         };
+        // Même annulus dans les deux cas — seul le material change. Un
+        // disque d'accrétion n'est pas un anneau : il **émet** au lieu
+        // d'occulter, et son shader porte un tout autre vocabulaire
+        // (`accretion.rs`).
         let (voile_lots, mat_voile) = if c.voile_alpha > 0.0 {
-            (voile::construire_annulus(&c), Some(mat_voile()))
+            let mat = if c.accretion { mat_accretion() } else { mat_voile() };
+            (voile::construire_annulus(&c), Some(mat))
         } else {
             (Vec::new(), None)
         };
@@ -270,12 +290,23 @@ impl Disque {
             let cote_cam = self.axe_n.dot(tocam);
             let f = (cote_lum * cote_cam / 0.05).clamp(-1.0, 1.0); // lissage ±0.05
             let face_lum = 0.775 + 0.225 * f; // 1.0 face éclairée -> 0.55 face nuit
-            voile::uniforms_voile(
-                mat, &self.cfg, self.temps, p_rel,
-                (self.axe_u, self.axe_n, self.axe_v),
-                tocam, moitie, phases,
-                dir_lum, face_lum, self.ombre_rayon, cam.light_color,
-            );
+            // Un disque d'accrétion ne reçoit pas de lumière, il en produit :
+            // ni face nuit, ni ombre du corps central, ni teinte d'étoile —
+            // ses uniforms n'ont presque rien de commun avec ceux du voile.
+            if self.cfg.accretion {
+                accretion::uniforms_accretion(
+                    mat, &self.cfg, self.temps, p_rel,
+                    (self.axe_u, self.axe_n, self.axe_v),
+                    tocam, moitie,
+                );
+            } else {
+                voile::uniforms_voile(
+                    mat, &self.cfg, self.temps, p_rel,
+                    (self.axe_u, self.axe_n, self.axe_v),
+                    tocam, moitie, phases,
+                    dir_lum, face_lum, self.ombre_rayon, cam.light_color,
+                );
+            }
             gl_use_material(mat);
             for lot in &self.voile_lots {
                 draw_mesh(lot);

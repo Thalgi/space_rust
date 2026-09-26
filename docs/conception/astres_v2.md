@@ -620,6 +620,38 @@ pixels (`PX_MIN`) alors que le disque garde sa taille physique — le disque
 passe donc sous l'horizon dessiné. Sans conséquence visible à cette échelle,
 où plus rien ne se lit, mais c'est une incohérence réelle.
 
+## 6 quinquies. Le lot 5, prolongé en deux sous-lots (2026-09-26)
+
+Le disque d'accrétion du lot 5 a un plan, mais ne convainc pas. La recherche
+[`astres_v2_disque_accretion.md`](astres_v2_disque_accretion.md) a classé
+quatre causes et tranché : la décisive n'est pas la matière mais la
+**silhouette** — sans déviation des rayons, un disque incliné *est* un anneau
+incliné, et personne n'a cette image en tête en pensant « trou noir ».
+
+| # | Contenu | Ce qu'il livre |
+|---|---|---|
+| **5.1** | Un **shader dédié** : profil de température en puissance, beaming **coloré**, turbulence cisaillée. Le vocabulaire des anneaux quitte le disque d'accrétion, et réciproquement | La matière. **Rien ne change de silhouette** — c'est voulu, ça isole la régression |
+| **5.2** | Le **pli** : la moitié arrière du disque relevée par-dessus et par-dessous l'astre, déformation par sommet pilotée par `tocam` | L'image. Un anneau qui se referme sur l'astre |
+
+**Ordre de livraison, demandé par l'utilisateur** : chaque sous-lot apparaît
+d'abord dans **GALERIE - CEINTURES & DISQUES**, pour que l'objet soit
+répertorié à côté de ses voisins et jugeable seul, **puis** dans la vue des
+étoiles. Un disque qu'on ne peut comparer ni à un anneau de Saturne ni à un
+disque protosolaire ne se juge pas.
+
+Ce sont des **sous-lots du lot 5**, pas un lot neuf : le disque d'accrétion
+est son sujet, et il n'est pas fini. Le lot 6 garde son contenu.
+
+⚠️ **Échelle du disque protosolaire de T Tauri**, question ouverte soulevée à
+l'écran (« je n'aurais pas imaginé un disque aussi grand »). Il fait
+**16 rayons stellaires**, soit 0,28 UA. À comparer : la galerie des disques
+en montre un de **6 UA**, et la réalité tourne autour de **100 UA**. Il
+paraît grand parce qu'il se mesure contre l'étoile ; il est en fait déjà
+vingt fois plus petit que celui de la galerie. Le mettre à l'échelle de
+celle-ci couvrirait tout le système et masquerait ses planètes. Laissé tel
+quel faute d'un meilleur compromis, mais `RAYON_PROTOSOLAIRE` est une
+constante isolée.
+
 ## 7. Hors périmètre
 
 **Rendre les arches visibles au cadrage par défaut** : tranché et chiffré par

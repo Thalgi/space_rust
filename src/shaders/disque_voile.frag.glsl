@@ -31,9 +31,6 @@ uniform vec3 dir_lumiere;    // direction de propagation de la lumière au centr
 uniform float face_lum;      // 1 = face éclairée du plan, 0.55 = face nuit
 uniform float ombre_rayon;   // rayon du corps central (0 = pas d'ombre)
 uniform vec3 lum_couleur;    // couleur * intensité de l'étoile primaire
-uniform vec3 axe_n;          // normale du plan du disque
-uniform vec3 tocam;          // du centre vers la caméra
-uniform float doppler;       // beaming : 0 = aucun (anneaux), > 0 = accrétion
 
 float hash(float x) {
     return fract(sin(x * 12.9898) * 43758.5453);
@@ -153,23 +150,6 @@ void main() {
 
     // L'émissif (disques proto*) ne subit ni face nuit ni ombre : il émet.
     col += emissif * exp(-t * 2.6) * couleur2;
-
-    // **Beaming Doppler** : dans un disque d'accrétion la matière frôle la
-    // vitesse de la lumière, et le côté qui vient vers nous est nettement
-    // plus brillant que celui qui s'éloigne. C'est LE signe qui distingue un
-    // disque d'accrétion d'un anneau -- sans lui, le trou noir porte une
-    // collerette symétrique qui ne dit rien de sa rotation. Nul quand
-    // `doppler` vaut 0 : aucun anneau planétaire n'a de raison d'être plus
-    // brillant d'un côté. Effet PEINT, pas relativiste.
-    if (doppler > 0.001) {
-        vec3 radial = normalize(vpos - axe_n * dot(vpos, axe_n));
-        vec3 vitesse = cross(axe_n, radial);   // sens de rotation du disque
-        float vers_nous = dot(vitesse, tocam); // +1 approche, -1 s'éloigne
-        // La matière interne tourne plus vite : le beaming y est plus fort.
-        float rapide = mix(1.0, 0.35, t);
-        col *= 1.0 + doppler * vers_nous * rapide;
-        a *= clamp(1.0 + 0.45 * doppler * vers_nous * rapide, 0.25, 1.6);
-    }
 
     gl_FragColor = vec4(max(col, vec3(0.0)), clamp(a, 0.0, 1.0));
 }

@@ -122,7 +122,6 @@ pub(super) fn uniforms_voile(
     mat.set_uniform("face_lum", face_lum);
     mat.set_uniform("ombre_rayon", ombre_rayon);
     mat.set_uniform("lum_couleur", (lum_couleur.x, lum_couleur.y, lum_couleur.z));
-    mat.set_uniform("doppler", c.doppler);
     mat.set_uniform_array("bandes", &c.lacunes[..]);
 }
 
@@ -160,8 +159,7 @@ fn uniforms_voile_decl() -> Vec<UniformDesc> {
             UniformDesc::new("face_lum", UniformType::Float1),
             UniformDesc::new("ombre_rayon", UniformType::Float1),
             UniformDesc::new("lum_couleur", UniformType::Float3),
-            UniformDesc::new("doppler", UniformType::Float1),
-            UniformDesc::array(UniformDesc::new("bandes", UniformType::Float4), 4),
+                UniformDesc::array(UniformDesc::new("bandes", UniformType::Float4), 4),
 ]
 }
 

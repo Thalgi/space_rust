@@ -66,12 +66,24 @@ pub struct DisqueConfig {
     pub emissif: f32,           // lueur chaude au bord interne (disques proto*)
     pub rotation_voile: f32,    // vitesse angulaire visuelle au bord interne (rad/s)
     /// **Beaming Doppler** : le côté du disque qui vient vers la caméra
-    /// s'éclaircit, celui qui s'en éloigne s'assombrit. `0` pour tout ce qui
-    /// tourne lentement — un anneau de Saturne n'a aucune raison d'être plus
-    /// brillant d'un côté. Ne prend son sens que sur un disque d'accrétion,
-    /// dont la matière frôle la vitesse de la lumière. Effet **peint**, pas
-    /// relativiste (`astres_v2.md` §7).
+    /// s'éclaircit et bleuit, celui qui s'en éloigne s'assombrit et rougit.
+    /// Effet **peint**, pas relativiste (`astres_v2.md` §7).
+    ///
+    /// ⚠️ Lu par le **seul** shader d'accrétion. Le lot 5 l'avait d'abord mis
+    /// dans le voile partagé, ce qui revenait à donner du vocabulaire
+    /// d'accrétion à chaque anneau de Saturne du jeu.
     pub doppler: f32,
+    /// **Dureté du profil de température**, pour un disque d'accrétion.
+    ///
+    /// La luminosité de surface suit `r^-exposant`. La valeur physique est
+    /// **3** (`T ∝ r^-3/4` et une émission en `T⁴`), mais elle éteint si
+    /// complètement le bord externe qu'il n'en reste rien : on l'adoucit, et
+    /// on le dit. `0` = pas de profil, c'est le cas de tout ce qui n'est pas
+    /// un disque d'accrétion.
+    pub temp_exposant: f32,
+    /// **Ce disque est un disque d'accrétion** : il se dessine avec son
+    /// propre shader, additif, et non avec le voile des anneaux.
+    pub accretion: bool,
 }
 
 impl DisqueConfig {
@@ -108,6 +120,8 @@ impl DisqueConfig {
             emissif: 0.0,
             rotation_voile: 0.02,
             doppler: 0.0,
+            temp_exposant: 0.0,
+            accretion: false,
         }
     }
 
@@ -134,7 +148,11 @@ impl DisqueConfig {
             gran_freq: vec2(8.0, 0.75),
             emissif: 1.0,
             rotation_voile: 0.35,
-            doppler: 0.8,
+            doppler: 0.9,
+            // Adouci depuis la valeur physique (3,0) : celle-ci éteint le
+            // bord externe au point qu'il disparaît, et on perd le disque.
+            temp_exposant: 1.6,
+            accretion: true,
             ..Self::base(0, interne, externe, masse)
         }
     }
