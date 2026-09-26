@@ -33,7 +33,9 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
 - [x] **Supergéante bleue** (Rigel) : preset galerie + vent stellaire (`couronne_type 2`).
 - [x] **Sous-naine** (subdwarf) : preset galerie (petite/chaude).
 - [ ] **Naine brune** (déjà côté gazeuses) : à relier ? (chevauchement géante/étoile).
-- [x] **Protoétoile / T Tauri** : preset galerie + jets bipolaires.
+- [x] **Protoétoile / T Tauri** : preset galerie + jets bipolaires, **et son disque
+  protosolaire** depuis le 2026-09-26 (mode de couronne 6, `Variante::Proto`). Il partageait
+  le mode 1 avec l'étoile à neutrons, qui n'a que faire d'un berceau de planètes.
 
 ## Étoiles particulières (le « un peu spécial »)
 
@@ -47,6 +49,17 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
 - [~] **Trou noir** (accrétion) : preset galerie présent (`couronne_type 5` = horizon noir + anneau
   de photons + disque d'accrétion incliné, Doppler + spirale, **stylisé**). Reste : lentille
   gravitationnelle (arc du disque au-dessus de l'horizon) — le vrai gros morceau. *(2026-07-04)*
+  - **2026-09-26** : il est désormais **rencontrable en explorant** (lot 4) — il n'était
+    produit par aucun tirage, et le `match` du mode de couronne n'avait pas de bras `5` :
+    l'objet existait mais personne ne pouvait tomber dessus. ~1 % des étoiles, masse propre
+    (la relation masse-luminosité ne s'applique pas), pas de zone habitable.
+  - Le disque d'accrétion est devenu un **vrai `Disque`** avec son plan (lot 5), puis son
+    **shader dédié** et son **pli** (5.1-5.3) — la moitié arrière relevée par-dessus et
+    par-dessous l'astre, qui imite l'arc lentillé sans dévier un seul rayon. L'arc *du fond
+    stellaire*, lui, reste à faire (lot 8) — et la recherche a montré qu'il est **accessible**
+    sans copie d'écran, les cubemaps étant core en GLSL ES 100 ([`technique.md`](technique.md)).
+  - ⚠️ Aspect **non validé à l'écran** au moment de l'arrêt. Journal :
+    [`astres_v2.md`](astres_v2.md).
 - [x] **Magnétar** : arcs de champ magnétique dipolaire brillants, violets (`couronne_type 4`).
 
 ---

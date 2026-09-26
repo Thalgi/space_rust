@@ -17,6 +17,8 @@
 | macroquad ne double-face aucune géométrie | une face vue des deux côtés s'émet **deux fois**, enroulement inversé |
 | l'uniform `Projection` est la matrice **vue-projection** | voir [`ceintures.md`](ceintures.md) § P.2 octies |
 | un uniform déclaré mais non lu vaut **zéro**, en silence | tests de correspondance uniforms ↔ GLSL |
+| `fwidth`/`dFdx`/`dFdy` **ne sont pas** dans GLSL ES 100 core | ne jamais y adosser un anti-crénelage — voir ci-dessous |
+| il n'y a **pas** de post-traitement global disponible | pas de bloom, pas de grab-pass : ce qui s'en approche se falsifie en géométrie |
 
 ---
 
@@ -93,3 +95,35 @@ plomberie non.
 qu'avant. Invisible aux effectifs actuels ; si la vue système rame un jour, ne
 vider que sur **changement** de textures plutôt qu'inconditionnellement.
 
+
+
+---
+
+## Trois faits sur GLSL ES 100, établis par la recherche du 2026-09-26
+
+Rassemblés en cherchant comment rendre un disque d'accrétion
+([`conception/astres_v2_disque_accretion_2.md`](../conception/astres_v2_disque_accretion_2.md)),
+mais ils ne tiennent à aucun chantier.
+
+- ⚠️ **Les dérivées ne sont pas core.** `fwidth`, `dFdx`, `dFdy` sont des
+  fonctions **optionnelles** de GLSL ES 100 : elles exigent
+  `#extension GL_OES_standard_derivatives : enable`, et l'extension n'existe
+  que là où le contexte l'expose. **Ne pas y adosser l'anti-crénelage d'un
+  bord.** La parade portable : faire calculer la taille projetée par le CPU
+  et la passer en uniform.
+- **Pas de contrôle de LOD en fragment** (`texture2DLodEXT` est une
+  extension). Une octave fine de bruit ne peut donc pas être filtrée par
+  mip : il faut la fondre analytiquement, sinon elle scintille en vue
+  rasante.
+- **Les cubemaps, elles, sont core** — et miniquad 0.4.10 expose bien
+  `TextureKind::CubeMap`. C'est ce qui rendra faisable la **lentille
+  gravitationnelle du fond stellaire** (lot 8 du chantier astres) sans
+  copie d'écran : dévier analytiquement la direction de vue, puis
+  échantillonner le fond. Noté ici parce que c'est le genre de possibilité
+  qu'on croit fermée par défaut.
+
+**Décompte des pipelines au 2026-09-26** : **11 sites de chargement** sur les
+32 du plafond, après l'ajout du shader d'accrétion. Le test
+`impostor::tests::le_nombre_de_shaders_reste_sous_le_plafond` sonne à chaque
+arrivée — c'est le moment de vérifier que le nouveau venu est bien mis en
+cache.

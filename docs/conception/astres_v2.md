@@ -642,6 +642,10 @@ disque protosolaire ne se juge pas.
 Ce sont des **sous-lots du lot 5**, pas un lot neuf : le disque d'accrétion
 est son sujet, et il n'est pas fini. Le lot 6 garde son contenu.
 
+**Journal du chantier** :
+[`suivi/astres_v2.md`](../suivi/astres_v2.md) — état de chaque lot, ce qui
+reste ouvert, et ce que le chantier a appris.
+
 **Livrés.** **5.1** : `disque_accretion.frag.glsl` et son pipeline, profil de
 température en puissance (adouci à 1,6 — la valeur physique 3 éteint le bord
 externe au point qu'il disparaît), beaming coloré, turbulence cisaillée,
@@ -649,6 +653,22 @@ blending **additif**. `doppler` quitte le voile partagé, qui redevient le
 shader des anneaux. **5.2** : le **pli** — la moitié arrière du disque
 dessinée **deux fois**, relevée au-dessus puis au-dessous de l'astre, pour
 imiter la silhouette que produit la déviation des rayons.
+
+**5.3** : les onze corrections de
+[`astres_v2_disque_accretion_2.md`](astres_v2_disque_accretion_2.md), après
+une seconde recherche — le pli **comprime** au lieu de dilater, le bruit
+devient anisotrope et enroulé en spirale, la teinte chaude est ordonnée
+`R > G > B` pour que le clipping additif la mène au blanc et non au cyan, le
+beaming passe en `D³` plafonné, la géométrie est recalibrée sur le rayon de
+l'**ombre** et non de l'horizon, et l'anneau brillant devient l'anneau de
+**lentille** porté par le disque. Tout le vocabulaire d'accrétion part dans
+un type `Accretion`.
+
+⚠️ **Le 5.3 n'a pas été jugé à l'écran.** Il est livré et testé ; son aspect
+reste à valider.
+
+**5.4, à faire** : la variante **Interstellar**, à comparer côte à côte
+(§5 de la recherche). Elle ne doit être qu'un **preset** de plus.
 
 Trois points du pli, tous vérifiés :
 

@@ -15,7 +15,35 @@
 > « Où trouver quoi »). **Ne pas recommencer** : un fait qui se raconte va dans
 > un journal, pas ici.
 
-## Reprendre ici (état au 2026-08-16)
+## Reprendre ici (état au 2026-09-26)
+
+**Chantier en cours : Astres V2.** Branche `chantier-astres`, worktree
+`.claude/worktrees/astres-v2`. **32 commits d'avance sur `main`, rien de
+fusionné, rien de poussé.**
+
+**Vérifié** : **838 tests verts** (850 avec le binaire `mhd`), `cargo clippy
+--all-targets` à **0 avertissement**.
+
+**Le prochain pas** : sous-lot **5.4** — la variante « Interstellar » du
+disque d'accrétion, à comparer côte à côte avec celle du 5.3. Tout est
+préparé pour qu'elle ne soit qu'un **preset** de plus.
+
+⚠️ **Le sous-lot 5.3 n'a pas été jugé à l'écran.** Il est livré et testé,
+son aspect reste à valider : GALERIE - CEINTURES & DISQUES, entrée « Disque
+d'accretion ».
+
+→ Tout le détail, lot par lot, dans
+[`docs/suivi/astres_v2.md`](docs/suivi/astres_v2.md) — c'est lui qu'il faut
+lire, pas les commits.
+
+⚠️ **Consigne de commit : voir « Commits » plus bas.** Elle dit de ne jamais
+commiter de soi-même ; la session du 2026-09-24 → 26 a commité à chaque lot
+sans objection de l'utilisateur. **À trancher** : soit la consigne tient et
+il faut y revenir, soit elle est caduque et cette ligne doit disparaître.
+
+---
+
+## Ce qui précédait (état au 2026-08-16)
 
 **Vérifié** : **734 tests verts**, `cargo clippy --all-targets` à **0
 avertissement**.
@@ -193,10 +221,11 @@ lui : `a0ebb58` « torus & elysium complex base complete », `73fb924`
 « torus », `fb7d589` « fix » (2026-08-10), `dc0d7bf` « torus ok », `2a042e6`
 « P4 ok », `7278aa1` « P.1 a P.3 ok, plus fix ui ».
 
-Branche courante `worktree-skymap-v2-marqueurs` (chantier Skymap V2,
-`docs/suivi/interface.md` § « Skymap V2 — marqueurs de planètes et lunes ») :
-commits `16199fa`..`HEAD`, pas encore fusionnée sur `origin/main` — les deux
-lignes ci-dessus décrivent l'état de `main`, pas celui de cette branche.
+⚠️ **Périmé depuis.** Skymap V2 a été **fusionné dans `main`**
+(`f3a32b8`), et la branche courante est maintenant `chantier-astres`
+(worktree `.claude/worktrees/astres-v2`), 32 commits d'avance sur `main`,
+**non fusionnée et non poussée**. Les deux lignes ci-dessus décrivent un
+`main` déjà dépassé.
 
 Consigne debout : *« no commit i'll say when commit is needed »* — ne jamais
 commiter de soi-même. **Mais signaler les points de commit** : l'utilisateur
@@ -208,7 +237,10 @@ sur un fichier contenant du travail non commité. Pour annuler ses propres
 modifications : ré-éditer les lignes, ou sauvegarder le fichier dans le
 scratchpad **avant** de le toucher (red-checks compris).
 
-État vérifié : **734 tests verts** (746 avec le binaire `mhd`), **`cargo clippy
+État vérifié au 2026-09-26 : **838 tests verts** (850 avec `mhd`), **`cargo
+clippy --all-targets` : 0 avertissement** (branche `chantier-astres`).
+
+Ancien relevé : **734 tests verts** (746 avec le binaire `mhd`), **`cargo clippy
 --all-targets` : 0 avertissement** (branche `worktree-skymap-v2-marqueurs`,
 voir la ligne « Branche courante » ci-dessus ; 719 était le compte au moment
 du Lot D, laissé tel quel dans le récit qui suit).
