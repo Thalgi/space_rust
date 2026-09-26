@@ -65,35 +65,15 @@ pub struct DisqueConfig {
     pub arcs: f32,              // 0 = anneau complet … 1 = arcs isolés (Neptune)
     pub emissif: f32,           // lueur chaude au bord interne (disques proto*)
     pub rotation_voile: f32,    // vitesse angulaire visuelle au bord interne (rad/s)
-    /// **Beaming Doppler** : le côté du disque qui vient vers la caméra
-    /// s'éclaircit et bleuit, celui qui s'en éloigne s'assombrit et rougit.
-    /// Effet **peint**, pas relativiste (`astres_v2.md` §7).
+    /// **Ce disque est un disque d'accrétion**, et voici tout son
+    /// vocabulaire. `None` pour tout le reste — anneaux planétaires,
+    /// ceintures, disques proto\*.
     ///
-    /// ⚠️ Lu par le **seul** shader d'accrétion. Le lot 5 l'avait d'abord mis
-    /// dans le voile partagé, ce qui revenait à donner du vocabulaire
-    /// d'accrétion à chaque anneau de Saturne du jeu.
-    pub doppler: f32,
-    /// **Dureté du profil de température**, pour un disque d'accrétion.
-    ///
-    /// La luminosité de surface suit `r^-exposant`. La valeur physique est
-    /// **3** (`T ∝ r^-3/4` et une émission en `T⁴`), mais elle éteint si
-    /// complètement le bord externe qu'il n'en reste rien : on l'adoucit, et
-    /// on le dit. `0` = pas de profil, c'est le cas de tout ce qui n'est pas
-    /// un disque d'accrétion.
-    pub temp_exposant: f32,
-    /// **Amplitude du pli** (sous-lot 5.2) : de combien la moitié arrière du
-    /// disque est relevée par-dessus l'astre, en part de son propre rayon.
-    ///
-    /// Imite la silhouette que produit la déviation des rayons autour d'un
-    /// trou noir — la face arrière, physiquement cachée, apparaît au-dessus
-    /// de lui. ⚠️ **Réglage esthétique, et trucage borné** : trop faible,
-    /// l'anneau ne se referme pas ; trop fort, il devient une soucoupe. Rien
-    /// ne le déduit (`astres_v2_disque_accretion.md` §8). `0` = disque plat,
-    /// ce qu'est n'importe quel autre disque.
-    pub pli: f32,
-    /// **Ce disque est un disque d'accrétion** : il se dessine avec son
-    /// propre shader, additif, et non avec le voile des anneaux.
-    pub accretion: bool,
+    /// ⚠️ Un type à part plutôt qu'une dizaine de champs ici : ce
+    /// `DisqueConfig` est partagé avec les anneaux de Saturne, et y verser
+    /// du vocabulaire d'accrétion est exactement la dérive que la recherche
+    /// lui reprochait (`astres_v2_disque_accretion_2.md` §2).
+    pub accretion: Option<super::accretion::Accretion>,
 }
 
 impl DisqueConfig {
@@ -129,10 +109,7 @@ impl DisqueConfig {
             arcs: 0.0,
             emissif: 0.0,
             rotation_voile: 0.02,
-            doppler: 0.0,
-            temp_exposant: 0.0,
-            pli: 0.0,
-            accretion: false,
+            accretion: None,
         }
     }
 
@@ -154,17 +131,10 @@ impl DisqueConfig {
             voile_alpha_interne: 1.0,
             voile_bord: 0.14,
             // Une turbulence marquée : le gaz d'accrétion n'est pas lisse.
-            granulation: 0.55,
-            gran_seuil: 0.38,
-            gran_freq: vec2(8.0, 0.75),
-            emissif: 1.0,
-            rotation_voile: 0.35,
-            doppler: 0.9,
-            // Adouci depuis la valeur physique (3,0) : celle-ci éteint le
-            // bord externe au point qu'il disparaît, et on perd le disque.
-            temp_exposant: 1.6,
-            pli: 1.15,
-            accretion: true,
+            // Tout le reste est porté par `Accretion` : les champs du voile
+            // ci-dessous (granulation, arcs, lacunes…) ne le concernent pas
+            // et son shader ne les lit pas.
+            accretion: Some(super::accretion::Accretion::chaude()),
             ..Self::base(0, interne, externe, masse)
         }
     }

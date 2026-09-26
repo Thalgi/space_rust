@@ -191,9 +191,30 @@ Trois cibles cohérentes, il faut en choisir une :
 3. **Intermédiaire** — blanc-bleu, mais beaming plafonné à ~4:1 pour garder
    l'ombre lisible. Ni tout à fait juste, ni tout à fait iconique.
 
-Ma recommandation : **3**, avec les constantes exposées pour glisser vers 1
-ou 2 à l'œil. Mais c'est un choix esthétique, et il appartient à
-l'utilisateur.
+Ma recommandation était **3**, avec les constantes exposées pour glisser
+vers 1 ou 2 à l'œil.
+
+### Tranché le 2026-09-26 : on ne choisit pas, on compare
+
+**Décision de l'utilisateur** — livrer **les deux** et les juger côte à
+côte :
+
+- **sous-lot 5.3** : toutes les corrections de §3 (épaisseur comprise), avec
+  la cible **intermédiaire** — blanc-bleu saturant en blanc, beaming
+  plafonné pour garder l'ombre lisible ;
+- **sous-lot 5.4** : la cible **Interstellar** — disque froid non accrétant,
+  orangé, asymétrie réduite.
+
+⚠️ **Conséquence de conception, et c'est elle qui rend la comparaison
+possible** : les deux cibles ne doivent différer **que par des constantes**,
+jamais par du code. D'où un type `Accretion` dédié qui porte tout le
+vocabulaire du disque — au lieu de onze champs de plus sur le
+`DisqueConfig` partagé avec les anneaux de Saturne, ce que §2 reprochait
+déjà à l'existant. Les deux variantes deviennent alors deux **presets**, et
+la galerie des disques peut les afficher l'un à côté de l'autre.
+
+Si l'une des deux l'emporte, l'autre reste au catalogue : elle documente le
+choix, et le coût d'un preset est nul.
 
 ---
 

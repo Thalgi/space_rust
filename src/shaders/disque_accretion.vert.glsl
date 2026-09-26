@@ -40,6 +40,8 @@ uniform vec3 axe_v;
 uniform vec3 tocam;
 uniform float pli;        // amplitude du pli (0 = disque plat)
 uniform float pli_signe;  // +1 = l'arc du dessus, -1 = celui du dessous
+uniform float interne;    // rayon du bord interne, l'échelle du pli
+uniform float decalage;   // décalage vertical de cette nappe (épaisseur)
 
 void main() {
     vtc = texcoord;
@@ -61,9 +63,34 @@ void main() {
         // la matière n'a jamais été cachée, ce qui **raccorde** l'arc au
         // disque plat sans couture.
         k = smoothstep(-0.15, 0.95, -dot(normalize(rel), tocam));
-        rel += haut * (pli * pli_signe * k * assiette * length(rel));
+
+        // ⚠️ **L'arc se COMPRIME vers l'astre, il ne s'en éloigne pas.**
+        // La première version déplaçait proportionnellement à `length(rel)`
+        // : le bord externe, le plus loin, était donc soulevé le plus haut,
+        // et le disque se dépliait en deux gros lobes — signalé à l'écran.
+        // L'image lentillée de la face arrière forme au contraire un **arc
+        // fin à rayon apparent quasi constant**, indépendant de l'angle de
+        // vue, calé sur le voisinage de l'ombre. On ramène donc la matière
+        // vers un rayon de référence — celui du bord interne — au lieu de
+        // l'étaler.
+        float r = length(rel);
+        vec3 vers = rel / max(r, 1e-4);
+        // Vers le rayon de référence, d'autant plus que le point est
+        // derrière l'astre : le bord externe est ramené, le bord interne à
+        // peine touché.
+        float vise = mix(r, interne * 1.25, k * 0.85);
+        rel = vers * vise;
+        // Puis relevé, d'une hauteur elle aussi calée sur l'échelle de
+        // l'ombre et non sur l'étendue du disque.
+        rel += haut * (pli * pli_signe * k * assiette * interne);
     }
     vpli = k;
+
+    // Épaisseur : la nappe est décalée le long de la normale du plan. Un
+    // disque d'accrétion fait h/R ~ 0,05 a 0,1 -- il n'est jamais
+    // infiniment mince comme un anneau de Saturne, et par la tranche il
+    // doit montrer une bande, pas un cheveu.
+    rel += axe_n * decalage;
 
     vpos = rel;
     gl_Position = Projection * Model * vec4(centre + rel, 1.0);

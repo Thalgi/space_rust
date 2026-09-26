@@ -184,7 +184,7 @@ impl Disque {
         // d'occulter, et son shader porte un tout autre vocabulaire
         // (`accretion.rs`).
         let (voile_lots, mat_voile) = if c.voile_alpha > 0.0 {
-            let mat = if c.accretion { mat_accretion() } else { mat_voile() };
+            let mat = if c.accretion.is_some() { mat_accretion() } else { mat_voile() };
             (voile::construire_annulus(&c), Some(mat))
         } else {
             (Vec::new(), None)
@@ -293,16 +293,16 @@ impl Disque {
             // Un disque d'accrétion ne reçoit pas de lumière, il en produit :
             // ni face nuit, ni ombre du corps central, ni teinte d'étoile —
             // ses uniforms n'ont presque rien de commun avec ceux du voile.
-            if self.cfg.accretion {
+            if let Some(a) = self.cfg.accretion {
                 // **La moitié arrière se dessine deux fois**, relevée
                 // au-dessus puis au-dessous de l'astre : c'est le pli
                 // (sous-lot 5.2). La moitié avant reste à plat — elle n'a
                 // jamais été cachée, rien ne la dévie.
-                for pli in accretion::passes_pli(self.cfg.pli, moitie) {
+                for passe in accretion::passes(&a, moitie) {
                     accretion::uniforms_accretion(
-                        mat, &self.cfg, self.temps, p_rel,
+                        mat, &self.cfg, &a, self.temps, p_rel,
                         (self.axe_u, self.axe_n, self.axe_v),
-                        tocam, moitie, pli,
+                        tocam, moitie, passe,
                     );
                     gl_use_material(mat);
                     for lot in &self.voile_lots {

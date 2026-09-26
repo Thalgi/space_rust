@@ -23,40 +23,185 @@ use macroquad::prelude::*;
 const VERT: &str = include_str!("../shaders/disque_accretion.vert.glsl");
 const FRAG: &str = include_str!("../shaders/disque_accretion.frag.glsl");
 
-/// **Les passes à dessiner** pour une moitié de disque : `(amplitude du pli,
-/// signe)` pour chacune.
+/// **Tout le vocabulaire d'un disque d'accrétion**, et rien d'autre.
 ///
-/// La moitié **arrière** se dessine **deux fois**, relevée au-dessus puis
-/// au-dessous de l'astre : c'est le pli. La moitié **avant** reste à plat —
-/// elle n'a jamais été cachée par l'astre, donc rien ne la dévie, et la
-/// relever ferait décoller le disque de ses propres bords.
-///
-/// Un disque sans pli garde une seule passe par moitié, exactement comme
-/// avant le sous-lot 5.2.
-pub(super) fn passes_pli(pli: f32, moitie: f32) -> Vec<(f32, f32)> {
-    if pli <= 0.0 || moitie >= 0.0 {
-        return vec![(0.0, 1.0)];
+/// ⚠️ Un type à part plutôt qu'une dizaine de champs de plus sur
+/// `DisqueConfig` : celui-ci est partagé avec les anneaux de Saturne, et la
+/// recherche lui reprochait déjà de mélanger les deux vocabulaires
+/// (`astres_v2_disque_accretion_2.md` §2). Corollaire heureux : deux cibles
+/// visuelles ne diffèrent plus que par des **constantes**, ce qui permet de
+/// les comparer côte à côte en galerie.
+#[derive(Clone, Copy, Debug)]
+pub struct Accretion {
+    /// Teinte du bord interne, le plus chaud. ⚠️ **Ordonnée `R > G > B`.**
+    /// Sous blending additif on ne peut pas tone-mapper la somme — elle
+    /// s'accumule dans le framebuffer, après le shader. Mais le **clipping
+    /// par canal** fait le travail gratuitement : le rouge sature d'abord,
+    /// puis le vert, puis le bleu, et le cœur passe orange → jaune → blanc à
+    /// mesure que l'intensité monte. Une teinte bleutée (`B ≥ R`) saturerait
+    /// vers le **cyan** — c'était notre défaut.
+    pub chaud: Vec3,
+    /// Teinte du bord externe, le plus froid.
+    pub froid: Vec3,
+    /// Intensité au bord interne. **Laissée dépasser 1** : c'est elle qui
+    /// déclenche le clipping décrit ci-dessus.
+    pub eclat: f32,
+    /// Dureté du profil de **couleur**. La physique donne `T ∝ r^(-3/4)` et
+    /// une émission en `T⁴`, soit `I ∝ r^(-3)`.
+    pub exposant_couleur: f32,
+    /// Dureté du profil d'**opacité**, volontairement plus douce : un seul
+    /// exposant raide éteint le bord externe au point qu'il disparaît, et on
+    /// perd le disque.
+    pub exposant_opacite: f32,
+    /// Vitesse orbitale au bord interne, en fraction de `c`. Alimente le
+    /// beaming `I ∝ D³`.
+    pub beta: f32,
+    /// **Plafond du beaming.** ⚠️ C'est l'arbitrage du chantier : à
+    /// β = 0,35 la loi en `D³` donne un rapport de 8 à 10 entre les deux
+    /// côtés, et l'ombre du trou noir devient **illisible** — le papier
+    /// d'Interstellar a retiré le beaming pour cette raison exacte. Le
+    /// plafond garde le trait sans perdre la silhouette.
+    pub beaming_max: f32,
+    /// Cellules de bruit : `(radiales, azimutales)`. L'azimutale doit être
+    /// **entière** — le hash s'enroule dessus pour qu'il n'y ait pas de
+    /// couture. Un rapport d'aspect de 8:1 à 20:1 donne des filaments ; à
+    /// 1:1 on obtient des bulles.
+    pub cellules: Vec2,
+    /// Enroulement du bruit en **spirale logarithmique**, en radians par
+    /// e-fold de rayon. Sans lui les structures restent concentriques au
+    /// lieu de s'enrouler.
+    pub spirale: f32,
+    /// Force de la turbulence (0 = disque lisse).
+    pub turbulence: f32,
+    /// Vitesse angulaire visuelle au bord interne.
+    pub rotation: f32,
+    /// Douceur du bord **interne**. Quasi nul : l'ISCO est une coupure
+    /// franche, pas un fondu.
+    pub bord_interne: f32,
+    /// Douceur du bord **externe**, large : le disque s'y dilue.
+    pub bord_externe: f32,
+    /// Amplitude du pli (sous-lot 5.2), en part du rayon de l'ombre.
+    pub pli: f32,
+    /// Épaisseur géométrique `h/R`. Le disque est dessiné en plusieurs
+    /// nappes décalées de ±h, ce qui lui donne une tranche crédible au lieu
+    /// d'une ligne d'épaisseur nulle.
+    pub epaisseur: f32,
+    /// Nombre de nappes empilées. ⚠️ L'éclat est divisé d'autant : en
+    /// additif, empiler sans diviser part en **burn-out**, un blanc plat qui
+    /// détruit la silhouette.
+    pub nappes: usize,
+    /// Éclat du **faux bloom** : un annulus large et faible, sans bruit. On
+    /// n'a pas de post-traitement global — sans lui, un disque fin se lit
+    /// « rouge et terne » au lieu de « blanc brûlant ».
+    pub halo: f32,
+    /// Éclat de l'**anneau de lentille**, en multiple de l'émission directe.
+    /// ⚠️ Ce n'est **pas** l'anneau de photons, qui ne gagne qu'un
+    /// renforcement logarithmique et reste négligeable. C'est une image
+    /// démagnifiée de la face arrière, 2 à 3 fois plus brillante que
+    /// l'émission directe — et qui porte donc la couleur, le bruit et
+    /// l'asymétrie du disque, jamais un cercle uniforme.
+    pub anneau: f32,
+}
+
+impl Accretion {
+    /// **Cible « intermédiaire »** (sous-lot 5.3) : la physique d'un disque
+    /// stellaire actif — blanc-bleu saturant en blanc — mais un beaming
+    /// plafonné pour que l'ombre reste lisible.
+    pub fn chaude() -> Self {
+        Self {
+            // R > G > B : le clipping additif emmène le cœur vers le blanc.
+            chaud: vec3(1.0, 0.95, 0.88),
+            froid: vec3(0.85, 0.45, 0.22),
+            eclat: 3.2,
+            exposant_couleur: 2.2,
+            exposant_opacite: 0.6,
+            beta: 0.35,
+            beaming_max: 4.0,
+            cellules: vec2(16.0, 3.0), // ~5:1 puis étiré par la spirale
+            spirale: 2.4,
+            turbulence: 0.65,
+            rotation: 0.35,
+            bord_interne: 0.015,
+            bord_externe: 0.30,
+            pli: 0.55,
+            epaisseur: 0.07,
+            nappes: 3,
+            halo: 0.10,
+            anneau: 2.4,
+        }
     }
-    vec![(pli, 1.0), (pli, -1.0)]
+}
+
+/// Ce que chaque passe de dessin a de particulier.
+#[derive(Clone, Copy)]
+pub(super) struct Passe {
+    /// `(amplitude du pli, signe)`. `(0, _)` : à plat.
+    pub pli: (f32, f32),
+    /// Décalage vertical de la nappe (épaisseur).
+    pub decalage: f32,
+    /// Éclat de cette nappe. ⚠️ Divisé par le nombre de nappes : en
+    /// additif, empiler sans diviser part en **burn-out**.
+    pub couche: f32,
+    /// > 0 : c'est le faux bloom, sans bruit ni bord franc.
+    pub halo: f32,
+    /// > 0 : c'est l'anneau de lentille.
+    pub anneau: f32,
+}
+
+impl Passe {
+    fn nappe(pli: (f32, f32), decalage: f32, couche: f32) -> Self {
+        Self { pli, decalage, couche, halo: 0.0, anneau: 0.0 }
+    }
+}
+
+/// **Toutes les passes d'une moitié de disque.**
+///
+/// La moitié **arrière** se dessine deux fois — les deux arcs du pli — la
+/// moitié **avant** reste à plat : elle n'a jamais été cachée par l'astre,
+/// rien ne la dévie. Chacune est ensuite empilée en `nappes` pour donner au
+/// disque une épaisseur, et la moitié avant porte en plus le faux bloom et
+/// l'anneau de lentille.
+pub(super) fn passes(a: &Accretion, moitie: f32) -> Vec<Passe> {
+    let arcs: &[(f32, f32)] =
+        if moitie < 0.0 { &[(a.pli, 1.0), (a.pli, -1.0)] } else { &[(0.0, 1.0)] };
+    // ⚠️ **L'épaisseur n'est empilée que sur la moitié à plat.** Les arcs du
+    // pli sont déjà étalés par la déformation, et leur donner des nappes
+    // faisait passer le disque de 26 880 à 42 240 sommets — au-dessus d'un
+    // vaisseau entier, pour un objet qui n'est qu'un décor. Ce qu'on perd
+    // est invisible ; ce qu'on gagne est mesurable.
+    let n = if moitie < 0.0 { 1 } else { a.nappes.max(1) };
+    let couche = 1.0 / n as f32;
+    let mut out = Vec::with_capacity(arcs.len() * n + 2);
+    for arc in arcs {
+        for i in 0..n {
+            // Nappes réparties symétriquement autour du plan.
+            let u = if n == 1 { 0.0 } else { i as f32 / (n - 1) as f32 * 2.0 - 1.0 };
+            out.push(Passe::nappe(*arc, u * a.epaisseur, couche));
+        }
+    }
+    if moitie >= 0.0 {
+        if a.halo > 0.0 {
+            out.push(Passe { halo: a.halo, ..Passe::nappe((0.0, 1.0), 0.0, 1.0) });
+        }
+        if a.anneau > 0.0 {
+            out.push(Passe { anneau: a.anneau, ..Passe::nappe((0.0, 1.0), 0.0, 1.0) });
+        }
+    }
+    out
 }
 
 /// Pousse les uniforms du disque d'accrétion.
-// Ce sont les UNIFORMS du shader : les grouper ne ferait que déplacer la
-// liste d'un cran, comme pour `uniforms_voile`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn uniforms_accretion(
     mat: &Material,
     c: &DisqueConfig,
+    a: &Accretion,
     temps: f32,
-    // `centre` au **repère de rendu** (`CameraInfo::rel`), comme le voile :
-    // le vertex shader est le même, il lui faut la même origine qu'à la
-    // caméra.
     centre: Vec3,
     axes: (Vec3, Vec3, Vec3),
     tocam: Vec3,
     moitie: f32,
-    // `(amplitude, signe)` du pli. `(0, _)` dessine le disque à plat.
-    pli: (f32, f32),
+    passe: Passe,
 ) {
     let (u, n, v) = axes;
     mat.set_uniform("time", temps);
@@ -68,46 +213,46 @@ pub(super) fn uniforms_accretion(
     mat.set_uniform("tocam", (tocam.x, tocam.y, tocam.z));
     mat.set_uniform("moitie", moitie);
     mat.set_uniform("alpha", c.voile_alpha);
-    // `voile_couleur2` est le bord interne, `voile_couleur` l'externe : même
-    // convention que les autres presets, pour que la config reste lisible.
-    let (ch, fr) = (c.voile_couleur2, c.voile_couleur);
-    mat.set_uniform("chaud", (ch.x, ch.y, ch.z));
-    mat.set_uniform("froid", (fr.x, fr.y, fr.z));
-    mat.set_uniform("exposant", c.temp_exposant);
-    mat.set_uniform("turbulence", c.granulation);
-    mat.set_uniform("turb_freq", (c.gran_freq.x, c.gran_freq.y));
-    mat.set_uniform("rotation", c.rotation_voile);
+    mat.set_uniform("chaud", (a.chaud.x, a.chaud.y, a.chaud.z));
+    mat.set_uniform("froid", (a.froid.x, a.froid.y, a.froid.z));
+    mat.set_uniform("eclat", a.eclat);
+    mat.set_uniform("exp_couleur", a.exposant_couleur);
+    mat.set_uniform("exp_opacite", a.exposant_opacite);
+    mat.set_uniform("beta", a.beta);
+    mat.set_uniform("beaming_max", a.beaming_max.max(1.0));
+    mat.set_uniform("cellules", (a.cellules.x, a.cellules.y));
+    mat.set_uniform("spirale", a.spirale);
+    mat.set_uniform("turbulence", a.turbulence);
+    mat.set_uniform("rotation", a.rotation);
     mat.set_uniform("r_ratio", (c.externe / c.interne.max(1e-3)).max(1.001));
-    mat.set_uniform("doppler", c.doppler);
-    mat.set_uniform("bord", c.voile_bord);
-    mat.set_uniform("pli", pli.0);
-    mat.set_uniform("pli_signe", pli.1);
+    mat.set_uniform("bord_int", a.bord_interne);
+    mat.set_uniform("bord_ext", a.bord_externe);
+    mat.set_uniform("pli", passe.pli.0);
+    mat.set_uniform("pli_signe", passe.pli.1);
+    mat.set_uniform("interne", c.interne);
+    mat.set_uniform("decalage", passe.decalage * c.interne);
+    mat.set_uniform("couche", passe.couche);
+    mat.set_uniform("halo", passe.halo);
+    mat.set_uniform("anneau", passe.anneau);
 }
 
-/// **Déclaration des uniforms. Source unique** : sert à créer le material, et
-/// de référence au test de correspondance avec le `.glsl`.
+/// **Déclaration des uniforms. Source unique** : sert à créer le material,
+/// et de référence au test de correspondance avec le `.glsl`.
 fn uniforms_accretion_decl() -> Vec<UniformDesc> {
+    let f1 = |n: &str| UniformDesc::new(n, UniformType::Float1);
+    let f3 = |n: &str| UniformDesc::new(n, UniformType::Float3);
     vec![
-        UniformDesc::new("time", UniformType::Float1),
-        UniformDesc::new("seed", UniformType::Float1),
-        UniformDesc::new("centre", UniformType::Float3),
-        UniformDesc::new("axe_u", UniformType::Float3),
-        UniformDesc::new("axe_n", UniformType::Float3),
-        UniformDesc::new("axe_v", UniformType::Float3),
-        UniformDesc::new("tocam", UniformType::Float3),
-        UniformDesc::new("moitie", UniformType::Float1),
-        UniformDesc::new("alpha", UniformType::Float1),
-        UniformDesc::new("chaud", UniformType::Float3),
-        UniformDesc::new("froid", UniformType::Float3),
-        UniformDesc::new("exposant", UniformType::Float1),
-        UniformDesc::new("turbulence", UniformType::Float1),
-        UniformDesc::new("turb_freq", UniformType::Float2),
-        UniformDesc::new("rotation", UniformType::Float1),
-        UniformDesc::new("r_ratio", UniformType::Float1),
-        UniformDesc::new("doppler", UniformType::Float1),
-        UniformDesc::new("bord", UniformType::Float1),
-        UniformDesc::new("pli", UniformType::Float1),
-        UniformDesc::new("pli_signe", UniformType::Float1),
+        f1("time"), f1("seed"),
+        f3("centre"), f3("axe_u"), f3("axe_n"), f3("axe_v"), f3("tocam"),
+        f1("moitie"), f1("alpha"),
+        f3("chaud"), f3("froid"), f1("eclat"),
+        f1("exp_couleur"), f1("exp_opacite"),
+        f1("beta"), f1("beaming_max"),
+        UniformDesc::new("cellules", UniformType::Float2),
+        f1("spirale"), f1("turbulence"), f1("rotation"), f1("r_ratio"),
+        f1("bord_int"), f1("bord_ext"),
+        f1("pli"), f1("pli_signe"), f1("interne"), f1("decalage"),
+        f1("couche"), f1("halo"), f1("anneau"),
     ]
 }
 
@@ -166,29 +311,99 @@ mod tests {
     ///
     /// C'est toute la silhouette : la face arrière du disque apparaît
     /// au-dessus de l'astre **et** au-dessous. Deux arcs de même signe se
-    /// superposeraient — un seul arc, deux fois trop brillant en additif ; et
-    /// plier la moitié avant décollerait le disque de ses propres bords,
+    /// superposeraient — un seul arc, deux fois trop brillant en additif ;
+    /// et plier la moitié avant décollerait le disque de ses propres bords,
     /// puisqu'elle n'a jamais été cachée.
     #[test]
     fn seule_la_moitie_arriere_se_dedouble() {
-        let arriere = passes_pli(1.15, -1.0);
-        assert_eq!(arriere.len(), 2, "la moitié arrière ne donne pas deux arcs");
-        assert!(arriere[0].1 * arriere[1].1 < 0.0, "les deux arcs vont du même côté");
-        assert!(arriere.iter().all(|p| p.0 > 0.0), "un arc dessiné à plat");
-
-        let avant = passes_pli(1.15, 1.0);
-        assert_eq!(avant.len(), 1, "la moitié avant a été dédoublée");
-        assert_eq!(avant[0].0, 0.0, "la moitié avant a été pliée");
-    }
-
-    /// **Un disque sans pli dessine exactement comme avant** : une passe par
-    /// moitié, à plat. Le pli ne doit rien coûter à ce qui ne s'en sert pas.
-    #[test]
-    fn sans_pli_rien_ne_change() {
-        for moitie in [-1.0_f32, 0.0, 1.0] {
-            let p = passes_pli(0.0, moitie);
-            assert_eq!(p.len(), 1, "moitié {moitie} : passe de trop sans pli");
-            assert_eq!(p[0].0, 0.0);
+        let a = Accretion::chaude();
+        let signes: Vec<f32> =
+            passes(&a, -1.0).iter().filter(|p| p.pli.0 > 0.0).map(|p| p.pli.1).collect();
+        assert!(signes.iter().any(|s| *s > 0.0), "aucun arc au-dessus");
+        assert!(signes.iter().any(|s| *s < 0.0), "aucun arc au-dessous");
+        for p in passes(&a, 1.0) {
+            assert_eq!(p.pli.0, 0.0, "la moitié avant a été pliée");
         }
     }
+
+    /// **Empiler des nappes sans diviser l'éclat part en burn-out.**
+    ///
+    /// C'est l'erreur nommée par les auteurs de ces shaders : en blending
+    /// additif, des couches superposées finissent en blanc plat qui détruit
+    /// la silhouette. La somme des éclats doit rester celle d'une nappe.
+    #[test]
+    fn empiler_les_nappes_ne_brule_pas_l_image() {
+        for nappes in [1_usize, 2, 3, 5] {
+            let a = Accretion { nappes, ..Accretion::chaude() };
+            let somme: f32 = passes(&a, 1.0)
+                .iter()
+                .filter(|p| p.halo == 0.0 && p.anneau == 0.0)
+                .map(|p| p.couche)
+                .sum();
+            assert!(
+                (somme - 1.0).abs() < 1e-5,
+                "{nappes} nappes somment à {somme} : l'arc brûle ou s'éteint"
+            );
+        }
+    }
+
+    /// **Les nappes encadrent le plan**, au lieu d'être toutes du même
+    /// côté : sinon le disque n'a pas d'épaisseur, il est décalé.
+    #[test]
+    fn les_nappes_encadrent_le_plan() {
+        let a = Accretion { nappes: 3, ..Accretion::chaude() };
+        let d: Vec<f32> = passes(&a, 1.0)
+            .iter()
+            .filter(|p| p.halo == 0.0 && p.anneau == 0.0)
+            .map(|p| p.decalage)
+            .collect();
+        assert!(d.iter().any(|x| *x > 0.0) && d.iter().any(|x| *x < 0.0), "{d:?}");
+        assert!(d.iter().sum::<f32>().abs() < 1e-5, "nappes décentrées : {d:?}");
+        let seule = Accretion { nappes: 1, ..Accretion::chaude() };
+        assert_eq!(passes(&seule, 1.0)[0].decalage, 0.0);
+    }
+
+    /// **Le halo et l'anneau ne se posent qu'une fois, devant.** Les poser
+    /// aussi derrière les dédoublerait — et l'anneau de lentille est déjà
+    /// une image de la face arrière : le tracer deux fois le compterait
+    /// double.
+    #[test]
+    fn le_halo_et_l_anneau_ne_sont_poses_qu_une_fois() {
+        let a = Accretion::chaude();
+        let compte = |m: f32, f: fn(&Passe) -> f32| {
+            passes(&a, m).iter().filter(|p| f(p) > 0.0).count()
+        };
+        assert_eq!(compte(1.0, |p| p.halo), 1, "halo absent ou dupliqué devant");
+        assert_eq!(compte(1.0, |p| p.anneau), 1, "anneau absent ou dupliqué devant");
+        assert_eq!(compte(-1.0, |p| p.halo), 0, "halo dupliqué derrière");
+        assert_eq!(compte(-1.0, |p| p.anneau), 0, "anneau dupliqué derrière");
+    }
+
+    /// **La teinte chaude est ordonnée `R > G > B`.**
+    ///
+    /// Sous blending additif on ne peut pas tone-mapper la somme : elle
+    /// s'accumule dans le framebuffer, après le shader. Le clipping par
+    /// canal en tient lieu — le rouge sature d'abord, puis le vert, puis le
+    /// bleu, et le cœur vire au blanc. Une teinte bleutée saturerait vers le
+    /// **cyan** : c'était notre défaut.
+    #[test]
+    fn la_teinte_chaude_sature_vers_le_blanc_et_non_le_cyan() {
+        let a = Accretion::chaude();
+        let c = a.chaud;
+        assert!(c.x >= c.y && c.y >= c.z, "teinte chaude mal ordonnée : {c:?}");
+        assert!(c.x > c.z, "teinte chaude plate : le clipping ne fera rien");
+        assert!(a.eclat > 1.0, "éclat sous 1 : rien ne saturera jamais");
+    }
+
+    /// **Le budget de sommets reste tenable.** L'annulus fait 960 quads et
+    /// chaque passe le redessine ; le disque doit rester très en deçà d'un
+    /// vaisseau (25 600 sommets).
+    #[test]
+    fn le_disque_reste_dans_son_budget_de_sommets() {
+        let a = Accretion::chaude();
+        let n = passes(&a, -1.0).len() + passes(&a, 1.0).len();
+        let sommets = n * 960 * 4;
+        assert!(sommets < 32_000, "{n} passes, {sommets} sommets par frame");
+    }
+
 }

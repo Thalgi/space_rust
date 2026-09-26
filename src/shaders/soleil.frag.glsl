@@ -83,13 +83,25 @@ void main() {
         // plan (`soleil::avec_trou_noir`), dessiné en deux moitiés autour de
         // cet impostor. Ne restent ici que les deux choses qui appartiennent
         // vraiment à l'horizon.
-        float photon = smoothstep(0.10, 0.0, abs(rr - 1.08)); // anneau de photons
-        float horizon = smoothstep(1.03, 0.97, rr);           // 1 dans le trou
-        vec3 col = vec3(1.0, 0.85, 0.6) * photon;
+        // ⚠️ **Ce liseré n'est pas l'anneau de photons.** Celui-ci ne gagne
+        // qu'un renforcement LOGARITHMIQUE de brillance : il est
+        // observationnellement negligeable. Ce qu'on voit est l'anneau de
+        // LENTILLE, une image demagnifiee de la face arriere du disque --
+        // et c'est le disque lui-meme qui le dessine desormais
+        // (`disque_accretion`, passe `anneau`), avec sa couleur, son bruit
+        // et son asymetrie. Ne reste ici qu'un liseré discret sur le bord de
+        // l'ombre, la ou il n'y a pas de matiere pour le porter.
+        //
+        // Il valait 1,0 d'eclat et une teinte orangee franche : il se lisait
+        // comme un cercle trace au compas, et dominait l'image alors qu'il
+        // ne represente que quelques pour cent du flux.
+        float photon = smoothstep(0.07, 0.0, abs(rr - 1.05));
+        float horizon = smoothstep(1.02, 0.98, rr);  // 1 dans le trou
+        vec3 col = vec3(1.0, 0.93, 0.82) * photon * 0.35;
         // Horizon noir, opaque : c'est lui qui masque la moitié arrière du
         // disque, dessinée juste avant.
         col = mix(col, vec3(0.0), horizon);
-        gl_FragColor = vec4(col, clamp(max(photon, horizon), 0.0, 1.0));
+        gl_FragColor = vec4(col, clamp(max(photon * 0.5, horizon), 0.0, 1.0));
         return;
     }
 

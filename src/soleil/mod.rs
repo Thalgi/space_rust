@@ -112,11 +112,17 @@ pub struct Soleil {
 
 /// **Bornes du disque d'accrétion**, en rayons de l'horizon.
 ///
-/// Reprises telles quelles de l'ellipse que le shader peignait — elles
-/// avaient déjà été jugées à l'œil. La dernière orbite stable d'un trou noir
-/// de Schwarzschild vaut 3 rayons, le disque commence donc au-dessus de
-/// l'horizon, jamais dessus.
-const RAYON_ACCRETION: (f32, f32) = (1.4, 3.0);
+/// ⚠️ **Le « 1 » est le rayon de l'OMBRE, pas celui de l'horizon.** L'ombre
+/// apparente d'un trou noir de Schwarzschild vaut 2,6 rayons de
+/// Schwarzschild — la dessiner au rayon de l'horizon, erreur que la
+/// recherche signale comme fréquente, la rend 2,6 fois trop petite et
+/// transforme le disque en anneau lointain autour d'une bille. On prend
+/// donc l'ombre comme unité, ce que dessine déjà l'impostor.
+///
+/// Le bord interne suit alors le rapport physique **r_ISCO / r_ombre =
+/// 6/5,196 = 1,155** : le disque commence juste au-delà de l'ombre, pas loin
+/// devant. C'était 1,4, soit 20 % trop loin.
+const RAYON_ACCRETION: (f32, f32) = (1.155, 3.0);
 
 /// **Bornes du disque protosolaire**, en rayons stellaires. Bien plus large
 /// que le disque d'accrétion : c'est un berceau de planètes, pas une
@@ -494,92 +500,66 @@ mod tests_disque {
         }
     }
 
-    /// **Un disque d'accrétion n'est pas un anneau.** Trois choses l'en
-    /// distinguent, et chacune se perdrait en silence : il est fait de gaz
-    /// (aucune particule), son bord **interne** est le plus chaud — l'inverse
-    /// d'un disque protosolaire vu de l'extérieur — et il **beame**.
-    #[test]
-    fn un_disque_d_accretion_se_distingue_d_un_anneau() {
-        let acc = DisqueConfig::accretion(1.4, 3.0, 1000.0);
-        assert_eq!(acc.nb, 0, "des cailloux dans un disque d'accrétion");
-        assert!(acc.doppler > 0.0, "sans beaming, c'est une collerette symétrique");
-        // `couleur2` est le bord interne : il doit être le plus clair et le
-        // plus bleu des deux.
-        let (interne, externe) = (acc.voile_couleur2, acc.voile_couleur);
-        assert!(
-            interne.z > externe.z,
-            "le bord interne ({interne:?}) n'est pas plus bleu que l'externe ({externe:?})"
-        );
-        assert!(interne.length() > externe.length(), "le bord interne n'est pas le plus chaud");
-        assert!(acc.emissif > 0.0, "un disque d'accrétion qui n'émet pas");
-        // Un anneau planétaire, lui, ne beame pas.
-        assert_eq!(DisqueConfig::anneau_saturne(1.2, 2.3, Vec3::ONE, 0.0).doppler, 0.0);
-        assert_eq!(DisqueConfig::protosolaire(0, 3.0, 16.0, 1000.0).doppler, 0.0);
-    }
-
-    /// **Un disque d'accrétion se dessine avec son propre shader**, pas avec
-    /// le voile des anneaux — et il le dit lui-même.
+    /// **Seul un disque d'accrétion porte le vocabulaire de l'accrétion.**
     ///
-    /// Le drapeau est ce qui choisit le material : oublié, le disque
-    /// retomberait sur le voile, perdrait son profil de température et son
-    /// beaming, et redeviendrait exactement l'anneau qu'on cherche à ne plus
-    /// voir. Sans rien qui le signale, puisque le voile sait dessiner
-    /// n'importe quel annulus.
+    /// Tout est rassemblé dans un type à part : c'est ce qui empêche ce
+    /// vocabulaire de se répandre dans le `DisqueConfig` partagé avec les
+    /// anneaux de Saturne, et c'est aussi ce qui permet à deux cibles
+    /// visuelles de ne différer que par des constantes.
     #[test]
-    fn un_disque_d_accretion_reclame_son_propre_shader() {
-        assert!(DisqueConfig::accretion(1.4, 3.0, 1000.0).accretion);
-        assert!(DisqueConfig::accretion(1.4, 3.0, 1000.0).temp_exposant > 0.0);
-        // Et rien d'autre ne le réclame : le voile reste le shader des
-        // anneaux et des disques de matière froide.
+    fn seul_un_disque_d_accretion_porte_son_vocabulaire() {
+        let acc = DisqueConfig::accretion(1.4, 3.0, 1000.0);
+        let a = acc.accretion.expect("un disque d'accrétion sans réglages");
+        assert_eq!(acc.nb, 0, "des cailloux dans un disque d'accrétion");
+        assert!(a.beta > 0.0, "sans beaming, c'est une collerette symétrique");
+        assert!(a.pli > 0.0, "sans pli, la silhouette reste celle d'un anneau");
+        assert!(a.nappes >= 1 && a.epaisseur > 0.0, "un disque d'épaisseur nulle");
         for autre in [
             DisqueConfig::protosolaire(0, 3.0, 16.0, 1000.0),
             DisqueConfig::protoplanetaire(0, 3.0, 16.0, 1000.0),
             DisqueConfig::anneau_saturne(1.2, 2.3, Vec3::ONE, 0.0),
             DisqueConfig::asteroides(10, 2.0, 3.0, 1000.0),
         ] {
-            assert!(!autre.accretion, "un disque ordinaire réclame le shader d'accrétion");
-            assert_eq!(autre.temp_exposant, 0.0, "un profil de température hors accrétion");
-            assert_eq!(autre.doppler, 0.0, "du beaming sur un disque qui tourne lentement");
+            assert!(autre.accretion.is_none(), "un disque ordinaire se croit en accrétion");
         }
     }
 
-    /// **Seul un disque d'accrétion se plie.**
+    /// **Le bord interne est le plus chaud, et le profil est adouci.**
     ///
-    /// Le pli imite la déviation des rayons autour d'un trou noir : la face
-    /// arrière du disque, physiquement cachée, apparaît au-dessus de lui.
-    /// Appliqué à un anneau de Saturne, il le décollerait de sa planète sans
-    /// aucune raison physique.
+    /// La physique donne `I ∝ r^(-3)` ; appliquée telle quelle à l'opacité,
+    /// elle éteint le bord externe au point qu'il disparaît. D'où **deux**
+    /// exposants : raide pour la couleur, doux pour l'opacité.
     #[test]
-    fn seul_un_disque_d_accretion_se_plie() {
-        let acc = DisqueConfig::accretion(1.4, 3.0, 1000.0);
-        assert!(acc.pli > 0.0, "sans pli, la silhouette reste celle d'un anneau incliné");
-        // Assez pour enjamber l'astre, pas au point d'en faire une soucoupe.
-        assert!((0.5..2.5).contains(&acc.pli), "amplitude de pli hors du raisonnable : {}", acc.pli);
-        for autre in [
-            DisqueConfig::protosolaire(0, 3.0, 16.0, 1000.0),
-            DisqueConfig::anneau_saturne(1.2, 2.3, Vec3::ONE, 0.0),
-            DisqueConfig::kuiper(10, 2.0, 3.0, 1000.0),
-        ] {
-            assert_eq!(autre.pli, 0.0, "un disque ordinaire se plie");
-        }
-    }
-
-    /// **Le profil de température est adouci, et c'est assumé.**
-    ///
-    /// La valeur physique est 3 — `T ∝ r^(-3/4)` et une émission en `T⁴`.
-    /// Elle éteint si complètement le bord externe qu'il n'en reste rien.
-    /// L'adoucir est un choix ; le laisser à zéro serait le perdre.
-    #[test]
-    fn le_profil_de_temperature_est_adouci_mais_present() {
-        let e = DisqueConfig::accretion(1.4, 3.0, 1000.0).temp_exposant;
-        assert!(e > 0.5, "profil trop plat ({e}) : la galette uniforme revient");
-        assert!(e < 3.0, "profil à la valeur physique ({e}) : le bord externe disparaît");
-        // Ce que ça donne au bord externe, mesuré comme le shader le calcule.
-        let reste = (3.0_f32 / 1.4).powf(-e);
+    fn le_bord_interne_ecrase_sans_effacer_le_bord_externe() {
+        let a = DisqueConfig::accretion(1.4, 3.0, 1000.0).accretion.unwrap();
         assert!(
-            (0.1..0.6).contains(&reste),
-            "le bord externe garde {reste} de l'éclat interne : trop éteint ou trop présent"
+            a.exposant_couleur > a.exposant_opacite,
+            "la couleur ne s'effondre pas plus vite que l'opacité : le disque sera plat"
         );
+        assert!(a.chaud.length() > a.froid.length(), "le bord interne n'est pas le plus chaud");
+        // Ce qui reste d'opacité au bord externe, calculé comme le shader.
+        let reste = (3.0_f32 / 1.4).powf(-a.exposant_opacite);
+        assert!(
+            (0.3..0.95).contains(&reste),
+            "le bord externe garde {reste} de l'opacité interne : éteint ou plat"
+        );
+    }
+
+    /// **Les cellules de bruit sont très allongées, et enroulées.**
+    ///
+    /// Un rapport d'aspect proche de 1 donne des bulles — c'était notre
+    /// défaut. Il en faut 8:1 à 20:1, plus une spirale logarithmique, sans
+    /// quoi les structures restent concentriques au lieu de s'enrouler. Et
+    /// le compte azimutal doit être **entier** : c'est sur lui que le hash
+    /// s'enroule pour qu'il n'y ait pas de couture.
+    #[test]
+    fn le_bruit_est_allonge_et_enroule() {
+        let a = DisqueConfig::accretion(1.4, 3.0, 1000.0).accretion.unwrap();
+        let aspect = a.cellules.x / a.cellules.y;
+        assert!(aspect >= 4.0, "cellules d'aspect {aspect} : des bulles, pas des filaments");
+        assert_eq!(a.cellules.y, a.cellules.y.floor(), "compte azimutal non entier : couture");
+        assert!(a.cellules.y >= 1.0, "aucune cellule sur le tour");
+        assert!(a.spirale > 0.0, "sans spirale, les structures restent concentriques");
     }
 
     /// **Le disque commence au-dessus de l'horizon, pas dessus.** La dernière
@@ -588,7 +568,15 @@ mod tests_disque {
     /// à la sphère.
     #[test]
     fn le_disque_d_accretion_degage_l_horizon() {
-        assert!(RAYON_ACCRETION.0 > 1.0, "le disque mord sur l'horizon");
+        assert!(RAYON_ACCRETION.0 > 1.0, "le disque mord sur l'ombre");
+        // ⚠️ Et il la **serre** : r_ISCO / r_ombre = 6/5,196 = 1,155. Un
+        // bord interne trop loin transforme le disque en anneau lointain
+        // autour d'une bille — c'est ce qu'on voyait.
+        assert!(
+            RAYON_ACCRETION.0 < 1.3,
+            "bord interne à {} rayons d'ombre, contre 1,155 : le disque décolle",
+            RAYON_ACCRETION.0
+        );
         assert!(RAYON_ACCRETION.1 > RAYON_ACCRETION.0 * 1.5, "un disque trop fin pour se lire");
         // Le protosolaire est franchement plus large : ce n'est pas le même
         // objet, et il ne doit pas se confondre avec lui à l'œil.

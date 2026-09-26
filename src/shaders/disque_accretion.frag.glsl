@@ -1,17 +1,10 @@
 #version 100
-// Disque d'accrétion (sous-lot 6.1). Partage le vertex shader du voile --
-// l'annulus, son orientation et sa translation sont exactement les mêmes --
-// mais rien d'autre : un disque d'accrétion n'est pas un anneau de matière
-// éclairé du dehors, c'est du gaz qui rayonne parce qu'il brûle.
+// Disque d'accrétion (sous-lots 5.1 à 5.3). Annulus du voile, vertex shader
+// propre (`disque_accretion.vert.glsl`), et ici tout ce qui fait qu'un
+// disque d'accrétion n'est pas un anneau de matière éclairé du dehors.
 //
-// Ce qu'il fait et que le voile ne faisait pas :
-//   - un profil de température en PUISSANCE (T ~ r^-3/4, Shakura-Sunyaev),
-//     là où le voile interpolait linéairement deux teintes ;
-//   - un beaming Doppler qui décale aussi la COULEUR, pas seulement l'éclat ;
-//   - une turbulence cisaillée par la rotation képlérienne.
-//
-// Ce qu'il ne fait PAS : la silhouette (le disque reste un anneau plat, plié
-// au sous-lot 6.2), et toute forme de lentille gravitationnelle.
+// Les valeurs et les corrections viennent de
+// `docs/conception/astres_v2_disque_accretion_2.md`, qui les chiffre.
 precision highp float;
 
 varying vec2 vtc;    // (t radial 0..1, ang 0..1)
@@ -23,107 +16,139 @@ uniform float time;
 uniform float seed;
 uniform float moitie;      // -1 arrière seulement, +1 avant, 0 tout
 uniform float alpha;       // opacité maximale
-uniform vec3 chaud;        // teinte du bord interne (le plus chaud)
-uniform vec3 froid;        // teinte du bord externe
-uniform float exposant;    // dureté du profil de température (0 = plat)
-uniform float turbulence;  // 0 lisse .. 1 filamenteux
-uniform vec2 turb_freq;    // (fréquence spatiale, poids de l'octave fine)
-uniform float rotation;    // vitesse angulaire visuelle au bord interne
-uniform float r_ratio;     // externe / interne -> rotation différentielle
-uniform float doppler;     // force du beaming (0 = aucun)
-uniform float bord;        // largeur des bords doux (fraction radiale)
-uniform vec3 axe_n;        // normale du plan
-uniform vec3 tocam;        // du centre vers la caméra
-uniform float pli;         // amplitude du pli (0 = disque plat)
-uniform float pli_signe;   // +1 = arc du dessus, -1 = celui du dessous
+uniform vec3 chaud;        // bord interne — ordonné R > G > B
+uniform vec3 froid;        // bord externe
+uniform float eclat;       // intensité au bord interne (peut dépasser 1)
+uniform float exp_couleur; // dureté du profil de couleur
+uniform float exp_opacite; // dureté du profil d'opacité (plus douce)
+uniform float beta;        // vitesse orbitale au bord interne (fraction de c)
+uniform float beaming_max; // plafond du rapport de brillance entre les côtés
+uniform vec2 cellules;     // (radiales, azimutales — entier)
+uniform float spirale;     // enroulement du bruit, rad par e-fold de rayon
+uniform float turbulence;
+uniform float rotation;
+uniform float r_ratio;     // externe / interne
+uniform float bord_int;
+uniform float bord_ext;
+uniform vec3 axe_n;
+uniform vec3 tocam;
+uniform float pli;
+uniform float pli_signe;
+uniform float couche;      // teinte/éclat de la nappe : 1 = pleine, < 1 = empilée
+uniform float halo;        // > 0 : cette passe est le faux bloom, sans bruit
+uniform float anneau;      // > 0 : cette passe est l'anneau de lentille
 
 float hash21(vec2 p) {
     return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
-float vnoise(vec2 p) {
+// Bruit de valeur **périodique sur x**. La périodicité est ce qui permet
+// d'échantillonner en coordonnées (radial, azimutal) sans couture au
+// raccord de l'angle : le hash se referme sur `periode` cellules.
+float vnoise_cyl(vec2 p, float periode) {
     vec2 i = floor(p);
     vec2 f = fract(p);
     vec2 u = f * f * (3.0 - 2.0 * f);
-    float a = hash21(i);
-    float b = hash21(i + vec2(1.0, 0.0));
-    float c = hash21(i + vec2(0.0, 1.0));
-    float d = hash21(i + vec2(1.0, 1.0));
+    float i0 = mod(i.x, periode);
+    float i1 = mod(i.x + 1.0, periode);
+    float a = hash21(vec2(i0, i.y));
+    float b = hash21(vec2(i1, i.y));
+    float c = hash21(vec2(i0, i.y + 1.0));
+    float d = hash21(vec2(i1, i.y + 1.0));
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
 void main() {
-    // Moitié avant / arrière : l'astre s'intercale entre les deux passes.
     if (moitie * vdot < 0.0) { discard; }
 
-    // **Le second arc ne vit que là où le pli l'a vraiment soulevé.** Sur les
-    // côtés le pli s'annule, et les deux copies de la moitié arrière se
-    // superposent exactement — en additif, une bande deux fois trop brillante
-    // le long de la ligne de raccord. Celle du dessus, elle, se raccorde au
-    // disque plat : c'est la même matière, elle doit rester continue.
+    // Le second arc du pli ne vit que là où il a vraiment soulevé la
+    // matière : ailleurs, les deux copies se superposeraient exactement et
+    // additionneraient leur éclat le long du raccord.
     float part_arc = 1.0;
     if (pli > 0.001 && pli_signe < 0.0) {
         part_arc = smoothstep(0.12, 0.55, vpli);
         if (part_arc < 0.004) { discard; }
     }
 
-    float t = clamp(vtc.x, 0.0, 1.0);        // 0 = bord interne, 1 = externe
-    float rr = mix(1.0, r_ratio, t);         // rayon en unités du bord interne
+    float t = clamp(vtc.x, 0.0, 1.0);
+    float rr = mix(1.0, r_ratio, t);
 
-    // **Rotation képlérienne différentielle** : l'intérieur tourne bien plus
-    // vite que l'extérieur (omega ~ r^-3/2). C'est ce qui étire la matière en
-    // filaments au lieu de la laisser en paquets.
-    float ang = fract(vtc.y - rotation * time / pow(rr, 1.5));
+    // **Rotation képlérienne**, phase bornée. Non bornée, l'enroulement
+    // finit par produire des rayures infiniment fines, et l'argument du hash
+    // grandit au point de se quantifier.
+    float tour = 6.2831853;
+    float phase = mod(rotation * time, tour) / pow(rr, 1.5);
+    float ang = fract(vtc.y - phase / tour);
 
-    // **Profil de température.** T ~ r^-3/4 et l'émission suit T^4, soit une
-    // chute en r^-3 : le bord interne doit ECRASER le reste. `exposant` en
-    // règle la dureté -- la valeur physique (3.0) éteint si complètement le
-    // bord externe qu'il disparaît, et on perd le disque.
-    float chaleur = pow(rr, -exposant);
+    // **Profil radial, dédoublé.** La couleur suit un exposant raide (le
+    // bord interne doit écraser le reste), l'opacité un exposant doux — un
+    // seul exposant raide éteindrait le bord externe au point de le perdre.
+    float chaleur = pow(rr, -exp_couleur);
+    float densite = pow(rr, -exp_opacite);
 
-    // Turbulence, cisaillée avec la rotation : on échantillonne en espace
-    // disque (cartésien) pour éviter le damier polaire du bord externe.
-    float dens = 1.0;
-    if (turbulence > 0.001) {
-        float a2 = ang * 6.2831853;
-        vec2 p = vec2(cos(a2), sin(a2)) * (rr / r_ratio) * turb_freq.x;
-        float n = vnoise(p + seed);
-        n = mix(n, vnoise(p * 2.7 + seed * 1.7), turb_freq.y);
-        dens = mix(1.0, 0.45 + 1.1 * n, turbulence);
+    // **Bords asymétriques** : l'ISCO est une coupure franche, le bord
+    // externe une dilution. Un fondu symétrique donne un anneau mou.
+    densite *= smoothstep(0.0, max(bord_int, 0.001), t);
+    densite *= 1.0 - smoothstep(1.0 - max(bord_ext, 0.001), 1.0, t);
+
+    // **Turbulence anisotrope.** ⚠️ L'ancien mapping échantillonnait un
+    // cercle en espace cartésien : isotrope par construction, donc incapable
+    // de produire autre chose que des bulles, quel que soit le réglage. Ici
+    // on échantillonne en (azimut, rayon) avec des cellules très allongées,
+    // et on décale l'azimut en **spirale logarithmique** — sans quoi les
+    // structures restent concentriques au lieu de s'enrouler.
+    if (turbulence > 0.001 && halo < 0.001) {
+        float periode = max(floor(cellules.y), 1.0);
+        float ang_s = ang * periode - spirale * log(rr);
+        vec2 p = vec2(ang_s, t * cellules.x);
+        float n = vnoise_cyl(p, periode);
+        n = mix(n, vnoise_cyl(p * 2.0 + 7.3 + seed, periode * 2.0), 0.45);
+        // Crêtes affûtées : des filaments, pas des taches molles. Le
+        // plancher garde un continuum — sans lui, c'est de la fourrure.
+        n = 1.0 - abs(2.0 * n - 1.0);
+        densite *= mix(1.0, 0.35 + 1.25 * n * n, turbulence);
     }
 
-    // Bords doux : sans eux, l'annulus se termine sur une arête franche.
-    float b = max(bord, 0.001);
-    dens *= smoothstep(0.0, b, t) * (1.0 - smoothstep(1.0 - b, 1.0, t));
-
-    // **Beaming Doppler.** Le côté qui vient vers nous est plus brillant ET
-    // plus bleu ; celui qui s'éloigne, plus sombre et plus rouge. Le voile
-    // partagé n'en faisait que la moitié (l'éclat). C'est l'asymétrie qui
-    // distingue un disque d'accrétion d'un anneau -- sur M87*, elle est le
-    // trait le plus visible de l'image.
+    // **Beaming Doppler en D³**, plafonné. La loi relativiste donne un
+    // rapport de 8 à 10 entre les deux côtés — assez pour que l'ombre du
+    // trou noir disparaisse, ce qui a fait retirer l'effet du film
+    // Interstellar. Le plafond garde l'asymétrie sans perdre la silhouette.
     float faisceau = 1.0;
-    float bleuissement = 0.0;
-    if (doppler > 0.001) {
+    float decalage = 0.0;
+    if (beta > 0.001) {
         vec3 radial = normalize(vpos - axe_n * dot(vpos, axe_n));
         vec3 vitesse = cross(axe_n, radial);
-        float vers_nous = dot(vitesse, tocam);
-        // La matière interne tourne le plus vite : le beaming y est le plus
-        // fort. Même dépendance que la rotation, en plus doux.
-        float rapide = pow(rr, -0.5);
-        faisceau = max(0.0, 1.0 + doppler * vers_nous * rapide);
-        bleuissement = clamp(doppler * vers_nous * rapide * 0.5, -0.6, 0.6);
+        float cos_t = dot(vitesse, tocam);
+        float b = beta * pow(rr, -0.5); // l'intérieur file le plus vite
+        float d = 1.0 / max(1.0 - b * cos_t, 0.05);
+        faisceau = clamp(d * d * d, 1.0 / beaming_max, beaming_max);
+        decalage = clamp((faisceau - 1.0) * 0.25, -0.5, 0.5);
     }
 
+    // Couleur : on laisse l'intensité dépasser 1. Le clipping par canal fait
+    // office de tone mapping — le rouge sature d'abord, puis le vert, puis
+    // le bleu, et le cœur vire au blanc. C'est pour ça que `chaud` est
+    // ordonné R > G > B.
     vec3 col = mix(froid, chaud, clamp(chaleur, 0.0, 1.0));
-    // Décalage de couleur : vers le bleu si la matière s'approche, vers le
-    // rouge si elle fuit. Appliqué sur les canaux extrêmes seulement.
-    col.b *= 1.0 + bleuissement;
-    col.r *= 1.0 - bleuissement * 0.6;
-    col *= faisceau;
+    col.b *= 1.0 + decalage;       // s'approche -> bleuit
+    col.r *= 1.0 - decalage * 0.5; // s'éloigne -> rougit
+    col *= eclat * chaleur * faisceau * couche;
 
-    float a = clamp(dens * chaleur, 0.0, 1.0) * alpha * part_arc;
-    a *= clamp(faisceau, 0.35, 1.8);
-    if (a < 0.004) { discard; }
+    float a = clamp(densite, 0.0, 1.0) * alpha * part_arc * couche;
+    a *= clamp(faisceau, 0.3, 2.0);
 
+    // Le faux bloom : large, faible, lisse. Il ne porte ni bruit ni bord
+    // franc — c'est une lueur, pas de la matière.
+    if (halo > 0.001) {
+        a = clamp(densite, 0.0, 1.0) * halo * clamp(faisceau, 0.5, 1.6);
+        col = mix(froid, chaud, 0.6) * eclat;
+    }
+    // L'anneau de lentille porte la couleur, le bruit et l'asymétrie du
+    // disque — c'est une image de lui, pas un liseré décoratif.
+    if (anneau > 0.001) {
+        a *= anneau;
+    }
+
+    if (a < 0.003) { discard; }
     gl_FragColor = vec4(max(col, vec3(0.0)), clamp(a, 0.0, 1.0));
 }
