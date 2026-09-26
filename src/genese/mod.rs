@@ -205,30 +205,11 @@ struct Plan {
     a_max: f32,    // demi-grand axe max (UA)
 }
 
-/// **Le mode de couronne dit la variante.**
-///
-/// Séparé du tirage pour être testable : `ProfilEtoile::aleatoire` passe par
-/// `gen_range`, qui exige le contexte graphique. ⚠️ Un mode sans bras retombe
-/// sur `Normale` **en silence** — l'étoile perdrait ses jets ou son horizon
-/// sans que rien ne le signale, et c'est exactement ce qui tenait le trou
-/// noir hors du jeu alors que son rendu existait déjà.
-fn variante_de(couronne: f32) -> Variante {
-    match couronne as i32 {
-        1 => Variante::Jets,
-        2 => Variante::Vent,
-        3 => Variante::Pulsar,
-        4 => Variante::Magnetar,
-        5 => Variante::TrouNoir,
-        6 => Variante::Proto,
-        _ => Variante::Normale,
-    }
-}
-
 /// Tire une étoile-feuille aléatoire. Renvoie (feuille, masse, luminosité).
 fn feuille_alea() -> (Feuille, f32, f32) {
     let p = ProfilEtoile::aleatoire();
     let masse = if p.est_trou_noir() { MASSE_TROU_NOIR } else { masse_luminosite(p.luminosite) };
-    let var = variante_de(p.couronne);
+    let var = Variante::de_mode(p.couronne);
     (
         Feuille::new(p.rayon, p.couleur, p.luminosite, masse)
             .variante(var)
@@ -601,15 +582,7 @@ fn deployer_noeud(
         Noeud::Etoile(f) => {
             let mut s = Soleil::new(Vec3::ZERO, f.rayon, f.couleur, f.luminosite)
                 .avec_activite(etoile::activite_type(f.rayon, f.luminosite));
-            s = match f.variante {
-                Variante::Normale => s,
-                Variante::Jets => s.avec_jets(),
-                Variante::Vent => s.avec_vent(),
-                Variante::Pulsar => s.avec_pulsar(),
-                Variante::Magnetar => s.avec_magnetar(),
-                Variante::TrouNoir => s.avec_trou_noir(),
-                Variante::Proto => s.avec_jets().avec_disque_protosolaire(),
-            };
+            s = f.variante.appliquer(s);
             if f.remnant {
                 s = s.sans_zone_habitable(); // pulsar/magnétar/étoile à neutrons : pas de HZ
             }
@@ -1954,7 +1927,7 @@ mod tests_variante {
         ];
         for (mode, attendu) in attendus {
             assert!(
-                std::mem::discriminant(&variante_de(mode)) == std::mem::discriminant(&attendu),
+                std::mem::discriminant(&Variante::de_mode(mode)) == std::mem::discriminant(&attendu),
                 "le mode {mode} ne donne pas la variante attendue"
             );
         }
@@ -1967,7 +1940,7 @@ mod tests_variante {
     fn le_tirage_ne_produit_aucun_mode_orphelin() {
         for k in 0..1000 {
             let (_, _, _, _, nom, mode) = crate::etoile::particuliere(k as f32 / 1000.0);
-            let orphelin = matches!(variante_de(mode), Variante::Normale) && mode != 0.0;
+            let orphelin = matches!(Variante::de_mode(mode), Variante::Normale) && mode != 0.0;
             assert!(!orphelin, "{nom} porte le mode {mode}, que personne ne sait traduire");
         }
     }

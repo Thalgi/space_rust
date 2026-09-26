@@ -1,6 +1,7 @@
 use crate::astre::{Astre, CameraInfo};
 use crate::etoile::couleur_corps_noir;
 use crate::soleil::Soleil;
+use crate::stellaire::Variante;
 use macroquad::prelude::*;
 
 /// **Étoiles par ligne.**
@@ -33,7 +34,7 @@ fn catalogue() -> Vec<(&'static str, f32, f32, f32, f32)> {
         ("Supergeante bleue", 1.15, 21000.0, 6.0, 2.0), // vent stellaire
         // Particulières.
         ("Etoile carbonee (C)", 1.0, 2800.0, 2.5, 0.0),
-        ("T Tauri (jeune)", 0.85, 4200.0, 1.2, 1.0), // jets bipolaires
+        ("T Tauri (jeune)", 0.85, 4200.0, 1.2, 6.0), // jets bipolaires + disque protosolaire
         ("Wolf-Rayet", 1.05, 40000.0, 5.0, 2.0),     // vent violent
         ("Etoile a flares (M)", 0.58, 3000.0, 0.4, 0.0),
         ("Etoile a neutrons", 0.42, 40000.0, 0.2, 1.0), // jets fixes
@@ -55,20 +56,11 @@ impl GalerieEtoiles {
             .into_iter()
             .map(|(nom, rayon, temp, lumi, mode)| {
                 let s = Soleil::new(Vec3::ZERO, rayon, couleur_corps_noir(temp), lumi);
-                let s = if mode > 4.5 {
-                    s.avec_trou_noir()
-                } else if mode > 3.5 {
-                    s.avec_magnetar()
-                } else if mode > 2.5 {
-                    s.avec_pulsar()
-                } else if mode > 1.5 {
-                    s.avec_vent()
-                } else if mode > 0.5 {
-                    s.avec_jets()
-                } else {
-                    s
-                };
-                (nom.to_string(), s)
+                // ⚠️ **La même source que la genèse.** Cette chaîne était
+                // recopiée ici, et les deux avaient déjà divergé : le
+                // `mode > 4.5` local attrapait aussi le mode 6, et le T Tauri
+                // du catalogue restait au mode 1, donc sans disque.
+                (nom.to_string(), Variante::de_mode(mode).appliquer(s))
             })
             .collect();
         Self { cellules, scroll: 0.0 }
@@ -165,5 +157,36 @@ impl GalerieEtoiles {
             Color::new(0.7, 0.85, 0.85, 1.0),
         );
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **Aucune entrée du catalogue ne porte un mode que personne ne sait
+    /// traduire.**
+    ///
+    /// Le catalogue est écrit à la main, et son mode est un `f32` que rien ne
+    /// contraint : une valeur inconnue retombe sur `Normale` **en silence**,
+    /// et la vitrine montre une étoile ordinaire là où elle promet un pulsar
+    /// ou un disque. C'est la vue qui sert à juger les astres — elle ne peut
+    /// pas mentir sur ce qu'elle montre.
+    #[test]
+    fn chaque_entree_du_catalogue_porte_un_mode_connu() {
+        for (nom, _, _, _, mode) in catalogue() {
+            let inconnu =
+                matches!(Variante::de_mode(mode), Variante::Normale) && mode as i32 != 0;
+            assert!(!inconnu, "{nom} porte le mode {mode}, que personne ne sait traduire");
+        }
+    }
+
+    /// **Et les types qui portent un disque sont bien au catalogue** : c'est
+    /// la seule vue où l'on puisse les juger.
+    #[test]
+    fn les_porteurs_de_disque_sont_exposes() {
+        let modes: Vec<f32> = catalogue().into_iter().map(|e| e.4).collect();
+        assert!(modes.contains(&5.0), "aucun trou noir en galerie");
+        assert!(modes.contains(&6.0), "aucune jeune étoile à disque en galerie");
     }
 }

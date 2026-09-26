@@ -36,6 +36,45 @@ pub enum Variante {
     Proto,
 }
 
+impl Variante {
+    /// **Le mode de couronne dit la variante. Source unique.**
+    ///
+    /// ⚠️ Un mode sans bras retombe sur `Normale` **en silence** : l'étoile
+    /// perd ses jets, son horizon ou son disque, son rendu existe toujours,
+    /// et rien ne le dit. C'est ce qui a tenu le trou noir hors du jeu.
+    pub fn de_mode(mode: f32) -> Self {
+        match mode as i32 {
+            1 => Variante::Jets,
+            2 => Variante::Vent,
+            3 => Variante::Pulsar,
+            4 => Variante::Magnetar,
+            5 => Variante::TrouNoir,
+            6 => Variante::Proto,
+            _ => Variante::Normale,
+        }
+    }
+
+    /// **Configure une étoile selon sa variante. Source unique aussi.**
+    ///
+    /// ⚠️ La galerie en tenait une **copie**, sous forme de chaîne de `if`
+    /// sur le mode — et les deux avaient déjà divergé : son `mode > 4.5`
+    /// attrapait aussi le mode 6, si bien qu'une jeune étoile y aurait été
+    /// construite en trou noir, pendant que le T Tauri du catalogue restait
+    /// au mode 1 et n'avait donc aucun disque. Deux endroits qui décident du
+    /// même fait finissent toujours par ne plus dire la même chose.
+    pub fn appliquer(self, s: crate::soleil::Soleil) -> crate::soleil::Soleil {
+        match self {
+            Variante::Normale => s,
+            Variante::Jets => s.avec_jets(),
+            Variante::Vent => s.avec_vent(),
+            Variante::Pulsar => s.avec_pulsar(),
+            Variante::Magnetar => s.avec_magnetar(),
+            Variante::TrouNoir => s.avec_trou_noir(),
+            Variante::Proto => s.avec_jets().avec_disque_protosolaire(),
+        }
+    }
+}
+
 /// Étoile-feuille de l'arbre. La **masse** sert au calcul des barycentres.
 #[derive(Clone, Copy)]
 pub struct Feuille {
