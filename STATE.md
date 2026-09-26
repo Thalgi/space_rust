@@ -36,10 +36,10 @@ d'accretion ».
 [`docs/suivi/astres_v2.md`](docs/suivi/astres_v2.md) — c'est lui qu'il faut
 lire, pas les commits.
 
-⚠️ **Consigne de commit : voir « Commits » plus bas.** Elle dit de ne jamais
-commiter de soi-même ; la session du 2026-09-24 → 26 a commité à chaque lot
-sans objection de l'utilisateur. **À trancher** : soit la consigne tient et
-il faut y revenir, soit elle est caduque et cette ligne doit disparaître.
+**Commits** : un par lot ou sous-lot, sur la branche de chantier, une fois
+les tests verts et clippy à zéro — la consigne a été révisée le 2026-09-26,
+voir « Commits » plus bas. La **fusion** vers `main` reste une décision de
+l'utilisateur.
 
 ---
 
@@ -227,10 +227,25 @@ lui : `a0ebb58` « torus & elysium complex base complete », `73fb924`
 **non fusionnée et non poussée**. Les deux lignes ci-dessus décrivent un
 `main` déjà dépassé.
 
-Consigne debout : *« no commit i'll say when commit is needed »* — ne jamais
-commiter de soi-même. **Mais signaler les points de commit** : l'utilisateur
-commite aux jalons qu'on lui indique, depuis qu'un `git checkout --` a détruit
-du travail non commité (`docs/suivi/stations.md` §F.8).
+**Consigne debout (révisée le 2026-09-26) : commiter à chaque lot, sur la
+branche de chantier.**
+
+⚠️ **Elle remplace l'ancienne**, *« no commit i'll say when commit is
+needed »*, qui interdisait de commiter de soi-même. Cette règle-là datait
+d'une époque où l'on travaillait **directement sur `main`** : un commit y
+était un engagement, et l'utilisateur voulait le prononcer lui-même.
+
+Depuis, le travail se fait sur une **branche de chantier dans un worktree**
+(`.claude/worktrees/…`). Le raisonnement s'inverse : un commit n'engage plus
+rien — il **crée un point de repli**. Si un lot tourne mal, on revient au
+commit précédent au lieu de perdre le travail. C'est exactement ce que
+cherchait à éviter l'incident d'origine, un `git checkout --` qui avait
+détruit du travail non commité (`docs/suivi/stations.md` §F.8) : la réponse
+n'était pas de commiter *moins*, c'était de commiter *plus tôt*.
+
+En pratique : **un commit par lot ou sous-lot**, une fois les tests verts et
+clippy à zéro. La fusion vers `main`, elle, reste une décision de
+l'utilisateur — c'est là qu'est passé l'engagement.
 
 ⚠️ **Ne jamais employer `git checkout --`, `git restore` ou `git reset --hard`**
 sur un fichier contenant du travail non commité. Pour annuler ses propres

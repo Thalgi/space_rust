@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Ne jamais commiter.** Consigne debout du projet (`STATE.md`, « Commits ») : « no commit i'll say when commit is needed ». Chaque tâche se termine par un **point de commit à signaler** à l'utilisateur, jamais par un `git commit`.
+- ~~**Ne jamais commiter.** Consigne debout du projet (`STATE.md`, « Commits ») : « no commit i'll say when commit is needed ». Chaque tâche se termine par un **point de commit à signaler** à l'utilisateur, jamais par un `git commit`.~~ ⚠️ **Caduc depuis le 2026-09-26** : le travail se fait désormais sur une branche de chantier, où un commit ne vaut plus engagement mais **point de repli**. La consigne est maintenant « un commit par lot » (`STATE.md`, « Commits »). Barré plutôt que supprimé — ce plan est exécuté et fusionné, c'est une archive.
 - **Ne jamais employer `git checkout --`, `git restore` ou `git reset --hard`** sur un fichier (`STATE.md`) : le dépôt contient du travail non commité de l'utilisateur (`src/vaisseau/generateur/`, docs modifiées). Ne pas y toucher.
 - **Red-check systématique** (`docs/methode.md`) : chaque test neuf est cassé volontairement sur sa cible, on vérifie qu'il rougit, on rétablit. **Copier le fichier dans le scratchpad avant de le saboter, restaurer par copie — jamais par git.** Scratchpad : `C:\Users\thalgi\AppData\Local\Temp\claude\c--Users-thalgi-Desktop-perso-space-rust\f7e3003b-6e7d-4eca-8161-a725472eb82d\scratchpad`.
 - **Code et commentaires en français**, commentaires qui disent *pourquoi*.
