@@ -226,9 +226,14 @@ impl Accretion {
             halo: 0.16,
             anneau: 2.8,
             bornes: (1.155, 4.6),
-            // Très au-delà du disque : ce sont deux objets distincts, pas
-            // un dégradé. Les confondre donnerait une galette unique.
-            ceinture: Some((7.0, 13.0)),
+            // ⚠️ **Juste au-delà du disque, pas au loin.** Elle commençait à
+            // 7 rayons d'ombre pour un disque qui s'arrête à 4,6 : le vide
+            // entre les deux était si large qu'ils se lisaient comme deux
+            // objets étrangers, et non comme un même système en train d'être
+            // avalé. Elle démarre maintenant à un cinquième de plus que le
+            // bord du disque — assez pour qu'on voie la coupure, assez peu
+            // pour qu'on lise la continuité.
+            ceinture: Some((5.4, 9.5)),
             ..Self::chaude()
         }
     }
@@ -257,6 +262,7 @@ impl Accretion {
     ///
     /// Le vorace est le plus rare : c'est un état de crise, pas un état
     /// d'équilibre.
+    ///
     pub fn regime(graine: f32) -> Self {
         let u = (graine * 0.618_034).fract();
         if u < 0.35 {

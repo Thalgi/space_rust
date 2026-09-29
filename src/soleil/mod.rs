@@ -620,10 +620,17 @@ mod tests_disque {
             // Le protosolaire est franchement plus large : ce n'est pas le
             // même objet, il ne doit pas s'y confondre à l'œil.
             assert!(RAYON_PROTOSOLAIRE.1 > ext * 2.0, "{nom} : aussi large qu'un protosolaire");
-            // Et la ceinture, quand il y en a une, est **bien au-delà** du
-            // disque : deux objets, pas un dégradé.
-            if let Some((ci, _)) = a.ceinture {
-                assert!(ci > ext * 1.3, "{nom} : la ceinture colle au disque, ils se confondront");
+            // La ceinture, quand il y en a une, commence **au-delà** du
+            // disque sans s'en éloigner : il faut qu'un vide se voie entre
+            // les deux, et qu'ils restent pourtant un même système.
+            //
+            // ⚠️ Le seuil haut a été ajouté après coup : la borne basse
+            // seule laissait la ceinture partir si loin qu'elle se lisait
+            // comme un objet étranger — signalé à l'écran.
+            if let Some((ci, ce)) = a.ceinture {
+                assert!(ci > ext * 1.1, "{nom} : la ceinture colle au disque, ils se confondront");
+                assert!(ci < ext * 1.5, "{nom} : la ceinture est si loin qu'elle paraît étrangère");
+                assert!(ce > ci * 1.3, "{nom} : ceinture trop mince pour se lire");
             }
         }
     }
