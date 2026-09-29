@@ -419,6 +419,63 @@ pub mod verif {
     ///
     /// Une recherche de sous-chaîne dirait que `atmo` est lu par `atmo_densite`,
     /// et masquerait donc l'uniform mort derrière son homonyme plus long.
+    /// **Variables locales utilisées AVANT leur déclaration.**
+    ///
+    /// GLSL n'a pas de déclaration anticipée : une variable employée plus
+    /// haut que sa ligne de déclaration est une **erreur de compilation** —
+    /// et rien dans ce dépôt ne compile le GLSL, faute de contexte
+    /// graphique. Le défaut ne se voit donc qu'au lancement du jeu, sous la
+    /// forme d'un panic au chargement du material.
+    ///
+    /// Cas concret qui l'a motivée : `ouvert`, dans le vertex shader du
+    /// disque d'accrétion, déclaré au moment du soulèvement et employé dix
+    /// lignes plus haut par la compression.
+    ///
+    /// ⚠️ **Heuristique, et volontairement bornée à `main`.** Elle ne
+    /// connaît ni les portées ni les fonctions. Appliquée au fichier entier
+    /// elle signalait à tort les `p`, `a`, `b` des fonctions utilitaires —
+    /// paramètres et locales homonymes déclarés plus haut. Bornée au corps
+    /// de `main`, où vit toute la logique de ces shaders, elle n'a plus de
+    /// faux positif et garde le cas qui nous a mordus.
+    pub fn usage_avant_declaration(src: &str) -> Vec<String> {
+        const TYPES: [&str; 7] = ["float ", "vec2 ", "vec3 ", "vec4 ", "int ", "mat3 ", "mat4 "];
+        let corps = match src.find("void main") {
+            Some(i) => &src[i..],
+            None => return Vec::new(),
+        };
+        let lignes: Vec<&str> = corps.lines().collect();
+        let code = |l: &str| {
+            let t = l.trim_start();
+            !t.starts_with("//")
+                && !t.starts_with("uniform")
+                && !t.starts_with("varying")
+                && !t.starts_with("attribute")
+        };
+        let mut fautes = Vec::new();
+        for (i, ligne) in lignes.iter().enumerate() {
+            if !code(ligne) {
+                continue;
+            }
+            let t = ligne.trim_start();
+            let Some(reste) = TYPES.iter().find_map(|ty| t.strip_prefix(ty)) else {
+                continue;
+            };
+            let nom: String =
+                reste.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            // Une déclaration, pas un type de retour ni un paramètre.
+            if nom.is_empty() || !reste[nom.len()..].trim_start().starts_with('=') {
+                continue;
+            }
+            let premiere = lignes
+                .iter()
+                .position(|m| code(m) && contient_identifiant(m, &nom));
+            if premiere.is_some_and(|p| p < i) {
+                fautes.push(format!("{nom} (déclarée ligne {}, employée avant)", i + 1));
+            }
+        }
+        fautes
+    }
+
     fn contient_identifiant(ligne: &str, nom: &str) -> bool {
         let mot = |c: char| c.is_alphanumeric() || c == '_';
         let bytes = ligne.as_bytes();

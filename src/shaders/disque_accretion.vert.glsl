@@ -66,6 +66,21 @@ void main() {
         float assiette = length(perp);
         vec3 haut = perp / max(assiette, 1e-4);
 
+        // ⚠️ **Le pli est un phénomène de vue RASANTE.** La face arrière ne
+        // se dérobe derrière l'astre — et ne réapparaît en arc au-dessus de
+        // lui — que lorsqu'on regarde le disque presque par la tranche. Vu
+        // de haut, elle est simplement là, visible, et replier n'a aucun
+        // sens.
+        //
+        // Ce seuil montait auparavant à pleine force dès 17° de la vue de
+        // face : le pli s'appliquait donc à presque toutes les inclinaisons,
+        // d'où une moitié arrière tassée et un haut d'image vide dès qu'on
+        // levait la caméra. Il ne s'ouvre plus qu'en approchant la tranche.
+        // ⚠️ Réglage esthétique : la plage arbitre entre « la lentille
+        // disparaît trop tôt » et « le disque se replie alors qu'on voit
+        // tout ».
+        float ouvert = smoothstep(0.30, 0.80, assiette);
+
         // 1 droit derrière l'astre, 0 sur les côtés : le pli s'éteint là où
         // la matière n'a jamais été cachée, ce qui **raccorde** l'arc au
         // disque plat sans couture.
@@ -107,20 +122,6 @@ void main() {
         // s'effondrait dès qu'on regardait le disque d'un peu haut : l'arc
         // retombait derrière le disque noir, qui le masquait, et il ne
         // restait qu'un liseré autour d'un dôme sombre — signalé à l'écran.
-        // ⚠️ **Le pli est un phénomène de vue RASANTE.** La face arrière ne
-        // se dérobe derrière l'astre — et ne réapparaît en arc au-dessus de
-        // lui — que lorsqu'on regarde le disque presque par la tranche. Vu
-        // de haut, elle est simplement là, visible, et replier n'a aucun
-        // sens.
-        //
-        // Ce seuil montait auparavant à pleine force dès 17° de la vue de
-        // face : le pli s'appliquait donc à presque toutes les inclinaisons,
-        // d'où une moitié arrière tassée et un haut d'image vide dès qu'on
-        // levait la caméra. Il ne s'ouvre plus qu'en approchant la tranche.
-        // ⚠️ Réglage esthétique : la plage arbitre entre « la lentille
-        // disparaît trop tôt » et « le disque se replie alors qu'on voit
-        // tout ».
-        float ouvert = smoothstep(0.30, 0.80, assiette);
         rel += haut * (pli * pli_signe * k * ouvert * interne);
     }
     vpli = k;

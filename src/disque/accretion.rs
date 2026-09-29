@@ -330,7 +330,24 @@ pub(super) fn material_accretion() -> Material {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::impostor::verif::{uniforms_glsl, uniforms_inutilises, uniforms_rust};
+    use crate::impostor::verif::{
+        uniforms_glsl, uniforms_inutilises, uniforms_rust, usage_avant_declaration,
+    };
+
+    /// **Aucune variable n'est employée avant d'être déclarée.**
+    ///
+    /// GLSL n'a pas de déclaration anticipée : c'est une erreur de
+    /// compilation. Or **rien ici ne compile le GLSL** — il faut un contexte
+    /// graphique — donc le défaut ne se voit qu'au lancement du jeu, en
+    /// panic au chargement du material. C'est arrivé sur `ouvert`, déclaré
+    /// au soulèvement et employé dix lignes plus haut par la compression.
+    #[test]
+    fn aucune_variable_n_est_employee_avant_d_etre_declaree() {
+        for (nom, src) in [("vertex", VERT), ("fragment", FRAG)] {
+            let fautes = usage_avant_declaration(src);
+            assert!(fautes.is_empty(), "{nom} : {fautes:?}");
+        }
+    }
 
     /// **Un uniform lu par le `.glsl` mais absent du Rust vaut silencieusement
     /// zéro** : aucun message, l'effet disparaît. La garde que le voile n'a
