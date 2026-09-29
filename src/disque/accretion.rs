@@ -132,9 +132,18 @@ impl Accretion {
             rotation: 0.35,
             bord_interne: 0.015,
             bord_externe: 0.30,
-            // Relevé de 0,55 : l'arc doit passer franchement au-dessus de
-            // l'ombre, pas la raser.
-            pli: 1.1,
+            // ⚠️ Cette valeur a bougé deux fois, et la seconde était une
+            // surcorrection : en retirant le facteur d'inclinaison du
+            // soulèvement (qui l'effondrait dès qu'on regardait le disque
+            // d'un peu haut), j'ai **aussi** monté l'amplitude — deux gestes
+            // dans le même sens, et l'arc est parti trop haut au-dessus de
+            // l'horizon. Le premier geste suffisait.
+            //
+            // La cible : l'arc **frôle** le sommet de l'ombre. L'image
+            // lentillée de la face arrière se forme au voisinage du rayon
+            // critique, elle ne s'envole pas — un arc trop haut se lit comme
+            // un panache, plus comme un anneau qui enjambe.
+            pli: 0.72,
             epaisseur: 0.07,
             nappes: 3,
             halo: 0.10,
