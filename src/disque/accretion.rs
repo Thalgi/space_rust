@@ -129,7 +129,13 @@ impl Accretion {
             cellules: vec2(16.0, 3.0), // ~5:1 puis étiré par la spirale
             spirale: 2.4,
             turbulence: 0.65,
-            rotation: 0.35,
+            // ⚠️ Relevé de 0,35 : le bord interne mettait **18 secondes** à
+            // faire un tour, ce qui ne se lit pas comme de la matière en
+            // mouvement mais comme une image presque fixe. À 1,1 il en met
+            // six, et la rotation différentielle en `r^-3/2` en donne
+            // dix-huit au bord externe — c'est l'**écart** entre les deux
+            // qui se voit, pas la vitesse absolue.
+            rotation: 1.1,
             bord_interne: 0.015,
             bord_externe: 0.30,
             // ⚠️ Cette valeur a bougé deux fois, et la seconde était une

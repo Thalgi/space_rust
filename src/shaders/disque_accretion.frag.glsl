@@ -73,12 +73,20 @@ void main() {
     float t = clamp(vtc.x, 0.0, 1.0);
     float rr = mix(1.0, r_ratio, t);
 
-    // **Rotation képlérienne**, phase bornée. Non bornée, l'enroulement
-    // finit par produire des rayures infiniment fines, et l'argument du hash
-    // grandit au point de se quantifier.
+    // **Rotation képlérienne** : l'intérieur file, le bord traîne, en
+    // `r^-3/2`. Le résultat est compté **en tours**, et c'est `fract` qui
+    // l'enroule.
+    //
+    // ⚠️ Le modulo était appliqué au TEMPS, avant la division par
+    // `r^3/2` : l'enroulement se faisait donc sur `1/r^3/2` de tour, une
+    // fraction quelconque que le bruit ne sait pas raccorder. Seul le bord
+    // interne (`rr = 1`) sautait d'un tour entier, donc invisiblement ;
+    // partout ailleurs le disque **décrochait d'un coup** — signalé à
+    // l'écran. Enrouler après la division fait toujours sauter d'un tour
+    // exactement, et le bruit est périodique sur le tour.
     float tour = 6.2831853;
-    float phase = mod(rotation * time, tour) / pow(rr, 1.5);
-    float ang = fract(vtc.y - phase / tour);
+    float tours = rotation * time / (tour * pow(rr, 1.5));
+    float ang = fract(vtc.y - tours);
 
     // **Profil radial, dédoublé.** La couleur suit un exposant raide (le
     // bord interne doit écraser le reste), l'opacité un exposant doux — un
@@ -99,10 +107,19 @@ void main() {
     // structures restent concentriques au lieu de s'enrouler.
     if (turbulence > 0.001 && halo < 0.001) {
         float periode = max(floor(cellules.y), 1.0);
-        float ang_s = ang * periode - spirale * log(rr);
-        vec2 p = vec2(ang_s, t * cellules.x);
+        vec2 p = vec2(ang * periode - spirale * log(rr), t * cellules.x);
         float n = vnoise_cyl(p, periode);
-        n = mix(n, vnoise_cyl(p * 2.0 + 7.3 + seed, periode * 2.0), 0.45);
+        // ⚠️ **La seconde octave est advectée PLUS VITE que la première.**
+        // Advectées ensemble, les deux couches forment un motif rigide qui
+        // tourne d'un bloc — l'œil y lit une image qui pivote, pas de la
+        // matière qui coule. Décalées, elles glissent l'une sur l'autre, et
+        // c'est ce glissement qui se lit comme un écoulement.
+        float ang2 = fract(vtc.y - tours * 1.7);
+        vec2 p2 = vec2(
+            ang2 * periode * 2.0 - spirale * 2.0 * log(rr),
+            t * cellules.x * 2.0 + 7.3 + seed
+        );
+        n = mix(n, vnoise_cyl(p2, periode * 2.0), 0.45);
         // Crêtes affûtées : des filaments, pas des taches molles. Le
         // plancher garde un continuum — sans lui, c'est de la fourrure.
         n = 1.0 - abs(2.0 * n - 1.0);
