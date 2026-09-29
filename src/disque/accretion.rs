@@ -94,6 +94,18 @@ pub struct Accretion {
     /// n'a pas de post-traitement global — sans lui, un disque fin se lit
     /// « rouge et terne » au lieu de « blanc brûlant ».
     pub halo: f32,
+    /// **Bornes du disque, en rayons de l'ombre.** Portées par le preset et
+    /// non par l'astre : c'est la taille du disque qui distingue un trou noir
+    /// endormi d'un trou noir vorace, au même titre que son éclat.
+    ///
+    /// ⚠️ Le bord interne suit le rapport `r_ISCO / r_ombre = 6/5,196 =
+    /// 1,155`. Le repousser plus loin transforme le disque en anneau
+    /// lointain autour d'une bille.
+    pub bornes: (f32, f32),
+    /// **Ceinture de débris épars**, en rayons de l'ombre, quand il y en a
+    /// une. Un second disque, bien plus large et fait de cailloux — pas du
+    /// gaz brûlant du disque d'accrétion.
+    pub ceinture: Option<(f32, f32)>,
     /// Éclat de l'**anneau de lentille**, en multiple de l'émission directe.
     /// ⚠️ Ce n'est **pas** l'anneau de photons, qui ne gagne qu'un
     /// renforcement logarithmique et reste négligeable. C'est une image
@@ -154,6 +166,89 @@ impl Accretion {
             nappes: 3,
             halo: 0.10,
             anneau: 2.4,
+            bornes: (1.155, 3.0),
+            ceinture: None,
+        }
+    }
+
+    /// **Trou noir endormi** : il ne mange presque plus.
+    ///
+    /// Peu de matière, lente, et surtout **pas de gradient thermique** — un
+    /// disque qui ne s'alimente plus refroidit et s'uniformise. Ce qui reste
+    /// de plus visible est son **halo**, pâle et large : le peu de gaz qu'il
+    /// lui reste diffuse plus qu'il ne rayonne. Le beaming s'efface avec la
+    /// vitesse.
+    pub fn endormie() -> Self {
+        Self {
+            // Blanc froid, à peine teinté : plus de bord interne brûlant.
+            chaud: vec3(1.0, 0.99, 0.97),
+            froid: vec3(0.80, 0.80, 0.84),
+            eclat: 0.85,
+            exposant_couleur: 0.7,
+            exposant_opacite: 0.5,
+            beta: 0.12,
+            beaming_max: 1.6,
+            // Peu de structure : la turbulence s'éteint avec l'accrétion.
+            cellules: vec2(10.0, 2.0),
+            spirale: 1.2,
+            turbulence: 0.30,
+            rotation: 0.45,
+            bord_interne: 0.05,
+            bord_externe: 0.45,
+            pli: 0.72,
+            epaisseur: 0.05,
+            nappes: 2,
+            // **Le trait de cette variante.** Large et pâle, il domine un
+            // disque qui n'a plus grand-chose à montrer.
+            halo: 0.30,
+            anneau: 1.6,
+            bornes: (1.155, 2.4),
+            ceinture: None,
+        }
+    }
+
+    /// **Trou noir vorace** : il dévore, et ça se voit de loin.
+    ///
+    /// Disque plus large et plus brillant, turbulence marquée, beaming
+    /// franc — et une **ceinture de débris épars** bien au-delà, reste de ce
+    /// qu'il est en train d'avaler. Le disque brûle le gaz ; la ceinture,
+    /// elle, est faite de cailloux qui n'ont pas encore spiralé.
+    pub fn vorace() -> Self {
+        Self {
+            eclat: 2.4,
+            beta: 0.45,
+            beaming_max: 5.0,
+            cellules: vec2(22.0, 4.0),
+            spirale: 3.0,
+            turbulence: 0.80,
+            rotation: 1.4,
+            nappes: 3,
+            halo: 0.16,
+            anneau: 2.8,
+            bornes: (1.155, 4.6),
+            // Très au-delà du disque : ce sont deux objets distincts, pas
+            // un dégradé. Les confondre donnerait une galette unique.
+            ceinture: Some((7.0, 13.0)),
+            ..Self::chaude()
+        }
+    }
+
+    /// **Le régime d'un trou noir, dérivé de sa graine.**
+    ///
+    /// ⚠️ Dérivé, jamais tiré : un `gen_range` de plus décalerait tout ce
+    /// qui est tiré ensuite et changerait le système entier à graine égale —
+    /// même piège que `champ::poles` et `temps_initial`.
+    ///
+    /// Le vorace est le plus rare : c'est un état de crise, pas un état
+    /// d'équilibre.
+    pub fn regime(graine: f32) -> Self {
+        let u = (graine * 0.618_034).fract();
+        if u < 0.35 {
+            Self::endormie()
+        } else if u < 0.80 {
+            Self::chaude()
+        } else {
+            Self::vorace()
         }
     }
 }
@@ -472,6 +567,66 @@ mod tests {
         assert!(c.x >= c.y && c.y >= c.z, "teinte chaude mal ordonnée : {c:?}");
         assert!(c.x > c.z, "teinte chaude plate : le clipping ne fera rien");
         assert!(a.eclat > 1.0, "éclat sous 1 : rien ne saturera jamais");
+    }
+
+    /// **Les trois régimes se distinguent à l'œil**, et dans le bon sens.
+    ///
+    /// Un endormi qui ressemblerait à un vorace ne servirait à rien : c'est
+    /// une déclinaison, pas trois réglages au hasard. L'ordre compte —
+    /// l'endormi mange moins, donc brille moins, tourne moins vite, a moins
+    /// de structure et un disque plus petit ; son **halo**, lui, est le seul
+    /// trait qui grandit quand l'accrétion faiblit.
+    #[test]
+    fn les_trois_regimes_vont_du_plus_calme_au_plus_vorace() {
+        let (d, c, v) = (Accretion::endormie(), Accretion::chaude(), Accretion::vorace());
+        for (nom, f) in [
+            ("éclat", (|a: &Accretion| a.eclat) as fn(&Accretion) -> f32),
+            ("rotation", |a| a.rotation),
+            ("turbulence", |a| a.turbulence),
+            ("beaming", |a| a.beaming_max),
+            ("étendue", |a| a.bornes.1),
+        ] {
+            assert!(f(&d) < f(&c), "{nom} : l'endormi n'est pas en deçà de l'actif");
+            assert!(f(&c) < f(&v), "{nom} : l'actif n'est pas en deçà du vorace");
+        }
+        // ⚠️ Le halo va à **contre-courant** : moins l'astre accrète, plus
+        // ce qui lui reste diffuse au lieu de rayonner. C'est le trait qui
+        // fait reconnaître un trou noir endormi.
+        assert!(d.halo > c.halo, "l'endormi n'a pas son halo pâle et large");
+        // Et lui seul n'a plus de gradient thermique marqué : un disque qui
+        // ne s'alimente plus refroidit et s'uniformise.
+        assert!(d.exposant_couleur < c.exposant_couleur);
+        // Seul le vorace traîne une ceinture.
+        assert!(d.ceinture.is_none() && c.ceinture.is_none());
+        assert!(v.ceinture.is_some(), "le vorace n'a pas sa ceinture");
+    }
+
+    /// **Le régime se dérive de la graine, et les trois sortent.**
+    ///
+    /// ⚠️ Dérivé, jamais tiré : un `gen_range` de plus décalerait tout ce
+    /// qui est tiré ensuite, et le système entier changerait à graine égale.
+    /// Et un régime qu'aucune graine n'atteint est un régime qui n'existe
+    /// pas — le piège exact qui tenait le trou noir hors du jeu.
+    #[test]
+    fn chaque_regime_est_atteignable_et_reproductible() {
+        assert_eq!(Accretion::regime(12.5).eclat, Accretion::regime(12.5).eclat);
+        let mut vus = [0_usize; 3];
+        for k in 0..600 {
+            let a = Accretion::regime(k as f32 * 1.37);
+            let rang = if a.ceinture.is_some() {
+                2
+            } else if a.halo > Accretion::chaude().halo {
+                0
+            } else {
+                1
+            };
+            vus[rang] += 1;
+        }
+        for (i, n) in vus.iter().enumerate() {
+            assert!(*n > 30, "le régime {i} ne sort que {n} fois sur 600 : introuvable");
+        }
+        // Le vorace reste le plus rare : c'est un état de crise.
+        assert!(vus[2] < vus[1], "le vorace est plus courant que l'actif");
     }
 
     /// **Le budget de sommets reste tenable.** L'annulus fait 960 quads et

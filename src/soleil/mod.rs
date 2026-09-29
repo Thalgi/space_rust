@@ -6,7 +6,7 @@ mod materiau;
 mod rendu;
 
 use crate::astre::{Astre, Categorie, CameraInfo, CorpsBase};
-use crate::disque::{Disque, DisqueConfig};
+use crate::disque::{Accretion, Disque, DisqueConfig};
 use champ::Pole;
 use eruptions::{Boucle, Flare, Tache};
 use macroquad::models::Vertex;
@@ -102,27 +102,17 @@ pub struct Soleil {
     /// ellipse d'inclinaison câblée qui présentait éternellement la même face
     /// à la caméra — impossible de faire le tour, impossible de le voir par
     /// la tranche.
-    disque: Option<Disque>,
+    /// ⚠️ Un **vecteur** et non un seul : un trou noir vorace porte son
+    /// disque d'accrétion **et** une ceinture de débris épars bien au-delà.
+    /// Ce sont deux objets distincts, à deux échelles — les fondre en un
+    /// donnerait une galette unique.
+    disques: Vec<Disque>,
     mats: Vec<Material>,  // un par passe de `PASSES` (disque, puis couronne)
     mat_plasma: Material, // billboards en blending additif (plasma lumineux)
     halo: Texture2D,
     verts: Vec<Vertex>,
     inds: Vec<u16>,
 }
-
-/// **Bornes du disque d'accrétion**, en rayons de l'horizon.
-///
-/// ⚠️ **Le « 1 » est le rayon de l'OMBRE, pas celui de l'horizon.** L'ombre
-/// apparente d'un trou noir de Schwarzschild vaut 2,6 rayons de
-/// Schwarzschild — la dessiner au rayon de l'horizon, erreur que la
-/// recherche signale comme fréquente, la rend 2,6 fois trop petite et
-/// transforme le disque en anneau lointain autour d'une bille. On prend
-/// donc l'ombre comme unité, ce que dessine déjà l'impostor.
-///
-/// Le bord interne suit alors le rapport physique **r_ISCO / r_ombre =
-/// 6/5,196 = 1,155** : le disque commence juste au-delà de l'ombre, pas loin
-/// devant. C'était 1,4, soit 20 % trop loin.
-const RAYON_ACCRETION: (f32, f32) = (1.155, 3.0);
 
 /// **Bornes du disque protosolaire**, en rayons stellaires. Bien plus large
 /// que le disque d'accrétion : c'est un berceau de planètes, pas une
@@ -188,7 +178,7 @@ impl Soleil {
             couronne_irreg: ((luminosite - 0.4) / 3.6).clamp(0.0, 1.0),
             couronne_type: 0.0,
             zone_hab: true,
-            disque: None,
+            disques: Vec::new(),
             mats,
             mat_plasma,
             halo: texture_halo(TAILLE_HALO),
@@ -250,10 +240,24 @@ impl Soleil {
         self.couronne_irreg = 0.0;
         // Le disque **est** la lumière d'un trou noir : il n'a pas de
         // photosphère. Il vient donc avec l'objet, jamais séparément.
+        //
+        // Le **régime** — endormi, actif ou vorace — se dérive de la graine :
+        // deux trous noirs du même système ne sont pas au même stade de leur
+        // repas. Jamais tiré, sous peine de décaler tout ce qui suit.
         let (r, masse) = (self.base.rayon, self.base.masse);
-        let cfg =
-            DisqueConfig::accretion(r * RAYON_ACCRETION.0, r * RAYON_ACCRETION.1, masse);
-        self.avec_disque(cfg)
+        let a = Accretion::regime(self.graine);
+        let mut s = self.avec_disque(DisqueConfig::accretion_reglee(
+            r * a.bornes.0,
+            r * a.bornes.1,
+            masse,
+            a,
+        ));
+        if let Some((int, ext)) = a.ceinture {
+            // Des cailloux, pas du gaz : le voile des ceintures, pas le
+            // shader d'accrétion. C'est ce qui les distingue à l'œil.
+            s = s.avec_disque(DisqueConfig::debris_recents(900, r * int, r * ext, masse));
+        }
+        s
     }
 
     /// **Disque protosolaire** d'une jeune étoile (T Tauri) : le berceau des
@@ -283,7 +287,7 @@ impl Soleil {
     /// deux s'ajoutent au lieu de se recouvrir — un disque deux fois trop
     /// brillant, sans rien pour le signaler.
     pub fn sans_disque(mut self) -> Self {
-        self.disque = None;
+        self.disques.clear();
         self
     }
 
@@ -293,7 +297,7 @@ impl Soleil {
         let cfg = cfg.avec_normale(normale_disque(self.graine));
         let mut d = Disque::new(cfg);
         d.corps_mut().position = self.base.position;
-        self.disque = Some(d);
+        self.disques.push(d);
         self
     }
 
@@ -336,7 +340,7 @@ impl Astre for Soleil {
         // trous noirs (pas d'activité de surface sur un horizon), et ce sont
         // précisément eux qui portent un disque. Placé après ce retour, le
         // disque d'un trou noir ne tournerait jamais.
-        if let Some(d) = &mut self.disque {
+        for d in &mut self.disques {
             d.update(dt);
         }
         self.maj(dt);
@@ -521,7 +525,7 @@ mod tests_disque {
     /// visuelles de ne différer que par des constantes.
     #[test]
     fn seul_un_disque_d_accretion_porte_son_vocabulaire() {
-        let acc = DisqueConfig::accretion(1.4, 3.0, 1000.0);
+        let acc = DisqueConfig::accretion_reglee(1.4, 3.0, 1000.0, Accretion::chaude());
         let a = acc.accretion.expect("un disque d'accrétion sans réglages");
         assert_eq!(acc.nb, 0, "des cailloux dans un disque d'accrétion");
         assert!(a.beta > 0.0, "sans beaming, c'est une collerette symétrique");
@@ -544,7 +548,7 @@ mod tests_disque {
     /// exposants : raide pour la couleur, doux pour l'opacité.
     #[test]
     fn le_bord_interne_ecrase_sans_effacer_le_bord_externe() {
-        let a = DisqueConfig::accretion(1.4, 3.0, 1000.0).accretion.unwrap();
+        let a = DisqueConfig::accretion_reglee(1.4, 3.0, 1000.0, Accretion::chaude()).accretion.unwrap();
         assert!(
             a.exposant_couleur > a.exposant_opacite,
             "la couleur ne s'effondre pas plus vite que l'opacité : le disque sera plat"
@@ -567,7 +571,7 @@ mod tests_disque {
     /// s'enroule pour qu'il n'y ait pas de couture.
     #[test]
     fn le_bruit_est_allonge_et_enroule() {
-        let a = DisqueConfig::accretion(1.4, 3.0, 1000.0).accretion.unwrap();
+        let a = DisqueConfig::accretion_reglee(1.4, 3.0, 1000.0, Accretion::chaude()).accretion.unwrap();
         let aspect = a.cellules.x / a.cellules.y;
         assert!(aspect >= 4.0, "cellules d'aspect {aspect} : des bulles, pas des filaments");
         assert_eq!(a.cellules.y, a.cellules.y.floor(), "compte azimutal non entier : couture");
@@ -579,21 +583,34 @@ mod tests_disque {
     /// orbite stable d'un trou noir de Schwarzschild vaut trois rayons ; un
     /// disque qui mordrait sur l'horizon se lirait comme une collerette collée
     /// à la sphère.
+    ///
+    /// ⚠️ Balaie **les trois régimes** : les bornes sont portées par le
+    /// preset depuis qu'un trou noir vorace a un disque plus large qu'un
+    /// endormi, donc la règle doit valoir pour chacun.
     #[test]
     fn le_disque_d_accretion_degage_l_horizon() {
-        assert!(RAYON_ACCRETION.0 > 1.0, "le disque mord sur l'ombre");
-        // ⚠️ Et il la **serre** : r_ISCO / r_ombre = 6/5,196 = 1,155. Un
-        // bord interne trop loin transforme le disque en anneau lointain
-        // autour d'une bille — c'est ce qu'on voyait.
-        assert!(
-            RAYON_ACCRETION.0 < 1.3,
-            "bord interne à {} rayons d'ombre, contre 1,155 : le disque décolle",
-            RAYON_ACCRETION.0
-        );
-        assert!(RAYON_ACCRETION.1 > RAYON_ACCRETION.0 * 1.5, "un disque trop fin pour se lire");
-        // Le protosolaire est franchement plus large : ce n'est pas le même
-        // objet, et il ne doit pas se confondre avec lui à l'œil.
-        assert!(RAYON_PROTOSOLAIRE.1 > RAYON_ACCRETION.1 * 3.0);
+        let regimes = [
+            ("endormie", Accretion::endormie()),
+            ("chaude", Accretion::chaude()),
+            ("vorace", Accretion::vorace()),
+        ];
+        for (nom, a) in regimes {
+            let (int, ext) = a.bornes;
+            assert!(int > 1.0, "{nom} : le disque mord sur l'ombre");
+            // ⚠️ Et il la **serre** : r_ISCO / r_ombre = 6/5,196 = 1,155. Un
+            // bord interne trop loin transforme le disque en anneau lointain
+            // autour d'une bille — c'est ce qu'on voyait.
+            assert!(int < 1.3, "{nom} : bord interne à {int}, contre 1,155 — le disque décolle");
+            assert!(ext > int * 1.5, "{nom} : disque trop fin pour se lire");
+            // Le protosolaire est franchement plus large : ce n'est pas le
+            // même objet, il ne doit pas s'y confondre à l'œil.
+            assert!(RAYON_PROTOSOLAIRE.1 > ext * 2.0, "{nom} : aussi large qu'un protosolaire");
+            // Et la ceinture, quand il y en a une, est **bien au-delà** du
+            // disque : deux objets, pas un dégradé.
+            if let Some((ci, _)) = a.ceinture {
+                assert!(ci > ext * 1.3, "{nom} : la ceinture colle au disque, ils se confondront");
+            }
+        }
     }
 }
 

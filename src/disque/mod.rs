@@ -13,10 +13,11 @@
 //!   différentielle). Pour les anneaux planétaires, rendu en deux moitiés
 //!   (uniform `moitie` + discard) autour du corps de la planète.
 
-mod accretion;
+pub mod accretion;
 mod config;
 mod voile;
 
+pub use accretion::Accretion;
 pub use config::DisqueConfig;
 
 use crate::astre::{Astre, Categorie, CameraInfo, CorpsBase};
@@ -562,8 +563,11 @@ mod tests {
     #[test]
     fn tout_porteur_de_disque_avance_son_horloge() {
         for (nom, src) in PORTEURS {
+            // `Option<Disque>` ou `Vec<Disque>` — le soleil en porte
+            // plusieurs depuis que le trou noir vorace a une ceinture en
+            // plus de son disque.
             assert!(
-                src.contains("Option<Disque>"),
+                src.contains("Disque>"),
                 "{nom} ne porte plus de disque : retirer cette garde ou la corriger"
             );
             let avance = src

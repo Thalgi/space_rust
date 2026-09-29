@@ -221,7 +221,11 @@ impl GalerieDisques {
         // Trou noir stellaire : l'échelle n'est plus l'UA mais le rayon de
         // l'horizon. L'étoile est ici un vrai trou noir — sans quoi le disque
         // se jugerait contre une photosphère qui n'existe pas.
-        {
+        for (nom, reglage) in [
+            ("endormi", crate::disque::Accretion::endormie()),
+            ("actif", crate::disque::Accretion::chaude()),
+            ("vorace", crate::disque::Accretion::vorace()),
+        ] {
             let r = 0.62_f32;
             // `sans_disque` : l objet catalogué ici est celui que la galerie
             // fournit, pas celui que l astre porte -- en additif, les deux
@@ -229,13 +233,33 @@ impl GalerieDisques {
             let tn = Soleil::new(Vec3::ZERO, r, vec3(1.0, 0.95, 0.9), 0.4)
                 .avec_trou_noir()
                 .sans_disque();
+            let m = crate::genese::MASSE_TROU_NOIR;
             e(
-                "Disque d'accretion (trou noir stellaire)",
-                DisqueConfig::accretion(r * 1.4, r * 3.0, crate::genese::MASSE_TROU_NOIR),
+                &format!("Disque d'accretion - trou noir {nom}"),
+                DisqueConfig::accretion_reglee(
+                    r * reglage.bornes.0,
+                    r * reglage.bornes.1,
+                    m,
+                    reglage,
+                ),
                 tn,
                 2.6,
                 Vec::new(),
             );
+            // Le vorace traine en plus une ceinture de debris epars, bien
+            // au-dela de son disque : deux objets, deux echelles.
+            if let Some((ci, ce)) = reglage.ceinture {
+                let tn2 = Soleil::new(Vec3::ZERO, r, vec3(1.0, 0.95, 0.9), 0.4)
+                    .avec_trou_noir()
+                    .sans_disque();
+                e(
+                    &format!("Ceinture eparse - trou noir {nom}"),
+                    DisqueConfig::debris_recents(900, r * ci, r * ce, m),
+                    tn2,
+                    2.2,
+                    Vec::new(),
+                );
+            }
         }
         e(
             "Disque protosolaire (0.1 - 6 UA)",

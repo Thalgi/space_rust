@@ -120,7 +120,15 @@ impl DisqueConfig {
     /// disques proto\* — blanc-bleu au bord interne, où la matière chauffe à
     /// des millions de degrés, orange sombre au bord externe. Il tourne vite
     /// et il **beame** : c'est ce qui le distingue de tout autre anneau.
-    pub fn accretion(interne: f32, externe: f32, masse: f32) -> Self {
+    /// **Disque d'accrétion**, dans le régime demandé : endormi, actif ou
+    /// vorace. Les trois ne diffèrent que par des **constantes**, jamais par
+    /// du code — c'est ce qui permet de les comparer côte à côte.
+    pub fn accretion_reglee(
+        interne: f32,
+        externe: f32,
+        masse: f32,
+        reglage: super::accretion::Accretion,
+    ) -> Self {
         Self {
             voile_alpha: 0.85,
             // Interne = `couleur2`, externe = `couleur` : la convention des
@@ -134,7 +142,7 @@ impl DisqueConfig {
             // Tout le reste est porté par `Accretion` : les champs du voile
             // ci-dessous (granulation, arcs, lacunes…) ne le concernent pas
             // et son shader ne les lit pas.
-            accretion: Some(super::accretion::Accretion::chaude()),
+            accretion: Some(reglage),
             ..Self::base(0, interne, externe, masse)
         }
     }

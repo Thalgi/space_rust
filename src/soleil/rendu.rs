@@ -22,7 +22,7 @@ impl Soleil {
         // Même encadrement qu'un anneau planétaire (`planete/mod.rs`), et
         // pour la même raison — sans lui, un disque translucide dessiné d'un
         // seul tenant passe devant l'astre qu'il contourne.
-        if let Some(d) = &mut self.disque {
+        for d in &mut self.disques {
             d.corps_mut().position = c;
             d.draw_moitie(cam, -1.0);
         }
@@ -221,7 +221,7 @@ impl Soleil {
         gl_use_default_material();
 
         // Moitié avant APRÈS tout le reste : elle passe devant l'horizon.
-        if let Some(d) = &mut self.disque {
+        for d in &mut self.disques {
             d.draw_moitie(cam, 1.0);
         }
     }
