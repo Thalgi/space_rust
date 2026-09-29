@@ -257,6 +257,50 @@ impl DisqueConfig {
         .avec_bande(0.7, 0.015, 0.4)
     }
 
+    /// **Débris tombant vers un trou noir.** Preset à part, et non un
+    /// `debris_recents` rapetissé.
+    ///
+    /// ⚠️ La ceinture du trou noir vorace réutilisait `debris_recents` — une
+    /// ceinture autour d'une **planète** — avec un `taille_max` divisé sur
+    /// place. Un preset d'un autre domaine corrigé par un multiplicateur
+    /// local est exactement la dérive que ce chantier a déjà payée trois
+    /// fois : les réglages suivants seraient allés au même endroit, et
+    /// personne n'aurait su lesquels appartenaient à quoi.
+    ///
+    /// Ce qui distingue ces débris-ci :
+    ///
+    /// - **petits**, et sans gros blocs (`bimodal` à zéro) : à l'échelle
+    ///   d'un trou noir, un bloc qui se voit est un astre ;
+    /// - **excentriques** (`ecc_max`) : ils **tombent**, ils ne patrouillent
+    ///   pas une orbite propre — c'est ce qui les distingue d'un anneau ;
+    /// - **en traînées** (`clumping` haut) : la marée les étire en filaments
+    ///   plutôt qu'elle ne les répartit ;
+    /// - **éclairés par le disque**, donc chauds vers l'intérieur : la
+    ///   lumière vient du centre, pas d'une étoile lointaine.
+    pub fn debris_trou_noir(nb: usize, interne: f32, externe: f32, masse: f32) -> Self {
+        Self {
+            epaisseur: 0.07,
+            profil_radial: 1.5,
+            clumping: 0.85,
+            ecc_max: 0.35,
+            // ⚠️ Divisées par quatre après coup, `taille_min` avec
+            // `taille_max` : ne réduire que le plafond aurait resserré toute
+            // la population sur une seule taille, et un champ dont tous les
+            // grains sont identiques se lit comme une trame, pas comme des
+            // débris. C'est le rapport entre les deux qui fait la variété.
+            //
+            // À ce calibre les blocs tombent sous le pixel de loin ; c'est
+            // le plancher en pixels du champ (`disque::set_px_min`) qui les
+            // garde visibles, comme pour les ceintures d'astéroïdes.
+            taille_min: 0.003,
+            taille_max: 0.0138,
+            bimodal: 0.0,
+            couleur: vec3(0.50, 0.38, 0.32),
+            couleur2: vec3(0.95, 0.68, 0.44),
+            ..Self::base(nb, interne, externe, masse)
+        }
+    }
+
     /// Disque protoplanétaire : particules (planétésimaux) + voile de poussière
     /// chaude. Sillons des proto-planètes à poser via `avec_lacune`.
     pub fn protoplanetaire(nb: usize, interne: f32, externe: f32, masse: f32) -> Self {

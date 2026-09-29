@@ -620,17 +620,18 @@ mod tests_disque {
             // Le protosolaire est franchement plus large : ce n'est pas le
             // même objet, il ne doit pas s'y confondre à l'œil.
             assert!(RAYON_PROTOSOLAIRE.1 > ext * 2.0, "{nom} : aussi large qu'un protosolaire");
-            // La ceinture, quand il y en a une, commence **au-delà** du
-            // disque sans s'en éloigner : il faut qu'un vide se voie entre
-            // les deux, et qu'ils restent pourtant un même système.
-            //
-            // ⚠️ Le seuil haut a été ajouté après coup : la borne basse
-            // seule laissait la ceinture partir si loin qu'elle se lisait
-            // comme un objet étranger — signalé à l'écran.
+            // ⚠️ La ceinture **empiète** sur le disque externe et le
+            // dépasse. Cette garde disait l'inverse — « au-delà du disque,
+            // deux objets distincts » — et c'était une hypothèse de ma part,
+            // démentie à l'écran : sans recouvrement on voit deux anneaux
+            // concentriques sans rapport, au lieu de cailloux qui
+            // descendent et alimentent le disque.
             if let Some((ci, ce)) = a.ceinture {
-                assert!(ci > ext * 1.1, "{nom} : la ceinture colle au disque, ils se confondront");
-                assert!(ci < ext * 1.5, "{nom} : la ceinture est si loin qu'elle paraît étrangère");
-                assert!(ce > ci * 1.3, "{nom} : ceinture trop mince pour se lire");
+                assert!(ci < ext, "{nom} : la ceinture ne mord pas sur le disque");
+                // Mais pas jusqu'au cœur : le disque interne vaporise tout
+                // solide, des cailloux n'y survivraient pas.
+                assert!(ci > ext * 0.5, "{nom} : des cailloux jusque dans le disque brûlant");
+                assert!(ce > ext, "{nom} : la ceinture est noyée dans le disque, on ne la verra pas");
             }
         }
     }

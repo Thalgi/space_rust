@@ -230,16 +230,21 @@ impl Accretion {
             // grandit — un trou noir vorace étale son disque, il ne le
             // décolle pas de l'ombre.
             bornes: (1.155, 6.9),
-            // ⚠️ **Juste au-delà du disque, pas au loin.** Elle a commencé à
-            // 7 rayons d'ombre pour un disque qui s'arrêtait à 4,6 : le vide
-            // entre les deux était si large qu'ils se lisaient comme deux
-            // objets étrangers, et non comme un même système en train d'être
-            // avalé. Elle se tient depuis à **un sixième de plus** que le
-            // bord du disque — assez pour qu'on voie la coupure, assez peu
-            // pour qu'on lise la continuité — et suit donc le disque quand
-            // celui-ci grandit. C'est le rapport qui compte, pas la distance
-            // absolue.
-            ceinture: Some((8.0, 12.5)),
+            // ⚠️ **Elle EMPIÈTE sur le disque externe**, elle ne se tient
+            // pas au-delà.
+            //
+            // J'avais posé l'inverse, et jusqu'à une garde pour l'imposer :
+            // « deux objets distincts, pas un dégradé ». À l'écran ça donne
+            // deux anneaux concentriques sans rapport l'un avec l'autre, et
+            // le geste qui se lit — des cailloux qui descendent, se broient
+            // et alimentent le disque — disparaît.
+            //
+            // Le recouvrement est aussi le bon sens physique : le bord
+            // externe du disque est assez froid pour que des solides y
+            // survivent, et c'est justement là qu'ils se désagrègent. La
+            // ceinture démarre donc **dans** le dernier quart du disque et
+            // se prolonge bien au-delà.
+            ceinture: Some((5.2, 11.0)),
             ..Self::chaude()
         }
     }
@@ -248,20 +253,16 @@ impl Accretion {
     /// a pas.
     ///
     /// ⚠️ **Source unique.** L'astre la construisait, et la galerie la
-    /// reconstruisait de son côté : la première réduction de la taille des
-    /// blocs ne serait passée que dans l'une des deux, et la vitrine aurait
-    /// montré autre chose que le jeu. C'est le défaut le plus tenace de ce
-    /// chantier, rencontré quatre fois.
+    /// reconstruisait de son côté : un réglage ne serait passé que dans
+    /// l'une des deux, et la vitrine aurait montré autre chose que le jeu.
+    /// C'est le défaut le plus tenace de ce chantier, rencontré cinq fois.
+    ///
+    /// Le preset lui-même — `debris_trou_noir` — est à part : ce ne sont
+    /// pas les cailloux d'une ceinture planétaire, et les corriger sur
+    /// place aurait mélangé deux vocabulaires.
     pub fn config_ceinture(&self, rayon: f32, masse: f32) -> Option<DisqueConfig> {
         let (int, ext) = self.ceinture?;
-        let mut c = DisqueConfig::debris_recents(900, rayon * int, rayon * ext, masse);
-        // ⚠️ **Des cailloux, pas des lunes.** `debris_recents` vise une
-        // ceinture autour d'une planète, où les gros blocs se lisent bien ;
-        // à l'échelle d'un trou noir ils devenaient des astres à part
-        // entière. Moitié moins gros — et `bimodal`, qui tire ses rares gros
-        // blocs à `0,8 à 1,8 × taille_max`, suit.
-        c.taille_max *= 0.5;
-        Some(c)
+        Some(DisqueConfig::debris_trou_noir(900, rayon * int, rayon * ext, masse))
     }
 
     /// Nom lisible du régime, pour les vues de travail. ⚠️ Ici, et pas chez
@@ -649,29 +650,29 @@ mod tests {
         assert!(v.ceinture.is_some(), "le vorace n'a pas sa ceinture");
     }
 
-    /// **La ceinture sort d'une seule source, et ses blocs restent des
-    /// cailloux.**
+    /// **Ce sont des débris de trou noir, pas une ceinture planétaire.**
     ///
-    /// ⚠️ L'astre la construisait et la galerie la reconstruisait : la
-    /// réduction de la taille des blocs ne serait passée que dans l'une des
-    /// deux, et la vitrine aurait montré autre chose que le jeu. Ce test
-    /// garde la propriété qui les départage — un bloc de ceinture doit
-    /// rester petit devant l'astre.
+    /// ⚠️ Ils réutilisaient `debris_recents` — le preset d'une ceinture
+    /// autour d'une **planète** — avec un `taille_max` divisé sur place. Un
+    /// preset d'un autre domaine corrigé par un multiplicateur local est la
+    /// dérive que ce chantier a déjà payée trois fois. Ce test garde les
+    /// quatre traits qui en font autre chose.
     #[test]
-    fn la_ceinture_ne_contient_que_des_cailloux() {
-        let v = Accretion::vorace();
-        let c = v.config_ceinture(1.0, 1000.0).expect("le vorace a une ceinture");
-        let brut = DisqueConfig::debris_recents(900, 1.0, 2.0, 1000.0);
-        assert!(
-            c.taille_max < brut.taille_max,
-            "les blocs n'ont pas été réduits : {} contre {}",
-            c.taille_max,
-            brut.taille_max
-        );
-        // Et ils restent des cailloux : petits devant le rayon de l'ombre,
-        // qui vaut 1 dans ces unités. Au-delà, ce sont des lunes.
-        assert!(c.taille_max < 0.12, "un bloc de {} face à une ombre de 1", c.taille_max);
+    fn la_ceinture_est_faite_de_debris_de_trou_noir() {
+        let c = Accretion::vorace()
+            .config_ceinture(1.0, 1000.0)
+            .expect("le vorace a une ceinture");
+        // Des cailloux, pas des lunes : petits devant l'ombre, qui vaut 1
+        // dans ces unités.
+        assert!(c.taille_max < 0.08, "un bloc de {} face à une ombre de 1", c.taille_max);
         assert!(c.taille_max > c.taille_min, "les blocs ont fondu sous le grain");
+        // Aucun gros bloc : à cette échelle, un bloc qui se voit est un astre.
+        assert_eq!(c.bimodal, 0.0, "des blocs géants au tirage");
+        // Ils **tombent**, ils ne patrouillent pas : c'est ce qui les
+        // distingue d'un anneau.
+        assert!(c.ecc_max > 0.0, "des orbites circulaires : ça ne tombe pas, ça patrouille");
+        // Et la marée les étire en traînées plutôt qu'elle ne les répartit.
+        assert!(c.clumping > 0.5, "débris trop régulièrement semés pour une chute");
         // Les régimes sans ceinture n'en fabriquent pas.
         assert!(Accretion::chaude().config_ceinture(1.0, 1000.0).is_none());
         assert!(Accretion::endormie().config_ceinture(1.0, 1000.0).is_none());
