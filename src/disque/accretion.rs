@@ -166,11 +166,29 @@ pub(super) struct Passe {
     pub halo: f32,
     /// > 0 : c'est l'anneau de lentille.
     pub anneau: f32,
+    /// **Cette passe couvre l'annulus ENTIER**, sans découpe en moitiés.
+    ///
+    /// ⚠️ Le halo et l'anneau de lentille sont des **couronnes complètes
+    /// autour de l'astre** : les dessiner sur une seule moitié les coupait
+    /// net le long de la ligne de partage, et cette **cassure horizontale**
+    /// traversait l'image dès qu'on levait la caméra — signalé à l'écran.
+    /// Ils se posent donc en une passe entière, **avant** l'astre, de sorte
+    /// que l'horizon masque ce qui doit passer derrière lui.
+    pub entier: bool,
 }
 
 impl Passe {
     fn nappe(pli: (f32, f32), decalage: f32, couche: f32) -> Self {
-        Self { pli, decalage, couche, halo: 0.0, anneau: 0.0 }
+        Self { pli, decalage, couche, halo: 0.0, anneau: 0.0, entier: false }
+    }
+
+    /// La découpe en moitiés que le shader doit appliquer : `0` = aucune.
+    pub fn moitie(&self, demandee: f32) -> f32 {
+        if self.entier {
+            0.0
+        } else {
+            demandee
+        }
     }
 }
 
@@ -199,12 +217,18 @@ pub(super) fn passes(a: &Accretion, moitie: f32) -> Vec<Passe> {
             out.push(Passe::nappe(*arc, u * a.epaisseur, couche));
         }
     }
-    if moitie >= 0.0 {
+    // ⚠️ Halo et anneau de lentille : **une seule passe, entière, derrière**.
+    // Entière parce que ce sont des couronnes complètes — découpées en
+    // moitiés, elles s'arrêtaient net sur la ligne de partage et barraient
+    // l'image d'une cassure horizontale. Derrière parce que l'astre est
+    // dessiné entre les deux moitiés : l'horizon masque alors la part qui
+    // doit passer derrière lui, au lieu de la peindre par-dessus.
+    if moitie < 0.0 {
         if a.halo > 0.0 {
-            out.push(Passe { halo: a.halo, ..Passe::nappe((0.0, 1.0), 0.0, 1.0) });
+            out.push(Passe { halo: a.halo, entier: true, ..Passe::nappe((0.0, 1.0), 0.0, 1.0) });
         }
         if a.anneau > 0.0 {
-            out.push(Passe { anneau: a.anneau, ..Passe::nappe((0.0, 1.0), 0.0, 1.0) });
+            out.push(Passe { anneau: a.anneau, entier: true, ..Passe::nappe((0.0, 1.0), 0.0, 1.0) });
         }
     }
     out
@@ -231,7 +255,7 @@ pub(super) fn uniforms_accretion(
     mat.set_uniform("axe_n", (n.x, n.y, n.z));
     mat.set_uniform("axe_v", (v.x, v.y, v.z));
     mat.set_uniform("tocam", (tocam.x, tocam.y, tocam.z));
-    mat.set_uniform("moitie", moitie);
+    mat.set_uniform("moitie", passe.moitie(moitie));
     mat.set_uniform("alpha", c.voile_alpha);
     mat.set_uniform("chaud", (a.chaud.x, a.chaud.y, a.chaud.z));
     mat.set_uniform("froid", (a.froid.x, a.froid.y, a.froid.z));
@@ -383,20 +407,32 @@ mod tests {
         assert_eq!(passes(&seule, 1.0)[0].decalage, 0.0);
     }
 
-    /// **Le halo et l'anneau ne se posent qu'une fois, devant.** Les poser
-    /// aussi derrière les dédoublerait — et l'anneau de lentille est déjà
-    /// une image de la face arrière : le tracer deux fois le compterait
-    /// double.
+    /// **Le halo et l'anneau : une seule fois, et ENTIERS.**
+    ///
+    /// Une fois, parce que les poser des deux côtés les compterait double —
+    /// en additif, deux fois l'éclat. Entiers, parce que ce sont des
+    /// **couronnes complètes** autour de l'astre : découpés en moitiés, ils
+    /// s'arrêtaient net sur la ligne de partage et barraient l'image d'une
+    /// cassure horizontale dès qu'on levait la caméra.
     #[test]
-    fn le_halo_et_l_anneau_ne_sont_poses_qu_une_fois() {
+    fn le_halo_et_l_anneau_sont_poses_une_fois_et_entiers() {
         let a = Accretion::chaude();
-        let compte = |m: f32, f: fn(&Passe) -> f32| {
-            passes(&a, m).iter().filter(|p| f(p) > 0.0).count()
-        };
-        assert_eq!(compte(1.0, |p| p.halo), 1, "halo absent ou dupliqué devant");
-        assert_eq!(compte(1.0, |p| p.anneau), 1, "anneau absent ou dupliqué devant");
-        assert_eq!(compte(-1.0, |p| p.halo), 0, "halo dupliqué derrière");
-        assert_eq!(compte(-1.0, |p| p.anneau), 0, "anneau dupliqué derrière");
+        let toutes: Vec<Passe> = passes(&a, -1.0).into_iter().chain(passes(&a, 1.0)).collect();
+        let halo = (|p: &Passe| p.halo) as fn(&Passe) -> f32;
+        let anneau = (|p: &Passe| p.anneau) as fn(&Passe) -> f32;
+        for (nom, f) in [("halo", halo), ("anneau", anneau)] {
+            let poses: Vec<&Passe> = toutes.iter().filter(|p| f(p) > 0.0).collect();
+            assert_eq!(poses.len(), 1, "{nom} : posé {} fois sur les deux moitiés", poses.len());
+            assert!(poses[0].entier, "{nom} découpé en moitié : il barrera l'image");
+            // Et la découpe demandée est bien neutralisée.
+            assert_eq!(poses[0].moitie(-1.0), 0.0);
+            assert_eq!(poses[0].moitie(1.0), 0.0);
+        }
+        // Les nappes du disque, elles, restent découpées : c'est l'astre qui
+        // s'intercale entre les deux.
+        for p in toutes.iter().filter(|p| p.halo == 0.0 && p.anneau == 0.0) {
+            assert_eq!(p.moitie(-1.0), -1.0, "une nappe du disque a perdu sa découpe");
+        }
     }
 
     /// **La teinte chaude est ordonnée `R > G > B`.**

@@ -91,7 +91,14 @@ void main() {
         // Vers le rayon de référence, d'autant plus que le point est
         // derrière l'astre : le bord externe est ramené, le bord interne à
         // peine touché.
-        float vise = mix(r, interne * 1.25, k * 0.85);
+        // ⚠️ **La compression suit l'inclinaison, elle aussi.** Elle ne
+        // dépendait que de `k`, donc elle s'appliquait à pleine force même
+        // quand on regarde le disque d'en haut : toute la moitié arrière se
+        // retrouvait tassée en un mince arc contre l'ombre, laissant le haut
+        // de l'image vide — signalé à l'écran. Or vu de haut, la face
+        // arrière n'est **pas cachée** : elle se voit directement, et il n'y
+        // a rien à replier.
+        float vise = mix(r, interne * 1.25, k * 0.85 * ouvert);
         rel = vers * vise;
         // Puis relevé, d'une hauteur elle aussi calée sur l'échelle de
         // l'ombre et non sur l'étendue du disque.
@@ -100,10 +107,20 @@ void main() {
         // s'effondrait dès qu'on regardait le disque d'un peu haut : l'arc
         // retombait derrière le disque noir, qui le masquait, et il ne
         // restait qu'un liseré autour d'un dôme sombre — signalé à l'écran.
-        // `assiette` ne sert plus qu'à **éteindre** le pli quand le disque
-        // est vu de face, cas où il n'y a rien derrière l'astre à faire
-        // passer par-dessus ; partout ailleurs le pli garde toute sa hauteur.
-        float ouvert = smoothstep(0.04, 0.30, assiette);
+        // ⚠️ **Le pli est un phénomène de vue RASANTE.** La face arrière ne
+        // se dérobe derrière l'astre — et ne réapparaît en arc au-dessus de
+        // lui — que lorsqu'on regarde le disque presque par la tranche. Vu
+        // de haut, elle est simplement là, visible, et replier n'a aucun
+        // sens.
+        //
+        // Ce seuil montait auparavant à pleine force dès 17° de la vue de
+        // face : le pli s'appliquait donc à presque toutes les inclinaisons,
+        // d'où une moitié arrière tassée et un haut d'image vide dès qu'on
+        // levait la caméra. Il ne s'ouvre plus qu'en approchant la tranche.
+        // ⚠️ Réglage esthétique : la plage arbitre entre « la lentille
+        // disparaît trop tôt » et « le disque se replie alors qu'on voit
+        // tout ».
+        float ouvert = smoothstep(0.30, 0.80, assiette);
         rel += haut * (pli * pli_signe * k * ouvert * interne);
     }
     vpli = k;
