@@ -95,7 +95,16 @@ void main() {
         rel = vers * vise;
         // Puis relevé, d'une hauteur elle aussi calée sur l'échelle de
         // l'ombre et non sur l'étendue du disque.
-        rel += haut * (pli * pli_signe * k * assiette * interne);
+        // ⚠️ **L'arc doit DÉGAGER l'ombre, sinon il n'existe pas.** Multiplié
+        // par `assiette` (le sinus de l'inclinaison), le soulèvement
+        // s'effondrait dès qu'on regardait le disque d'un peu haut : l'arc
+        // retombait derrière le disque noir, qui le masquait, et il ne
+        // restait qu'un liseré autour d'un dôme sombre — signalé à l'écran.
+        // `assiette` ne sert plus qu'à **éteindre** le pli quand le disque
+        // est vu de face, cas où il n'y a rien derrière l'astre à faire
+        // passer par-dessus ; partout ailleurs le pli garde toute sa hauteur.
+        float ouvert = smoothstep(0.04, 0.30, assiette);
+        rel += haut * (pli * pli_signe * k * ouvert * interne);
     }
     vpli = k;
 

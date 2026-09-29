@@ -116,7 +116,12 @@ impl Accretion {
             // cœur se lise franchement blanc.
             chaud: vec3(1.0, 0.97, 0.93),
             froid: vec3(0.85, 0.45, 0.22),
-            eclat: 3.2,
+            // ⚠️ Descendu de 3,2 : après la correction du `couche` appliqué
+            // deux fois — qui rendait tout neuf fois trop sombre — la moitié
+            // qui s'approche se mettait à **écrêter partout**, et sa texture
+            // disparaissait sous un aplat gris. On veut un cœur qui sature,
+            // pas une moitié de disque qui sature.
+            eclat: 1.6,
             exposant_couleur: 2.2,
             exposant_opacite: 0.6,
             beta: 0.35,
@@ -127,7 +132,9 @@ impl Accretion {
             rotation: 0.35,
             bord_interne: 0.015,
             bord_externe: 0.30,
-            pli: 0.55,
+            // Relevé de 0,55 : l'arc doit passer franchement au-dessus de
+            // l'ombre, pas la raser.
+            pli: 1.1,
             epaisseur: 0.07,
             nappes: 3,
             halo: 0.10,

@@ -147,7 +147,11 @@ void main() {
     float a = clamp(densite, 0.0, 1.0) * alpha * part_arc * couche;
     // (l'énergie déposée est `col × a` : diviser `a` par le nombre de nappes
     // suffit à ce que l'empilement rende exactement une nappe pleine)
-    a *= clamp(faisceau, 0.3, 2.0);
+    // ⚠️ **Pince serrée.** Le beaming doit se lire sur l'ÉCLAT, pas sur
+    // l'opacité : laissé courir jusqu'à 2, il rendait la moitié qui
+    // s'approche uniformément opaque, et la texture y disparaissait sous un
+    // aplat — signalé à l'écran.
+    a *= clamp(faisceau, 0.5, 1.4);
 
     // Le faux bloom : large, faible, lisse. Il ne porte ni bruit ni bord
     // franc — c'est une lueur, pas de la matière.
