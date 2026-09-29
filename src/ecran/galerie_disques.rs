@@ -248,13 +248,13 @@ impl GalerieDisques {
             );
             // Le vorace traine en plus une ceinture de debris epars, bien
             // au-dela de son disque : deux objets, deux echelles.
-            if let Some((ci, ce)) = reglage.ceinture {
+            if let Some(cfg) = reglage.config_ceinture(r, m) {
                 let tn2 = Soleil::new(Vec3::ZERO, r, vec3(1.0, 0.95, 0.9), 0.4)
                     .avec_trou_noir()
                     .sans_disque();
                 e(
                     &format!("Ceinture eparse - trou noir {nom}"),
-                    DisqueConfig::debris_recents(900, r * ci, r * ce, m),
+                    cfg,
                     tn2,
                     2.2,
                     Vec::new(),

@@ -267,10 +267,10 @@ impl Soleil {
             masse,
             a,
         ));
-        if let Some((int, ext)) = a.ceinture {
-            // Des cailloux, pas du gaz : le voile des ceintures, pas le
-            // shader d'accrétion. C'est ce qui les distingue à l'œil.
-            s = s.avec_disque(DisqueConfig::debris_recents(900, r * int, r * ext, masse));
+        // Des cailloux, pas du gaz : le voile des ceintures, pas le shader
+        // d'accrétion. C'est ce qui les distingue à l'œil.
+        if let Some(c) = a.config_ceinture(r, masse) {
+            s = s.avec_disque(c);
         }
         s
     }

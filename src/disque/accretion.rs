@@ -225,17 +225,43 @@ impl Accretion {
             nappes: 3,
             halo: 0.16,
             anneau: 2.8,
-            bornes: (1.155, 4.6),
-            // ⚠️ **Juste au-delà du disque, pas au loin.** Elle commençait à
-            // 7 rayons d'ombre pour un disque qui s'arrête à 4,6 : le vide
+            // ⚠️ Le bord **interne** reste à 1,155 : c'est le rapport
+            // physique `r_ISCO / r_ombre`, pas un réglage. Seul l'externe
+            // grandit — un trou noir vorace étale son disque, il ne le
+            // décolle pas de l'ombre.
+            bornes: (1.155, 6.9),
+            // ⚠️ **Juste au-delà du disque, pas au loin.** Elle a commencé à
+            // 7 rayons d'ombre pour un disque qui s'arrêtait à 4,6 : le vide
             // entre les deux était si large qu'ils se lisaient comme deux
             // objets étrangers, et non comme un même système en train d'être
-            // avalé. Elle démarre maintenant à un cinquième de plus que le
+            // avalé. Elle se tient depuis à **un sixième de plus** que le
             // bord du disque — assez pour qu'on voie la coupure, assez peu
-            // pour qu'on lise la continuité.
-            ceinture: Some((5.4, 9.5)),
+            // pour qu'on lise la continuité — et suit donc le disque quand
+            // celui-ci grandit. C'est le rapport qui compte, pas la distance
+            // absolue.
+            ceinture: Some((8.0, 12.5)),
             ..Self::chaude()
         }
+    }
+
+    /// **La ceinture de ce régime, prête à poser** — `None` quand il n'y en
+    /// a pas.
+    ///
+    /// ⚠️ **Source unique.** L'astre la construisait, et la galerie la
+    /// reconstruisait de son côté : la première réduction de la taille des
+    /// blocs ne serait passée que dans l'une des deux, et la vitrine aurait
+    /// montré autre chose que le jeu. C'est le défaut le plus tenace de ce
+    /// chantier, rencontré quatre fois.
+    pub fn config_ceinture(&self, rayon: f32, masse: f32) -> Option<DisqueConfig> {
+        let (int, ext) = self.ceinture?;
+        let mut c = DisqueConfig::debris_recents(900, rayon * int, rayon * ext, masse);
+        // ⚠️ **Des cailloux, pas des lunes.** `debris_recents` vise une
+        // ceinture autour d'une planète, où les gros blocs se lisent bien ;
+        // à l'échelle d'un trou noir ils devenaient des astres à part
+        // entière. Moitié moins gros — et `bimodal`, qui tire ses rares gros
+        // blocs à `0,8 à 1,8 × taille_max`, suit.
+        c.taille_max *= 0.5;
+        Some(c)
     }
 
     /// Nom lisible du régime, pour les vues de travail. ⚠️ Ici, et pas chez
@@ -621,6 +647,34 @@ mod tests {
         // Seul le vorace traîne une ceinture.
         assert!(d.ceinture.is_none() && c.ceinture.is_none());
         assert!(v.ceinture.is_some(), "le vorace n'a pas sa ceinture");
+    }
+
+    /// **La ceinture sort d'une seule source, et ses blocs restent des
+    /// cailloux.**
+    ///
+    /// ⚠️ L'astre la construisait et la galerie la reconstruisait : la
+    /// réduction de la taille des blocs ne serait passée que dans l'une des
+    /// deux, et la vitrine aurait montré autre chose que le jeu. Ce test
+    /// garde la propriété qui les départage — un bloc de ceinture doit
+    /// rester petit devant l'astre.
+    #[test]
+    fn la_ceinture_ne_contient_que_des_cailloux() {
+        let v = Accretion::vorace();
+        let c = v.config_ceinture(1.0, 1000.0).expect("le vorace a une ceinture");
+        let brut = DisqueConfig::debris_recents(900, 1.0, 2.0, 1000.0);
+        assert!(
+            c.taille_max < brut.taille_max,
+            "les blocs n'ont pas été réduits : {} contre {}",
+            c.taille_max,
+            brut.taille_max
+        );
+        // Et ils restent des cailloux : petits devant le rayon de l'ombre,
+        // qui vaut 1 dans ces unités. Au-delà, ce sont des lunes.
+        assert!(c.taille_max < 0.12, "un bloc de {} face à une ombre de 1", c.taille_max);
+        assert!(c.taille_max > c.taille_min, "les blocs ont fondu sous le grain");
+        // Les régimes sans ceinture n'en fabriquent pas.
+        assert!(Accretion::chaude().config_ceinture(1.0, 1000.0).is_none());
+        assert!(Accretion::endormie().config_ceinture(1.0, 1000.0).is_none());
     }
 
     /// **Le régime se dérive de la graine, et les trois sortent.**
