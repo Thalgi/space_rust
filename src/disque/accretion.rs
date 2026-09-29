@@ -110,7 +110,11 @@ impl Accretion {
     pub fn chaude() -> Self {
         Self {
             // R > G > B : le clipping additif emmène le cœur vers le blanc.
-            chaud: vec3(1.0, 0.95, 0.88),
+            // ⚠️ Volontairement **peu** chaude : l'ordre des canaux est ce
+            // qui évite le cyan, mais plus l'écart est grand, plus la montée
+            // vers le blanc passe par un jaune marqué. Resserrée pour que le
+            // cœur se lise franchement blanc.
+            chaud: vec3(1.0, 0.97, 0.93),
             froid: vec3(0.85, 0.45, 0.22),
             eclat: 3.2,
             exposant_couleur: 2.2,

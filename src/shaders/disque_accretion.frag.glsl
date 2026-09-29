@@ -9,7 +9,7 @@ precision highp float;
 
 varying vec2 vtc;    // (t radial 0..1, ang 0..1)
 varying float vdot;  // dot(position relative, tocam) -> moitiés avant/arrière
-varying vec3 vpos;   // position relative au centre (monde)
+varying vec3 vpos;   // position **non pliée** dans le plan du disque
 varying float vpli;  // part de pli appliquée ici (0 = à plat)
 
 uniform float time;
@@ -34,7 +34,7 @@ uniform vec3 axe_n;
 uniform vec3 tocam;
 uniform float pli;
 uniform float pli_signe;
-uniform float couche;      // teinte/éclat de la nappe : 1 = pleine, < 1 = empilée
+uniform float couche;      // part d'une nappe empilée : 1 = seule, 1/n si n nappes
 uniform float halo;        // > 0 : cette passe est le faux bloom, sans bruit
 uniform float anneau;      // > 0 : cette passe est l'anneau de lentille
 
@@ -116,6 +116,12 @@ void main() {
     float faisceau = 1.0;
     float decalage = 0.0;
     if (beta > 0.001) {
+        // ⚠️ `vpos` est la position **avant le pli**. Le beaming dépend de
+        // la vitesse orbitale, donc de l'endroit où la matière se trouve
+        // *vraiment* — pas de l'endroit où le pli l'a peinte. Calculé sur la
+        // position pliée, le côté brillant se retrouvait posé au mauvais
+        // endroit sur les arcs, et l'asymétrie cessait de correspondre au
+        // point de vue : signalé à l'écran.
         vec3 radial = normalize(vpos - axe_n * dot(vpos, axe_n));
         vec3 vitesse = cross(axe_n, radial);
         float cos_t = dot(vitesse, tocam);
@@ -132,9 +138,15 @@ void main() {
     vec3 col = mix(froid, chaud, clamp(chaleur, 0.0, 1.0));
     col.b *= 1.0 + decalage;       // s'approche -> bleuit
     col.r *= 1.0 - decalage * 0.5; // s'éloigne -> rougit
-    col *= eclat * chaleur * faisceau * couche;
+    // ⚠️ **`couche` ne s'applique QU'À L'ALPHA.** Ce qui se dépose dans le
+    // framebuffer vaut `col × a` : l'appliquer des deux côtés le divisait
+    // par n **au carré**, soit neuf fois trop sombre à trois nappes. C'est
+    // pour ça que le cœur ne saturait jamais en blanc.
+    col *= eclat * chaleur * faisceau;
 
     float a = clamp(densite, 0.0, 1.0) * alpha * part_arc * couche;
+    // (l'énergie déposée est `col × a` : diviser `a` par le nombre de nappes
+    // suffit à ce que l'empilement rende exactement une nappe pleine)
     a *= clamp(faisceau, 0.3, 2.0);
 
     // Le faux bloom : large, faible, lisse. Il ne porte ni bruit ni bord

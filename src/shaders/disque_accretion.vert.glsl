@@ -47,6 +47,13 @@ void main() {
     vtc = texcoord;
     vec3 rel = axe_u * position.x + axe_n * position.y + axe_v * position.z;
     vdot = dot(rel, tocam);
+    // ⚠️ La position **dans le plan du disque**, capturée avant toute
+    // déformation. Le fragment shader en tire la vitesse orbitale pour le
+    // beaming : celle-ci dépend de l'endroit où la matière est *vraiment*,
+    // pas de l'endroit où le pli l'a peinte. Prise après, le côté brillant
+    // se retrouvait posé au mauvais endroit sur les arcs — signalé à
+    // l'écran.
+    vpos = rel;
 
     float k = 0.0;
     if (pli > 0.001) {
@@ -62,7 +69,13 @@ void main() {
         // 1 droit derrière l'astre, 0 sur les côtés : le pli s'éteint là où
         // la matière n'a jamais été cachée, ce qui **raccorde** l'arc au
         // disque plat sans couture.
-        k = smoothstep(-0.15, 0.95, -dot(normalize(rel), tocam));
+        // ⚠️ **La borne basse est exactement 0.** Le découpage en moitiés se
+        // fait sur `vdot = 0` ; si `k` n'y vaut pas zéro, la moitié arrière
+        // y est déjà comprimée et relevée alors que la moitié avant y est
+        // plate — les deux ne se rejoignent plus, et une **cassure
+        // horizontale** apparaît de part et d'autre de l'astre. Elle valait
+        // -0,15, ce qui laissait k ≈ 0,05 à la couture : signalé à l'écran.
+        k = smoothstep(0.0, 0.95, -dot(normalize(rel), tocam));
 
         // ⚠️ **L'arc se COMPRIME vers l'astre, il ne s'en éloigne pas.**
         // La première version déplaçait proportionnellement à `length(rel)`
@@ -92,6 +105,5 @@ void main() {
     // doit montrer une bande, pas un cheveu.
     rel += axe_n * decalage;
 
-    vpos = rel;
     gl_Position = Projection * Model * vec4(centre + rel, 1.0);
 }
