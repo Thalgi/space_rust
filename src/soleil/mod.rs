@@ -326,6 +326,19 @@ impl Astre for Soleil {
         &mut self.base
     }
     fn update(&mut self, dt: f32) {
+        // Le disque s'anime au rythme du jeu, comme l'anneau d'une planète
+        // (`Planete::update`). Sans ça son horloge reste à **zéro** : il se
+        // dessine, mais il ne tourne pas — défaut signalé à l'écran, visible
+        // en skymap et en vue isolée, et invisible en galerie des disques,
+        // qui appelle `update` sur ses disques elle-même.
+        //
+        // ⚠️ **Ici et non dans `maj`** : celui-ci s'interrompt tôt pour les
+        // trous noirs (pas d'activité de surface sur un horizon), et ce sont
+        // précisément eux qui portent un disque. Placé après ce retour, le
+        // disque d'un trou noir ne tournerait jamais.
+        if let Some(d) = &mut self.disque {
+            d.update(dt);
+        }
         self.maj(dt);
     }
     fn draw(&mut self, cam: &CameraInfo) {

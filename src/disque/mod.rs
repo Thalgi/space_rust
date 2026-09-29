@@ -540,6 +540,40 @@ fn material_particules() -> Material {
 mod tests {
     use super::*;
 
+    /// Les types qui **portent** un `Disque` et doivent donc faire avancer
+    /// son horloge.
+    const PORTEURS: [(&str, &str); 2] = [
+        ("planete/mod.rs", include_str!("../planete/mod.rs")),
+        ("soleil/mod.rs", include_str!("../soleil/mod.rs")),
+    ];
+
+    /// **Tout porteur de disque fait avancer son horloge.**
+    ///
+    /// ⚠️ `Disque::update` est la **seule mutation par frame** : tout le
+    /// reste est calculé sur le GPU à partir de `temps`. Un porteur qui
+    /// oublie de l'appeler obtient un disque qui se dessine parfaitement et
+    /// **ne tourne jamais** — rien ne plante, rien ne manque à l'écran, il
+    /// est juste figé.
+    ///
+    /// C'est arrivé au disque d'accrétion : `Planete::update` faisait
+    /// avancer son anneau, `Soleil::update` non. Le défaut était invisible
+    /// en galerie des disques, qui appelle `update` sur ses disques
+    /// elle-même, et ne se voyait qu'en skymap et en vue isolée.
+    #[test]
+    fn tout_porteur_de_disque_avance_son_horloge() {
+        for (nom, src) in PORTEURS {
+            assert!(
+                src.contains("Option<Disque>"),
+                "{nom} ne porte plus de disque : retirer cette garde ou la corriger"
+            );
+            let avance = src
+                .lines()
+                .filter(|l| !l.trim_start().starts_with("//"))
+                .any(|l| l.contains(".update(dt)"));
+            assert!(avance, "{nom} : son disque ne recevra jamais `dt`, donc il restera figé");
+        }
+    }
+
     /// Relevé de charge d'un champ : ce que la carte graphique reçoit par frame.
     /// Un lot = un `draw_mesh` = un appel de dessin.
     struct Charge {
