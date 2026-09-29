@@ -91,6 +91,53 @@ fn types_particuliers() -> Vec<crate::etoile::Gabarit> {
     out
 }
 
+/// **Le bloc de debug du coin haut-gauche.**
+///
+/// La vue isolée sert à **travailler un rendu** : on veut voir d'un coup ce
+/// qui est chargé, sous quel angle, et surtout **à quelle taille à l'écran**
+/// — c'est elle qui décide de ce qui est lisible, et tout le chantier astres
+/// s'est heurté à des effets invisibles sous ~10 px de rayon
+/// (`astres_v2.md` §0).
+///
+/// Fonction **pure** : elle rend les lignes, elle ne les dessine pas. C'est
+/// ce qui la rend testable, `police::texte` exigeant le contexte graphique.
+/// ⚠️ Prend les **nombres** de la caméra, pas la caméra : `Camera::new`
+/// exige le contexte graphique, et une fonction qui le réclame ne se teste
+/// pas. Elle n'a de toute façon besoin que de ces quatre-là.
+fn lignes_debug(
+    spec: &Specimen,
+    orientation: (f32, f32),
+    dist: f32,
+    zoom: f32,
+    ecran: Vec2,
+    px: f32,
+) -> Vec<String> {
+    let (yaw, pitch) = orientation;
+    let mut l = vec![spec.label()];
+    match spec {
+        Specimen::Soleil { rayon, lumi, couronne, .. } => {
+            let v = crate::stellaire::Variante::de_mode(*couronne);
+            l.push(format!("  rayon {rayon:.2}   lumi {lumi:.2}"));
+            l.push(format!("  couronne {} -> {}", *couronne as i32, v.nom()));
+        }
+        Specimen::Planete { rayon, .. } => {
+            l.push(format!("  rayon {rayon:.3}"));
+        }
+    }
+    l.push(format!(
+        "CAM  yaw {:.0}°  pitch {:.0}°  dist {:.2}  zoom x{:.2}",
+        yaw.to_degrees(),
+        pitch.to_degrees(),
+        dist,
+        zoom
+    ));
+    // ⚠️ Rayon **physique** projeté : le plancher en pixels des étoiles
+    // (`soleil::PX_MIN`) peut l'élargir au loin. En vue isolée la caméra est
+    // proche, donc le plancher dort et le chiffre est exact.
+    l.push(format!("ECRAN  rayon ~{px:.0} px   {:.0}x{:.0}", ecran.x, ecran.y));
+    l
+}
+
 /// Construit un système à un seul astre, centré à l'origine.
 fn batir(spec: &Specimen) -> Systeme {
     let mut sys = Systeme::new();
@@ -196,16 +243,33 @@ impl Objet {
         self.rendu
             .rendre(cam3d, &cam_info, &mut self.fond, &mut self.sys, Default::default());
 
+        let ecran = vec2(screen_width(), screen_height());
+        let px = crate::impostor::px_rayon(
+            self.spec.rayon(),
+            self.cam.dist,
+            crate::impostor::viewport_h(),
+        );
+        let debug = lignes_debug(
+            &self.spec,
+            (self.cam.yaw, self.cam.pitch),
+            self.cam.dist,
+            self.cam.zoom(),
+            ecran,
+            px,
+        );
+        for (i, ligne) in debug.iter().enumerate() {
+            crate::police::texte(ligne, 12.0, 24.0 + i as f32 * 20.0, 18.0, WHITE);
+        }
         crate::police::texte(
             &format!(
-                "{}   |   {} FPS   G: aleatoire   1: soleil   2: planete   3: exotiques   P: pixel   R: shaders   Echap: menu",
-                self.spec.label(),
-                get_fps()
+                "{} FPS   rendu: {:?}   G: aleatoire   1: soleil   2: planete   3: exotiques   P: pixel   R: shaders   Echap: menu",
+                get_fps(),
+                crate::reglages::mode_rendu()
             ),
             12.0,
-            24.0,
+            ecran.y - 16.0,
             18.0,
-            WHITE,
+            Color::new(0.75, 0.75, 0.8, 1.0),
         );
         false
     }
@@ -255,6 +319,45 @@ mod tests {
             assert!(!nom_de(i).is_empty(), "rang {i} sans nom");
             assert!(Specimen::particulier(i).rayon() > 0.0, "rang {i} sans rayon");
         }
+    }
+
+    /// **Le bloc de debug dit ce qu'on a sous les yeux.**
+    ///
+    /// Une vue de travail dont l'affichage ment est pire qu'une vue sans
+    /// affichage : on règle à l'aveugle en croyant savoir. Les trois faits
+    /// qui comptent — quel astre, sous quel angle, à quelle taille écran —
+    /// doivent être là et être justes.
+    #[test]
+    fn le_debug_dit_ce_qu_on_regarde() {
+        let spec = Specimen::particulier(0); // le trou noir
+        let l = lignes_debug(&spec, (0.8, 0.5), 8.0, 1.0, vec2(1920.0, 1080.0), 142.0);
+        let tout = l.join("\n");
+        assert!(tout.contains("Trou noir"), "le type manque : {tout}");
+        // ⚠️ La variante, pas seulement le numéro de mode : c'est elle qui
+        // dit si le rendu attendu est bien celui qu'on va voir.
+        assert!(tout.contains("trou noir"), "la variante manque : {tout}");
+        assert!(tout.contains("142"), "la taille écran manque : {tout}");
+        assert!(tout.contains("1920"), "la résolution manque : {tout}");
+        assert!(l.len() >= 4, "bloc trop pauvre : {l:?}");
+    }
+
+    /// **L'orientation est en degrés, pas en radians.** Un angle en radians
+    /// ne se lit pas d'un coup d'œil, et c'est un réglage qu'on compare à
+    /// l'œil entre deux captures.
+    #[test]
+    fn l_orientation_est_lisible() {
+        use std::f32::consts::{FRAC_PI_2, PI};
+        let tout = lignes_debug(
+            &Specimen::particulier(0),
+            (PI, FRAC_PI_2), // 180° et 90°
+            10.0,
+            1.0,
+            vec2(800.0, 600.0),
+            10.0,
+        )
+        .join("\n");
+        assert!(tout.contains("180"), "yaw pas en degrés : {tout}");
+        assert!(tout.contains("90"), "pitch pas en degrés : {tout}");
     }
 
     /// **Le trou noir est le premier du défilé**, puisque c'est lui qu'on

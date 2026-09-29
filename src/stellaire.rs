@@ -54,6 +54,22 @@ impl Variante {
         }
     }
 
+    /// Nom lisible de la variante, pour l'affichage de debug. ⚠️ Ici, et pas
+    /// dans la vue qui l'affiche : un `match` sur la variante recopié
+    /// ailleurs est exactement ce que [`Self::appliquer`] existe pour
+    /// éviter.
+    pub fn nom(self) -> &'static str {
+        match self {
+            Variante::Normale => "normale",
+            Variante::Jets => "jets",
+            Variante::Vent => "vent",
+            Variante::Pulsar => "pulsar",
+            Variante::Magnetar => "magnetar",
+            Variante::TrouNoir => "trou noir",
+            Variante::Proto => "jets + disque proto",
+        }
+    }
+
     /// **Configure une étoile selon sa variante. Source unique aussi.**
     ///
     /// ⚠️ La galerie en tenait une **copie**, sous forme de chaîne de `if`
