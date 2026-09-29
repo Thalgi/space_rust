@@ -7,8 +7,9 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État à l'arrêt (2026-09-26)** : 838 tests verts, `cargo clippy
---all-targets` à zéro avertissement. Le sous-lot **5.4 est le prochain**.
+**État au 2026-09-29** : 851 tests verts, `cargo clippy --all-targets` à zéro
+avertissement. **Le sous-lot 5.3 est validé à l'écran.** Le **5.4 est le
+prochain**, et attend un go explicite de l'utilisateur.
 
 ---
 
@@ -30,7 +31,7 @@ n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 | **5** — le disque d'accrétion a un plan | fait | `f43691a` |
 | **5.1** — shader dédié | fait | `8c2cec6` |
 | **5.2** — le pli | fait | `f4a0e2d` |
-| **5.3** — l'aspect, corrigé sur mesures | fait | `c32e3bf` |
+| **5.3** — l'aspect, corrigé sur mesures | **fait et validé à l'écran** | `c32e3bf` + 7 correctifs |
 | **5.4** — la variante Interstellar, à comparer | **à faire** | |
 | 6 à 13 | à faire | |
 
@@ -65,13 +66,13 @@ compareraient plus. Aucun `if` sur la variante dans le shader.
 
 ### Ce qui reste ouvert, et que personne ne garde
 
-- **Aucune vérification visuelle du 5.3.** Le sous-lot est livré et testé,
-  mais l'aspect n'a **pas** été jugé à l'écran. C'est la première chose à
-  faire en reprenant : GALERIE - CEINTURES & DISQUES, entrée « Disque
-  d'accretion ».
 - **Le GLSL ne compile qu'au lancement.** Aucun test du dépôt ne peut le
-  vérifier ; `disque_accretion.frag.glsl` et `.vert.glsl` ont été très
-  remaniés au 5.3. Si l'appli panique au chargement d'un material, c'est là.
+  vérifier. C'est arrivé une fois au 5.3 — une variable employée dix lignes
+  avant sa déclaration, panic au démarrage. `verif::usage_avant_declaration`
+  garde désormais cette classe d'erreur **dans le corps de `main`**, mais
+  elle seule : un type faux, un appel inexistant passeraient encore. Une
+  vraie garde demanderait `glslangValidator` en dépendance de test — chantier
+  à part, non engagé.
 - **Convention de silhouette** : nous prenons l'ombre comme unité (le noir
   remplit l'anneau, convention « épaisse », celle de l'image EHT). La
   convention « mince » — noir à 0,55 × le rayon de l'anneau, anneau tracé
@@ -134,6 +135,14 @@ Quatre occurrences, dont trois trouvées par l'utilisateur à l'écran :
   point laissait deux sommets orphelins par frame.
 
 Quand j'écris les entrées à la main, je les écris trop gentilles.
+
+Deux autres pièges du red-check, rencontrés depuis :
+
+- **saboter le test au lieu du code.** Retirer un nom de la *liste
+  d'assertions* ne prouve rien ; c'est la production qu'on casse.
+- **un sabotage resté en place.** La commande qui devait le défaire a échoué,
+  et l'arbre a été annoncé propre à tort. C'est un test qui l'a rattrapé au
+  coup suivant. **Relire avant d'annoncer**, ne pas se fier à la commande.
 
 ### Mesurer désigne le coupable ; supposer coûte deux tours
 

@@ -664,8 +664,12 @@ l'**ombre** et non de l'horizon, et l'anneau brillant devient l'anneau de
 **lentille** porté par le disque. Tout le vocabulaire d'accrétion part dans
 un type `Accretion`.
 
-⚠️ **Le 5.3 n'a pas été jugé à l'écran.** Il est livré et testé ; son aspect
-reste à valider.
+**5.3 validé à l'écran le 2026-09-29**, après sept correctifs successifs —
+chacun parti d'une capture. Le sous-lot porte aussi, au final, les **trois
+régimes** du trou noir : endormi (halo blanc large, peu de matière), actif, et
+vorace (disque élargi de moitié plus une ceinture de débris qui mord sur son
+bord externe). Les trois ne diffèrent que par des **constantes**, portées par
+le type `Accretion` — c'est ce qui rendra le 5.4 possible au même prix.
 
 **5.4, à faire** : la variante **Interstellar**, à comparer côte à côte
 (§5 de la recherche). Elle ne doit être qu'un **preset** de plus.

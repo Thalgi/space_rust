@@ -21,16 +21,17 @@
 `.claude/worktrees/astres-v2`. **32 commits d'avance sur `main`, rien de
 fusionné, rien de poussé.**
 
-**Vérifié** : **838 tests verts** (850 avec le binaire `mhd`), `cargo clippy
---all-targets` à **0 avertissement**.
+**Vérifié (2026-09-29)** : **851 tests verts** (863 avec le binaire `mhd`),
+`cargo clippy --all-targets` à **0 avertissement**.
 
 **Le prochain pas** : sous-lot **5.4** — la variante « Interstellar » du
-disque d'accrétion, à comparer côte à côte avec celle du 5.3. Tout est
-préparé pour qu'elle ne soit qu'un **preset** de plus.
+disque d'accrétion, à comparer côte à côte avec les régimes du 5.3. Tout est
+préparé pour qu'elle ne soit qu'un **preset** de plus : le type `Accretion`
+porte déjà tout le vocabulaire, et trois régimes en sortent sans une ligne de
+shader.
 
-⚠️ **Le sous-lot 5.3 n'a pas été jugé à l'écran.** Il est livré et testé,
-son aspect reste à valider : GALERIE - CEINTURES & DISQUES, entrée « Disque
-d'accretion ».
+**Le sous-lot 5.3 est validé à l'écran** (2026-09-29). ⚠️ Le **5.4 attend un
+go explicite** de l'utilisateur : ne pas l'entamer de soi-même.
 
 → Tout le détail, lot par lot, dans
 [`docs/suivi/astres_v2.md`](docs/suivi/astres_v2.md) — c'est lui qu'il faut
