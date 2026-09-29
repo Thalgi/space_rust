@@ -84,20 +84,26 @@ fn construire_simple() -> (Systeme, String) {
     let profil = ProfilEtoile::aleatoire();
     // Masse de l'unique étoile : dérivée de sa luminosité, pas la constante
     // brute -- une naine froide ne pèse pas comme une géante bleue.
-    let masse_etoile = masse_luminosite(profil.luminosite);
+    // ⚠️ Sauf un trou noir : ce qu'il rayonne vient de son disque, pas d'une
+    // photosphère, et la relation masse-luminosité le coucherait au plancher.
+    // Même règle que `feuille_alea` -- c'est le MÊME fait.
+    let masse_etoile = if profil.est_trou_noir() {
+        MASSE_TROU_NOIR
+    } else {
+        masse_luminosite(profil.luminosite)
+    };
 
     let mut sys = Systeme::new();
     let soleil = Soleil::new(vec3(0.0, 0.0, 0.0), profil.rayon, profil.couleur, profil.luminosite)
         // Naine active ou géante calme (§1.3) : dérivé du même gabarit que la
         // masse ci-dessus, pas d'un second tirage pour le même fait.
         .avec_activite(etoile::activite_type(profil.rayon, profil.luminosite));
-    let soleil = match profil.couronne as i32 {
-        1 => soleil.avec_jets(),
-        2 => soleil.avec_vent(),
-        3 => soleil.avec_pulsar(),
-        4 => soleil.avec_magnetar(),
-        _ => soleil,
-    };
+    // ⚠️ **QUATRIÈME copie de cette chaîne**, trouvée par le garde-fou de
+    // `stellaire.rs` — et la plus coûteuse : `construire_simple` est le
+    // chemin des systèmes à **une seule étoile**, donc le plus fréquent du
+    // jeu. Un trou noir tiré ici s'affichait en étoile ordinaire, et n'était
+    // correct que dans les systèmes multiples.
+    let soleil = Variante::de_mode(profil.couronne).appliquer(soleil);
     // Rémanents (pulsar/magnétar/étoile à neutrons) : pas de zone habitable à tracer.
     let soleil = if profil.est_remnant() {
         soleil.sans_zone_habitable()

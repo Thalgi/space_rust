@@ -204,3 +204,71 @@ impl ArbreStellaire {
         sorties
     }
 }
+
+#[cfg(test)]
+mod tests_variante {
+    /// Les fichiers qui traduisent un **mode de couronne** en étoile
+    /// configurée. Tous doivent passer par [`super::Variante::appliquer`].
+    const CONSOMMATEURS: [(&str, &str); 3] = [
+        ("genese/mod.rs", include_str!("genese/mod.rs")),
+        ("ecran/galerie_etoiles.rs", include_str!("ecran/galerie_etoiles.rs")),
+        ("ecran/objet.rs", include_str!("ecran/objet.rs")),
+    ];
+
+    /// **Personne ne retraduit un mode de couronne dans son coin.**
+    ///
+    /// ⚠️ Ce défaut s'est produit **trois fois** sur le chantier astres, et
+    /// chaque fois il est passé inaperçu jusqu'à ce qu'on le voie à l'écran :
+    /// la genèse, la galerie des étoiles et la vue isolée tenaient chacune
+    /// leur propre chaîne `mode → constructeur`, arrêtée aux bras qui
+    /// existaient le jour où elle a été écrite. Un mode plus récent y
+    /// retombait sur `Normale` **en silence** — le trou noir s'affichait en
+    /// étoile ordinaire, la jeune étoile perdait son disque.
+    ///
+    /// La garde est indirecte, faute de mieux : construire un `Soleil` exige
+    /// le contexte graphique, donc rien ne peut vérifier le résultat. Mais
+    /// une chaîne recopiée mentionne forcément les variantes du **milieu**
+    /// (`pulsar`, `magnetar`) — celles que personne ne construit
+    /// délibérément, à la différence du trou noir ou des jets, qu'une
+    /// galerie peut légitimement demander nommément.
+    #[test]
+    fn personne_ne_retraduit_un_mode_dans_son_coin() {
+        for (nom, src) in CONSOMMATEURS {
+            for builder in ["avec_pulsar(", "avec_magnetar("] {
+                let recopie = src
+                    .lines()
+                    .filter(|l| !l.trim_start().starts_with("//"))
+                    .any(|l| l.contains(builder));
+                assert!(
+                    !recopie,
+                    "{nom} construit `{builder}` lui-même : c'est une chaîne \
+                     mode → constructeur recopiée. Passer par `Variante::appliquer`."
+                );
+            }
+        }
+    }
+
+    /// **Et la source unique, elle, les construit bien toutes.** Sans quoi
+    /// le test ci-dessus serait satisfait par un `appliquer` qui aurait
+    /// perdu des bras en route.
+    ///
+    /// ⚠️ Ne cherche que dans la partie **production** du fichier. La liste
+    /// ci-dessous contient elle-même les noms qu'elle cherche : fouiller tout
+    /// le fichier rendait le test **toujours vrai**, quoi qu'on retire de
+    /// `appliquer`. Il se satisfaisait lui-même, et le sabotage l'a montré.
+    #[test]
+    fn la_source_unique_construit_toutes_les_variantes() {
+        let ici = include_str!("stellaire.rs");
+        let ici = ici.split("#[cfg(test)]").next().unwrap_or(ici);
+        for builder in [
+            "avec_jets(",
+            "avec_vent(",
+            "avec_pulsar(",
+            "avec_magnetar(",
+            "avec_trou_noir(",
+            "avec_disque_protosolaire(",
+        ] {
+            assert!(ici.contains(builder), "`Variante::appliquer` ne sait pas faire `{builder}`");
+        }
+    }
+}
