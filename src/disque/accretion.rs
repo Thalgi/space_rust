@@ -233,6 +233,22 @@ impl Accretion {
         }
     }
 
+    /// Nom lisible du régime, pour les vues de travail. ⚠️ Ici, et pas chez
+    /// celui qui l'affiche : le nommer par son **rang dans une liste** était
+    /// fragile — il suffisait que l'ordre change.
+    ///
+    /// Reconnu par sa ceinture (le vorace en a une) puis par son halo, qui
+    /// va à contre-courant de l'accrétion.
+    pub fn nom(&self) -> &'static str {
+        if self.ceinture.is_some() {
+            "vorace"
+        } else if self.halo > Self::chaude().halo {
+            "endormi"
+        } else {
+            "actif"
+        }
+    }
+
     /// **Le régime d'un trou noir, dérivé de sa graine.**
     ///
     /// ⚠️ Dérivé, jamais tiré : un `gen_range` de plus décalerait tout ce

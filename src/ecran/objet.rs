@@ -17,7 +17,16 @@ use macroquad::rand::gen_range;
 /// copie de `Specimen` — y compris celle d'une étoile, qui n'en a que faire —
 /// traînerait les 376 octets.
 enum Specimen {
-    Soleil { rayon: f32, couleur: Vec3, lumi: f32, nom: String, couronne: f32 },
+    Soleil {
+        rayon: f32,
+        couleur: Vec3,
+        lumi: f32,
+        nom: String,
+        couronne: f32,
+        /// Régime imposé, pour les trous noirs du défilé. `None` : il se
+        /// dérive de la graine, comme en jeu.
+        regime: Option<crate::disque::Accretion>,
+    },
     Planete { rayon: f32, app: Box<Apparence> },
 }
 
@@ -33,6 +42,7 @@ impl Specimen {
                 lumi: p.luminosite,
                 nom: p.nom().to_string(),
                 couronne: p.couronne,
+                regime: None,
             }
         } else {
             let (rayon, app) = planete_aleatoire();
@@ -55,13 +65,22 @@ impl Specimen {
     /// vue de travail doit redonner deux fois la même image.
     fn particulier(i: usize) -> Self {
         let types = types_particuliers();
-        let (tmin, tmax, rayon, lumi, nom, couronne) = types[i % types.len()];
+        let (g, regime) = types[i % types.len()];
+        let (tmin, tmax, rayon, lumi, nom, couronne) = g;
+        // ⚠️ Le régime se nomme lui-même. Le nommer par son **rang** dans
+        // la liste marchait tant que l'ordre ne bougeait pas — c'est-à-dire
+        // jusqu'au premier qui l'aurait changé.
+        let nom = match regime {
+            Some(r) => format!("{nom} ({})", r.nom()),
+            None => nom.to_string(),
+        };
         Specimen::Soleil {
             rayon,
             couleur: crate::etoile::couleur_corps_noir((tmin + tmax) * 0.5),
             lumi,
-            nom: nom.to_string(),
+            nom,
             couronne,
+            regime,
         }
     }
 
@@ -80,12 +99,24 @@ impl Specimen {
 /// recopier un seul. Sert à les faire défiler en vue isolée — chercher un
 /// trou noir en régénérant la skymap est laborieux, et il n'apparaît que
 /// dans ~1 % des tirages.
-fn types_particuliers() -> Vec<crate::etoile::Gabarit> {
-    let mut out: Vec<crate::etoile::Gabarit> = Vec::new();
+fn types_particuliers() -> Vec<(crate::etoile::Gabarit, Option<crate::disque::Accretion>)> {
+    use crate::disque::Accretion;
+    let mut out: Vec<(crate::etoile::Gabarit, Option<Accretion>)> = Vec::new();
     for k in 0..200 {
         let g = crate::etoile::particuliere(k as f32 / 200.0);
-        if !out.iter().any(|d| d.4 == g.4) {
-            out.push(g);
+        if out.iter().any(|(d, _)| d.4 == g.4) {
+            continue;
+        }
+        // ⚠️ Le trou noir compte **pour trois** : son régime se dérive de la
+        // graine, donc en jeu on tombe sur l'un d'eux et il faudrait
+        // régénérer pour voir les autres. Une vue de travail doit pouvoir
+        // les montrer à la demande.
+        if g.4 == "Trou noir" {
+            for r in [Accretion::endormie(), Accretion::chaude(), Accretion::vorace()] {
+                out.push((g, Some(r)));
+            }
+        } else {
+            out.push((g, None));
         }
     }
     out
@@ -142,7 +173,7 @@ fn lignes_debug(
 fn batir(spec: &Specimen) -> Systeme {
     let mut sys = Systeme::new();
     match spec {
-        Specimen::Soleil { rayon, couleur, lumi, couronne, .. } => {
+        Specimen::Soleil { rayon, couleur, lumi, couronne, regime, .. } => {
             let s = Soleil::new(Vec3::ZERO, *rayon, *couleur, *lumi);
             // ⚠️ **La même source que la genèse et la galerie.** Cette vue
             // tenait une troisième copie de la chaîne mode → constructeur,
@@ -150,7 +181,14 @@ fn batir(spec: &Specimen) -> Systeme {
             // étoile à disque (mode 6) s'y affichait en étoile ordinaire,
             // sans que rien ne le dise. Troisième occurrence du même défaut
             // sur ce chantier.
-            sys.ajouter(Box::new(crate::stellaire::Variante::de_mode(*couronne).appliquer(s)));
+            let s = crate::stellaire::Variante::de_mode(*couronne).appliquer(s);
+            // Régime impose (trous noirs du defile) : sinon il reste derive
+            // de la graine, comme en jeu.
+            let s = match regime {
+                Some(r) => s.avec_regime(*r),
+                None => s,
+            };
+            sys.ajouter(Box::new(s));
         }
         Specimen::Planete { rayon, app } => {
             sys.ajouter(Box::new(Planete::new(Vec3::ZERO, Vec3::ZERO, *rayon, 1.0, **app, Vec::new())));
@@ -288,14 +326,21 @@ mod tests {
     #[test]
     fn le_defile_couvre_tous_les_types_particuliers() {
         let types = types_particuliers();
-        let noms: Vec<&str> = types.iter().map(|g| g.4).collect();
+        let noms: Vec<&str> = types.iter().map(|(g, _)| g.4).collect();
         assert!(noms.contains(&"Trou noir"), "le trou noir n'est pas au défilé : {noms:?}");
         assert!(noms.contains(&"T Tauri (jeune)"), "la jeune étoile à disque manque");
-        // Aucun doublon : chaque pression de la touche montre autre chose.
-        for (i, n) in noms.iter().enumerate() {
-            assert!(!noms[..i].contains(n), "{n} apparaît deux fois");
+        // Aucun doublon — **sauf le trou noir**, qui compte pour trois : son
+        // régime se dérive de la graine, donc le défilé est le seul endroit
+        // où l'on puisse les demander tous les trois.
+        for (i, (g, r)) in types.iter().enumerate() {
+            if r.is_some() {
+                continue;
+            }
+            assert!(!noms[..i].contains(&g.4), "{} apparaît deux fois", g.4);
         }
-        assert!(types.len() >= 6, "seulement {} types au défilé", types.len());
+        let regimes = types.iter().filter(|(_, r)| r.is_some()).count();
+        assert_eq!(regimes, 3, "le trou noir doit compter pour ses trois régimes");
+        assert!(types.len() >= 6, "seulement {} entrées au défilé", types.len());
     }
 
     /// **Le défilé boucle**, et ne sort jamais de la liste : on peut appuyer
@@ -365,14 +410,22 @@ mod tests {
     /// ne sort que dans ~1 % des tirages.
     #[test]
     fn le_trou_noir_vient_en_premier() {
-        match Specimen::particulier(0) {
-            Specimen::Soleil { nom, couronne, .. } => {
-                assert_eq!(nom, "Trou noir");
-                // Et il porte bien son mode, sans quoi `batir` en ferait une
-                // étoile ordinaire — le défaut que cette vue avait.
-                assert_eq!(couronne, 5.0);
+        // Les trois régimes ouvrent le défilé, dans l'ordre.
+        for (rang, attendu) in [(0, "endormi"), (1, "actif"), (2, "vorace")] {
+            match Specimen::particulier(rang) {
+                Specimen::Soleil { nom, couronne, regime, .. } => {
+                    assert!(nom.starts_with("Trou noir"), "rang {rang} : {nom}");
+                    assert!(nom.contains(attendu), "rang {rang} : attendu {attendu}, eu {nom}");
+                    // Et il porte bien son mode, sans quoi `batir` en ferait
+                    // une étoile ordinaire — le défaut que cette vue avait.
+                    assert_eq!(couronne, 5.0);
+                    // ⚠️ Et son régime est **imposé** : sans ça il se
+                    // dériverait de la graine, et les trois cellules
+                    // montreraient la même chose au hasard.
+                    assert!(regime.is_some(), "rang {rang} : régime laissé au hasard");
+                }
+                Specimen::Planete { .. } => panic!("rang {rang} : ce n'est pas une étoile"),
             }
-            Specimen::Planete { .. } => panic!("le premier du défilé n'est pas une étoile"),
         }
     }
 }

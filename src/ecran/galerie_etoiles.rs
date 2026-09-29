@@ -1,6 +1,7 @@
 use crate::astre::{Astre, CameraInfo};
 use crate::etoile::couleur_corps_noir;
 use crate::soleil::Soleil;
+use crate::disque::Accretion;
 use crate::stellaire::Variante;
 use macroquad::prelude::*;
 
@@ -40,8 +41,37 @@ fn catalogue() -> Vec<(&'static str, f32, f32, f32, f32)> {
         ("Etoile a neutrons", 0.42, 40000.0, 0.2, 1.0), // jets fixes
         ("Pulsar", 0.42, 40000.0, 0.25, 3.0),           // jets qui tournent (phare)
         ("Magnetar", 0.45, 40000.0, 0.3, 4.0), // arcs magnétiques
-        ("Trou noir", 0.62, 6500.0, 0.4, 5.0), // horizon + disque d'accretion (stylise)
     ]
+}
+
+/// **Les trois régimes du trou noir**, exposés côte à côte.
+///
+/// En jeu le régime se **dérive de la graine** : on tombe sur l'un des trois,
+/// et il faudrait régénérer jusqu'à voir les autres. Une planche-contact doit
+/// les montrer ensemble — c'est sa raison d'être.
+///
+/// ⚠️ Le gabarit (rayon, température, luminosité) vient de
+/// `etoile::particuliere`, **pas d'une copie** : la galerie montre ce que le
+/// jeu produit, ou elle ne sert à rien.
+fn regimes_trou_noir() -> [Accretion; 3] {
+    [Accretion::endormie(), Accretion::chaude(), Accretion::vorace()]
+}
+
+/// Les cellules correspondantes. ⚠️ Séparée de [`regimes_trou_noir`] parce
+/// qu'elle construit des `Soleil`, ce qui exige le contexte graphique : une
+/// fonction qui le réclame ne se teste pas. La **décision** — quels régimes,
+/// sous quels noms — reste donc vérifiable.
+fn trous_noirs() -> Vec<(String, Soleil)> {
+    let (tmin, tmax, rayon, lumi, _, mode) = crate::etoile::particuliere(0.0);
+    let couleur = couleur_corps_noir((tmin + tmax) * 0.5);
+    regimes_trou_noir()
+        .into_iter()
+        .map(|regime| {
+            let s =
+                Variante::de_mode(mode).appliquer(Soleil::new(Vec3::ZERO, rayon, couleur, lumi));
+            (format!("Trou noir - {}", regime.nom()), s.avec_regime(regime))
+        })
+        .collect()
 }
 
 /// Galerie « planche-contact » des types d'étoiles (visualisation/calibration).
@@ -62,6 +92,7 @@ impl GalerieEtoiles {
                 // du catalogue restait au mode 1, donc sans disque.
                 (nom.to_string(), Variante::de_mode(mode).appliquer(s))
             })
+            .chain(trous_noirs())
             .collect();
         Self { cellules, scroll: 0.0 }
     }
@@ -181,12 +212,36 @@ mod tests {
         }
     }
 
-    /// **Et les types qui portent un disque sont bien au catalogue** : c'est
-    /// la seule vue où l'on puisse les juger.
+    /// **Et les types qui portent un disque sont bien exposés** : c'est la
+    /// seule vue où l'on puisse les juger côte à côte.
     #[test]
     fn les_porteurs_de_disque_sont_exposes() {
         let modes: Vec<f32> = catalogue().into_iter().map(|e| e.4).collect();
-        assert!(modes.contains(&5.0), "aucun trou noir en galerie");
         assert!(modes.contains(&6.0), "aucune jeune étoile à disque en galerie");
+        // ⚠️ Le trou noir a quitté le catalogue pour `trous_noirs()`, qui en
+        // montre les **trois régimes**. En jeu celui-ci se dérive de la
+        // graine : on tombe sur l'un des trois, et il faudrait régénérer
+        // pour voir les autres — une planche-contact doit les montrer
+        // ensemble.
+        assert!(!modes.contains(&5.0), "le trou noir est resté au catalogue : il y sera en double");
+    }
+
+    /// **Les trois régimes sont exposés, et ce sont bien trois régimes
+    /// différents.** Trois cellules identiques ne compareraient rien.
+    #[test]
+    fn les_trois_regimes_du_trou_noir_sont_exposes() {
+        let tn = regimes_trou_noir();
+        // Chacun se nomme, et les trois noms diffèrent : trois cellules
+        // identiques ne compareraient rien.
+        let noms: Vec<&str> = tn.iter().map(|r| r.nom()).collect();
+        for (i, n) in noms.iter().enumerate() {
+            assert!(!noms[..i].contains(n), "deux cellules montrent le régime « {n} »");
+        }
+        let eclats: Vec<f32> = tn.iter().map(|r| r.eclat).collect();
+        for (i, e) in eclats.iter().enumerate() {
+            assert!(!eclats[..i].contains(e), "deux cellules ont le même éclat");
+        }
+        // Et le vorace, seul, traîne sa ceinture.
+        assert_eq!(tn.iter().filter(|r| r.ceinture.is_some()).count(), 1);
     }
 }

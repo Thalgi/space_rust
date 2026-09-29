@@ -244,8 +244,23 @@ impl Soleil {
         // Le **régime** — endormi, actif ou vorace — se dérive de la graine :
         // deux trous noirs du même système ne sont pas au même stade de leur
         // repas. Jamais tiré, sous peine de décaler tout ce qui suit.
-        let (r, masse) = (self.base.rayon, self.base.masse);
         let a = Accretion::regime(self.graine);
+        self.avec_regime(a)
+    }
+
+    /// **Impose le régime** d'un trou noir au lieu de le dériver de sa
+    /// graine.
+    ///
+    /// Pour les vues de travail — galerie et vue isolée — où l'on veut voir
+    /// les trois côte à côte plutôt que de régénérer jusqu'à tomber sur
+    /// celui qu'on cherche. En jeu, le régime reste **dérivé** : c'est une
+    /// propriété de l'astre, pas un choix.
+    ///
+    /// ⚠️ Remplace les disques existants : sans ça, appeler deux régimes de
+    /// suite les empilerait, et en additif l'éclat doublerait.
+    pub fn avec_regime(mut self, a: Accretion) -> Self {
+        self.disques.clear();
+        let (r, masse) = (self.base.rayon, self.base.masse);
         let mut s = self.avec_disque(DisqueConfig::accretion_reglee(
             r * a.bornes.0,
             r * a.bornes.1,
