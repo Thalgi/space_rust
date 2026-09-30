@@ -107,9 +107,27 @@ pub(crate) fn ordinaire(p: f32, q: f32) -> Gabarit {
         // La température descend à 450 K pour que la classe **Y** soit
         // atteignable (`genese::preset_naine_brune`).
         (450.0, 2400.0, entre(1.7, 2.1), entre(0.15, 0.30), "Naine brune", 0.0)
+    } else if p < 0.29 {
+        // **Céphéide** (lot 7) : supergéante jaune. Se distingue d'une
+        // supergéante rouge par sa température, et de tout le reste par sa
+        // **pulsation** — voir [`pulsation`].
+        (5000.0, 6500.0, entre(5.0, 7.5), entre(6.0, 11.0), "Cepheide", 0.0)
+    } else if p < 0.31 {
+        // **Mira** (lot 7) : géante rouge de la branche asymptotique. ⚠️ Elle
+        // recouvre la géante rouge en teinte comme en taille, et c'est
+        // **assumé** : ce qui en fait un type est sa pulsation, la plus ample
+        // du catalogue. Le §3 bis l'autorise — une représentation distincte à
+        // l'écran, pas forcément une teinte distincte.
+        (2500.0, 3200.0, entre(6.0, 9.0), entre(4.0, 8.0), "Mira", 0.0)
+    } else if p < 0.33 {
+        // **Naine blanche pulsante (ZZ Ceti)** (lot 7). ⚠️ Gabarit
+        // **identique** à celui d'une naine blanche : même température, même
+        // taille, même éclat. Sa pulsation est sa seule différence, et c'est
+        // exactement ce que la fiche du §3 annonçait.
+        (11000.0, 12500.0, entre(0.5, 0.8), entre(0.15, 0.4), "Naine blanche pulsante (ZZ Ceti)", 0.0)
     } else {
         // Séquence principale (poids biaisés pour la variété).
-        let r = (p - 0.27) / 0.73;
+        let r = (p - 0.33) / 0.67;
         if r < 0.36 {
             (2400.0, 3700.0, 1.3, 0.4, "M (naine rouge)", 0.0)
         } else if r < 0.58 {
@@ -220,6 +238,36 @@ pub fn zone_habitable(luminosite: f32) -> (f32, f32) {
 pub fn activite_type(rayon: f32, luminosite: f32) -> f32 {
     let gabarit = rayon.max(0.01) * luminosite.max(0.0).sqrt();
     (1.6 / (1.0 + gabarit)).clamp(0.15, 1.0)
+}
+
+/// **Pulsation d'un type** : `(amplitude relative du rayon, période en
+/// secondes)`. `(0, 0)` pour tout ce qui ne pulse pas — c'est-à-dire presque
+/// tout.
+///
+/// Une seule pièce couvre les **trois** types variables, parce qu'ils ne
+/// diffèrent que par ces deux nombres. La luminosité n'a pas de réglage à
+/// elle : à température constante `L ∝ R²`, donc elle suit le carré du facteur.
+/// C'est la physique qui lie les deux, pas une commodité — et ça évite deux
+/// réglages pour un seul fait.
+///
+/// ⚠️ **Réponse à la question laissée ouverte au §9** de la conception
+/// (« jusqu'où va la pulsation ? »). Les **amplitudes de rayon sont réelles** :
+/// δ Cephei varie d'environ 10 %, Mira d'environ 20 %. Seule ZZ Ceti est
+/// exagérée — son rayon ne bouge en vrai que de quelques millièmes, et sa
+/// variation de 0,1 à 3 % de brillance serait invisible ici ; c'est de la
+/// triche assumée, du même ordre que `PX_MIN`.
+///
+/// Les **périodes**, elles, sont toutes compressées et ne peuvent pas ne pas
+/// l'être : 5,4 jours pour δ Cephei, 332 jours pour Mira, quelques minutes pour
+/// ZZ Ceti. Elles sont calées sur l'horloge du spectacle, celle où une tache vit
+/// huit à seize secondes. Le garde-fou est qu'aucune ne descende au clignotement.
+pub fn pulsation(nom: &str) -> (f32, f32) {
+    match nom {
+        "Cepheide" => (0.10, 7.0),
+        "Mira" => (0.20, 16.0),
+        "Naine blanche pulsante (ZZ Ceti)" => (0.04, 1.4),
+        _ => (0.0, 0.0),
+    }
 }
 
 /// **Naine brune ?**, d'après le seul nom du type.
@@ -373,13 +421,28 @@ mod tests_ordinaires {
     use super::*;
 
     /// Les noms que la table des ordinaires doit savoir produire.
-    const ATTENDUS: [&str; 13] = [
+    /// Les classes de la **séquence principale**, séparées du reste : c'est
+    /// d'elles que le tirage doit rester majoritairement fait.
+    const SEQUENCE: [&str; 7] = [
+        "M (naine rouge)",
+        "K (orange)",
+        "G (jaune)",
+        "F (blanc-jaune)",
+        "A (blanche)",
+        "B (bleu-blanc)",
+        "O (bleue)",
+    ];
+
+    const ATTENDUS: [&str; 16] = [
         "Geante rouge",
         "Naine blanche",
         "Supergeante rouge",
         "Sous-naine (sdB)",
         "Etoile carbonee (C)",
         "Naine brune",
+        "Cepheide",
+        "Mira",
+        "Naine blanche pulsante (ZZ Ceti)",
         "M (naine rouge)",
         "K (orange)",
         "G (jaune)",
@@ -424,9 +487,15 @@ mod tests_ordinaires {
             assert!(p > 0.01, "{nom} ne tient que {p} du tirage : introuvable");
             assert!(p < 0.10, "{nom} en tient {p} : ce n'est plus une variété, c'est la norme");
         }
-        // La séquence principale reste l'ordinaire de l'ordinaire.
-        let sp: f32 = ["M (naine rouge)", "K (orange)", "G (jaune)"].iter().map(|n| part(n)).sum();
-        assert!(sp > 0.5, "la séquence principale ne tient plus que {sp} du tirage");
+        // **La séquence principale reste l'ordinaire de l'ordinaire.**
+        //
+        // ⚠️ Mesurée sur ses **sept** classes, et non trois. Elle n'en comptait
+        // que M, K et G : à chaque type exotique ajouté la somme baissait
+        // mécaniquement, et le test s'est mis au rouge au lot 7 sans que la
+        // séquence ait cessé d'être majoritaire. Un seuil qu'un ajout légitime
+        // fait tomber ne garde pas ce qu'il prétend garder.
+        let sp: f32 = SEQUENCE.iter().map(|n| part(n)).sum();
+        assert!(sp > 0.6, "la séquence principale ne tient plus que {sp} du tirage");
     }
 
     /// **`q` fait vraiment varier les types à plage**, sinon deux géantes
@@ -491,6 +560,72 @@ mod tests_ordinaires {
         let (_, _, r_geante, l_geante, _, _) = ordinaire(0.04, 1.0);
         assert!(r_sup > r_geante * 1.2, "supergéante {r_sup} contre géante {r_geante}");
         assert!(l_sup > l_geante * 1.2, "éclat {l_sup} contre {l_geante}");
+    }
+
+    /// **Les trois types variables pulsent, et eux seuls.**
+    ///
+    /// ⚠️ C'est leur **seule** raison d'être pour deux d'entre eux : Mira
+    /// recouvre la géante rouge en teinte comme en taille, et ZZ Ceti a le
+    /// gabarit d'une naine blanche au chiffre près. Une pulsation nulle en
+    /// ferait donc des doublons silencieux — des étiquettes, ce que le §3 bis
+    /// interdit. Le test compare chacun à son jumeau non pulsant.
+    #[test]
+    fn les_trois_variables_pulsent_et_elles_seules() {
+        for nom in ["Cepheide", "Mira", "Naine blanche pulsante (ZZ Ceti)"] {
+            let (amp, periode) = pulsation(nom);
+            assert!(amp > 0.0, "{nom} ne pulse pas : c'est un doublon");
+            assert!(periode > 0.0, "{nom} : période nulle, la pulsation serait inerte");
+            // ⚠️ **Pas épileptique** (§8 de la conception). Une seconde de
+            // période est déjà un battement soutenu ; en deçà on quitte la
+            // pulsation pour le clignotement.
+            assert!(periode >= 1.0, "{nom} : {periode} s, c'est un clignotement");
+            // ⚠️ Et l'amplitude reste sous la marge orbitale. `premiere_orbite`
+            // pose la planète interne à 1,5 rayon : au-delà de +50 %, une étoile
+            // gonflée l'avalerait.
+            assert!(amp < 0.5, "{nom} : {amp} d'amplitude, elle toucherait sa planète interne");
+        }
+        // Leurs jumeaux, eux, ne pulsent pas — sinon il n'y aurait plus de
+        // jumeau, et la comparaison ne dirait rien.
+        for nom in ["Geante rouge", "Naine blanche", "Supergeante rouge", "G (jaune)"] {
+            assert_eq!(pulsation(nom), (0.0, 0.0), "{nom} s'est mise à pulser");
+        }
+        // Mira est la plus ample, ZZ Ceti la plus rapide : c'est ce qui les
+        // distingue l'une de l'autre.
+        assert!(pulsation("Mira").0 > pulsation("Cepheide").0);
+        assert!(pulsation("Naine blanche pulsante (ZZ Ceti)").1 < pulsation("Cepheide").1);
+    }
+
+    /// **ZZ Ceti et la naine blanche ont le même gabarit** — et c'est voulu.
+    ///
+    /// Si un jour elles se distinguaient autrement que par la pulsation, ce
+    /// commentaire serait faux et ce test doit le dire : on croirait garder une
+    /// équivalence qui n'existe plus.
+    #[test]
+    fn zz_ceti_ne_se_distingue_d_une_naine_blanche_que_par_sa_pulsation() {
+        let trouve = |cible: &str| {
+            (0..3000)
+                .map(|k| ordinaire(k as f32 / 3000.0, 0.5))
+                .find(|g| g.4 == cible)
+                .expect("type absent du tirage")
+        };
+        let (bmin, bmax, br, bl, ..) = trouve("Naine blanche");
+        let (zmin, zmax, zr, zl, ..) = trouve("Naine blanche pulsante (ZZ Ceti)");
+        assert!((zr - br).abs() < 0.05, "rayons écartés : {zr} contre {br}");
+        assert!((zl - bl).abs() < 0.05, "éclats écartés : {zl} contre {bl}");
+        // ⚠️ La température, elle, n'est **pas** identique, et c'est voulu : la
+        // bande d'instabilité des DAV est à 10 500–12 500 K, soit l'extrémité
+        // **froide** de la famille. ZZ Ceti est une naine blanche qui a
+        // refroidi jusqu'à se mettre à battre — pas n'importe quelle naine
+        // blanche. Elle vit donc au bas de la plage, voire juste en dessous, et
+        // jamais dans son haut.
+        assert!(zmax <= bmax, "ZZ Ceti monte au-delà des naines blanches les plus chaudes");
+        assert!(
+            zmax < bmin + 1000.0,
+            "ZZ Ceti à {zmax} K : elle a quitté la bande d'instabilité pour le gros de la famille"
+        );
+        assert!(zmin > bmin * 0.8, "ZZ Ceti à {zmin} K : trop froide pour une naine blanche");
+        assert_eq!(pulsation("Naine blanche").0, 0.0);
+        assert!(pulsation("Naine blanche pulsante (ZZ Ceti)").0 > 0.0);
     }
 
     /// **La naine brune n'est pas une photosphère, et n'est pas un rémanent.**

@@ -78,7 +78,20 @@ impl Variante {
     /// construite en trou noir, pendant que le T Tauri du catalogue restait
     /// au mode 1 et n'avait donc aucun disque. Deux endroits qui décident du
     /// même fait finissent toujours par ne plus dire la même chose.
-    pub fn appliquer(self, s: crate::soleil::Soleil) -> crate::soleil::Soleil {
+    /// ⚠️ **Prend aussi le nom du type**, depuis le lot 7. La pulsation n'est
+    /// pas un mode de couronne — une céphéide est au mode 0, comme une G
+    /// ordinaire — donc elle n'aurait atteint aucune étoile par ce chemin, et il
+    /// aurait fallu l'écrire dans les **cinq** endroits qui configurent une
+    /// étoile d'après son type. C'est le défaut que cette fonction existe pour
+    /// éviter, et la conception l'avait annoncé : « `Variante` ignore trou noir
+    /// comme pulsation ; un exotique ajouté sans elle n'apparaîtra jamais dans
+    /// un système multiple ».
+    ///
+    /// Un nom vide — les presets écrits à la main, qui décrivent de vraies
+    /// étoiles — ne pulse pas.
+    pub fn appliquer(self, s: crate::soleil::Soleil, nom: &str) -> crate::soleil::Soleil {
+        let (amp, periode) = crate::etoile::pulsation(nom);
+        let s = s.avec_pulsation(amp, periode);
         match self {
             Variante::Normale => s,
             Variante::Jets => s.avec_jets(),
@@ -102,11 +115,34 @@ pub struct Feuille {
     /// Rémanent compact (pulsar/magnétar/étoile à neutrons) : pas de zone habitable.
     /// Distinct de `variante` car l'étoile à neutrons partage `Jets` avec T Tauri.
     pub remnant: bool,
+    /// **Nom du type**, pour ce qui s'en dérive et que le mode de couronne ne
+    /// dit pas — la pulsation, aujourd'hui.
+    ///
+    /// ⚠️ Vide par défaut, et c'est voulu : les presets écrits à la main
+    /// décrivent de **vraies** étoiles (le Soleil, Alpha du Centaure) et n'ont
+    /// aucune raison de pulser. Seul `feuille_alea`, qui tire dans le catalogue,
+    /// le renseigne.
+    pub nom: &'static str,
 }
 
 impl Feuille {
     pub fn new(rayon: f32, couleur: Vec3, luminosite: f32, masse: f32) -> Self {
-        Self { rayon, couleur, luminosite, masse, variante: Variante::Normale, remnant: false }
+        Self {
+            rayon,
+            couleur,
+            luminosite,
+            masse,
+            variante: Variante::Normale,
+            remnant: false,
+            nom: "",
+        }
+    }
+
+    /// Renseigne le **type** de la feuille : ce qui s'en dérive au-delà du mode
+    /// de couronne (la pulsation) s'appliquera alors comme en système simple.
+    pub fn du_type(mut self, nom: &'static str) -> Self {
+        self.nom = nom;
+        self
     }
     /// Fixe une variante (jets, vent, pulsar…).
     pub fn variante(mut self, v: Variante) -> Self {
@@ -250,7 +286,7 @@ mod tests_variante {
     #[test]
     fn personne_ne_retraduit_un_mode_dans_son_coin() {
         for (nom, src) in CONSOMMATEURS {
-            for builder in ["avec_pulsar(", "avec_magnetar("] {
+            for builder in ["avec_pulsar(", "avec_magnetar(", "avec_pulsation("] {
                 let recopie = src
                     .lines()
                     .filter(|l| !l.trim_start().starts_with("//"))
@@ -283,6 +319,7 @@ mod tests_variante {
             "avec_magnetar(",
             "avec_trou_noir(",
             "avec_disque_protosolaire(",
+            "avec_pulsation(",
         ] {
             assert!(ici.contains(builder), "`Variante::appliquer` ne sait pas faire `{builder}`");
         }

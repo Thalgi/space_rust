@@ -296,6 +296,61 @@ mod tests_orbite_interne {
         assert_eq!(echelle_systeme(&soleil, 0.0), echelle_systeme(&soleil, 1.0));
     }
 
+    /// **Il reste de la marge entre l'étoile gonflée et sa planète interne.**
+    ///
+    /// ⚠️ La conception avait posé l'avertissement d'avance (§8) : la garde
+    /// `l_etoile_agrandie_reste_dans_l_orbite_de_mercure` porte sur `R_SOLEIL`,
+    /// une **constante**, donc une pulsation qui gonfle le rayon dessiné passe
+    /// devant elle sans la déclencher.
+    ///
+    /// ⚠️ **Écrit d'abord comme « elle n'avale pas sa planète », ce test ne
+    /// pouvait pas échouer** — le sabotage l'a montré, en portant l'amplitude de
+    /// Mira à 0,49 sans le faire rougir. Le plancher de `premiere_orbite` garantit
+    /// 1,5 rayon, et aucun type n'a un système assez resserré pour que
+    /// l'amplitude morde : la conclusion était vraie par construction. Deuxième
+    /// quasi-tautologie de ce chantier, même famille que la première.
+    ///
+    /// Il **mesure** donc, au lieu d'affirmer : le rapport le plus serré du
+    /// catalogue entre l'orbite interne et l'étoile à son maximum. La naine brune
+    /// le tient, à environ 1,8 — lui donner une pulsation d'un quart le ferait
+    /// tomber sous le seuil, et c'est exactement le genre d'ajout qu'on veut voir
+    /// signalé.
+    #[test]
+    fn il_reste_de_la_marge_entre_l_etoile_gonflee_et_sa_planete_interne() {
+        let mut pire = (f32::INFINITY, "");
+        for k in 0..2000 {
+            let p = k as f32 / 2000.0;
+            for q in [0.0_f32, 1.0] {
+                for gab in [etoile::ordinaire(p, q), etoile::particuliere(p)] {
+                    let (_, _, rayon, lumi, nom, couronne) = gab;
+                    let (amp, _) = etoile::pulsation(nom);
+                    let profil = etoile::ProfilEtoile {
+                        temperature: 5000.0,
+                        couleur: Vec3::ONE,
+                        rayon,
+                        luminosite: lumi,
+                        nom,
+                        couronne,
+                    };
+                    // Pire cas : l'échelle la plus resserrée, le bas de la
+                    // fourchette de distance, et l'étoile au sommet de sa
+                    // pulsation.
+                    let a = premiere_orbite(0.4 * echelle_systeme(&profil, 0.0), rayon);
+                    let rapport = a * etoile::UA / (rayon * (1.0 + amp)).max(1e-6);
+                    if rapport < pire.0 {
+                        pire = (rapport, nom);
+                    }
+                }
+            }
+        }
+        assert!(
+            pire.0 > 1.5,
+            "« {} » ne laisse que {:.2} rayon entre sa surface gonflée et sa planète interne",
+            pire.1,
+            pire.0
+        );
+    }
+
     /// **Le plancher ne se déclenche que quand il sert.** Une étoile ordinaire
     /// ne doit pas voir son système repoussé : ce serait resserrer tous les
     /// autres pour un cas limite.
@@ -368,7 +423,7 @@ fn construire_simple() -> (Systeme, String) {
         // chemin des systèmes à **une seule étoile**, donc le plus fréquent du
         // jeu. Un trou noir tiré ici s'affichait en étoile ordinaire, et n'était
         // correct que dans les systèmes multiples.
-        let soleil = Variante::de_mode(profil.couronne).appliquer(soleil);
+        let soleil = Variante::de_mode(profil.couronne).appliquer(soleil, profil.nom);
         // Rémanents (pulsar/magnétar/étoile à neutrons) : pas de zone habitable.
         let soleil = if profil.est_remnant() {
             soleil.sans_zone_habitable()
@@ -495,6 +550,7 @@ fn feuille_alea() -> (Feuille, f32, f32) {
     (
         Feuille::new(p.rayon, p.couleur, p.luminosite, masse)
             .variante(var)
+            .du_type(p.nom)
             .avec_remnant(p.est_remnant()),
         masse,
         p.luminosite,
@@ -864,7 +920,7 @@ fn deployer_noeud(
         Noeud::Etoile(f) => {
             let mut s = Soleil::new(Vec3::ZERO, f.rayon, f.couleur, f.luminosite)
                 .avec_activite(etoile::activite_type(f.rayon, f.luminosite));
-            s = f.variante.appliquer(s);
+            s = f.variante.appliquer(s, f.nom);
             if f.remnant {
                 s = s.sans_zone_habitable(); // pulsar/magnétar/étoile à neutrons : pas de HZ
             }

@@ -807,6 +807,34 @@ celle-ci couvrirait tout le système et masquerait ses planètes. Laissé tel
 quel faute d'un meilleur compromis, mais `RAYON_PROTOSOLAIRE` est une
 constante isolée.
 
+## 6 octies. Le lot 7, livré (2026-09-30)
+
+**Une seule pièce pour trois types**, comme la §3 l'avait prévu :
+`etoile::pulsation(nom)` rend `(amplitude du rayon, période)`. La **luminosité
+n'a pas de réglage à elle** — `L ∝ R²` à température constante, donc elle suit le
+carré. Un seul fait, une seule source, et la variation d'éclat se voit du coup
+**à n'importe quelle échelle**.
+
+**La question du §9 est tranchée.** Les amplitudes de rayon sont **réelles** pour
+la céphéide (≈ 10 %) et Mira (≈ 20 %) ; seule **ZZ Ceti est exagérée** — son
+rayon ne bouge en vrai que de quelques millièmes. Les **périodes** sont toutes
+compressées, et ne peuvent pas ne pas l'être.
+
+⚠️ **La pulsation n'est pas un mode de couronne.** Une céphéide est au mode 0,
+donc elle n'aurait atteint aucune étoile par `Variante` — il aurait fallu
+l'écrire cinq fois. `Variante::appliquer` prend désormais le **nom** du type, et
+`Feuille` le porte. C'est la réponse à l'avertissement de la §3 : « `Variante`
+ignore trou noir comme pulsation ».
+
+⚠️ **Le piège annoncé — la cible de clic — n'en était pas un.** La pulsation passe
+par `rayon_dessine`, source unique : elle bouge la cible *avec* le disque peint.
+Et `Systeme::pick` prend 40 % de marge, donc le rayon cliquable reste toujours
+au-dessus du rayon peint. Seule la marge respire.
+
+**Deux types n'existent que par leur pulsation** : Mira recouvre la géante rouge,
+ZZ Ceti a le gabarit d'une naine blanche. Le §3 bis l'autorise — une
+représentation distincte à l'écran, pas forcément une teinte distincte.
+
 ## 7. Hors périmètre
 
 **Rendre les arches visibles au cadrage par défaut** : tranché et chiffré par

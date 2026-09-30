@@ -57,8 +57,26 @@ sdB, étoile carbonée et **naine brune** au tirage.
 n'est **pas** la quasi-étoile du lot 11 (enveloppe de milliers de masses
 solaires chauffée par accrétion, large comme une UA). Le lot 11 reste entier.
 
-**Le prochain pas** : **lot 7** — `pulse_amp`/`pulse_freq`, dérivés dans
-`rayon_dessine` **et donc** dans `Systeme::pick` (céphéide, Mira, ZZ Ceti).
+**Le lot 7 est livré**, **à juger à l'écran** : la **pulsation**, donc céphéide,
+Mira et naine blanche pulsante (ZZ Ceti) d'un coup.
+
+- `etoile::pulsation(nom) -> (amplitude, période)`. La luminosité n'a **pas** de
+  réglage à elle : `L ∝ R²` à température constante, elle suit le carré — donc
+  la variation d'éclat se voit **à toute distance**.
+- ⚠️ La pulsation **n'est pas un mode de couronne** : `Variante::appliquer` prend
+  désormais le **nom** du type en plus du mode, et `Feuille` porte ce nom. Sans
+  ça, il aurait fallu l'écrire dans cinq endroits.
+- Le piège annoncé (la cible de clic) n'en était pas un : la pulsation passe par
+  `rayon_dessine`, donc elle bouge la cible **avec** le disque peint, et les 40 %
+  de marge de `Systeme::pick` absorbent le reste.
+- **Amplitudes réelles** pour la céphéide (10 %) et Mira (20 %) ; ZZ Ceti est
+  exagérée et c'est assumé, comme `PX_MIN`. Les **périodes** sont compressées.
+
+**Le prochain pas** : **lot 8** — lentille **locale** (impostor élargi, UV déviés
+sur le fond stellaire) pour l'anneau d'Einstein en approche. ⚠️ Elle est sous
+condition au §9 de la conception ; à trancher avant de l'engager. Les lots 9 à 13
+(comètes, distinction des types, quasi-étoile, disques proto) ne dépendent pas
+d'elle.
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de

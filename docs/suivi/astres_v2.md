@@ -7,10 +7,10 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-09-30** : 870 tests verts, clippy à zéro. **Le lot 5 est clos**
-(ses sept presets de trou noir sont au tirage) et **le lot 6 est livré** :
-supergéante rouge, sous-naine sdB, étoile carbonée et **naine brune** au tirage.
-Tout est **à juger à l'écran**.
+**État au 2026-09-30** : 874 tests verts, clippy à zéro. **Le lot 5 est clos**
+(ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
+rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
+pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
 
 Deux dettes restent, petites et consignées plus bas : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de
@@ -44,7 +44,8 @@ silhouette « mince » n'a jamais été essayée.
 | **6.1 bis** — le défilé de la vue isolée couvre les ordinaires | **fait** | |
 | **6.2** — la naine brune comme **centre** d'un système | **fait**, à juger à l'écran | |
 | **6.2 bis** — ses quatre classes dans la planche des étoiles | **fait** | |
-| 7 à 13 | à faire | |
+| **7** — pulsation : céphéide, Mira, ZZ Ceti | **fait**, à juger à l'écran | |
+| 8 à 13 | à faire | |
 
 Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 `crash.log` sorti du dépôt.
@@ -52,6 +53,51 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### Le lot 7 : la pulsation (2026-09-30)
+
+**Une seule pièce pour trois types**, comme annoncé : céphéide, Mira et ZZ Ceti
+ne diffèrent que par deux nombres, `etoile::pulsation(nom) -> (amplitude,
+période)`. La **luminosité n'a pas de réglage à elle** — à température constante
+`L ∝ R²`, donc elle suit le carré du facteur. C'est la physique qui lie les deux,
+et ça évite deux réglages pour un seul fait. Conséquence heureuse : la variation
+d'éclat se voit **à n'importe quelle échelle**, là où le gonflement du disque ne
+se lit que de près.
+
+**Réponse à la question laissée ouverte au §9** (« jusqu'où va la pulsation ? ») :
+les **amplitudes de rayon sont réelles** — δ Cephei varie d'environ 10 %, Mira
+d'environ 20 %. Seule **ZZ Ceti est exagérée** : son rayon ne bouge en vrai que
+de quelques millièmes, et sa variation de brillance de 0,1 à 3 % serait invisible
+ici. Triche assumée, du même ordre que `PX_MIN`. Les **périodes**, elles, sont
+toutes compressées et ne peuvent pas ne pas l'être (5,4 jours, 332 jours,
+quelques minutes) ; le garde-fou est qu'aucune ne descende au clignotement.
+
+⚠️ **La pulsation n'est pas un mode de couronne** — une céphéide est au mode 0,
+comme une G ordinaire — donc elle n'aurait atteint aucune étoile par `Variante`.
+Il aurait fallu l'écrire dans les **cinq** endroits qui configurent une étoile
+d'après son type. `Variante::appliquer` prend donc maintenant le **nom** en plus
+du mode, et `Feuille` porte le nom de son type pour que les systèmes multiples en
+bénéficient. La conception l'avait annoncé : « `Variante` ignore trou noir comme
+pulsation ; un exotique ajouté sans elle n'apparaîtra jamais dans un système
+multiple. » Les deux gardes anti-recopie de `stellaire.rs` couvrent
+`avec_pulsation(`.
+
+**Deux types n'ont que leur pulsation pour exister**, et c'est assumé : Mira
+recouvre la géante rouge en teinte comme en taille, ZZ Ceti a le gabarit d'une
+naine blanche au chiffre près. Le §3 bis l'autorise — une représentation
+distincte à l'écran, pas forcément une teinte distincte. Une garde compare chacun
+à son jumeau non pulsant, et une autre vérifie que les jumeaux ne pulsent pas.
+
+⚠️ **Le piège annoncé — la cible de clic — n'en était pas un.** La pulsation
+entre dans `rayon_dessine`, source unique de la taille : elle bouge donc la cible
+*avec* le disque peint, jamais en désaccord avec lui. Et `Systeme::pick` prend
+40 % de marge, si bien qu'à ±20 % d'amplitude le rayon cliquable reste toujours
+au-dessus du rayon peint. Seule la marge respire. La parade était déjà là.
+
+**L'écrêtage de l'amplitude vit dans une fonction libre**, `facteur_pulsation` :
+`Soleil::new` charge des materials, donc exige le contexte graphique, et une
+borne posée au constructeur ne se testerait pas. Or c'est *elle* qui empêche un
+rayon nul — donc une étoile qui disparaît en emportant sa cible de clic.
 
 ### Le lot 6, découpé en deux (2026-09-30)
 
@@ -357,6 +403,25 @@ Deux autres pièges du red-check, rencontrés depuis :
   bien la bonne valeur. Dans l'autre sens, c'est un sabotage qui passe au
   vert sans qu'on sache pourquoi. Le contenu a raison contre le test :
   vérifier le fichier, puis remettre sa date à l'heure avant de conclure.
+
+### Un test qui affirme une conséquence garantie ne garde rien
+
+**Deux fois**, et la seconde malgré la leçon de la première :
+
+- « la première planète tombe hors de son étoile » — garanti par
+  `premiere_orbite`, donc retirer le plancher laissait le test vert ;
+- « une étoile qui pulse n'avale pas sa planète interne » — garanti par la marge
+  de 1,5 rayon, donc porter l'amplitude de Mira à 0,49 le laissait vert.
+
+Les deux fois, c'est le **sabotage** qui l'a dit, jamais la relecture : la phrase
+sonnait juste et l'assertion était vraie. La parade est la même dans les deux
+cas — **mesurer au lieu d'affirmer**. Le second calcule désormais la marge la
+plus serrée du catalogue et refuse qu'elle descende sous 1,5 ; donner une
+pulsation d'un quart à la naine brune la fait tomber à 1,46, et le test le dit au
+chiffre près.
+
+Le signe qui devrait alerter : un test dont la conclusion se déduit d'une borne
+posée quelques lignes plus haut dans le code qu'il teste.
 
 ### Mesurer désigne le coupable ; supposer coûte deux tours
 

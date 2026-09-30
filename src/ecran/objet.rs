@@ -230,7 +230,7 @@ fn lignes_debug(
 fn batir(spec: &Specimen) -> Systeme {
     let mut sys = Systeme::new();
     match spec {
-        Specimen::Soleil { rayon, couleur, lumi, couronne, regime, .. } => {
+        Specimen::Soleil { rayon, couleur, lumi, couronne, regime, nom } => {
             let s = Soleil::new(Vec3::ZERO, *rayon, *couleur, *lumi);
             // ⚠️ **La même source que la genèse et la galerie.** Cette vue
             // tenait une troisième copie de la chaîne mode → constructeur,
@@ -238,7 +238,7 @@ fn batir(spec: &Specimen) -> Systeme {
             // étoile à disque (mode 6) s'y affichait en étoile ordinaire,
             // sans que rien ne le dise. Troisième occurrence du même défaut
             // sur ce chantier.
-            let s = crate::stellaire::Variante::de_mode(*couronne).appliquer(s);
+            let s = crate::stellaire::Variante::de_mode(*couronne).appliquer(s, nom);
             // Régime impose (trous noirs du defile) : sinon il reste derive
             // de la graine, comme en jeu.
             let s = match regime {

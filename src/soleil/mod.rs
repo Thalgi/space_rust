@@ -93,6 +93,11 @@ pub struct Soleil {
     couronne_irreg: f32, // irrégularité (rayons/spicules) de la couronne
     couronne_type: f32,  // 0 = halo, 1 = jets bipolaires (pulsar), 2 = vent (WR)
     zone_hab: bool,      // false = rémanent (pulsar/magnétar/étoile à neutrons) : pas de zone habitable
+    /// **Pulsation** : `(amplitude relative du rayon, période en secondes)`.
+    /// `(0, _)` : l'étoile ne pulse pas, et c'est le cas de presque toutes.
+    /// Dérivée du type par `etoile::pulsation`, appliquée par
+    /// `Variante::appliquer`.
+    pulse: (f32, f32),
     /// **Disque de matière autour de l'étoile** — accrétion d'un trou noir,
     /// disque protosolaire d'une jeune étoile.
     ///
@@ -142,6 +147,31 @@ fn normale_disque(graine: f32) -> Vec3 {
 /// est *un* fait, il n'a droit qu'à une source (`docs/methode.md`). Et une
 /// dérivation se teste, là où un second `gen_range` exigerait le contexte
 /// graphique.
+/// **Amplitude maximale d'une pulsation**, en part du rayon.
+///
+/// ⚠️ Ce n'est pas un goût, c'est une borne de sûreté. La pulsation traverse
+/// `rayon_dessine`, source unique de la taille de l'étoile **et** de la cible de
+/// clic de `Systeme::pick` : à 1,0 le facteur toucherait zéro et l'étoile
+/// disparaîtrait un instant, en emportant sa cible. La marge orbitale de
+/// `genese::premiere_orbite` (1,5 rayon) donne la même borne par l'autre bout.
+const AMP_PULSE_MAX: f32 = 0.5;
+
+/// **Facteur de pulsation** : `1,0` sans pulsation, sinon une sinusoïde autour
+/// de 1.
+///
+/// ⚠️ **Fonction libre, et l'écrêtage est ici.** `Soleil::new` charge des
+/// materials, donc exige le contexte graphique : une borne posée au constructeur
+/// ou dans une méthode ne se testerait pas, et c'est précisément la borne qui
+/// empêche un rayon nul. Elle vit donc au seul endroit qu'aucun appelant ne peut
+/// contourner, et que les tests atteignent.
+fn facteur_pulsation(amplitude: f32, periode: f32, temps: f32) -> f32 {
+    let amp = amplitude.clamp(0.0, AMP_PULSE_MAX);
+    if amp <= 0.0 {
+        return 1.0;
+    }
+    1.0 + amp * (std::f32::consts::TAU * temps / periode.max(1e-3)).sin()
+}
+
 fn temps_initial(graine: f32) -> f32 {
     // Un demi-tour de graine : large devant les rythmes du spectacle (une
     // tache vit 8 à 16 s), sans partir si loin que les `f32` s'épaississent.
@@ -178,6 +208,7 @@ impl Soleil {
             couronne_irreg: ((luminosite - 0.4) / 3.6).clamp(0.0, 1.0),
             couronne_type: 0.0,
             zone_hab: true,
+            pulse: (0.0, 1.0),
             disques: Vec::new(),
             mats,
             mat_plasma,
@@ -215,6 +246,21 @@ impl Soleil {
     /// facteur que celui-ci module au lieu d'écraser.
     pub fn avec_activite(mut self, activite: f32) -> Self {
         self.activite = activite.clamp(0.0, 1.0);
+        self
+    }
+
+    /// **Fait pulser l'étoile** : `amplitude` relative du rayon, `periode` en
+    /// secondes. Dérivée du type par `etoile::pulsation`, posée par
+    /// `Variante::appliquer` — l'unique endroit qui configure une étoile
+    /// d'après son type.
+    ///
+    /// ⚠️ Une amplitude nulle ou une période nulle laissent l'étoile immobile :
+    /// la valeur par défaut est donc inerte, et le cas « ne pulse pas » n'a
+    /// besoin d'aucun bras.
+    pub fn avec_pulsation(mut self, amplitude: f32, periode: f32) -> Self {
+        // Rangée telle quelle : c'est [`facteur_pulsation`] qui écrête, parce
+        // que lui se teste.
+        self.pulse = (amplitude, periode);
         self
     }
 
@@ -324,6 +370,32 @@ impl Soleil {
     fn eclat(&self) -> f32 {
         1.0 + 0.6 * self.flares.iter().map(|f| f.intensite).sum::<f32>().min(1.0)
     }
+
+    /// **Facteur de pulsation courant** : `1,0` pour une étoile qui ne pulse
+    /// pas, sinon une sinusoïde autour de 1.
+    ///
+    /// Suit `self.temps`, la même horloge de spectacle que les taches, les
+    /// boucles et l'éclat — et **décalée d'une étoile à l'autre** par
+    /// [`temps_initial`], si bien que deux céphéides d'un binaire ne battent pas
+    /// à l'unisson. C'est exactement la raison pour laquelle ce décalage existe.
+    ///
+    /// ⚠️ Reste **strictement positif** : l'amplitude est bornée à 0,5 par
+    /// [`Self::avec_pulsation`], donc le facteur ne descend jamais sous 0,5. Un
+    /// rayon nul ou négatif ferait disparaître l'étoile et renverrait une cible
+    /// de clic vide.
+    pub(super) fn facteur_pulse(&self) -> f32 {
+        facteur_pulsation(self.pulse.0, self.pulse.1, self.temps)
+    }
+
+    /// **Part de la pulsation dans l'éclat** : le carré du facteur de rayon.
+    ///
+    /// À température constante, `L = 4πR²σT⁴` donne `L ∝ R²`. Un seul réglage
+    /// gouverne donc les deux — et c'est la raison pour laquelle
+    /// `etoile::pulsation` n'a pas d'amplitude de luminosité à part.
+    fn pulse_lumiere(&self) -> f32 {
+        let f = self.facteur_pulse();
+        f * f
+    }
 }
 
 /// Combine le réglage global (sliders UI, `Systeme::reglages_etoile`) et
@@ -368,7 +440,18 @@ impl Astre for Soleil {
     /// l'occultation, `Systeme::pick` sa cible de clic.
     fn rayon_dessine(&self, cam_pos: Vec3) -> f32 {
         crate::impostor::rayon_plancher(
-            self.base.rayon,
+            // ⚠️ **La pulsation entre ici, et nulle part ailleurs.** C'est la
+            // source unique de la taille de l'étoile : le quad, les boucles,
+            // l'occultation et la **cible de clic** de `Systeme::pick` en
+            // dérivent tous. La conception annonçait le piège — une pulsation
+            // du rayon bouge la cible de clic — et la parade est qu'elle la
+            // bouge *avec* le disque dessiné, jamais en désaccord avec lui.
+            //
+            // `Systeme::pick` prend en plus 40 % de marge : à ±20 % d'amplitude,
+            // le rayon cliquable reste toujours au-dessus du rayon peint. Un
+            // clic posé sur le disque visible atteint donc l'étoile à tout
+            // instant de son cycle, et seule la marge respire.
+            self.base.rayon * self.facteur_pulse(),
             (cam_pos - self.base.position).length(),
             crate::impostor::viewport_h(),
             PX_MIN,
@@ -384,11 +467,16 @@ impl Astre for Soleil {
         self.puissance = moduler(puissance, self.activite);
         self.alea = alea;
     }
+    /// ⚠️ **La pulsation y passe au carré.** À température constante
+    /// `L ∝ R²` : c'est la physique qui lie les deux, et c'est ce qui évite un
+    /// second réglage pour un seul fait. Conséquence heureuse — la variation
+    /// d'éclat se voit **à n'importe quelle échelle**, là où le gonflement du
+    /// disque ne se lit que de près.
     fn lumiere(&self) -> Option<Vec3> {
-        Some(self.couleur * self.luminosite * self.eclat())
+        Some(self.couleur * self.luminosite * self.eclat() * self.pulse_lumiere())
     }
     fn luminosite(&self) -> Option<f32> {
-        Some(self.luminosite * self.eclat())
+        Some(self.luminosite * self.eclat() * self.pulse_lumiere())
     }
     /// Une étoile se résume à sa couleur de corps noir : c'est déjà ce qui la
     /// distingue à l'œil (une naine rouge d'une géante bleue).
@@ -429,6 +517,43 @@ mod tests {
         assert!((dessine - PX_MIN).abs() < 1e-3, "{dessine} px au lieu de {PX_MIN}");
     }
 
+    /// **La pulsation oscille autour de 1, et ne s'annule jamais.**
+    ///
+    /// ⚠️ Elle traverse `rayon_dessine`, la source unique de la taille de
+    /// l'étoile — donc aussi la **cible de clic** de `Systeme::pick`. Un facteur
+    /// nul ou négatif ferait disparaître l'étoile et rendrait une cible vide ;
+    /// c'est pour ça que l'amplitude est bornée à 0,5 et non laissée libre.
+    ///
+    /// L'éclat, lui, suit le **carré** : `L ∝ R²` à température constante.
+    #[test]
+    fn la_pulsation_oscille_autour_de_un_sans_jamais_s_annuler() {
+        use super::{facteur_pulsation, AMP_PULSE_MAX};
+        // Sans pulsation, exactement 1 : le cas par défaut doit être **inerte**,
+        // sans quoi toutes les étoiles du jeu respireraient.
+        for periode in [0.0_f32, 1.0, 9.0] {
+            assert_eq!(facteur_pulsation(0.0, periode, 3.7), 1.0);
+        }
+        // ⚠️ Amplitude demandée bien au-delà de la borne : elle doit être
+        // **écrêtée**, pas obéie. C'est la seule protection contre un rayon nul.
+        for amp in [0.1_f32, 0.2, 9.0] {
+            let (mut bas, mut haut) = (f32::INFINITY, f32::NEG_INFINITY);
+            for k in 0..600 {
+                let f = facteur_pulsation(amp, 4.0, k as f32 * 0.02);
+                assert!(f > 0.0, "amp {amp} : facteur {f}, l'étoile disparaît avec sa cible de clic");
+                bas = bas.min(f);
+                haut = haut.max(f);
+            }
+            // Le cycle passe des deux côtés de 1 : ce qui ne ferait que gonfler
+            // serait un gonflement, pas une pulsation.
+            assert!(bas < 0.999 && haut > 1.001, "amp {amp} : cycle incomplet, {bas} à {haut}");
+            let borne = amp.min(AMP_PULSE_MAX);
+            assert!(bas >= 1.0 - borne - 1e-4, "amp {amp} : descend à {bas}");
+            assert!(haut <= 1.0 + borne + 1e-4, "amp {amp} : monte à {haut}");
+        }
+        // Une période nulle ne divise pas par zéro.
+        assert!(facteur_pulsation(0.2, 0.0, 1.0).is_finite());
+    }
+
     /// **Et il ne mange pas l'orbite de Mercure.**
     ///
     /// ⚠️ La garde existante (`presets.rs`, « le Soleil mange l'orbite de
@@ -443,6 +568,13 @@ mod tests {
     /// ci-dessous dit ce qui resterait acceptable, pas ce qui est mesuré :
     /// au-delà de la moitié, le disque toucherait visiblement l'orbite et le
     /// système cesserait de se lire.
+    ///
+    /// ⚠️ **Elle ne couvre pas la pulsation** (lot 7), et la conception l'avait
+    /// annoncé : elle porte sur la **constante** `R_SOLEIL`, donc un facteur
+    /// appliqué au moment du dessin passe devant elle une seconde fois. Le
+    /// Soleil ne pulse pas — `etoile::pulsation("")` est nulle — mais ce n'est
+    /// pas cette garde qui l'assure. Celle qui couvre les types variables est
+    /// `genese::tests_orbite_interne::une_etoile_qui_pulse_n_avale_pas_sa_planete_interne`.
     #[test]
     fn l_etoile_agrandie_reste_dans_l_orbite_de_mercure() {
         let dessine = rayon_plancher(R_SOLEIL, DIST_DEFAUT, VH, PX_MIN);

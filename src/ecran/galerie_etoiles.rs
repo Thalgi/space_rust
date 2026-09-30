@@ -28,10 +28,17 @@ fn catalogue() -> Vec<(&'static str, f32, f32, f32, f32)> {
         ("M (naine rouge)", 0.58, 3200.0, 0.35, 0.0),
         // Naines / sous-naines.
         ("Naine blanche", 0.45, 16000.0, 0.3, 0.0),
+        // ⚠️ Posée **juste après** sa jumelle : même taille, même éclat, même
+        // teinte. Seule la pulsation les sépare, et c'est côte à côte qu'on la
+        // juge (`etoile::pulsation`).
+        ("Naine blanche pulsante (ZZ Ceti)", 0.45, 11800.0, 0.3, 0.0),
         ("Sous-naine (sdB)", 0.55, 25000.0, 0.6, 0.0),
         // Géantes / supergéantes.
         ("Geante rouge", 1.15, 3400.0, 4.5, 0.0),
+        // Idem : Mira recouvre la géante rouge, sa pulsation est sa signature.
+        ("Mira", 1.18, 2900.0, 4.0, 0.0),
         ("Supergeante rouge", 1.2, 3500.0, 6.0, 0.0),
+        ("Cepheide", 1.1, 5800.0, 3.0, 0.0),
         ("Supergeante bleue", 1.15, 21000.0, 6.0, 2.0), // vent stellaire
         // Particulières.
         ("Etoile carbonee (C)", 1.0, 2800.0, 2.5, 0.0),
@@ -62,13 +69,13 @@ fn catalogue() -> Vec<(&'static str, f32, f32, f32, f32)> {
 /// se teste donc pas. La **décision** — quels presets, sous quels noms —
 /// est gardée chez `Accretion`, qui elle se teste.
 fn trous_noirs() -> Vec<(String, Box<dyn Astre>)> {
-    let (tmin, tmax, rayon, lumi, _, mode) = crate::etoile::particuliere(0.0);
+    let (tmin, tmax, rayon, lumi, nom_tn, mode) = crate::etoile::particuliere(0.0);
     let couleur = couleur_corps_noir((tmin + tmax) * 0.5);
     Accretion::catalogue()
         .into_iter()
         .map(|regime| {
             let s =
-                Variante::de_mode(mode).appliquer(Soleil::new(Vec3::ZERO, rayon, couleur, lumi));
+                Variante::de_mode(mode).appliquer(Soleil::new(Vec3::ZERO, rayon, couleur, lumi), nom_tn);
             let s = s.avec_regime(regime);
             (format!("Trou noir - {}", regime.libelle()), Box::new(s) as Box<dyn Astre>)
         })
@@ -149,7 +156,7 @@ impl GalerieEtoiles {
                 // recopiée ici, et les deux avaient déjà divergé : le
                 // `mode > 4.5` local attrapait aussi le mode 6, et le T Tauri
                 // du catalogue restait au mode 1, donc sans disque.
-                let s = Variante::de_mode(mode).appliquer(s);
+                let s = Variante::de_mode(mode).appliquer(s, nom);
                 (nom.to_string(), Box::new(s) as Box<dyn Astre>)
             })
             .chain(trous_noirs())
@@ -318,33 +325,49 @@ mod tests {
         assert!(RAYON_BRUNE > naine_m * 0.4, "invisible dans sa case");
     }
 
-    /// **Un type dont la teinte vient d'un filtre porte le même nom des deux
-    /// côtés.**
+    /// **Un type reconnu par son nom porte le même nom des deux côtés.**
     ///
-    /// ⚠️ Le filtre moléculaire se reconnaît **au nom du type**. Que la vitrine
-    /// écrive « Etoile carbonee » là où le tirage écrit « Etoile carbonee (C) »
-    /// suffirait à ce que le jeu la peigne rouge et la galerie orange, sans
-    /// qu'aucun test ne bronche : deux `couleur_etoile` appelées avec deux
-    /// chaînes différentes. Et les noms *diffèrent* déjà ailleurs à dessein
-    /// (« G (jaune - Soleil) » contre « G (jaune) ») — on ne peut donc pas
-    /// exiger l'égalité partout, seulement là où elle décide d'un rendu.
+    /// ⚠️ Deux traits de rendu se reconnaissent **au nom du type** : le filtre
+    /// moléculaire de la carbonée, et la **pulsation** des trois variables. Que
+    /// la vitrine écrive « Etoile carbonee » là où le tirage écrit « Etoile
+    /// carbonee (C) » suffirait à ce que le jeu la peigne rouge et la galerie
+    /// orange — ou à ce que Mira batte en jeu et reste figée en vitrine — sans
+    /// qu'aucun test ne bronche : deux fonctions appelées avec deux chaînes
+    /// différentes.
+    ///
+    /// Et les noms *diffèrent* déjà ailleurs à dessein (« G (jaune - Soleil) »
+    /// contre « G (jaune) ») : on ne peut donc pas exiger l'égalité partout,
+    /// seulement là où elle décide d'un rendu.
     #[test]
-    fn les_types_a_filtre_portent_le_meme_nom_au_tirage_et_en_vitrine() {
+    fn les_types_reconnus_par_leur_nom_le_portent_des_deux_cotes() {
         let en_vitrine: Vec<&str> = catalogue().into_iter().map(|e| e.0).collect();
         let mut vus = 0;
-        for k in 0..2000 {
-            let nom = crate::etoile::ordinaire(k as f32 / 2000.0, 0.5).4;
-            if crate::etoile::filtre_teinte(nom) == Vec3::ONE {
+        for k in 0..3000 {
+            let nom = crate::etoile::ordinaire(k as f32 / 3000.0, 0.5).4;
+            let filtre = crate::etoile::filtre_teinte(nom) != Vec3::ONE;
+            let pulse = crate::etoile::pulsation(nom) != (0.0, 0.0);
+            if !filtre && !pulse {
                 continue;
             }
             vus += 1;
             assert!(
                 en_vitrine.contains(&nom),
-                "« {nom} » porte un filtre au tirage mais ne figure pas sous ce nom en galerie : \
-                 {en_vitrine:?}"
+                "« {nom} » tient un trait de son nom (filtre {filtre}, pulsation {pulse}) mais ne \
+                 figure pas sous ce nom en galerie : {en_vitrine:?}"
             );
         }
-        assert!(vus > 0, "aucun type à filtre : ce test ne garde plus rien");
+        // Un compte, et non « au moins un » : les quatre types concernés sont la
+        // carbonée et les trois variables. Si ce nombre baisse, un type a perdu
+        // son trait ; s'il monte, un nouveau est arrivé sans passer ici.
+        let distincts: std::collections::BTreeSet<&str> = (0..3000)
+            .map(|k| crate::etoile::ordinaire(k as f32 / 3000.0, 0.5).4)
+            .filter(|n| {
+                crate::etoile::filtre_teinte(n) != Vec3::ONE
+                    || crate::etoile::pulsation(n) != (0.0, 0.0)
+            })
+            .collect();
+        assert_eq!(distincts.len(), 4, "types reconnus par leur nom : {distincts:?}");
+        assert!(vus > 0);
     }
 
     /// **La planche-contact montre le produit complet** : chaque appétit sous
