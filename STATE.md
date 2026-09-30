@@ -49,6 +49,13 @@ sdB, étoile carbonée et **naine brune** au tirage.
 - La **vue isolée** (touche `3`) fait maintenant défiler aussi les types
   ordinaires. ⚠️ Elle ne juge pas les **tailles** — `dist_pour` cadre chaque
   corps pour remplir l'écran ; le rayon se lit en chiffres dans le debug.
+- La **planche des étoiles** porte les **quatre classes** de naine brune (M, L,
+  T, Y). Ses cellules sont désormais des `Box<dyn Astre>` : le type était plus
+  étroit que l'usage, la boucle n'appelant que `update` et `draw`.
+
+⚠️ Une naine brune au centre d'un système joue un **rôle** stellaire, mais ce
+n'est **pas** la quasi-étoile du lot 11 (enveloppe de milliers de masses
+solaires chauffée par accrétion, large comme une UA). Le lot 11 reste entier.
 
 **Le prochain pas** : **lot 7** — `pulse_amp`/`pulse_freq`, dérivés dans
 `rayon_dessine` **et donc** dans `Systeme::pick` (céphéide, Mira, ZZ Ceti).

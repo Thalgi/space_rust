@@ -61,7 +61,7 @@ fn catalogue() -> Vec<(&'static str, f32, f32, f32, f32)> {
 /// Elle construit des `Soleil`, ce qui exige le contexte graphique : elle ne
 /// se teste donc pas. La **décision** — quels presets, sous quels noms —
 /// est gardée chez `Accretion`, qui elle se teste.
-fn trous_noirs() -> Vec<(String, Soleil)> {
+fn trous_noirs() -> Vec<(String, Box<dyn Astre>)> {
     let (tmin, tmax, rayon, lumi, _, mode) = crate::etoile::particuliere(0.0);
     let couleur = couleur_corps_noir((tmin + tmax) * 0.5);
     Accretion::catalogue()
@@ -69,14 +69,70 @@ fn trous_noirs() -> Vec<(String, Soleil)> {
         .map(|regime| {
             let s =
                 Variante::de_mode(mode).appliquer(Soleil::new(Vec3::ZERO, rayon, couleur, lumi));
-            (format!("Trou noir - {}", regime.libelle()), s.avec_regime(regime))
+            let s = s.avec_regime(regime);
+            (format!("Trou noir - {}", regime.libelle()), Box::new(s) as Box<dyn Astre>)
+        })
+        .collect()
+}
+
+/// **Rayon de présentation d'une naine brune**, dans l'échelle de cette planche.
+///
+/// ⚠️ Ce n'est **pas** celui du tirage (≈ 2 unités). La planche a son échelle à
+/// elle — une O bleue y vaut 1,05 contre 4,0 en jeu — et y poser le rayon du jeu
+/// ferait de la naine brune le plus gros objet de la vitrine, alors qu'elle est
+/// l'un des plus petits. Elle est de la taille de Jupiter, donc en deçà d'une
+/// naine M (0,58 ici).
+const RAYON_BRUNE: f32 = 0.40;
+
+/// **Les températures des quatre classes de naine brune**, dans l'ordre du plus
+/// chaud au plus froid.
+///
+/// ⚠️ Le **nom** de chaque classe n'est pas écrit ici : il vient de
+/// `genese::preset_naine_brune`, la même source que le jeu. Une température et
+/// un nom posés côte à côte auraient pu finir par ne plus se correspondre, et la
+/// vitrine aurait montré une classe sous le nom d'une autre.
+fn temperatures_naines_brunes() -> [f32; 4] {
+    [2200.0, 1700.0, 1100.0, 600.0]
+}
+
+/// **Les quatre classes de naine brune**, exposées parmi les étoiles.
+///
+/// Sa place est ici depuis qu'elle tient le **centre** d'un système (lot 6.2) :
+/// on veut la voir à côté d'une naine M, qui est ce dont elle se rapproche le
+/// plus. Elle reste aussi au catalogue des géantes gazeuses, et c'est cohérent —
+/// c'est bien par ce rendu qu'elle est peinte.
+///
+/// Elle construit des `Planete`, ce qui exige le contexte graphique : elle ne se
+/// teste donc pas. La **décision** — quelles classes, sous quels noms — se garde
+/// par [`temperatures_naines_brunes`] et `preset_naine_brune`.
+fn naines_brunes() -> Vec<(String, Box<dyn Astre>)> {
+    temperatures_naines_brunes()
+        .into_iter()
+        .map(|temp| {
+            let nom = crate::genese::preset_naine_brune(temp);
+            let app = crate::genese::preset_gazeuse(nom);
+            let p = crate::planete::Planete::new(
+                Vec3::ZERO,
+                Vec3::ZERO,
+                RAYON_BRUNE,
+                1.0,
+                app,
+                Vec::new(),
+            );
+            (format!("{nom}  {} K", temp as i32), Box::new(p) as Box<dyn Astre>)
         })
         .collect()
 }
 
 /// Galerie « planche-contact » des types d'étoiles (visualisation/calibration).
+///
+/// ⚠️ Les cellules sont des **`Astre`**, et non des `Soleil`. Depuis le lot 6.2
+/// la naine brune tient le centre d'un système sans être une photosphère : elle
+/// se rend en géante gazeuse, donc en `Planete`. La boucle de dessin n'appelait
+/// déjà que `update` et `draw`, tous deux au trait — le type était plus étroit
+/// que l'usage.
 pub struct GalerieEtoiles {
-    cellules: Vec<(String, Soleil)>,
+    cellules: Vec<(String, Box<dyn Astre>)>,
     scroll: f32,
 }
 
@@ -93,9 +149,11 @@ impl GalerieEtoiles {
                 // recopiée ici, et les deux avaient déjà divergé : le
                 // `mode > 4.5` local attrapait aussi le mode 6, et le T Tauri
                 // du catalogue restait au mode 1, donc sans disque.
-                (nom.to_string(), Variante::de_mode(mode).appliquer(s))
+                let s = Variante::de_mode(mode).appliquer(s);
+                (nom.to_string(), Box::new(s) as Box<dyn Astre>)
             })
             .chain(trous_noirs())
+            .chain(naines_brunes())
             .collect();
         Self { cellules, scroll: 0.0 }
     }
@@ -131,8 +189,8 @@ impl GalerieEtoiles {
 
         // --- Phase 3D : dessiner chaque étoile dans son viewport. ---
         let mut labels: Vec<(String, f32, f32)> = Vec::new();
-        for (i, (nom, soleil)) in self.cellules.iter_mut().enumerate() {
-            soleil.update(dt); // animation (granulation, taches, éruptions)
+        for (i, (nom, corps)) in self.cellules.iter_mut().enumerate() {
+            corps.update(dt); // animation (granulation, taches, éruptions, bandes)
             let cell_x = (i % cols) as f32 * cw;
             let cell_y = top + (i / cols) as f32 * ch - self.scroll;
             if cell_y + render_h < top || cell_y > screen_height() {
@@ -170,7 +228,7 @@ impl GalerieEtoiles {
                 lights_pos: [vec3(0.0, 0.0, 10.0), Vec3::ZERO, Vec3::ZERO, Vec3::ZERO],
                 lights_color: [Vec3::ONE, Vec3::ZERO, Vec3::ZERO, Vec3::ZERO],
             };
-            soleil.draw(&cam);
+            corps.draw(&cam);
             labels.push((nom.clone(), cell_x, cell_y + render_h + 16.0));
         }
 
@@ -227,6 +285,37 @@ mod tests {
         // pour voir les autres — une planche-contact doit les montrer
         // ensemble.
         assert!(!modes.contains(&5.0), "le trou noir est resté au catalogue : il y sera en double");
+    }
+
+    /// **Les quatre classes de naine brune sont exposées, et toutes
+    /// différentes.**
+    ///
+    /// ⚠️ La planche ne porte que des **températures** ; les noms viennent de
+    /// `preset_naine_brune`. Deux températures tombant dans la même classe
+    /// donneraient deux cellules identiques sous le même nom, et une classe
+    /// resterait invisible — sans que rien ne le dise, puisque la vitrine
+    /// afficherait bien quatre cases.
+    #[test]
+    fn les_quatre_classes_de_naine_brune_sont_exposees() {
+        let noms: Vec<&str> =
+            temperatures_naines_brunes().iter().map(|t| crate::genese::preset_naine_brune(*t)).collect();
+        for (i, n) in noms.iter().enumerate() {
+            assert!(!noms[..i].contains(n), "deux cellules montrent « {n} » : {noms:?}");
+        }
+        // Et ce sont bien les quatre du catalogue gazeux, pas trois plus une
+        // répétition.
+        assert_eq!(noms.len(), 4);
+        // Du plus chaud au plus froid : la planche se lit comme une séquence.
+        let t = temperatures_naines_brunes();
+        for i in 1..t.len() {
+            assert!(t[i] < t[i - 1], "les classes ne descendent pas en température : {t:?}");
+        }
+        // ⚠️ Et le rayon reste celui de la **planche**, pas celui du tirage
+        // (≈ 2 unités) : sinon la naine brune y serait le plus gros objet alors
+        // qu'elle est l'un des plus petits. En deçà d'une naine M.
+        let naine_m = catalogue().into_iter().find(|e| e.0 == "M (naine rouge)").expect("naine M").1;
+        assert!(RAYON_BRUNE < naine_m, "{RAYON_BRUNE} : plus grosse qu'une naine M ({naine_m})");
+        assert!(RAYON_BRUNE > naine_m * 0.4, "invisible dans sa case");
     }
 
     /// **Un type dont la teinte vient d'un filtre porte le même nom des deux

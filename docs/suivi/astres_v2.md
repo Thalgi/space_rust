@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-09-30** : 869 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-09-30** : 870 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage) et **le lot 6 est livré** :
 supergéante rouge, sous-naine sdB, étoile carbonée et **naine brune** au tirage.
 Tout est **à juger à l'écran**.
@@ -43,6 +43,7 @@ silhouette « mince » n'a jamais été essayée.
 | **6.1** — supergéante rouge, sous-naine, carbonée au tirage | fait, à juger à l'écran | `05bef4e` |
 | **6.1 bis** — le défilé de la vue isolée couvre les ordinaires | **fait** | |
 | **6.2** — la naine brune comme **centre** d'un système | **fait**, à juger à l'écran | |
+| **6.2 bis** — ses quatre classes dans la planche des étoiles | **fait** | |
 | 7 à 13 | à faire | |
 
 Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
@@ -128,6 +129,34 @@ la garde du 6.1 la **recopiait** pour pouvoir l'éprouver.
 **Ce que le 6.2 n'apporte pas** : une naine brune ne peut pas être la
 **compagne** d'un système multiple. L'arbre stellaire ne bâtit que des `Soleil`,
 et `feuille_alea` l'écarte explicitement plutôt que de la peindre en étoile.
+
+**6.2 bis — ses quatre classes dans la planche des étoiles.** Demande de
+l'utilisateur, et la bonne conséquence du 6.2 : ce qui tient le centre d'un
+système se juge parmi les étoiles, à côté d'une naine M qui est ce dont elle se
+rapproche le plus. Elle reste aussi au catalogue des gazeuses, et c'est
+cohérent — c'est bien par ce rendu qu'elle est peinte.
+
+La planche portait `Vec<(String, Soleil)>` alors que sa boucle de dessin
+n'appelait que `update` et `draw`, **tous deux au trait `Astre`** : le type était
+plus étroit que l'usage. Passé à `Box<dyn Astre>`, rien d'autre n'a bougé.
+
+⚠️ Deux pièges d'échelle, tous deux gardés :
+
+- **le rayon de la planche n'est pas celui du jeu.** Une O bleue vaut 1,05 en
+  vitrine contre 4,0 au tirage. Y poser le rayon du tirage (≈ 2) ferait de la
+  naine brune le plus gros objet de la vitrine alors qu'elle est l'un des plus
+  petits — de la taille de Jupiter, donc en deçà d'une naine M.
+- **les noms des classes ne sont pas écrits dans la galerie.** Elle ne porte que
+  des **températures**, et `preset_naine_brune` en déduit la classe : la même
+  source que le jeu. Deux températures tombant dans la même classe donneraient
+  deux cellules identiques et en cacheraient une — sans que rien ne le dise,
+  puisque quatre cases s'afficheraient bien.
+
+**Et une précision de vocabulaire, posée par l'utilisateur** : une naine brune
+qui tient le centre d'un système joue un **rôle** stellaire, mais ce n'est pas la
+**quasi-étoile** du lot 11 — celle-ci est une enveloppe de plusieurs milliers de
+masses solaires chauffée par accrétion sur un trou noir, large comme une UA,
+contre 0,07 masse solaire ici. Le lot 11 reste entier.
 
 ### Le lot 5 est clos. Tranché le 2026-09-30 : on garde les sept
 
