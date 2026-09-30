@@ -68,6 +68,9 @@ pub struct Planete {
     // Planète « sur rails » : orbite de Kepler analytique autour de son foyer.
     orbite_kep: Option<crate::orbite::Orbite>,
     foyer: Foyer,
+    // Ce corps tient la place d'une étoile, et rayonne cette luminosité.
+    // Voir [`Planete::au_centre_du_systeme`].
+    role_central: Option<f32>,
 }
 
 impl Planete {
@@ -125,7 +128,37 @@ impl Planete {
             l_q: Vec3::Z,
             orbite_kep: None,
             foyer: Foyer::Barycentre,
+            role_central: None,
         }
+    }
+
+    /// **Ce corps tient la place d'une étoile** : il reçoit donc le plancher en
+    /// pixels, comme elle.
+    ///
+    /// ⚠️ Le plancher est une **exception**, et son exposé de motifs dit
+    /// pourquoi : seule l'étoile tombe sous le pixel au cadrage par défaut, et
+    /// relever une Terre de la même façon la rendrait plus grosse que le Soleil
+    /// tout en donnant à chaque caillou une cible de clic de huit pixels
+    /// (`soleil/mod.rs`, `le_defaut_du_trait_rend_le_rayon_physique`).
+    ///
+    /// Ce raisonnement porte sur les planètes **parmi** les planètes. Un corps
+    /// au **centre**, lui, joue le rôle de l'étoile : une naine brune de deux
+    /// unités y ferait quelques pixels, et on arriverait dans un système dont
+    /// le cœur est invisible. C'est le même fait qui justifie le plancher, pas
+    /// une entorse.
+    ///
+    /// ⚠️ **Un seul champ pour un seul fait.** Le rôle entraîne trois
+    /// conséquences — le plancher, la lumière qu'il jette sur ses mondes, et la
+    /// luminosité que lisent les fiches et la zone habitable. Portées par un
+    /// booléen plus une luminosité rangée ailleurs, elles auraient pu diverger ;
+    /// portées par `Option<f32>`, un corps qui éclaire est un corps qui a le
+    /// plancher, par construction.
+    ///
+    /// Sans elle, `luminosite_totale` valait zéro pour un tel système et chaque
+    /// fiche de planète y annonçait **0 K**.
+    pub fn au_centre_du_systeme(mut self, luminosite: f32) -> Self {
+        self.role_central = Some(luminosite);
+        self
     }
 
     /// Attache une orbite de Kepler (planète « sur rails »).
@@ -274,6 +307,36 @@ impl Astre for Planete {
     }
     fn rendu_pret(&self) -> bool {
         self.terrain_pret()
+    }
+    /// Rayon dessiné : physique par défaut, **relevé au plancher** pour un corps
+    /// qui tient la place d'une étoile ([`Planete::au_centre_du_systeme`]).
+    ///
+    /// ⚠️ La même source que le dessin et que `Systeme::pick`, comme chez
+    /// l'étoile : une cible de clic qui ne suivrait pas la taille peinte se
+    /// décalerait justement sur le corps que le plancher agrandit.
+    fn rayon_dessine(&self, cam_pos: Vec3) -> f32 {
+        if self.role_central.is_none() {
+            return self.base.rayon;
+        }
+        crate::impostor::rayon_plancher(
+            self.base.rayon,
+            (cam_pos - self.base.position).length(),
+            crate::impostor::viewport_h(),
+            crate::soleil::PX_MIN,
+        )
+    }
+    /// Luminosité rayonnée : **rien**, sauf pour un corps qui tient la place
+    /// d'une étoile ([`Planete::au_centre_du_systeme`]). C'est elle que somment
+    /// `luminosite_totale`, la zone habitable et la fiche d'astre.
+    fn luminosite(&self) -> Option<f32> {
+        self.role_central
+    }
+    /// Lumière jetée sur le système, dérivée de la **teinte réelle** du corps —
+    /// jamais d'une couleur posée à côté, sinon retoucher son apparence
+    /// n'éclairerait plus ses mondes de la même façon.
+    fn lumiere(&self) -> Option<Vec3> {
+        let l = self.role_central?;
+        Some(self.teinte().unwrap_or(Vec3::ONE) * l)
     }
     fn gazeuse(&self) -> Option<bool> {
         Some(self.app.type_p == TypePlanete::Gazeuse)

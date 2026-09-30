@@ -36,6 +36,9 @@ impl Specimen {
         let soleil = forcer.unwrap_or(gen_range(0.0_f32, 1.0) < 0.5);
         if soleil {
             let p = ProfilEtoile::aleatoire();
+            if let Some(s) = Self::enveloppe_gazeuse(p.nom, p.temperature, p.rayon) {
+                return s;
+            }
             Specimen::Soleil {
                 rayon: p.rayon,
                 couleur: p.couleur,
@@ -57,16 +60,35 @@ impl Specimen {
         }
     }
 
-    /// **Un gabarit d'étoile particulière**, pris à sa source
-    /// (`etoile::particuliere`) au lieu d'être recopié : le catalogue des
-    /// types exotiques n'a qu'un seul endroit où vivre.
+    /// **Les types du tirage qui ne sont pas des photosphères.** `None` pour
+    /// tous les autres.
+    ///
+    /// ⚠️ Aujourd'hui la naine brune, et elle seule. Le dépôt la rend en géante
+    /// gazeuse — bandes, vortex, émission thermique — et la bâtir en `Soleil`
+    /// ici lui collerait granulation et couronne. La vue de travail montrerait
+    /// alors autre chose que le jeu, sur le seul type dont c'était justement le
+    /// point. Le prédicat vit dans `etoile`, pas ici.
+    fn enveloppe_gazeuse(nom: &str, temp: f32, rayon: f32) -> Option<Self> {
+        crate::etoile::est_naine_brune(nom).then(|| Specimen::Planete {
+            rayon,
+            app: Box::new(crate::genese::preset_gazeuse(crate::genese::preset_naine_brune(temp))),
+        })
+    }
+
+    /// **Un gabarit du défilé**, pris à sa source (`etoile::particuliere` et
+    /// `etoile::ordinaire`) au lieu d'être recopié : le catalogue des types
+    /// n'a qu'un seul endroit où vivre.
     ///
     /// La température est prise au milieu de sa plage plutôt que tirée : une
     /// vue de travail doit redonner deux fois la même image.
-    fn particulier(i: usize) -> Self {
-        let types = types_particuliers();
+    fn du_defile(i: usize) -> Self {
+        let types = types_au_defile();
         let (g, regime) = types[i % types.len()];
         let (tmin, tmax, rayon, lumi, nom, couronne) = g;
+        // Les types qui ne sont pas des photosphères se rendent autrement.
+        if let Some(s) = Self::enveloppe_gazeuse(nom, (tmin + tmax) * 0.5, rayon) {
+            return s;
+        }
         // ⚠️ Le régime se nomme lui-même. Le nommer par son **rang** dans
         // la liste marchait tant que l'ordre ne bougeait pas — c'est-à-dire
         // jusqu'au premier qui l'aurait changé.
@@ -125,6 +147,34 @@ fn types_particuliers() -> Vec<(crate::etoile::Gabarit, Option<crate::disque::Ac
         } else {
             out.push((g, None));
         }
+    }
+    out
+}
+
+/// **Tout le catalogue d'étoiles au défilé** : les particulières d'abord —
+/// c'est pour elles que la touche existe — puis les **ordinaires**.
+///
+/// ⚠️ Les ordinaires manquaient, et ça se paie exactement comme pour le trou
+/// noir avant le lot 4 : les trois types du lot 6.1 ne se voyaient qu'en
+/// régénérant des systèmes jusqu'à tomber dessus, une étoile sur douze.
+/// « Laborieux », et c'est le mot que l'utilisateur avait employé.
+///
+/// ⚠️ **La vue isolée ne juge pas les tailles.** `dist_pour` cadre chaque corps
+/// pour qu'il remplisse l'écran, donc une supergéante y paraît aussi grande
+/// qu'une naine. Ce qu'on vient y juger est la **teinte** et la surface ; le
+/// rayon et la luminosité se lisent en **chiffres** dans le bloc de debug.
+/// Pour comparer des tailles, c'est un vrai système qu'il faut.
+fn types_au_defile() -> Vec<(crate::etoile::Gabarit, Option<crate::disque::Accretion>)> {
+    let mut out = types_particuliers();
+    // `q = 0.5` : le milieu de la plage de rayon et de luminosité de chaque
+    // type. Une vue de travail doit redonner deux fois la même image, donc pas
+    // de tirage — même raison que la température prise au milieu de sa plage.
+    for k in 0..400 {
+        let g = crate::etoile::ordinaire(k as f32 / 400.0, 0.5);
+        if out.iter().any(|(d, _)| d.4 == g.4) {
+            continue;
+        }
+        out.push((g, None));
     }
     out
 }
@@ -259,11 +309,12 @@ impl Objet {
         if is_key_pressed(KeyCode::Key2) {
             self.charger(Some(false));
         }
-        // Les types particuliers au défilé : trou noir en tête, puis pulsar,
-        // étoile à neutrons, magnétar, Wolf-Rayet, supergéante bleue,
-        // T Tauri et son disque.
+        // Le défilé : les particulières d'abord — trou noir et ses sept
+        // régimes en tête, puis pulsar, étoile à neutrons, magnétar,
+        // Wolf-Rayet, supergéante bleue, T Tauri et son disque — puis les
+        // ordinaires, séquence principale comprise.
         if is_key_pressed(KeyCode::Key3) {
-            self.spec = Specimen::particulier(self.particulier);
+            self.spec = Specimen::du_defile(self.particulier);
             self.particulier += 1;
             self.sys = batir(&self.spec);
             self.cam.set_dist(dist_pour(&self.spec));
@@ -357,8 +408,8 @@ mod tests {
     /// indéfiniment sur la touche.
     #[test]
     fn le_defile_boucle_sans_sortir_de_la_liste() {
-        let n = types_particuliers().len();
-        let nom_de = |i: usize| match Specimen::particulier(i) {
+        let n = types_au_defile().len();
+        let nom_de = |i: usize| match Specimen::du_defile(i) {
             Specimen::Soleil { nom, .. } => nom,
             Specimen::Planete { .. } => panic!("rang {i} : ce n'est pas une étoile"),
         };
@@ -372,8 +423,27 @@ mod tests {
         // Et il ne sort jamais de la liste, quel que soit le rang.
         for i in [0_usize, 1, n - 1, n, n + 3, 10_000] {
             assert!(!nom_de(i).is_empty(), "rang {i} sans nom");
-            assert!(Specimen::particulier(i).rayon() > 0.0, "rang {i} sans rayon");
+            assert!(Specimen::du_defile(i).rayon() > 0.0, "rang {i} sans rayon");
         }
+    }
+
+    /// **Le défilé couvre aussi les types ordinaires.**
+    ///
+    /// ⚠️ Il ne portait que les particulières, et les trois types du lot 6.1 ne
+    /// se voyaient donc qu'en régénérant des systèmes — une étoile sur douze.
+    /// C'est le même défaut que le trou noir avant le lot 4 : un rendu qui
+    /// existe et qu'on ne peut pas aller voir. Les deux tables sont balayées à
+    /// leur source, aucune liste recopiée ici.
+    #[test]
+    fn le_defile_couvre_aussi_les_types_ordinaires() {
+        let noms: Vec<&str> = types_au_defile().iter().map(|(g, _)| g.4).collect();
+        for k in 0..400 {
+            let attendu = crate::etoile::ordinaire(k as f32 / 400.0, 0.5).4;
+            assert!(noms.contains(&attendu), "« {attendu} » n'est pas au défilé : {noms:?}");
+        }
+        // Et les particulières restent en tête : c'est pour elles que la touche
+        // existe, et le trou noir doit rester au premier appui.
+        assert_eq!(noms[0], "Trou noir");
     }
 
     /// **Le bloc de debug dit ce qu'on a sous les yeux.**
@@ -384,7 +454,7 @@ mod tests {
     /// doivent être là et être justes.
     #[test]
     fn le_debug_dit_ce_qu_on_regarde() {
-        let spec = Specimen::particulier(0); // le trou noir
+        let spec = Specimen::du_defile(0); // le trou noir
         let l = lignes_debug(&spec, (0.8, 0.5), 8.0, 1.0, vec2(1920.0, 1080.0), 142.0);
         let tout = l.join("\n");
         assert!(tout.contains("Trou noir"), "le type manque : {tout}");
@@ -403,7 +473,7 @@ mod tests {
     fn l_orientation_est_lisible() {
         use std::f32::consts::{FRAC_PI_2, PI};
         let tout = lignes_debug(
-            &Specimen::particulier(0),
+            &Specimen::du_defile(0),
             (PI, FRAC_PI_2), // 180° et 90°
             10.0,
             1.0,
@@ -422,7 +492,7 @@ mod tests {
     fn le_trou_noir_vient_en_premier() {
         // Les trois régimes ouvrent le défilé, dans l'ordre.
         for (rang, attendu) in [(0, "endormi"), (1, "actif"), (2, "vorace")] {
-            match Specimen::particulier(rang) {
+            match Specimen::du_defile(rang) {
                 Specimen::Soleil { nom, couronne, regime, .. } => {
                     assert!(nom.starts_with("Trou noir"), "rang {rang} : {nom}");
                     assert!(nom.contains(attendu), "rang {rang} : attendu {attendu}, eu {nom}");

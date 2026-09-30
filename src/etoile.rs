@@ -86,9 +86,30 @@ pub(crate) fn ordinaire(p: f32, q: f32) -> Gabarit {
         // vient pas du corps noir mais de [`filtre_teinte`]. Sans ce filtre
         // elle n'est pas un type, seulement une étiquette.
         (2600.0, 3200.0, entre(4.0, 6.5), entre(2.0, 4.0), "Etoile carbonee (C)", 0.0)
+    } else if p < 0.27 {
+        // **Naine brune** (lot 6.2). ⚠️ Le seul type du tirage qui n'est **pas
+        // une photosphère** : elle ne fusionne pas l'hydrogène, et le dépôt la
+        // rend depuis toujours en **géante gazeuse** — bandes, vortex, émission
+        // thermique — ce qui est bien meilleur que ce qu'une étoile en ferait.
+        // Voir [`Self::est_naine_brune`], que chaque bâtisseur de corps doit
+        // consulter.
+        //
+        // Rayon : celui d'une géante gazeuse (~11 R⊕ compressés), soit ~2
+        // unités.
+        //
+        // ⚠️ Luminosité **volontairement non physique**. Le réel est de l'ordre
+        // de 10⁻⁵ L☉ : ses mondes seraient noirs et sa fiche annoncerait 0 K.
+        // Posée au niveau de la naine blanche (0,15–0,4), elle reste l'astre le
+        // plus terne du catalogue tout en éclairant ce qui l'entoure. L'échelle
+        // de luminosité du jeu est de toute façon compressée — une O bleue y
+        // vaut 4 pour 10⁵ dans le réel.
+        //
+        // La température descend à 450 K pour que la classe **Y** soit
+        // atteignable (`genese::preset_naine_brune`).
+        (450.0, 2400.0, entre(1.7, 2.1), entre(0.15, 0.30), "Naine brune", 0.0)
     } else {
         // Séquence principale (poids biaisés pour la variété).
-        let r = (p - 0.24) / 0.76;
+        let r = (p - 0.27) / 0.73;
         if r < 0.36 {
             (2400.0, 3700.0, 1.3, 0.4, "M (naine rouge)", 0.0)
         } else if r < 0.58 {
@@ -147,6 +168,25 @@ impl ProfilEtoile {
     pub fn est_trou_noir(&self) -> bool {
         self.nom == "Trou noir"
     }
+
+    /// **Naine brune** : le seul type du tirage qui ne produit pas un `Soleil`.
+    ///
+    /// Elle ne fusionne pas l'hydrogène, n'a pas de photosphère stellaire, et le
+    /// dépôt la rend depuis toujours en **géante gazeuse** — bandes, vortex,
+    /// émission thermique côté nuit. La rendre en étoile serait un recul.
+    ///
+    /// ⚠️ **Tout bâtisseur de corps doit consulter ce prédicat.** Trois le
+    /// font : la genèse d'un système simple (elle en fait le centre), le tirage
+    /// des feuilles d'un système multiple (il l'écarte, faute de savoir en faire
+    /// une compagne), et la vue isolée (elle en fait une planète). Un quatrième
+    /// qui l'oublierait la peindrait en étoile, et ce serait invisible au test :
+    /// c'est le défaut le plus tenace de ce chantier.
+    ///
+    /// Elle partage deux traits avec les rémanents — orbites serrées, pas de
+    /// zone habitable traçable — sans en être une : `est_remnant` reste faux.
+    pub fn est_naine_brune(&self) -> bool {
+        est_naine_brune(self.nom)
+    }
 }
 
 /// Unités du monde par UA (unité astronomique). Les distances orbitales sont
@@ -180,6 +220,16 @@ pub fn zone_habitable(luminosite: f32) -> (f32, f32) {
 pub fn activite_type(rayon: f32, luminosite: f32) -> f32 {
     let gabarit = rayon.max(0.01) * luminosite.max(0.0).sqrt();
     (1.6 / (1.0 + gabarit)).clamp(0.15, 1.0)
+}
+
+/// **Naine brune ?**, d'après le seul nom du type.
+///
+/// ⚠️ La forme dont a besoin un bâtisseur qui n'a qu'un **gabarit** sous la
+/// main, sans `ProfilEtoile` complet — la vue isolée, par exemple.
+/// [`ProfilEtoile::est_naine_brune`] passe par ici : le nom du type n'est écrit
+/// qu'une fois.
+pub fn est_naine_brune(nom: &str) -> bool {
+    nom == "Naine brune"
 }
 
 /// **Filtre d'absorption moléculaire**, en multiplicateur de la couleur de
@@ -323,12 +373,13 @@ mod tests_ordinaires {
     use super::*;
 
     /// Les noms que la table des ordinaires doit savoir produire.
-    const ATTENDUS: [&str; 12] = [
+    const ATTENDUS: [&str; 13] = [
         "Geante rouge",
         "Naine blanche",
         "Supergeante rouge",
         "Sous-naine (sdB)",
         "Etoile carbonee (C)",
+        "Naine brune",
         "M (naine rouge)",
         "K (orange)",
         "G (jaune)",
@@ -440,6 +491,46 @@ mod tests_ordinaires {
         let (_, _, r_geante, l_geante, _, _) = ordinaire(0.04, 1.0);
         assert!(r_sup > r_geante * 1.2, "supergéante {r_sup} contre géante {r_geante}");
         assert!(l_sup > l_geante * 1.2, "éclat {l_sup} contre {l_geante}");
+    }
+
+    /// **La naine brune n'est pas une photosphère, et n'est pas un rémanent.**
+    ///
+    /// ⚠️ Le prédicat est ce qui décide de **quel corps** on bâtit : trois
+    /// endroits le consultent (genèse simple, feuilles d'un multiple, vue
+    /// isolée). Elle partage deux traits avec les rémanents — orbites serrées,
+    /// pas de zone habitable traçable — et les confondre lui collerait une
+    /// couronne de pulsar.
+    #[test]
+    fn la_naine_brune_n_est_ni_une_photosphere_ni_un_remnant() {
+        let (_, _, rayon, lumi, nom, couronne) = ordinaire(0.25, 0.5);
+        assert_eq!(nom, "Naine brune");
+        assert!(est_naine_brune(nom), "le prédicat ne la reconnaît pas");
+        let p = ProfilEtoile {
+            temperature: 1200.0,
+            couleur: Vec3::ONE,
+            rayon,
+            luminosite: lumi,
+            nom,
+            couronne,
+        };
+        assert!(p.est_naine_brune());
+        assert!(!p.est_remnant(), "prise pour un rémanent : elle en prendrait la couronne");
+        assert!(!p.est_trou_noir());
+        // ⚠️ Assez lumineuse pour éclairer ses mondes. Sa valeur réelle
+        // (~10⁻⁵ L☉) les laisserait noirs et sa fiche annoncerait 0 K.
+        assert!(lumi > 0.1, "luminosité {lumi} : ses planètes seront noires");
+        // Et elle reste la plus terne du catalogue, hors rémanents.
+        for autre in ["Geante rouge", "Supergeante rouge", "Sous-naine (sdB)", "Etoile carbonee (C)"] {
+            let l = (0..2000)
+                .map(|k| ordinaire(k as f32 / 2000.0, 0.0))
+                .find(|g| g.4 == autre)
+                .expect("type absent")
+                .3;
+            assert!(lumi < l, "la naine brune ({lumi}) brille plus que {autre} ({l})");
+        }
+        // Aucun filtre de teinte : son aspect vient de son apparence gazeuse,
+        // pas d'une couleur de corps noir corrigée.
+        assert_eq!(filtre_teinte(nom), Vec3::ONE);
     }
 
     /// **La sous-naine se distingue par son éclat, et par lui seul.**

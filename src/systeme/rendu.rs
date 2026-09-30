@@ -24,10 +24,16 @@ impl Systeme {
     /// Lumière principale du système : étoile hôte, sinon lumière de secours
     /// (planète isolée). Renvoie (position, couleur).
     pub(crate) fn lumiere_principale(&self) -> (Vec3, Vec3) {
-        let etoile = self
-            .astres
-            .iter()
-            .find(|a| a.categorie() == Categorie::Etoile);
+        // ⚠️ **La source est le corps qui émet**, et non celui dont la catégorie
+        // est `Etoile`. C'était équivalent tant que seul un `Soleil` rayonnait ;
+        // une naine brune au centre d'un système (lot 6.2) est rendue en géante
+        // gazeuse, donc de catégorie `Planete`, et le système se retrouvait
+        // éclairé par la lumière de secours — ou par rien.
+        //
+        // Rien d'autre ne change : `Planete::lumiere` ne rend `Some` que pour un
+        // corps posé au centre, et l'ordre de la liste met l'astre central en
+        // tête dans les deux cas.
+        let etoile = self.astres.iter().find(|a| a.lumiere().is_some());
         let secours = self.lumiere_secours();
         let light = etoile
             .map(|a| a.corps().position)

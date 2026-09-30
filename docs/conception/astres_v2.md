@@ -734,7 +734,20 @@ essayée. Le lot suivant est le **6**.
 | # | Contenu | Ce qu'il livre |
 |---|---|---|
 | **6.1** | Supergéante rouge, sous-naine sdB, étoile carbonée au tirage ; `filtre_teinte` ; la table sortie dans `etoile::ordinaire(p, q)` ; `genese::premiere_orbite` | Le tirage cesse de se répéter, et sa table devient testable |
+| **6.1 bis** | Le défilé de la vue isolée couvre aussi les types **ordinaires** | On peut aller voir les nouveaux types sans régénérer |
 | **6.2** | La naine brune comme **centre** d'un système | Un système autour d'un objet qui n'est pas une étoile |
+
+⚠️ **Le 6.2 a fait apparaître une hypothèse que tout le dépôt portait sans le
+dire : le corps au centre d'un système est un `Soleil`.** Quatre endroits en
+dépendaient — la masse (plancher de `masse_luminosite`), le plancher en pixels
+(réservé aux `Soleil`), la source de lumière (cherchée par `Categorie::Etoile`)
+et la luminosité totale (les `Planete` n'en rendent aucune, d'où des fiches à
+0 K). Chacun a été corrigé au fait qu'il énonce vraiment, pas par un cas
+particulier « naine brune ».
+
+**Limite assumée** : une naine brune ne peut pas être la **compagne** d'un
+système multiple — l'arbre stellaire ne bâtit que des `Soleil`. `feuille_alea`
+l'écarte explicitement plutôt que de la peindre en étoile.
 
 ⚠️ **La §3 se trompe sur un point, et c'est ce qui donne son contenu au 6.1.**
 Elle donne l'étoile carbonée « distincte par la seule teinte », donc de la

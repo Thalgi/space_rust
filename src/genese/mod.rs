@@ -66,6 +66,67 @@ pub(crate) fn masse_luminosite(luminosite: f32) -> f32 {
 /// et supergéantes extrêmes — une borne qui n'a rien à dire ici.
 pub(crate) const MASSE_TROU_NOIR: f32 = 8.0 * MASSE_ETOILE;
 
+/// **Masse d'une naine brune.** ~0,07 masse solaire : sous la limite de fusion
+/// de l'hydrogène, c'est ce qui en fait une naine brune.
+///
+/// ⚠️ Comme le trou noir, elle a besoin de sa propre constante — mais par
+/// l'autre bout. `masse_luminosite` **plancher** à un quart de masse solaire
+/// pour écarter les naines pâles ; une naine brune est quatre fois plus légère
+/// encore, et s'y verrait quadruplée. Le trou noir, lui, dépasse le plafond.
+pub(crate) const MASSE_NAINE_BRUNE: f32 = 0.07 * MASSE_ETOILE;
+
+/// **Le preset de naine brune, d'après sa température.**
+///
+/// Les quatre entrées du catalogue gazeux forment une **séquence spectrale** :
+/// poussiéreuse (L), méthane (T), froide (Y). Les relier à la température plutôt
+/// que de tirer au hasard fait que la teinte du corps dit sa classe — et la
+/// lumière qu'il jette vient de la même température.
+///
+/// ⚠️ Les noms sont ceux du catalogue (`catalogue_gazeuses`) : une faute de
+/// frappe ici fait paniquer `preset_gazeuse`, et un test la rattrape.
+pub(crate) fn preset_naine_brune(temp: f32) -> &'static str {
+    if temp >= 2000.0 {
+        "Naine brune"
+    } else if temp >= 1400.0 {
+        "Naine brune L (poussiereuse)"
+    } else if temp >= 900.0 {
+        "Naine brune T (methane)"
+    } else {
+        "Naine brune Y (froide)"
+    }
+}
+
+/// **L'échelle d'un système, en UA.** `u` dans `[0 ; 1]` tient la place du
+/// tirage pour les types qui ont une plage.
+///
+/// - **étoiles normales** : `√L`, car la zone habitable se déplace en `√L`.
+///   Étalonné pour que le Soleil (L = 1) reproduise les distances historiques.
+///   Un astre lumineux étale son système, une naine le resserre.
+/// - **rémanents** : aucune zone habitable, planètes rescapées sur orbites
+///   serrées (cf. PSR B1257+12), indépendamment de leur maigre éclat.
+/// - **naine brune** : plus serré encore. Sa luminosité réelle donnerait
+///   `√L ≈ 0,003` et tout tiendrait dans son propre rayon.
+///
+/// ⚠️ **Extrait de `instancier` exprès.** La règle y vivait en clair, donc hors
+/// d'atteinte de tout test, et la garde que le lot 6.1 venait d'écrire la
+/// **recopiait** pour pouvoir l'éprouver — comparer une copie à une copie ne
+/// prouve rien (`docs/methode.md`). Elle a maintenant un seul endroit.
+pub(crate) fn echelle_systeme(profil: &ProfilEtoile, u: f32) -> f32 {
+    let entre = |a: f32, b: f32| a + (b - a) * u.clamp(0.0, 1.0);
+    if profil.est_naine_brune() {
+        // ⚠️ 0,20 et non 0,15 : à 0,15 la première planète tombait **sous** le
+        // plancher de `premiere_orbite`, donc à 1,5 rayon de la naine, et c'est
+        // la garde `aucun_type_du_tirage_n_a_besoin_du_plancher` qui l'a dit.
+        // Un système comprimé au point que le plancher le porte est un système
+        // qu'on n'a pas choisi.
+        entre(0.20, 0.32)
+    } else if profil.est_remnant() {
+        entre(0.25, 0.5)
+    } else {
+        profil.luminosite.max(0.001).sqrt()
+    }
+}
+
 /// **La première planète se pose au-delà de la surface de son étoile.**
 ///
 /// ⚠️ Rien ne l'imposait. Le garde-fou anti-collision de `instancier` ne compare
@@ -120,10 +181,11 @@ mod tests_orbite_interne {
                     [("ordinaire", etoile::ordinaire(p, q)), ("particuliere", etoile::particuliere(p))]
                 {
                     let (_, _, rayon, lumi, type_nom, couronne) = gab;
-                    // L'échelle du système, telle qu'`instancier` la calcule.
-                    // ⚠️ Via `est_remnant`, pas une liste recopiée : les
-                    // rémanents n'ont pas de zone habitable et leurs planètes
-                    // rescapées orbitent serré, indépendamment de leur éclat.
+                    // ⚠️ L'échelle vient d'`echelle_systeme`, **la vraie**, et
+                    // non d'une copie de sa règle : cette garde la recopiait, et
+                    // comparer une copie à une copie ne prouve rien
+                    // (`docs/methode.md`). `u = 0` prend le bas de chaque plage,
+                    // soit le système le plus resserré — le pire cas.
                     let profil = etoile::ProfilEtoile {
                         temperature: 5000.0,
                         couleur: Vec3::ONE,
@@ -132,9 +194,7 @@ mod tests_orbite_interne {
                         nom: type_nom,
                         couronne,
                     };
-                    let ech =
-                        if profil.est_remnant() { 0.25 } else { lumi.max(0.001).sqrt() };
-                    let brute = 0.4 * ech;
+                    let brute = 0.4 * echelle_systeme(&profil, 0.0);
                     assert_eq!(
                         premiere_orbite(brute, rayon),
                         brute,
@@ -145,6 +205,95 @@ mod tests_orbite_interne {
                 }
             }
         }
+    }
+
+    /// **Les quatre naines brunes sont atteignables, et nommées juste.**
+    ///
+    /// ⚠️ **Le nom est un lien vers le catalogue gazeux**, et `preset_gazeuse`
+    /// **panique** sur un nom inconnu : une faute de frappe ici ne se verrait
+    /// pas à la compilation, seulement au lancement du jeu, quand une graine
+    /// tombe sur une naine brune. Le test le dit tout de suite.
+    ///
+    /// Et les quatre doivent sortir : une classe qu'aucune température n'atteint
+    /// est une classe qui n'existe pas — le piège qui tenait le trou noir hors
+    /// du jeu.
+    #[test]
+    fn les_quatre_naines_brunes_sont_atteignables_et_nommees_juste() {
+        let catalogue: Vec<String> =
+            catalogue_gazeuses().into_iter().map(|(n, _)| n).collect();
+        // La plage de température que le tirage donne à une naine brune, prise à
+        // sa source.
+        let (tmin, tmax, ..) = etoile::ordinaire(0.25, 0.5);
+        let mut vus: Vec<&str> = Vec::new();
+        for k in 0..2000 {
+            let t = tmin + (tmax - tmin) * (k as f32 / 2000.0);
+            let nom = preset_naine_brune(t);
+            assert!(
+                catalogue.iter().any(|n| n == nom),
+                "« {nom} » n'est pas au catalogue gazeux : `preset_gazeuse` paniquera"
+            );
+            if !vus.contains(&nom) {
+                vus.push(nom);
+            }
+        }
+        assert_eq!(vus.len(), 4, "seulement {} classes atteintes : {vus:?}", vus.len());
+        // La séquence va du plus chaud au plus froid : la classe dit la
+        // température, sinon elle ne dit rien.
+        assert_eq!(vus[0], "Naine brune Y (froide)", "la plus froide n'ouvre pas la séquence");
+        assert_eq!(vus[3], "Naine brune", "la plus chaude ne la ferme pas");
+    }
+
+    /// **Une naine brune pèse moins que le plancher des étoiles.**
+    ///
+    /// C'est ce qui en fait une naine brune : sous la limite de fusion de
+    /// l'hydrogène. ⚠️ `masse_luminosite` plancher à un quart de masse solaire
+    /// pour écarter les naines pâles — appliquée ici, elle la **quadruplerait**,
+    /// et les périodes orbitales de tout son système seraient fausses. Symétrique
+    /// exact du trou noir, qui dépasse le plafond.
+    #[test]
+    fn une_naine_brune_pese_moins_que_le_plancher_des_etoiles() {
+        let plancher = masse_luminosite(0.0); // le plancher, par construction
+        assert!(
+            MASSE_NAINE_BRUNE < plancher,
+            "{MASSE_NAINE_BRUNE} : au-dessus du plancher {plancher}, donc pas besoin d'elle"
+        );
+        // Et elle reste une masse crédible, pas un caillou : au-dessus du dixième
+        // du plancher stellaire.
+        assert!(MASSE_NAINE_BRUNE > plancher * 0.1, "trop légère pour tenir un système");
+    }
+
+    /// **L'échelle d'un système de naine brune est la plus serrée de toutes.**
+    ///
+    /// Sa luminosité réelle donnerait `√L ≈ 0,003` et tout tiendrait dans son
+    /// propre rayon ; la valeur du jeu (~0,2) est donc posée à la main. Elle doit
+    /// rester en deçà de celle d'un rémanent, elle-même en deçà d'une étoile
+    /// ordinaire — sinon l'ordre des compacités ne veut plus rien dire.
+    #[test]
+    fn l_echelle_d_une_naine_brune_est_la_plus_serree() {
+        let profil = |nom: &'static str, lumi: f32| etoile::ProfilEtoile {
+            temperature: 3000.0,
+            couleur: Vec3::ONE,
+            rayon: 1.0,
+            luminosite: lumi,
+            nom,
+            couronne: 0.0,
+        };
+        let brune = profil("Naine brune", 0.2);
+        let remnant = profil("Pulsar", 0.25);
+        let soleil = profil("G (jaune)", 1.0);
+        for u in [0.0_f32, 0.5, 1.0] {
+            let (b, r, s) = (
+                echelle_systeme(&brune, u),
+                echelle_systeme(&remnant, u),
+                echelle_systeme(&soleil, u),
+            );
+            assert!(b < r, "u={u} : naine brune {b} pas plus serrée qu'un rémanent {r}");
+            assert!(r < s, "u={u} : rémanent {r} pas plus serré qu'une G {s}");
+        }
+        // ⚠️ Une étoile ordinaire ignore `u` : son échelle vient de sa
+        // luminosité, pas d'un tirage. Sinon deux systèmes de même étoile
+        // n'auraient pas la même étendue.
+        assert_eq!(echelle_systeme(&soleil, 0.0), echelle_systeme(&soleil, 1.0));
     }
 
     /// **Le plancher ne se déclenche que quand il sert.** Une étoile ordinaire
@@ -186,40 +335,52 @@ fn construire_simple() -> (Systeme, String) {
     // Même règle que `feuille_alea` -- c'est le MÊME fait.
     let masse_etoile = if profil.est_trou_noir() {
         MASSE_TROU_NOIR
+    } else if profil.est_naine_brune() {
+        // Sous la limite de fusion : elle passe **sous** le plancher de
+        // `masse_luminosite`, là où le trou noir dépasse son plafond.
+        MASSE_NAINE_BRUNE
     } else {
         masse_luminosite(profil.luminosite)
     };
 
     let mut sys = Systeme::new();
-    let soleil = Soleil::new(vec3(0.0, 0.0, 0.0), profil.rayon, profil.couleur, profil.luminosite)
-        // Naine active ou géante calme (§1.3) : dérivé du même gabarit que la
-        // masse ci-dessus, pas d'un second tirage pour le même fait.
-        .avec_activite(etoile::activite_type(profil.rayon, profil.luminosite));
-    // ⚠️ **QUATRIÈME copie de cette chaîne**, trouvée par le garde-fou de
-    // `stellaire.rs` — et la plus coûteuse : `construire_simple` est le
-    // chemin des systèmes à **une seule étoile**, donc le plus fréquent du
-    // jeu. Un trou noir tiré ici s'affichait en étoile ordinaire, et n'était
-    // correct que dans les systèmes multiples.
-    let soleil = Variante::de_mode(profil.couronne).appliquer(soleil);
-    // Rémanents (pulsar/magnétar/étoile à neutrons) : pas de zone habitable à tracer.
-    let soleil = if profil.est_remnant() {
-        soleil.sans_zone_habitable()
+    // ⚠️ **Une naine brune n'est pas une photosphère.** Elle ne fusionne pas
+    // l'hydrogène, et le dépôt la rend depuis toujours en géante gazeuse —
+    // bandes, vortex, émission thermique côté nuit — ce qui vaut bien mieux que
+    // ce qu'une étoile en ferait. Le centre du système est donc ici une
+    // `Planete`, et `au_centre_du_systeme` lui rend ce que le rôle implique :
+    // le plancher en pixels, et la lumière qu'elle jette sur ses mondes.
+    if profil.est_naine_brune() {
+        let app = preset_gazeuse(preset_naine_brune(profil.temperature));
+        sys.ajouter(Box::new(
+            Planete::new(Vec3::ZERO, Vec3::ZERO, profil.rayon, masse_etoile, app, Vec::new())
+                .au_centre_du_systeme(profil.luminosite),
+        ));
     } else {
-        soleil
-    };
-    sys.ajouter(Box::new(soleil));
+        let soleil =
+            Soleil::new(vec3(0.0, 0.0, 0.0), profil.rayon, profil.couleur, profil.luminosite)
+                // Naine active ou géante calme (§1.3) : dérivé du même gabarit
+                // que la masse ci-dessus, pas d'un second tirage pour le même
+                // fait.
+                .avec_activite(etoile::activite_type(profil.rayon, profil.luminosite));
+        // ⚠️ **QUATRIÈME copie de cette chaîne**, trouvée par le garde-fou de
+        // `stellaire.rs` — et la plus coûteuse : `construire_simple` est le
+        // chemin des systèmes à **une seule étoile**, donc le plus fréquent du
+        // jeu. Un trou noir tiré ici s'affichait en étoile ordinaire, et n'était
+        // correct que dans les systèmes multiples.
+        let soleil = Variante::de_mode(profil.couronne).appliquer(soleil);
+        // Rémanents (pulsar/magnétar/étoile à neutrons) : pas de zone habitable.
+        let soleil = if profil.est_remnant() {
+            soleil.sans_zone_habitable()
+        } else {
+            soleil
+        };
+        sys.ajouter(Box::new(soleil));
+    }
 
-    // Échelle du système (UA), ancrée sur le TYPE d'étoile — distances à l'échelle :
-    //  - étoiles normales : ∝ √L, car la zone habitable se déplace en √L. Étalonné
-    //    pour que le Soleil (L=1) reproduise les distances historiques (~0,4–0,8 UA).
-    //    Un astre lumineux étale donc son système, une naine le resserre.
-    //  - rémanents : aucune zone habitable ; planètes rescapées sur orbites serrées
-    //    (cf. PSR B1257+12), indépendamment de leur maigre éclat visible.
-    let ech: f32 = if profil.est_remnant() {
-        gen_range(0.25_f32, 0.5)
-    } else {
-        profil.luminosite.max(0.001).sqrt()
-    };
+    // Échelle du système (UA), ancrée sur le TYPE d'étoile. La règle vit dans
+    // `echelle_systeme` — un seul endroit, et testable.
+    let ech: f32 = echelle_systeme(&profil, gen_range(0.0_f32, 1.0));
 
     // Planètes : distances en UA suivant une loi de Titius-Bode, mises à l'échelle.
     let nb: i32 = gen_range(3, 7);
@@ -310,7 +471,25 @@ struct Plan {
 
 /// Tire une étoile-feuille aléatoire. Renvoie (feuille, masse, luminosité).
 fn feuille_alea() -> (Feuille, f32, f32) {
-    let p = ProfilEtoile::aleatoire();
+    // ⚠️ **Pas de naine brune en compagne.** Une feuille de l'arbre stellaire
+    // devient un `Soleil` (`stellaire::Feuille`), et une naine brune y serait
+    // donc peinte en étoile — granulation, couronne — exactement l'étiquette
+    // que le §3 bis interdit. Elle peut être le **centre** d'un système (lot
+    // 6.2), pas encore une compagne : ça demanderait que l'arbre sache porter
+    // un corps qui n'est pas une photosphère.
+    //
+    // Retiré ici plutôt qu'au tirage : `ordinaire` décrit ce qui **existe**, et
+    // c'est à chaque bâtisseur de dire ce qu'il sait construire. Bornée à huit
+    // essais — une boucle non bornée sur un `gen_range` est un risque qu'on ne
+    // prend pas pour un cas qui sort une fois sur trente-cinq.
+    let mut p = ProfilEtoile::aleatoire();
+    for _ in 0..8 {
+        if !p.est_naine_brune() {
+            break;
+        }
+        p = ProfilEtoile::aleatoire();
+    }
+    let p = p;
     let masse = if p.est_trou_noir() { MASSE_TROU_NOIR } else { masse_luminosite(p.luminosite) };
     let var = Variante::de_mode(p.couronne);
     (

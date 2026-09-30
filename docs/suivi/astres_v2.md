@@ -7,10 +7,10 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-09-30** : 864 tests verts, clippy à zéro. **Le lot 5 est clos**
-(ses sept presets de trou noir sont au tirage) et le **6.1 est livré** :
-supergéante rouge, sous-naine sdB et étoile carbonée au tirage. **Le 6.2 —
-la naine brune comme centre d'un système — reste à faire.**
+**État au 2026-09-30** : 869 tests verts, clippy à zéro. **Le lot 5 est clos**
+(ses sept presets de trou noir sont au tirage) et **le lot 6 est livré** :
+supergéante rouge, sous-naine sdB, étoile carbonée et **naine brune** au tirage.
+Tout est **à juger à l'écran**.
 
 Deux dettes restent, petites et consignées plus bas : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de
@@ -40,8 +40,9 @@ silhouette « mince » n'a jamais été essayée.
 | **5.4** — la cible Interstellar, à comparer | fait, jugée « très satisfaisante » | `689b8f4` |
 | **5.5** — la cible froide déclinée en appétits, plus la braise | fait | `689b8f4` |
 | **5 — clos** : les sept presets au tirage | **fait et tranché** | |
-| **6.1** — supergéante rouge, sous-naine, carbonée au tirage | **fait**, à juger à l'écran | |
-| **6.2** — la naine brune comme **centre** d'un système | à faire | |
+| **6.1** — supergéante rouge, sous-naine, carbonée au tirage | fait, à juger à l'écran | `05bef4e` |
+| **6.1 bis** — le défilé de la vue isolée couvre les ordinaires | **fait** | |
+| **6.2** — la naine brune comme **centre** d'un système | **fait**, à juger à l'écran | |
 | 7 à 13 | à faire | |
 
 Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
@@ -93,12 +94,40 @@ annoncée large comme une orbite. D'où `premiere_orbite`, posé une fois.
 
 **6.2 — la naine brune comme centre d'un système.** Pas de la donnée : elle est
 déjà **mieux rendue que la plupart des étoiles** (quatre presets gazeux soignés),
-mais côté planète. La mettre au centre demande une échelle de système propre
-(`√L` la réduirait à rien, sa luminosité est de l'ordre de 10⁻⁵), une masse
-propre comme le trou noir (`masse_luminosite` la coucherait au plancher), et
-que la lumière principale du système vienne d'un corps qui n'est pas de
-catégorie `Etoile`. Le chemin existe — `lumiere_secours`, pour la planète
-isolée — mais il n'a jamais servi de source principale.
+mais côté planète. C'est le seul type du tirage qui **n'est pas une
+photosphère** — d'où `etoile::est_naine_brune`, que **tout bâtisseur de corps
+doit consulter**. Trois le font : la genèse simple en fait le centre, le tirage
+des feuilles d'un système multiple l'écarte (l'arbre stellaire ne sait bâtir que
+des `Soleil`), et la vue isolée en fait une planète. Un quatrième qui
+l'oublierait la peindrait en étoile, sans qu'aucun test ne bronche.
+
+Quatre conséquences, chacune découverte en la posant :
+
+- **Sa masse passe sous le plancher** de `masse_luminosite` — symétrique exact
+  du trou noir, qui dépasse son plafond. Sans `MASSE_NAINE_BRUNE`, elle serait
+  quadruplée et les périodes de tout son système fausses.
+- **Le plancher en pixels lui manquait.** Il est réservé aux `Soleil`, pour une
+  raison qui porte sur les planètes *parmi* les planètes ; un corps au **centre**
+  joue le rôle de l'étoile, et sans lui on arrivait dans un système au cœur
+  invisible. D'où `Planete::au_centre_du_systeme`.
+- **`lumiere_principale` cherchait la catégorie `Etoile`**, pas un corps qui
+  émet. Corrigé : la source est celui dont `lumiere()` rend `Some`. Équivalent
+  pour tout l'existant, puisque seul un `Soleil` rayonnait.
+- **Les fiches de ses planètes annonçaient 0 K.** `luminosite_totale` somme les
+  `Astre::luminosite`, et une `Planete` n'en rendait aucune. Le rôle central
+  porte donc la luminosité — un seul champ, `Option<f32>` : un corps qui éclaire
+  est un corps qui a le plancher, par construction.
+
+⚠️ **Le lot 6.1 a rendu service au 6.2.** La garde
+`aucun_type_du_tirage_n_a_besoin_du_plancher` a signalé que la première échelle
+choisie (0,15) faisait tomber la première planète **sous** le plancher orbital —
+un système comprimé qu'on n'avait pas choisi. Relevée à 0,20. Et `echelle_systeme`
+a été extrait à cette occasion : la règle vivait en clair dans `instancier`, et
+la garde du 6.1 la **recopiait** pour pouvoir l'éprouver.
+
+**Ce que le 6.2 n'apporte pas** : une naine brune ne peut pas être la
+**compagne** d'un système multiple. L'arbre stellaire ne bâtit que des `Soleil`,
+et `feuille_alea` l'écarte explicitement plutôt que de la peindre en étoile.
 
 ### Le lot 5 est clos. Tranché le 2026-09-30 : on garde les sept
 
@@ -279,6 +308,13 @@ Deux autres pièges du red-check, rencontrés depuis :
 - **un sabotage resté en place.** La commande qui devait le défaire a échoué,
   et l'arbre a été annoncé propre à tort. C'est un test qui l'a rattrapé au
   coup suivant. **Relire avant d'annoncer**, ne pas se fier à la commande.
+- **un remplacement littéral frappe les deux côtés.** Au 6.2, deux sabotages
+  sont restés verts : le motif existait **aussi** dans le test (`for k in
+  0..400`) ou de l'autre côté de la comparaison (le nom d'un preset, écrit dans
+  la fonction *et* dans le catalogue). Remplacé partout, le test se sabotait
+  avec la production et ne prouvait plus rien. C'est la variante mécanique de
+  « saboter le test au lieu du code ». **Compter les occurrences de l'ancre et
+  refuser d'agir si elle n'est pas unique** — le script le fait désormais.
 - **vérifier que le motif a mordu, systématiquement.** Au 2026-09-30 un
   sabotage a raté parce que le motif supposait des `CRLF` là où le fichier a
   des `LF`. Le script l'a dit — il teste que le motif existe avant de
