@@ -34,8 +34,17 @@ braise). Le catalogue est leur **produit**. Le tirage pondère un appétit
 (0,35 / 0,45 / 0,20) puis **partage ce poids entre ses cibles** : ajouter une
 teinte change la variété, jamais la fréquence d'un appétit.
 
-**Le prochain pas** : **lot 6** — supergéante rouge, sous-naine, carbonée,
-naine brune au tirage.
+**Le 6.1 est livré** : supergéante rouge, sous-naine sdB et étoile carbonée au
+tirage, **à juger à l'écran**. La carbonée n'était pas de la simple donnée — en
+corps noir elle serait *moins* rouge qu'une naine M froide, d'où un **filtre
+d'absorption moléculaire** (`filtre_teinte`). La table du tirage, elle, est
+sortie dans `etoile::ordinaire(p, q)` : elle vivait dans une chaîne de `if`
+qu'aucun test ne pouvait atteindre, comme le trou noir avant le lot 4.
+
+**Le prochain pas** : **6.2 — la naine brune comme centre d'un système.** Elle
+est déjà bien rendue, mais côté planète : il lui faut une échelle de système
+propre, une masse propre, et que la lumière principale vienne d'un corps hors
+catégorie `Etoile`.
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de

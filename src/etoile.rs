@@ -46,43 +46,81 @@ pub(crate) fn particuliere(p: f32) -> Gabarit {
     }
 }
 
+/// **Quelle étoile ordinaire** — tout ce qui n'est pas une particulière — pour
+/// un tirage `p` dans `[0 ; 1]`, `q` donnant la place dans la plage de rayon et
+/// de luminosité de son type.
+///
+/// ⚠️ **Extrait d'`aleatoire` pour la même raison que [`particuliere`]** :
+/// `gen_range` exige le contexte graphique, donc le tirage ne se teste pas,
+/// mais la **table**, si. Les trois types du lot 6 auraient vécu dans la chaîne
+/// de `if` d'`aleatoire`, hors d'atteinte de tout test — c'est exactement
+/// ainsi que le trou noir est resté hors du jeu jusqu'au lot 4.
+///
+/// `q` est ce qui évite un second type de piège : une table de constantes
+/// figées ferait de toutes les géantes rouges des jumelles, et le lot 1 a été
+/// fait pour le contraire.
+pub(crate) fn ordinaire(p: f32, q: f32) -> Gabarit {
+    let entre = |a: f32, b: f32| a + (b - a) * q.clamp(0.0, 1.0);
+    if p < 0.08 {
+        // Géante rouge : énorme, froide, très lumineuse.
+        (3000.0, 3900.0, entre(4.5, 7.0), entre(3.0, 6.0), "Geante rouge", 0.0)
+    } else if p < 0.15 {
+        // Naine blanche : petite, très chaude, peu lumineuse.
+        (12000.0, 28000.0, entre(0.5, 0.8), entre(0.15, 0.4), "Naine blanche", 0.0)
+    } else if p < 0.18 {
+        // **Supergéante rouge** (lot 6). Se distingue de la géante par la
+        // taille et l'éclat, pas par la teinte : 150 K d'écart ne se voient
+        // pas. ⚠️ C'est le plus gros astre que le tirage sache produire, et
+        // `genese::premiere_orbite` en dépend pour ne pas poser un monde
+        // dedans.
+        (3200.0, 4000.0, entre(8.5, 12.0), entre(8.0, 14.0), "Supergeante rouge", 0.0)
+    } else if p < 0.21 {
+        // **Sous-naine chaude sdB** (lot 6). ⚠️ Sa couleur est celle d'une
+        // naine blanche — mesuré : (0,62 / 0,74 / 1,00) contre
+        // (0,67 / 0,78 / 1,00). Ce qui la distingue est son **éclat**, cinq à
+        // vingt fois supérieur : cœur d'hélium en fusion contre braise qui
+        // refroidit. Ça se lit au halo, et la zone habitable s'en va au loin.
+        (28000.0, 36000.0, entre(0.55, 0.75), entre(1.6, 3.2), "Sous-naine (sdB)", 0.0)
+    } else if p < 0.24 {
+        // **Étoile carbonée** (lot 6) : une géante froide dont la teinte ne
+        // vient pas du corps noir mais de [`filtre_teinte`]. Sans ce filtre
+        // elle n'est pas un type, seulement une étiquette.
+        (2600.0, 3200.0, entre(4.0, 6.5), entre(2.0, 4.0), "Etoile carbonee (C)", 0.0)
+    } else {
+        // Séquence principale (poids biaisés pour la variété).
+        let r = (p - 0.24) / 0.76;
+        if r < 0.36 {
+            (2400.0, 3700.0, 1.3, 0.4, "M (naine rouge)", 0.0)
+        } else if r < 0.58 {
+            (3700.0, 5200.0, 1.6, 0.7, "K (orange)", 0.0)
+        } else if r < 0.74 {
+            (5200.0, 6000.0, 2.0, 1.0, "G (jaune)", 0.0)
+        } else if r < 0.85 {
+            (6000.0, 7500.0, 2.3, 1.4, "F (blanc-jaune)", 0.0)
+        } else if r < 0.93 {
+            (7500.0, 11000.0, 2.6, 2.0, "A (blanche)", 0.0)
+        } else if r < 0.98 {
+            (11000.0, 30000.0, 3.2, 3.0, "B (bleu-blanc)", 0.0)
+        } else {
+            (30000.0, 45000.0, 4.0, 4.0, "O (bleue)", 0.0)
+        }
+    }
+}
+
 impl ProfilEtoile {
-    /// Tire une étoile au hasard. Quelques variantes spéciales (géante rouge,
-    /// naine blanche) en plus de la séquence principale O–M (M majoritaires).
+    /// Tire une étoile au hasard : une particulière dans 5 % des cas, sinon une
+    /// ordinaire ([`ordinaire`], où vit toute la table).
     pub fn aleatoire() -> Self {
         let v: f32 = gen_range(0.0, 1.0);
-        // (t_min, t_max, rayon, luminosité, nom, mode de couronne)
         let (tmin, tmax, rayon, lumi, nom, couronne) = if v < PART_PARTICULIERES {
             particuliere(gen_range(0.0, 1.0))
-        } else if v < 0.12 {
-            // Géante rouge : énorme, froide, très lumineuse.
-            (3000.0, 3900.0, gen_range(4.5, 7.0), gen_range(3.0, 6.0), "Geante rouge", 0.0)
-        } else if v < 0.18 {
-            // Naine blanche : minuscule, très chaude, peu lumineuse.
-            (12000.0, 28000.0, gen_range(0.5, 0.8), gen_range(0.15, 0.4), "Naine blanche", 0.0)
         } else {
-            // Séquence principale (poids biaisés pour la variété).
-            let r: f32 = gen_range(0.0, 1.0);
-            if r < 0.36 {
-                (2400.0, 3700.0, 1.3, 0.4, "M (naine rouge)", 0.0)
-            } else if r < 0.58 {
-                (3700.0, 5200.0, 1.6, 0.7, "K (orange)", 0.0)
-            } else if r < 0.74 {
-                (5200.0, 6000.0, 2.0, 1.0, "G (jaune)", 0.0)
-            } else if r < 0.85 {
-                (6000.0, 7500.0, 2.3, 1.4, "F (blanc-jaune)", 0.0)
-            } else if r < 0.93 {
-                (7500.0, 11000.0, 2.6, 2.0, "A (blanche)", 0.0)
-            } else if r < 0.98 {
-                (11000.0, 30000.0, 3.2, 3.0, "B (bleu-blanc)", 0.0)
-            } else {
-                (30000.0, 45000.0, 4.0, 4.0, "O (bleue)", 0.0)
-            }
+            ordinaire(gen_range(0.0, 1.0), gen_range(0.0, 1.0))
         };
         let temperature = gen_range(tmin, tmax);
         Self {
             temperature,
-            couleur: couleur_corps_noir(temperature),
+            couleur: couleur_etoile(nom, temperature),
             rayon,
             luminosite: lumi,
             nom,
@@ -142,6 +180,41 @@ pub fn zone_habitable(luminosite: f32) -> (f32, f32) {
 pub fn activite_type(rayon: f32, luminosite: f32) -> f32 {
     let gabarit = rayon.max(0.01) * luminosite.max(0.0).sqrt();
     (1.6 / (1.0 + gabarit)).clamp(0.15, 1.0)
+}
+
+/// **Filtre d'absorption moléculaire**, en multiplicateur de la couleur de
+/// corps noir. Neutre pour presque tous les types.
+///
+/// ⚠️ **Sans lui, l'étoile carbonée n'existe pas.** Sa fiche de conception la
+/// donne « distincte par la seule teinte » (§3) — mais dérivée du corps noir
+/// comme les autres, sa teinte la rend **moins rouge** que les naines M les
+/// plus froides : mesuré, (1,00 / 0,68 / 0,40) à 2900 K contre
+/// (1,00 / 0,61 / 0,24) pour une naine M à 2400 K. Ce serait donc une
+/// étiquette et non un type, ce que le filtre de la §3 bis interdit
+/// explicitement.
+///
+/// **Et la physique est justement un filtre** : une étoile carbonée est une
+/// photosphère froide vue **à travers** ses propres bandes de C₂ et CN, qui
+/// mangent le bleu puis le vert. D'où un multiplicateur plutôt qu'une couleur
+/// posée à la main — et l'ordre R > G > B s'en trouve renforcé, jamais inversé.
+pub fn filtre_teinte(nom: &str) -> Vec3 {
+    match nom {
+        "Etoile carbonee (C)" => vec3(1.0, 0.55, 0.20),
+        _ => Vec3::ONE,
+    }
+}
+
+/// **La couleur d'une étoile, d'après son type et sa température. Source
+/// unique.**
+///
+/// ⚠️ Trois endroits la calculaient — le tirage, la galerie des étoiles, la vue
+/// isolée — tous les trois par `couleur_corps_noir` seul. Le filtre posé dans
+/// un seul aurait donné une carbonée rouge en jeu et orange en vitrine.
+///
+/// La carte du ciel (`starmap`) reste sur `couleur_corps_noir` et c'est
+/// volontaire : elle ne connaît que des températures, pas des types.
+pub fn couleur_etoile(nom: &str, temp: f32) -> Vec3 {
+    couleur_corps_noir(temp) * filtre_teinte(nom)
 }
 
 /// Couleur approximative d'un corps noir à `temp` Kelvin (approx. de Tanner Helland).
@@ -242,6 +315,149 @@ mod tests_particulieres {
         };
         assert!(tn.est_trou_noir());
         assert!(tn.est_remnant(), "une zone habitable serait tracée autour de l'horizon");
+    }
+}
+
+#[cfg(test)]
+mod tests_ordinaires {
+    use super::*;
+
+    /// Les noms que la table des ordinaires doit savoir produire.
+    const ATTENDUS: [&str; 12] = [
+        "Geante rouge",
+        "Naine blanche",
+        "Supergeante rouge",
+        "Sous-naine (sdB)",
+        "Etoile carbonee (C)",
+        "M (naine rouge)",
+        "K (orange)",
+        "G (jaune)",
+        "F (blanc-jaune)",
+        "A (blanche)",
+        "B (bleu-blanc)",
+        "O (bleue)",
+    ];
+
+    fn balayage() -> Vec<&'static str> {
+        (0..2000).map(|k| ordinaire(k as f32 / 2000.0, 0.5).4).collect()
+    }
+
+    /// **Chaque type ordinaire est atteignable.**
+    ///
+    /// ⚠️ La garde qui manquait, et c'est *elle* le lot 6 autant que les types
+    /// eux-mêmes : la table vivait dans la chaîne de `if` d'`aleatoire`, donc
+    /// aucun test ne pouvait dire qu'un type en était sorti. Une borne mal
+    /// posée en écarte un **en silence** — son rendu continue d'exister,
+    /// personne ne le rencontre jamais. C'est arrivé au trou noir, et les
+    /// particulières ont reçu cette garde au lot 4 ; les ordinaires ne
+    /// l'avaient pas.
+    #[test]
+    fn chaque_type_ordinaire_est_atteignable() {
+        let vus = balayage();
+        for nom in ATTENDUS {
+            assert!(vus.contains(&nom), "{nom} est injoignable au tirage");
+        }
+        for nom in &vus {
+            assert!(ATTENDUS.contains(nom), "type inattendu au tirage : {nom}");
+        }
+    }
+
+    /// **Les trois types du lot 6 sortent assez souvent pour qu'on les
+    /// rencontre**, et restent moins courants que la séquence principale.
+    #[test]
+    fn les_types_du_lot_6_se_rencontrent_sans_devenir_la_regle() {
+        let vus = balayage();
+        let part = |nom: &str| vus.iter().filter(|n| **n == nom).count() as f32 / vus.len() as f32;
+        for nom in ["Supergeante rouge", "Sous-naine (sdB)", "Etoile carbonee (C)"] {
+            let p = part(nom);
+            assert!(p > 0.01, "{nom} ne tient que {p} du tirage : introuvable");
+            assert!(p < 0.10, "{nom} en tient {p} : ce n'est plus une variété, c'est la norme");
+        }
+        // La séquence principale reste l'ordinaire de l'ordinaire.
+        let sp: f32 = ["M (naine rouge)", "K (orange)", "G (jaune)"].iter().map(|n| part(n)).sum();
+        assert!(sp > 0.5, "la séquence principale ne tient plus que {sp} du tirage");
+    }
+
+    /// **`q` fait vraiment varier les types à plage**, sinon deux géantes
+    /// rouges sont jumelles — le défaut que le lot 1 a été fait pour corriger,
+    /// et qu'une table de constantes figées ramènerait.
+    #[test]
+    fn le_second_tirage_ecarte_les_jumelles() {
+        for p in [0.04_f32, 0.11, 0.16, 0.19, 0.22] {
+            let (_, _, r0, l0, nom, _) = ordinaire(p, 0.0);
+            let (_, _, r1, l1, _, _) = ordinaire(p, 1.0);
+            assert!(r1 > r0, "{nom} : rayon figé à {r0}");
+            assert!(l1 > l0, "{nom} : luminosité figée à {l0}");
+        }
+        // Et `q` reste borné : hors de [0 ; 1] on ne sort pas de la plage.
+        let (_, _, r_bas, _, _, _) = ordinaire(0.04, -5.0);
+        let (_, _, r_haut, _, _, _) = ordinaire(0.04, 9.0);
+        assert_eq!(r_bas, ordinaire(0.04, 0.0).2);
+        assert_eq!(r_haut, ordinaire(0.04, 1.0).2);
+    }
+
+    /// **L'étoile carbonée est la plus rouge du catalogue — c'est sa seule
+    /// raison d'être.**
+    ///
+    /// ⚠️ Sans le filtre moléculaire elle serait *moins* rouge que les naines M
+    /// les plus froides, malgré une température inférieure : le corps noir seul
+    /// ne descend pas assez bas dans le vert. Ce test compare donc au **pire
+    /// cas** de la concurrence, pas à une valeur écrite à la main.
+    #[test]
+    fn la_carbonee_est_la_plus_rouge_du_catalogue() {
+        // Le plus rouge de chaque type : sa borne froide.
+        let plus_rouge = |nom: &str, t: f32| {
+            let c = couleur_etoile(nom, t);
+            (c.y + c.z) / c.x.max(1e-3) // plus petit = plus rouge
+        };
+        let carbonee = plus_rouge("Etoile carbonee (C)", 3200.0); // sa borne CHAUDE
+        for (nom, t) in [
+            ("M (naine rouge)", 2400.0),
+            ("Geante rouge", 3000.0),
+            ("Supergeante rouge", 3200.0),
+            ("K (orange)", 3700.0),
+        ] {
+            let autre = plus_rouge(nom, t);
+            assert!(
+                carbonee < autre * 0.8,
+                "carbonée ({carbonee:.3}) pas franchement plus rouge que {nom} ({autre:.3})"
+            );
+        }
+        // Et le filtre ne casse pas l'ordre des canaux : une teinte qui
+        // remonterait le bleu au-dessus du rouge saturerait vers le cyan.
+        let c = couleur_etoile("Etoile carbonee (C)", 2900.0);
+        assert!(c.x >= c.y && c.y >= c.z, "teinte mal ordonnée : {c:?}");
+    }
+
+    /// **La supergéante rouge se distingue par sa taille et son éclat**, pas
+    /// par sa teinte : 150 K d'écart avec une géante ne se voient pas.
+    #[test]
+    fn la_supergeante_depasse_la_geante_en_taille_et_en_eclat() {
+        // Le plus petit exemplaire de supergéante contre le plus grand de
+        // géante : c'est le cas limite qui décide, pas les médianes.
+        let (_, _, r_sup, l_sup, nom, _) = ordinaire(0.16, 0.0);
+        assert_eq!(nom, "Supergeante rouge");
+        let (_, _, r_geante, l_geante, _, _) = ordinaire(0.04, 1.0);
+        assert!(r_sup > r_geante * 1.2, "supergéante {r_sup} contre géante {r_geante}");
+        assert!(l_sup > l_geante * 1.2, "éclat {l_sup} contre {l_geante}");
+    }
+
+    /// **La sous-naine se distingue par son éclat, et par lui seul.**
+    ///
+    /// ⚠️ Sa couleur est celle d'une naine blanche — mesuré, (0,62 / 0,74 /
+    /// 1,00) contre (0,67 / 0,78 / 1,00). Un test sur la teinte passerait au
+    /// vert sans rien garantir. Ce qui la rend visible est son halo : cœur
+    /// d'hélium en fusion contre braise qui refroidit.
+    #[test]
+    fn la_sous_naine_se_distingue_de_la_naine_blanche_par_son_eclat() {
+        let (_, _, _, l_sdb, nom, _) = ordinaire(0.19, 0.0);
+        assert_eq!(nom, "Sous-naine (sdB)");
+        let (_, _, _, l_blanche, _, _) = ordinaire(0.11, 1.0); // la plus brillante
+        assert!(l_sdb > l_blanche * 3.0, "sdB {l_sdb} contre naine blanche {l_blanche}");
+        // Et la teinte, elle, ne les sépare PAS : si un jour elle le faisait,
+        // ce commentaire serait faux et ce test doit le dire.
+        let (a, b) = (couleur_etoile("Sous-naine (sdB)", 32000.0), couleur_etoile("Naine blanche", 20000.0));
+        assert!((a - b).length() < 0.15, "les teintes se sont écartées : {a:?} vs {b:?}");
     }
 }
 

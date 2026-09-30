@@ -7,10 +7,10 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-09-30** : **le lot 5 est clos.** Ses sept presets de trou noir
-sont au tirage — décision de l'utilisateur, qui a préféré la variété au choix
-d'une cible unique. **Le prochain lot est le 6** : supergéante rouge,
-sous-naine, carbonée, naine brune au tirage.
+**État au 2026-09-30** : 864 tests verts, clippy à zéro. **Le lot 5 est clos**
+(ses sept presets de trou noir sont au tirage) et le **6.1 est livré** :
+supergéante rouge, sous-naine sdB et étoile carbonée au tirage. **Le 6.2 —
+la naine brune comme centre d'un système — reste à faire.**
 
 Deux dettes restent, petites et consignées plus bas : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de
@@ -40,7 +40,8 @@ silhouette « mince » n'a jamais été essayée.
 | **5.4** — la cible Interstellar, à comparer | fait, jugée « très satisfaisante » | `689b8f4` |
 | **5.5** — la cible froide déclinée en appétits, plus la braise | fait | `689b8f4` |
 | **5 — clos** : les sept presets au tirage | **fait et tranché** | |
-| **6** — supergéante rouge, sous-naine, carbonée, naine brune | **le prochain** | |
+| **6.1** — supergéante rouge, sous-naine, carbonée au tirage | **fait**, à juger à l'écran | |
+| **6.2** — la naine brune comme **centre** d'un système | à faire | |
 | 7 à 13 | à faire | |
 
 Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
@@ -49,6 +50,55 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### Le lot 6, découpé en deux (2026-09-30)
+
+**6.1 — les trois types « donnée seulement », et ce qui n'en était pas.** La
+fiche du §3 les donne tous les trois pour de la donnée pure, « le rendu normal
+leur convient ». **C'est faux pour l'étoile carbonée**, et mesuré : dérivée du
+corps noir comme les autres, elle sort à `(1,00 / 0,68 / 0,40)` à 2900 K, quand
+une naine M à 2400 K est à `(1,00 / 0,61 / 0,24)`. Elle serait donc **moins
+rouge** que ce dont elle doit se distinguer — une étiquette, pas un type, ce que
+le filtre de la §3 bis interdit.
+
+D'où `filtre_teinte`, un multiplicateur sur la couleur de corps noir. Et c'est
+la physique, pas un correctif : une carbonée est une photosphère froide vue **à
+travers** ses bandes de C₂ et CN, qui mangent le bleu puis le vert. Avec le
+filtre : `(1,00 / 0,375 / 0,08)`, la chose la plus rouge du catalogue.
+
+**La sous-naine sdB a le problème inverse** : sa couleur est celle d'une naine
+blanche — `(0,62 / 0,74 / 1,00)` contre `(0,67 / 0,78 / 1,00)`. Aucun réglage de
+teinte ne les séparera. Ce qui la distingue est son **éclat**, cinq à vingt fois
+supérieur : cœur d'hélium en fusion contre braise qui refroidit. Ça se lit au
+halo, et la zone habitable part au loin. Une garde dit explicitement que les
+teintes ne les séparent pas — si un jour elles le faisaient, le commentaire
+serait faux et le test le dira.
+
+⚠️ **Le vrai contenu du 6.1 est ailleurs : la table du tirage n'était pas
+testable.** Les types ordinaires vivaient dans la chaîne de `if` d'`aleatoire`,
+qui appelle `gen_range` — donc hors d'atteinte de tout test, **exactement**
+comme le trou noir l'était avant le lot 4. Les particulières avaient reçu leur
+garde à ce moment-là ; les ordinaires, non. La table est sortie dans
+`ordinaire(p, q)` sur le modèle de `particuliere(p)`, `q` donnant la place dans
+la plage de rayon et de luminosité — sans lui, une table de constantes figées
+ferait de toutes les géantes rouges des jumelles, soit le défaut que le lot 1 a
+corrigé.
+
+**Un trou structurel trouvé en chemin** : rien n'empêchait de poser une planète
+**dans** son étoile. Le garde-fou anti-collision de `instancier` ne compare que
+les planètes entre elles. Ça n'avait pas de conséquence — le plus gros astre
+était une géante de 7 unités et l'échelle du système suit `√L` — mais c'était
+une coïncidence. La supergéante monte à 12, et la quasi-étoile du lot 11 est
+annoncée large comme une orbite. D'où `premiere_orbite`, posé une fois.
+
+**6.2 — la naine brune comme centre d'un système.** Pas de la donnée : elle est
+déjà **mieux rendue que la plupart des étoiles** (quatre presets gazeux soignés),
+mais côté planète. La mettre au centre demande une échelle de système propre
+(`√L` la réduirait à rien, sa luminosité est de l'ordre de 10⁻⁵), une masse
+propre comme le trou noir (`masse_luminosite` la coucherait au plancher), et
+que la lumière principale du système vienne d'un corps qui n'est pas de
+catégorie `Etoile`. Le chemin existe — `lumiere_secours`, pour la planète
+isolée — mais il n'a jamais servi de source principale.
 
 ### Le lot 5 est clos. Tranché le 2026-09-30 : on garde les sept
 

@@ -66,6 +66,103 @@ pub(crate) fn masse_luminosite(luminosite: f32) -> f32 {
 /// et supergéantes extrêmes — une borne qui n'a rien à dire ici.
 pub(crate) const MASSE_TROU_NOIR: f32 = 8.0 * MASSE_ETOILE;
 
+/// **La première planète se pose au-delà de la surface de son étoile.**
+///
+/// ⚠️ Rien ne l'imposait. Le garde-fou anti-collision de `instancier` ne compare
+/// que les planètes **entre elles** ; l'étoile, elle, n'y figure pas. Ça n'avait
+/// pas de conséquence tant que le plus gros astre du tirage était une géante
+/// rouge de 7 unités, car l'échelle du système suit `√L` et une géante étale
+/// déjà ses mondes — mais c'était une coïncidence, pas une garantie.
+///
+/// La supergéante rouge du lot 6 monte à 12 unités, et la quasi-étoile du lot 11
+/// est annoncée **large comme une orbite** : celle-là poserait ses planètes dans
+/// sa propre photosphère. La règle est donc posée maintenant, une fois, au seul
+/// endroit qui décide de cette distance.
+///
+/// Une fois et demie le rayon : assez pour que le monde ne rase pas la surface,
+/// assez peu pour qu'un système compact le reste.
+pub(crate) fn premiere_orbite(brute_ua: f32, rayon_etoile: f32) -> f32 {
+    brute_ua.max(rayon_etoile / etoile::UA * 1.5)
+}
+
+#[cfg(test)]
+mod tests_orbite_interne {
+    use super::*;
+
+    /// **Aucun type du tirage n'a besoin du plancher — il doit rester inerte.**
+    ///
+    /// ⚠️ **Écrit d'abord à l'envers**, comme « la première planète tombe hors
+    /// de son étoile ». C'était une **tautologie** : `premiere_orbite` le
+    /// garantit par construction, donc retirer le plancher laissait le test
+    /// vert. C'est le sabotage qui l'a dit, pas la relecture.
+    ///
+    /// Ce qu'il y a à garder est l'inverse, et ce n'est pas tautologique : le
+    /// plancher est là pour un type **à venir** — la quasi-étoile du lot 11,
+    /// large comme une orbite. Le jour où il se met à mordre sur un type
+    /// ordinaire, c'est que ce type étale ou resserre son système autrement
+    /// qu'on ne croit, et le système sortira comprimé sans que rien le dise.
+    ///
+    /// (Le plancher lui-même est gardé par le test suivant, sur son cas
+    /// d'usage réel.)
+    #[test]
+    fn aucun_type_du_tirage_n_a_besoin_du_plancher() {
+        // `instancier` : `a = premiere_orbite(gen_range(0.4, 0.8) * ech, r)`,
+        // avec `ech = √L` hors rémanents. Le pire cas est donc 0,4 et le plus
+        // grand rayon du type.
+        // ⚠️ `q` aux deux bouts. Le rayon et la luminosité montent **ensemble**
+        // dans `ordinaire` — un gros astre est un astre brillant, donc son
+        // système s'étale d'autant — et c'est précisément ce qui garde le
+        // plancher inerte. Les découpler un jour le rendrait porteur.
+        for p in 0..2000 {
+            let p = p as f32 / 2000.0;
+            for q in [0.0_f32, 1.0] {
+                for (nom, gab) in
+                    [("ordinaire", etoile::ordinaire(p, q)), ("particuliere", etoile::particuliere(p))]
+                {
+                    let (_, _, rayon, lumi, type_nom, couronne) = gab;
+                    // L'échelle du système, telle qu'`instancier` la calcule.
+                    // ⚠️ Via `est_remnant`, pas une liste recopiée : les
+                    // rémanents n'ont pas de zone habitable et leurs planètes
+                    // rescapées orbitent serré, indépendamment de leur éclat.
+                    let profil = etoile::ProfilEtoile {
+                        temperature: 5000.0,
+                        couleur: Vec3::ONE,
+                        rayon,
+                        luminosite: lumi,
+                        nom: type_nom,
+                        couronne,
+                    };
+                    let ech =
+                        if profil.est_remnant() { 0.25 } else { lumi.max(0.001).sqrt() };
+                    let brute = 0.4 * ech;
+                    assert_eq!(
+                        premiere_orbite(brute, rayon),
+                        brute,
+                        "{nom} « {type_nom} » : le plancher a dû repousser sa première planète — \
+                         rayon {rayon:.1} pour une orbite brute de {:.1} unités",
+                        brute * etoile::UA
+                    );
+                }
+            }
+        }
+    }
+
+    /// **Le plancher ne se déclenche que quand il sert.** Une étoile ordinaire
+    /// ne doit pas voir son système repoussé : ce serait resserrer tous les
+    /// autres pour un cas limite.
+    #[test]
+    fn le_plancher_orbital_ne_touche_pas_aux_etoiles_ordinaires() {
+        // Le Soleil : L = 1, rayon 2,0 dans les unités du tirage.
+        assert_eq!(premiere_orbite(0.4, 2.0), 0.4, "le plancher a repoussé une G");
+        // Une naine M : petit rayon, système resserré.
+        assert_eq!(premiere_orbite(0.4 * 0.4_f32.sqrt(), 1.3), 0.4 * 0.4_f32.sqrt());
+        // Et il mord bien là où il faut : une quasi-étoile large comme une
+        // orbite (lot 11), posée à 0,1 UA, se voit repoussée.
+        let quasi = premiere_orbite(0.1, 1.2 * etoile::UA);
+        assert!(quasi > 1.2, "une quasi-étoile poserait un monde dans sa photosphère : {quasi}");
+    }
+}
+
 /// Construit un système aléatoire à partir d'une graine. Renvoie aussi un texte d'info.
 /// La multiplicité (1 à 4 étoiles) est dérivée du seed lui-même, ce qui laisse la
 /// séquence RNG du cas mono-étoile intacte (systèmes sauvegardés reproductibles).
@@ -126,7 +223,7 @@ fn construire_simple() -> (Systeme, String) {
 
     // Planètes : distances en UA suivant une loi de Titius-Bode, mises à l'échelle.
     let nb: i32 = gen_range(3, 7);
-    let mut a: f32 = gen_range(0.4, 0.8) * ech;
+    let mut a: f32 = premiere_orbite(gen_range(0.4, 0.8) * ech, profil.rayon);
     // Dernière planète posée (a, rayon) -> évite que deux corps se chevauchent quand
     // l'espacement géométrique les rapproche trop (systèmes compacts / rémanents).
     let mut precedent: Option<(f32, f32)> = None;

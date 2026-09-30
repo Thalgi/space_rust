@@ -729,6 +729,39 @@ bloquante : le disque passe sous l'horizon dessiné à très longue distance
 (`PX_MIN`, §6 quater), et la convention de silhouette « mince » n'a jamais été
 essayée. Le lot suivant est le **6**.
 
+## 6 septies. Le lot 6, découpé en deux (2026-09-30)
+
+| # | Contenu | Ce qu'il livre |
+|---|---|---|
+| **6.1** | Supergéante rouge, sous-naine sdB, étoile carbonée au tirage ; `filtre_teinte` ; la table sortie dans `etoile::ordinaire(p, q)` ; `genese::premiere_orbite` | Le tirage cesse de se répéter, et sa table devient testable |
+| **6.2** | La naine brune comme **centre** d'un système | Un système autour d'un objet qui n'est pas une étoile |
+
+⚠️ **La §3 se trompe sur un point, et c'est ce qui donne son contenu au 6.1.**
+Elle donne l'étoile carbonée « distincte par la seule teinte », donc de la
+donnée pure. Mesuré : dérivée du corps noir comme les autres, elle est **moins
+rouge** qu'une naine M froide — `(1,00 / 0,68 / 0,40)` à 2900 K contre
+`(1,00 / 0,61 / 0,24)` à 2400 K. Ce serait une étiquette, pas un type, ce que le
+filtre de la §3 bis interdit explicitement.
+
+D'où [`filtre_teinte`] : un multiplicateur sur la couleur de corps noir, qui est
+la physique même — une carbonée est une photosphère froide vue **à travers** ses
+bandes de C₂ et CN. La sous-naine a le problème symétrique : sa couleur est
+celle d'une naine blanche, et seul son **éclat** (cinq à vingt fois supérieur)
+la distingue.
+
+**Et le vrai enjeu du 6.1 était la testabilité.** Les types ordinaires vivaient
+dans la chaîne de `if` d'`aleatoire`, qui appelle `gen_range` : hors d'atteinte
+de tout test, **exactement** comme le trou noir avant le lot 4. Les
+particulières avaient reçu leur garde à ce moment-là, les ordinaires jamais. La
+table est donc sortie dans `ordinaire(p, q)` — `q` donnant la place dans la
+plage de rayon et de luminosité, sans quoi une table figée referait des jumelles.
+
+**Trou structurel trouvé en chemin** : rien n'empêchait de poser une planète
+**dans** son étoile — le garde-fou de `instancier` ne compare que les planètes
+entre elles. Sans conséquence jusqu'ici par coïncidence (l'échelle suit `√L`),
+mais la supergéante monte à 12 unités et la quasi-étoile du lot 11 est annoncée
+large comme une orbite. `premiere_orbite` pose la règle une fois.
+
 Trois points du pli, tous vérifiés :
 
 - Le **raccord** se fait tout seul : le pli s'éteint sur les côtés

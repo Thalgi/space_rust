@@ -1,5 +1,5 @@
 use crate::astre::{Astre, CameraInfo};
-use crate::etoile::couleur_corps_noir;
+use crate::etoile::{couleur_corps_noir, couleur_etoile};
 use crate::soleil::Soleil;
 use crate::disque::Accretion;
 use crate::stellaire::Variante;
@@ -85,7 +85,10 @@ impl GalerieEtoiles {
         let cellules = catalogue()
             .into_iter()
             .map(|(nom, rayon, temp, lumi, mode)| {
-                let s = Soleil::new(Vec3::ZERO, rayon, couleur_corps_noir(temp), lumi);
+                // ⚠️ `couleur_etoile`, pas `couleur_corps_noir` : une étoile
+                // carbonée doit sa teinte à un filtre moléculaire, et la
+                // vitrine la montrerait orange là où le jeu la peint rouge.
+                let s = Soleil::new(Vec3::ZERO, rayon, couleur_etoile(nom, temp), lumi);
                 // ⚠️ **La même source que la genèse.** Cette chaîne était
                 // recopiée ici, et les deux avaient déjà divergé : le
                 // `mode > 4.5` local attrapait aussi le mode 6, et le T Tauri
@@ -224,6 +227,35 @@ mod tests {
         // pour voir les autres — une planche-contact doit les montrer
         // ensemble.
         assert!(!modes.contains(&5.0), "le trou noir est resté au catalogue : il y sera en double");
+    }
+
+    /// **Un type dont la teinte vient d'un filtre porte le même nom des deux
+    /// côtés.**
+    ///
+    /// ⚠️ Le filtre moléculaire se reconnaît **au nom du type**. Que la vitrine
+    /// écrive « Etoile carbonee » là où le tirage écrit « Etoile carbonee (C) »
+    /// suffirait à ce que le jeu la peigne rouge et la galerie orange, sans
+    /// qu'aucun test ne bronche : deux `couleur_etoile` appelées avec deux
+    /// chaînes différentes. Et les noms *diffèrent* déjà ailleurs à dessein
+    /// (« G (jaune - Soleil) » contre « G (jaune) ») — on ne peut donc pas
+    /// exiger l'égalité partout, seulement là où elle décide d'un rendu.
+    #[test]
+    fn les_types_a_filtre_portent_le_meme_nom_au_tirage_et_en_vitrine() {
+        let en_vitrine: Vec<&str> = catalogue().into_iter().map(|e| e.0).collect();
+        let mut vus = 0;
+        for k in 0..2000 {
+            let nom = crate::etoile::ordinaire(k as f32 / 2000.0, 0.5).4;
+            if crate::etoile::filtre_teinte(nom) == Vec3::ONE {
+                continue;
+            }
+            vus += 1;
+            assert!(
+                en_vitrine.contains(&nom),
+                "« {nom} » porte un filtre au tirage mais ne figure pas sous ce nom en galerie : \
+                 {en_vitrine:?}"
+            );
+        }
+        assert!(vus > 0, "aucun type à filtre : ce test ne garde plus rien");
     }
 
     /// **La planche-contact montre le produit complet** : chaque appétit sous

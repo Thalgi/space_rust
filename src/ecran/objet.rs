@@ -70,13 +70,19 @@ impl Specimen {
         // ⚠️ Le régime se nomme lui-même. Le nommer par son **rang** dans
         // la liste marchait tant que l'ordre ne bougeait pas — c'est-à-dire
         // jusqu'au premier qui l'aurait changé.
+        // ⚠️ Même source que le jeu et la galerie : une carbonée tient sa
+        // teinte d'un filtre moléculaire, pas du seul corps noir. Calculée
+        // **avant** que le libellé du régime soit accolé au nom — le filtre se
+        // reconnaît au nom du type, et « Trou noir (chaud actif) » n'en est pas
+        // un.
+        let couleur = crate::etoile::couleur_etoile(nom, (tmin + tmax) * 0.5);
         let nom = match regime {
             Some(r) => format!("{nom} ({})", r.libelle()),
             None => nom.to_string(),
         };
         Specimen::Soleil {
             rayon,
-            couleur: crate::etoile::couleur_corps_noir((tmin + tmax) * 0.5),
+            couleur,
             lumi,
             nom,
             couronne,
