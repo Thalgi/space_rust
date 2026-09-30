@@ -7,10 +7,14 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-09-30** : 855 tests verts, `cargo clippy --all-targets` à zéro
-avertissement. Les sous-lots **5.3 validé** et **5.4 jugé « très
-satisfaisant »**. Le **5.5 est livré** et attend son jugement : sept presets
-au catalogue, et le choix entre cibles reste ouvert.
+**État au 2026-09-30** : **le lot 5 est clos.** Ses sept presets de trou noir
+sont au tirage — décision de l'utilisateur, qui a préféré la variété au choix
+d'une cible unique. **Le prochain lot est le 6** : supergéante rouge,
+sous-naine, carbonée, naine brune au tirage.
+
+Deux dettes restent, petites et consignées plus bas : le disque passe sous
+l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de
+silhouette « mince » n'a jamais été essayée.
 
 ---
 
@@ -33,9 +37,11 @@ au catalogue, et le choix entre cibles reste ouvert.
 | **5.1** — shader dédié | fait | `8c2cec6` |
 | **5.2** — le pli | fait | `f4a0e2d` |
 | **5.3** — l'aspect, corrigé sur mesures | **fait et validé à l'écran** | `c32e3bf` + 7 correctifs |
-| **5.4** — la cible Interstellar, à comparer | **fait**, jugée « très satisfaisante » | |
-| **5.5** — la cible froide déclinée en appétits, plus la braise | **fait**, **à juger à l'écran** | |
-| 6 à 13 | à faire | |
+| **5.4** — la cible Interstellar, à comparer | fait, jugée « très satisfaisante » | `689b8f4` |
+| **5.5** — la cible froide déclinée en appétits, plus la braise | fait | `689b8f4` |
+| **5 — clos** : les sept presets au tirage | **fait et tranché** | |
+| **6** — supergéante rouge, sous-naine, carbonée, naine brune | **le prochain** | |
+| 7 à 13 | à faire | |
 
 Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 `crash.log` sorti du dépôt.
@@ -44,17 +50,28 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 
 ## Ce qu'il faut savoir pour reprendre
 
-### Le prochain pas : regarder les sept, puis trancher
+### Le lot 5 est clos. Tranché le 2026-09-30 : on garde les sept
 
-Le 5.4 a été jugé « très satisfaisant », et le 5.5 en a tiré les variantes
-demandées. **Ce qu'il reste à faire est un jugement, pas un codage.** Les sept
-presets sont visibles ensemble en galerie des étoiles, en galerie des disques
-et en vue isolée (touche `3`), sous les libellés « chaud / Interstellar /
-braise » × « endormi / actif / vorace ».
+**Décision de l'utilisateur.** La comparaison entre cibles ne débouche pas sur
+un choix : *« pour garder de la variation je suis preneur de garder les 7 cas
+de représentation de trou noir, ça rajoute de la diversité »*.
 
-⚠️ **Ne rien brancher avant le verdict.** Aucune cible froide n'est au tirage :
-si l'une l'emporte, ce sont les constantes de `chaude()` qui bougeront, pas un
-cas de plus.
+⚠️ **Conséquence, et elle n'est pas documentaire** : garder les sept veut dire
+les **brancher sur le tirage**. Quatre d'entre eux n'existaient que dans les
+vues de travail ; les laisser là aurait rendu la décision sans effet sur le
+jeu. `regime()` puise donc désormais dans le catalogue entier.
+
+**Le poids d'un appétit se partage entre ses cibles**, et c'est le point à ne
+pas perdre : la décision ajoute de la *variété*, pas de la *fréquence*. Un trou
+noir vorace reste aussi rare qu'avant — 20 % — il a simplement deux visages
+possibles. Sans ce partage, décliner une teinte de plus rendrait mécaniquement
+le vorace plus courant, et un état de crise cesserait d'en être un. Deux gardes
+le tiennent : les sept sont atteignables, et les parts par appétit restent
+0,35 / 0,45 / 0,20.
+
+⚠️ **À graine égale, un trou noir existant change d'aspect.** C'est inhérent à
+la décision. En revanche rien ne se décale en cascade : le preset est **dérivé**
+de la graine, il ne consomme pas le flux aléatoire.
 
 **Les deux axes, depuis le 5.5.** C'est la structure à comprendre avant de
 toucher à quoi que ce soit ici :
@@ -67,6 +84,10 @@ toucher à quoi que ce soit ici :
 
 Décliner une cible de plus coûte **une ligne**. C'est ce que le 5.5 est venu
 vérifier, et ça a marché du premier coup.
+
+Le tirage, lui, ne connaît que les **appétits** : il pondère un appétit, puis
+partage ce poids entre les cibles qui le portent. Ajouter une teinte reste donc
+une ligne, même du côté du jeu.
 
 ⚠️ **Absolu ou proportionnel : la distinction porte tout.** Ce que la cible
 impose est absolu (teinte, gradient retiré, plafond du beaming, minceur) ; ce à
@@ -104,12 +125,11 @@ deux cibles froides). Le `beta` inchangé en est le corollaire honnête : c'est
 le **plafond** qui porte le retrait du beaming, ce qui le désigne pour ce qu'il
 est — un choix d'image, pas une autre physique.
 
-**Aucune cible froide n'est au tirage.** `regime()` ne tire que des appétits
-**chauds** : une cible n'est pas un état d'astre, c'est une réponse concurrente
-à la question de l'aspect. Les ajouter changerait tous les trous noirs à graine
-égale. Une garde tient les deux moitiés : présentes au catalogue (sinon elles
-n'existent pas — le piège qui tenait le trou noir hors du jeu), absentes du
-tirage.
+**Les sept cibles sont au tirage** depuis la décision du 2026-09-30. Ce
+paragraphe disait l'inverse jusque-là — les cibles froides étaient des
+candidates en attente de verdict, volontairement tenues hors du jeu pour ne pas
+changer les trous noirs existants avant qu'on ait choisi. Le choix a été de ne
+pas choisir.
 
 ### Ce qui reste ouvert, et que personne ne garde
 
@@ -209,6 +229,11 @@ Deux autres pièges du red-check, rencontrés depuis :
 - **un sabotage resté en place.** La commande qui devait le défaire a échoué,
   et l'arbre a été annoncé propre à tort. C'est un test qui l'a rattrapé au
   coup suivant. **Relire avant d'annoncer**, ne pas se fier à la commande.
+- **vérifier que le motif a mordu, systématiquement.** Au 2026-09-30 un
+  sabotage a raté parce que le motif supposait des `CRLF` là où le fichier a
+  des `LF`. Le script l'a dit — il teste que le motif existe avant de
+  remplacer — et sans ce garde-fou j'aurais lu un vert comme une preuve.
+  C'est la même leçon que l'indentation changée, et elle est revenue.
 - **restaurer par copie remonte le temps.** `Copy-Item` donne au fichier
   restauré la date de **la sauvegarde**, donc plus ancienne que les
   artefacts du build saboté. Cargo compare les dates : il conclut que rien

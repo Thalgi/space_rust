@@ -278,10 +278,11 @@ impl Accretion {
     /// l'utilisateur, consignée au §5 de
     /// `astres_v2_disque_accretion_2.md`.
     ///
-    /// ⚠️ **Ce n'est pas un régime d'astre**, et aucune graine n'y mène :
-    /// c'est l'autre réponse à la même question. `regime()` en tire toujours
-    /// trois. Si celle-ci l'emporte à l'écran, ce sont les constantes de
-    /// `chaude` qui bougeront — pas un quatrième cas dans le tirage.
+    /// ⚠️ Elle a d'abord été tenue **hors du tirage**, le temps du jugement,
+    /// pour ne pas changer les trous noirs existants avant qu'on ait choisi.
+    /// **Le 2026-09-30 l'utilisateur a choisi de ne pas choisir** : les sept
+    /// presets restent, pour la variété, et celui-ci est au tirage comme les
+    /// autres.
     ///
     /// Trois écarts, et rien d'autre. Ils sont tous les trois **assumés comme
     /// non physiques** : ce sont exactement les retraits qu'a faits le film.
@@ -401,7 +402,7 @@ impl Accretion {
 
     /// **Les trois appétits, dans l'ordre. Source unique.**
     ///
-    /// ⚠️ `regime()` y puise et le catalogue les décline : trois listes du
+    /// ⚠️ Le catalogue les décline et le tirage les pondère : trois listes du
     /// même fait avaient déjà divergé une fois dans ce chantier.
     pub fn appetits() -> [Self; 3] {
         [Self::endormie(), Self::chaude(), Self::vorace()]
@@ -451,28 +452,55 @@ impl Accretion {
         Some(DisqueConfig::debris_trou_noir(900, rayon * int, rayon * ext, masse))
     }
 
-    /// **Le régime d'un trou noir, dérivé de sa graine.**
+    /// **Fréquence d'un appétit au tirage.**
+    ///
+    /// L'endormi est un état d'équilibre, le vorace un état de **crise** : les
+    /// poids ne sont pas décoratifs, ils disent lequel est rare.
+    fn poids_appetit(nom: &str) -> f32 {
+        match nom {
+            "endormi" => 0.35,
+            "vorace" => 0.20,
+            _ => 0.45,
+        }
+    }
+
+    /// **Le preset d'un trou noir, dérivé de sa graine.**
     ///
     /// ⚠️ Dérivé, jamais tiré : un `gen_range` de plus décalerait tout ce
     /// qui est tiré ensuite et changerait le système entier à graine égale —
     /// même piège que `champ::poles` et `temps_initial`.
     ///
-    /// Le vorace est le plus rare : c'est un état de crise, pas un état
-    /// d'équilibre.
+    /// **Le 2026-09-30, l'utilisateur a tranché : les sept presets restent**,
+    /// pour la variété. Les cibles froides ne sont donc plus des candidates en
+    /// attente de verdict — elles sont au tirage comme les autres.
     ///
+    /// ⚠️ **Le poids d'un appétit se partage entre ses cibles.** C'est ce qui
+    /// fait que la décision ajoute de la *variété* sans toucher à la
+    /// *fréquence* : un trou noir vorace reste aussi rare qu'avant, il a
+    /// simplement deux visages possibles. Décliner une teinte de plus ne
+    /// rendra pas non plus l'endormi plus courant.
+    ///
+    /// Une seule valeur dérivée, et un parcours cumulé : un second hash de la
+    /// même graine risquerait de corréler les deux axes.
     pub fn regime(graine: f32) -> Self {
-        let u = (graine * 0.618_034).fract();
-        // ⚠️ Puise dans `appetits()` plutôt que de renommer les trois
-        // constructeurs : le tirage et le catalogue ne doivent pas pouvoir
-        // désigner deux jeux d'appétits différents.
-        let rang = if u < 0.35 {
-            0
-        } else if u < 0.80 {
-            1
-        } else {
-            2
-        };
-        Self::appetits()[rang]
+        let cat = Self::catalogue();
+        let poids: Vec<f32> = cat
+            .iter()
+            .map(|a| {
+                let cibles = cat.iter().filter(|b| b.nom == a.nom).count() as f32;
+                Self::poids_appetit(a.nom) / cibles
+            })
+            .collect();
+        // Normalisé plutôt que supposé sommer à 1 : un poids retouché ne doit
+        // pas pouvoir rendre le dernier preset injoignable en silence.
+        let mut u = (graine * 0.618_034).fract() * poids.iter().sum::<f32>();
+        for (a, p) in cat.iter().zip(&poids) {
+            u -= p;
+            if u < 0.0 {
+                return *a;
+            }
+        }
+        cat[cat.len() - 1]
     }
 }
 
@@ -893,17 +921,13 @@ mod tests {
         assert!(aura(&b).x >= aura(&b).y && aura(&b).y >= aura(&b).z);
     }
 
-    /// **Le catalogue expose des cellules distinctes, et le tirage n'a que les
-    /// appétits chauds.**
+    /// **Le catalogue n'expose pas deux fois la même cellule.**
     ///
-    /// Les deux moitiés comptent. **Au catalogue**, parce qu'un preset que
-    /// rien n'atteint est un preset qui n'existe pas — le piège exact qui
-    /// tenait le trou noir hors du jeu. **Hors du tirage**, parce qu'une cible
-    /// n'est pas un état d'astre mais une réponse concurrente à la question de
-    /// l'aspect : elles se jugent côte à côte avant qu'on tranche, et les
-    /// ajouter au tirage changerait tous les trous noirs à graine égale.
+    /// Un doublon dans une planche-contact se lit comme une différence qu'on
+    /// cherche en vain. Depuis que les sept presets sont au tirage, c'est aussi
+    /// la garde qui dit que le jeu montre sept trous noirs et non six.
     #[test]
-    fn le_catalogue_expose_des_cellules_distinctes_hors_du_tirage() {
+    fn le_catalogue_expose_des_cellules_distinctes() {
         let cat = Accretion::catalogue();
         let libelles: Vec<String> = cat.iter().map(|a| a.libelle()).collect();
         for attendu in ["chaud actif", "Interstellar endormi", "braise actif"] {
@@ -926,13 +950,6 @@ mod tests {
                 !cat[..i].iter().any(|b| sig(b) == s),
                 "« {} » est la copie d'une cellule précédente",
                 libelles[i]
-            );
-        }
-        for k in 0..600 {
-            assert_eq!(
-                Accretion::regime(k as f32 * 1.37).cible,
-                "chaud",
-                "une cible visuelle a rejoint le tirage des astres"
             );
         }
     }
@@ -1005,19 +1022,46 @@ mod tests {
     /// pas — le piège exact qui tenait le trou noir hors du jeu.
     #[test]
     fn chaque_regime_est_atteignable_et_reproductible() {
-        assert_eq!(Accretion::regime(12.5).eclat, Accretion::regime(12.5).eclat);
-        let attendus = ["endormi", "actif", "vorace"];
-        let mut vus = [0_usize; 3];
-        for k in 0..600 {
-            let nom = Accretion::regime(k as f32 * 1.37).nom;
-            let rang = attendus.iter().position(|n| *n == nom).expect("régime inconnu au tirage");
+        assert_eq!(Accretion::regime(12.5).libelle(), Accretion::regime(12.5).libelle());
+        let cat = Accretion::catalogue();
+        let mut vus: Vec<usize> = vec![0; cat.len()];
+        let mut par_appetit = std::collections::BTreeMap::new();
+        // ⚠️ Graines petites et pas assorties. Avec un pas plus large, la
+        // graine atteint des magnitudes où l'`eps` de `f32` mange la partie
+        // fractionnaire : le tirage se met à cycler sur une poignée de valeurs
+        // et un preset peut se retrouver affamé pour une raison qui n'a rien à
+        // voir avec les poids.
+        for k in 0..1200 {
+            let a = Accretion::regime(k as f32 * 0.37);
+            let rang = cat
+                .iter()
+                .position(|b| b.libelle() == a.libelle())
+                .expect("le tirage sort un preset absent du catalogue");
             vus[rang] += 1;
+            *par_appetit.entry(a.nom).or_insert(0_usize) += 1;
         }
+        // ⚠️ **Les sept, pas seulement les trois appétits.** Décision de
+        // l'utilisateur le 2026-09-30 : les sept presets restent, pour la
+        // variété. Un preset qu'aucune graine n'atteint est un preset qui
+        // n'existe pas — c'est le piège exact qui tenait le trou noir hors du
+        // jeu, et il se reposerait ici à la première teinte oubliée.
         for (i, n) in vus.iter().enumerate() {
-            assert!(*n > 30, "le régime « {} » ne sort que {n} fois sur 600 : introuvable", attendus[i]);
+            assert!(*n > 50, "« {} » ne sort que {n} fois sur 1200", cat[i].libelle());
+        }
+        // ⚠️ Et la **fréquence d'un appétit** ne bouge pas quand on ajoute des
+        // teintes : le poids se partage entre les cibles. Sans ça, décliner
+        // une cible de plus rendrait mécaniquement le vorace plus courant, et
+        // un état de crise cesserait d'en être un.
+        let n = 1200.0;
+        for (nom, attendu) in [("endormi", 0.35), ("actif", 0.45), ("vorace", 0.20)] {
+            let part = par_appetit[nom] as f32 / n;
+            assert!(
+                (part - attendu).abs() < 0.04,
+                "appétit « {nom} » : {part:.3} du tirage au lieu de {attendu}"
+            );
         }
         // Le vorace reste le plus rare : c'est un état de crise.
-        assert!(vus[2] < vus[1], "le vorace est plus courant que l'actif");
+        assert!(par_appetit["vorace"] < par_appetit["actif"]);
     }
 
     /// **Le budget de sommets reste tenable.** L'annulus fait 960 quads et

@@ -679,11 +679,7 @@ au rayon, pas à la température), turbulence basse. Bornes, pli et anneau de
 lentille sont **identiques** : c'est ce qui fait porter la comparaison sur
 l'aspect et non sur la géométrie, et une garde le vérifie.
 
-Elle n'est **pas** au tirage des astres : ce n'est pas un quatrième état de
-trou noir, c'est l'autre réponse à la même question. Elle ne se voit donc que
-dans les vues de travail, jusqu'au verdict. **Jugée « très satisfaisante » à
-l'écran le 2026-09-30** — mais le choix entre les deux cibles reste ouvert, et
-rien n'est branché sur le tirage.
+**Jugée « très satisfaisante » à l'écran le 2026-09-30.**
 
 **5.5** : la cible froide **déclinée en appétits**, plus une quatrième teinte.
 Demande de l'utilisateur au vu du 5.4 : les mêmes variantes que le 5.3, et une
@@ -707,6 +703,31 @@ cellules pour un seul objet. Une garde tient cette distinction
 Sept presets au catalogue : trois appétits × deux cibles, plus la braise —
 déclinée une seule fois, puisque c'est une variante de **teinte** et non
 d'appétit.
+
+## 6 sexies. Le lot 5 clos : on garde les sept (2026-09-30)
+
+La décision du §5 de la recherche — comparer les cibles, puis en choisir une —
+**n'a pas débouché sur un choix**. Décision de l'utilisateur : *« pour garder
+de la variation je suis preneur de garder les 7 cas de représentation de trou
+noir, ça rajoute de la diversité »*.
+
+⚠️ **Garder les sept veut dire les brancher sur le tirage.** Quatre n'existaient
+que dans les vues de travail ; les y laisser aurait rendu la décision sans
+effet sur le jeu. `regime()` puise donc dans le catalogue entier.
+
+**Le poids d'un appétit se partage entre ses cibles.** La décision ajoute de la
+*variété*, pas de la *fréquence* : un vorace reste à 20 %, il a simplement deux
+visages. Sans ce partage, décliner une teinte de plus rendrait mécaniquement un
+état de crise plus courant.
+
+À graine égale un trou noir existant change d'aspect — inhérent à la décision —
+mais rien ne se décale en cascade : le preset est **dérivé** de la graine, il ne
+consomme pas le flux aléatoire.
+
+**Le lot 5 est clos.** Restent deux dettes consignées au journal, aucune
+bloquante : le disque passe sous l'horizon dessiné à très longue distance
+(`PX_MIN`, §6 quater), et la convention de silhouette « mince » n'a jamais été
+essayée. Le lot suivant est le **6**.
 
 Trois points du pli, tous vérifiés :
 

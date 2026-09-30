@@ -236,9 +236,22 @@ le disque entier. L'éclat de la cible chaude (1,6) y produirait l'aplat saturé
 corrigé au 5.3 — il a fallu redescendre à 1,1. Deux constantes qu'on croyait
 indépendantes ne le sont pas.
 
-⚠️ `froide` n'est **pas** au tirage des astres : ce n'est pas un quatrième
-état de trou noir, c'est l'autre réponse à la même question. Elle ne se voit
-que dans les vues de travail, jusqu'au verdict.
+### Tranché le 2026-09-30 : on ne choisit pas non plus
+
+La question de ce §5 — trois cibles, il faut en choisir une — **n'a jamais reçu
+de réponse unique**, et c'est la bonne fin. Décision de l'utilisateur : garder
+les sept presets, *« ça rajoute de la diversité »*.
+
+Ce que ça dit de la recherche : l'arbitrage « physique contre lisibilité » était
+réel et bien posé, mais il supposait un jeu qui montre **un** trou noir. Dans un
+jeu qui en engendre beaucoup, l'arbitrage cesse d'en être un — les deux
+réponses cohabitent, et l'écart entre elles devient une ressource au lieu d'un
+problème.
+
+Les sept sont donc au tirage, le poids d'un appétit se partageant entre ses
+cibles pour que la variété n'altère pas les fréquences. La cible froide a
+d'abord été tenue hors du jeu, le temps du jugement, précisément pour ne pas
+changer les trous noirs existants avant qu'on ait choisi.
 
 ---
 

@@ -24,19 +24,22 @@ fusionné, rien de poussé.**
 **Vérifié (2026-09-30)** : **855 tests verts** (867 avec le binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
-**5.3 validé** à l'écran, **5.4 jugé « très satisfaisant »**. Le **5.5 est
-livré** et **attend le jugement visuel** : la cible froide déclinée en trois
-appétits, plus une quatrième teinte « braise » (~3000 K, aura rouge).
+**Le lot 5 est clos** (2026-09-30). Ses **sept presets de trou noir sont au
+tirage** : l'utilisateur a préféré garder la variété plutôt que choisir une
+cible unique.
 
 Le 5.5 a séparé deux axes qui étaient confondus — l'**appétit** (`nom` :
-endormi / actif / vorace, le seul axe que le tirage connaît) et la **cible**
-(`cible` : chaud / Interstellar / braise). Le catalogue est leur **produit**,
-sept presets, et décliner une cible de plus coûte une ligne.
+endormi / actif / vorace) et la **cible** (`cible` : chaud / Interstellar /
+braise). Le catalogue est leur **produit**. Le tirage pondère un appétit
+(0,35 / 0,45 / 0,20) puis **partage ce poids entre ses cibles** : ajouter une
+teinte change la variété, jamais la fréquence d'un appétit.
 
-**Le prochain pas** : **regarder les sept et trancher**. Galerie des étoiles
-(`E`), galerie des disques, vue isolée (touche `3`). ⚠️ **Rien n'est à coder
-avant ce verdict**, et **aucune cible froide n'est au tirage** : si l'une
-l'emporte, ce sont les constantes de `chaude()` qui bougeront.
+**Le prochain pas** : **lot 6** — supergéante rouge, sous-naine, carbonée,
+naine brune au tirage.
+
+Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
+l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de
+silhouette « mince » n'a jamais été essayée.
 
 → Tout le détail, lot par lot, dans
 [`docs/suivi/astres_v2.md`](docs/suivi/astres_v2.md) — c'est lui qu'il faut

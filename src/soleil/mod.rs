@@ -252,9 +252,9 @@ impl Soleil {
     /// graine.
     ///
     /// Pour les vues de travail — galerie et vue isolée — où l'on veut voir
-    /// les trois côte à côte plutôt que de régénérer jusqu'à tomber sur
-    /// celui qu'on cherche. En jeu, le régime reste **dérivé** : c'est une
-    /// propriété de l'astre, pas un choix.
+    /// **tout le catalogue** côte à côte plutôt que de régénérer jusqu'à
+    /// tomber sur celui qu'on cherche. En jeu, le preset reste **dérivé** de
+    /// la graine : c'est une propriété de l'astre, pas un choix.
     ///
     /// ⚠️ Remplace les disques existants : sans ça, appeler deux régimes de
     /// suite les empilerait, et en additif l'éclat doublerait.
@@ -602,7 +602,7 @@ mod tests_disque {
     /// ⚠️ Balaie **tout le catalogue** : les bornes sont portées par le
     /// preset depuis qu'un trou noir vorace a un disque plus large qu'un
     /// endormi, donc la règle doit valoir pour chacun — y compris les
-    /// presets qui ne sont pas au tirage.
+    /// presets — les sept y sont, depuis la décision du 2026-09-30.
     #[test]
     fn le_disque_d_accretion_degage_l_horizon() {
         for a in Accretion::catalogue() {
