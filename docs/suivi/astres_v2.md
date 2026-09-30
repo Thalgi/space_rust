@@ -45,7 +45,9 @@ silhouette « mince » n'a jamais été essayée.
 | **6.2** — la naine brune comme **centre** d'un système | **fait**, à juger à l'écran | |
 | **6.2 bis** — ses quatre classes dans la planche des étoiles | **fait** | |
 | **7** — pulsation : céphéide, Mira, ZZ Ceti | **fait**, à juger à l'écran | |
-| 8 à 13 | à faire | |
+| **8.1** — le ciel en cubemap, gravé depuis le champ existant | **fait** (pas encore consommé) | |
+| **8.2** — la déviation dans le shader du trou noir | **le prochain pas** | |
+| 9 à 13 | à faire | |
 
 Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 `crash.log` sorti du dépôt.
@@ -53,6 +55,85 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### Le lot 8 : la lentille locale (2026-09-30)
+
+**Tranché avec l'utilisateur** : lentille **locale**, fond échantillonné depuis
+une **cubemap gravée du champ d'étoiles existant**.
+
+**Pourquoi locale, et ce n'est pas qu'une question de coût.** Le non-local
+demanderait la scène déjà rendue comme texture — une cible de rendu plein écran,
+une copie, une seconde passe par frame, ce que l'architecture n'a pas (la
+recherche sur le disque d'accrétion le notait déjà). Mais surtout **une copie
+d'écran ne contient pas ce que le trou noir cache** : ces pixels n'ont jamais été
+dessinés. Or l'effet signature d'une lentille est de faire réapparaître en anneau
+ce qui est *derrière*. Tordre l'image rendue donnerait une distorsion du décor
+visible, **jamais** l'anneau d'Einstein. La cubemap, elle, contient tout le ciel,
+y compris les directions occultées à l'écran.
+
+⚠️ **La limite est de fond, pas de budget.** Une cubemap encode des directions
+**à l'infini**. Le champ d'étoiles est à 3000 unités, donc assimilable à
+l'infini ; une planète à 40 unités a de la **parallaxe** — sa direction apparente
+dépend d'où est l'œil — et aucune cubemap échantillonnée par direction seule ne
+peut la représenter. Une planète qui passe derrière le trou noir ne sera donc ni
+déviée ni reprise dans l'anneau. Il faudrait du raymarching géodésique par pixel.
+
+#### 8.1 — le ciel en cubemap
+
+⚠️ **Chaque vue tire son propre champ d'étoiles** (400 à 900 selon l'écran, sept
+sites de `Fond::new`, tous aléatoires). Une cubemap construite à part montrerait
+donc **d'autres étoiles** que celles qu'on voit, et l'anneau afficherait un ciel
+qui n'existe nulle part. Elle est gravée depuis `self.etoiles`, et `Fond` la
+porte — c'est la seule façon que les deux ne puissent pas diverger.
+
+**La partie qu'on ne peut pas déboguer à l'œil** est la convention de cubemap :
+elle retourne deux axes selon la face, et s'en écarter ne casse rien de visible
+tant que le ciel est seul — *un ciel d'étoiles aléatoires miroité ressemble à un
+ciel d'étoiles aléatoires*. Ça n'apparaîtrait que dans l'anneau, où le ciel dévié
+ne raccorderait plus le ciel autour : un défaut qu'on mettrait des heures à
+attribuer et qu'on corrigerait en tâtonnant sur des signes. D'où `direction_de`,
+l'inverse exact de `face_et_uv`, et trois gardes — aller-retour sur 1600
+directions, chaque axe sur sa face au centre, chaque étoile gravée dans sa face.
+
+**Le chemin technique est validé** : macroquad n'expose que des `Texture2D`, mais
+`Texture2D::from_miniquad_texture` accepte une cubemap créée par en dessous, et
+miniquad lie la texture avec **sa propre cible** au moment du dessin
+(`gl.rs`, `apply_bindings_from_slice`). Un `samplerCube` recevra donc bien un
+`GL_TEXTURE_CUBE_MAP`.
+
+**Trouvé en chemin** : `impostor::verif::uniforms_glsl` n'écartait que
+`sampler2D`. Le premier `samplerCube` se serait présenté comme un uniform manquant
+côté Rust, et la garde de correspondance aurait accusé le shader au lieu d'elle-même.
+
+⚠️ **Le 8.1 n'est pas encore consommé** : rien ne l'échantillonne, et ses items
+portent un `allow(dead_code)` qui le dit. Le découpage est délibéré — verrouiller
+la convention avant qu'une ligne de GLSL en dépende.
+
+#### 8.2 — ce qu'il reste à faire
+
+La formule est posée, il reste à la câbler. Pour un pixel à l'angle `θ` du centre
+(azimut `û`), la lentille mince donne la direction source `β = θ − θ_E²/θ` : un
+anneau d'Einstein apparaît naturellement en `θ = θ_E`, et `β` négatif produit
+l'image secondaire de l'autre côté. Dans le shader :
+
+```glsl
+vec2 u = v_q / max(rr, 1e-4);
+float theta = rr * angle_ombre;
+float beta  = theta - e * e / max(theta, 1e-6);
+vec3 lat = u.x * cam_right + u.y * cam_up;
+gl_FragColor = textureCube(fond, normalize(-to_cam * cos(beta) + lat * sin(beta)));
+```
+
+Il faut : déclarer `samplerCube fond` dans `MaterialParams.textures`, ajouter
+l'uniform `angle_ombre` (le rayon angulaire de l'ombre, `R/d`, que le CPU calcule
+déjà pour `PX_MIN`), élargir la couronne du trou noir pour laisser place à
+l'anneau, et poser la cubemap sur le material depuis `rendu.rs` — le seul endroit
+où le `Fond` et le système sont tous deux en main.
+
+**Étape de validation suggérée avant la déviation** : sampler **sans** dévier
+(`beta = theta`). Le quad élargi doit alors devenir **invisible** — le ciel
+continue à travers lui sans raccord. C'est la preuve que la convention est bonne,
+et elle se juge d'un coup d'œil.
 
 ### Le lot 7 : la pulsation (2026-09-30)
 
@@ -93,6 +174,40 @@ entre dans `rayon_dessine`, source unique de la taille : elle bouge donc la cibl
 *avec* le disque peint, jamais en désaccord avec lui. Et `Systeme::pick` prend
 40 % de marge, si bien qu'à ±20 % d'amplitude le rayon cliquable reste toujours
 au-dessus du rayon peint. Seule la marge respire. La parade était déjà là.
+
+#### ⚠️ Dette : la pulsation est trop sage — pour **Astres V3** (2026-09-30)
+
+Jugée « correcte pour le moment ». **Le motif, dans les mots de
+l'utilisateur** : *« ça fait un côté gonflement sinusoïde que j'aime pas,
+j'aurais préféré un côté tumultueux plus asymétrique »*. Il a lui-même noté que
+la complexité derrière n'est pas anodine et **repoussé la reprise à une V3** :
+ne pas l'engager dans ce chantier.
+
+Donc le défaut n'est **pas** le dosage, et pas non plus la couleur : c'est la
+**forme de l'onde**. Une sinusoïde monte et descend au même rythme, et ça se lit
+comme une respiration mécanique. Les vraies courbes de lumière sont
+**asymétriques** — montée rapide, déclin lent — et c'est précisément cette
+dissymétrie qui donne l'impression d'une étoile qui se soulève puis retombe.
+
+Deux pistes, par coût croissant, à reprendre en V3 :
+
+- **Une fonction de forme** à la place de `sin`, avec un paramètre de
+  dissymétrie. Un terme de plus dans `facteur_pulsation`, rien de structurel —
+  c'est le dosage qui demandera des allers-retours à l'écran.
+- **Du tumulte** par-dessus : une seconde harmonique décalée, ou un bruit lent
+  ajouté à la phase, pour que deux cycles ne soient pas superposables. C'est ce
+  que le mot « tumultueux » demande, et c'est plus difficile à doser sans
+  basculer dans le tremblement.
+
+Deux autres manques, relevés par lecture du code et **non** signalés par
+l'utilisateur — à garder sous le coude, pas à traiter d'office :
+
+- **La température ne bouge pas** : une vraie céphéide traverse la bande
+  d'instabilité et change de **couleur** en se dilatant. Ici `couleur` est figée
+  à la génération.
+- **Rayon et éclat sont en phase**, l'un étant le carré de l'autre. Une céphéide
+  réelle est la plus brillante quand elle se **dilate**, pas quand elle est la
+  plus grosse.
 
 **L'écrêtage de l'amplitude vit dans une fonction libre**, `facteur_pulsation` :
 `Soleil::new` charge des materials, donc exige le contexte graphique, et une

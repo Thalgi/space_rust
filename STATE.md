@@ -72,11 +72,25 @@ Mira et naine blanche pulsante (ZZ Ceti) d'un coup.
 - **Amplitudes réelles** pour la céphéide (10 %) et Mira (20 %) ; ZZ Ceti est
   exagérée et c'est assumé, comme `PX_MIN`. Les **périodes** sont compressées.
 
-**Le prochain pas** : **lot 8** — lentille **locale** (impostor élargi, UV déviés
-sur le fond stellaire) pour l'anneau d'Einstein en approche. ⚠️ Elle est sous
-condition au §9 de la conception ; à trancher avant de l'engager. Les lots 9 à 13
-(comètes, distinction des types, quasi-étoile, disques proto) ne dépendent pas
-d'elle.
+**Le lot 8 est engagé, et tranché** : lentille **locale**, fond échantillonné
+depuis une **cubemap gravée du champ d'étoiles existant** (décision de
+l'utilisateur, 2026-09-30).
+
+**8.1 fait** : `Fond` grave son propre ciel en cubemap (`face_et_uv`,
+`direction_de`, `graver_faces`), verrouillé par trois gardes. ⚠️ **Pas encore
+consommé** — ses items portent un `allow(dead_code)` qui le dit. Le découpage est
+délibéré : la convention de cubemap ne se débogue pas à l'œil (un ciel d'étoiles
+aléatoires miroité ressemble à un ciel d'étoiles aléatoires), donc elle est
+verrouillée avant qu'une ligne de GLSL en dépende.
+
+**Le prochain pas : 8.2**, la déviation dans le shader. La formule, la liste des
+branchements et une **étape de validation** (sampler sans dévier : le quad élargi
+doit devenir invisible) sont écrites dans
+[`docs/suivi/astres_v2.md`](docs/suivi/astres_v2.md), section « lot 8 ».
+
+⚠️ Limite de fond, pas de budget : une cubemap encode des directions **à
+l'infini**. Une planète qui passe derrière le trou noir ne sera ni déviée ni
+reprise dans l'anneau — elle a de la parallaxe, le champ d'étoiles non.
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de

@@ -365,8 +365,15 @@ pub mod verif {
     const IMPLICITES: &[&str] = &["Model", "Projection", "_Time"];
 
     /// Noms des uniforms **lus par le shader**, extraits des sources GLSL (vertex
-    /// et fragment). Les textures (`sampler2D`) sont déclarées à part, dans
-    /// `MaterialParams.textures`.
+    /// et fragment). Les textures — `sampler2D`, `samplerCube` — sont déclarées
+    /// à part, dans `MaterialParams.textures`.
+    ///
+    /// ⚠️ Le filtre ne connaissait que `sampler2D`, parce que c'était le seul
+    /// type de texture du dépôt. Le premier `samplerCube` (le fond stellaire du
+    /// lot 8) se serait donc présenté comme un uniform manquant côté Rust, et la
+    /// garde de correspondance aurait accusé le shader au lieu d'elle-même.
+    /// C'est la règle qu'elle énonce déjà — « les textures sont déclarées à
+    /// part » — appliquée à toutes les textures.
     pub fn uniforms_glsl(sources: &[&str]) -> BTreeSet<String> {
         let mut noms = BTreeSet::new();
         for src in sources {
@@ -378,7 +385,7 @@ pub mod verif {
                 let (Some(type_), Some(nom)) = (mots.next(), mots.next()) else {
                     continue;
                 };
-                if type_ == "sampler2D" {
+                if type_.starts_with("sampler") {
                     continue;
                 }
                 let nom = nom.split('[').next().unwrap_or(nom);
