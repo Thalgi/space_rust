@@ -71,7 +71,7 @@ impl Specimen {
         // la liste marchait tant que l'ordre ne bougeait pas — c'est-à-dire
         // jusqu'au premier qui l'aurait changé.
         let nom = match regime {
-            Some(r) => format!("{nom} ({})", r.nom()),
+            Some(r) => format!("{nom} ({})", r.libelle()),
             None => nom.to_string(),
         };
         Specimen::Soleil {
@@ -107,12 +107,13 @@ fn types_particuliers() -> Vec<(crate::etoile::Gabarit, Option<crate::disque::Ac
         if out.iter().any(|(d, _)| d.4 == g.4) {
             continue;
         }
-        // ⚠️ Le trou noir compte **pour trois** : son régime se dérive de la
-        // graine, donc en jeu on tombe sur l'un d'eux et il faudrait
-        // régénérer pour voir les autres. Une vue de travail doit pouvoir
-        // les montrer à la demande.
+        // ⚠️ Le trou noir compte **pour tout le catalogue** : son régime se
+        // dérive de la graine, donc en jeu on tombe sur l'un d'eux et il
+        // faudrait régénérer pour voir les autres. Une vue de travail doit
+        // pouvoir les montrer à la demande — y compris la cible concurrente,
+        // qu'aucune graine n'atteint et qui ne se juge que là.
         if g.4 == "Trou noir" {
-            for r in [Accretion::endormie(), Accretion::chaude(), Accretion::vorace()] {
+            for r in Accretion::catalogue() {
                 out.push((g, Some(r)));
             }
         } else {
@@ -329,17 +330,20 @@ mod tests {
         let noms: Vec<&str> = types.iter().map(|(g, _)| g.4).collect();
         assert!(noms.contains(&"Trou noir"), "le trou noir n'est pas au défilé : {noms:?}");
         assert!(noms.contains(&"T Tauri (jeune)"), "la jeune étoile à disque manque");
-        // Aucun doublon — **sauf le trou noir**, qui compte pour trois : son
-        // régime se dérive de la graine, donc le défilé est le seul endroit
-        // où l'on puisse les demander tous les trois.
+        // Aucun doublon — **sauf le trou noir**, qui compte pour tout son
+        // catalogue : son régime se dérive de la graine, donc le défilé est
+        // le seul endroit où l'on puisse les demander tous — et le seul, tout
+        // court, pour la cible visuelle qu'aucune graine n'atteint.
         for (i, (g, r)) in types.iter().enumerate() {
             if r.is_some() {
                 continue;
             }
             assert!(!noms[..i].contains(&g.4), "{} apparaît deux fois", g.4);
         }
-        let regimes = types.iter().filter(|(_, r)| r.is_some()).count();
-        assert_eq!(regimes, 3, "le trou noir doit compter pour ses trois régimes");
+        let vus: Vec<String> = types.iter().filter_map(|(_, r)| r.map(|r| r.libelle())).collect();
+        let attendus: Vec<String> =
+            crate::disque::Accretion::catalogue().iter().map(|a| a.libelle()).collect();
+        assert_eq!(vus, attendus, "le défilé ne montre pas le catalogue du trou noir");
         assert!(types.len() >= 6, "seulement {} entrées au défilé", types.len());
     }
 

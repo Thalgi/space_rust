@@ -113,6 +113,25 @@ pub struct Accretion {
     /// l'émission directe — et qui porte donc la couleur, le bruit et
     /// l'asymétrie du disque, jamais un cercle uniforme.
     pub anneau: f32,
+    /// **Nom du preset**, porté par lui.
+    ///
+    /// ⚠️ Il était *déduit* : une ceinture ⇒ vorace, un halo au-dessus de
+    /// l'actif ⇒ endormi, sinon actif. La déduction tenait tant qu'il n'y
+    /// avait que trois presets qui s'ordonnaient. `froide` n'a aucun trait
+    /// qui la trahisse — elle se serait nommée « actif », et la galerie
+    /// aurait montré deux cellules du même nom. Un fait porté vaut mieux
+    /// qu'un fait reconstitué.
+    ///
+    /// ⚠️ Il ne nomme que l'**appétit** — endormi, actif, vorace. La teinte
+    /// est nommée par `cible`, et les deux se combinent dans [`Self::libelle`].
+    pub nom: &'static str,
+    /// **Nom de la cible visuelle** : « chaud », « Interstellar », « braise ».
+    ///
+    /// ⚠️ Deux axes **orthogonaux**, et c'est tout l'intérêt : l'appétit dit
+    /// combien l'astre mange, la cible dit de quoi ça a l'air. Confondus —
+    /// ce qu'ils étaient jusqu'au 5.5 — décliner une cible en trois appétits
+    /// obligeait à réécrire les trois écarts d'appétit pour chaque cible.
+    pub cible: &'static str,
 }
 
 impl Accretion {
@@ -168,6 +187,8 @@ impl Accretion {
             anneau: 2.4,
             bornes: (1.155, 3.0),
             ceinture: None,
+            nom: "actif",
+            cible: "chaud",
         }
     }
 
@@ -204,6 +225,8 @@ impl Accretion {
             anneau: 1.6,
             bornes: (1.155, 2.4),
             ceinture: None,
+            nom: "endormi",
+            cible: "chaud",
         }
     }
 
@@ -245,8 +268,171 @@ impl Accretion {
             // ceinture démarre donc **dans** le dernier quart du disque et
             // se prolonge bien au-delà.
             ceinture: Some((5.2, 11.0)),
+            nom: "vorace",
             ..Self::chaude()
         }
+    }
+
+    /// **Cible « Interstellar »** (sous-lot 5.4) : le Gargantua de Thorne et
+    /// DNEG, à mettre **en regard** de la cible chaude du 5.3 — décision de
+    /// l'utilisateur, consignée au §5 de
+    /// `astres_v2_disque_accretion_2.md`.
+    ///
+    /// ⚠️ **Ce n'est pas un régime d'astre**, et aucune graine n'y mène :
+    /// c'est l'autre réponse à la même question. `regime()` en tire toujours
+    /// trois. Si celle-ci l'emporte à l'écran, ce sont les constantes de
+    /// `chaude` qui bougeront — pas un quatrième cas dans le tirage.
+    ///
+    /// Trois écarts, et rien d'autre. Ils sont tous les trois **assumés comme
+    /// non physiques** : ce sont exactement les retraits qu'a faits le film.
+    ///
+    /// 1. **Orangé, à température constante en rayon.** Un disque stellaire
+    ///    actif est à ~1,2 × 10⁷ K, donc blanc-bleu. Gargantua est spécifié à
+    ///    **4500 K** — un disque froid, qui n'accrète pas — et son gradient
+    ///    thermique est retiré : `exposant_couleur` quasi nul, `froid` à
+    ///    portée de `chaud`.
+    /// 2. **Asymétrie effacée.** La vitesse orbitale, elle, est imposée par
+    ///    la géométrie : `beta` ne bouge donc **pas**. C'est le plafond qui
+    ///    écrase le beaming — « exceedingly lopsided, with the hole's shadow
+    ///    barely discernible, was obviously unacceptable ».
+    /// 3. **Lisse.** Un disque qui n'accrète plus n'a pas de turbulence
+    ///    magnétorotationnelle à montrer.
+    ///
+    /// Tout le reste — bornes, pli, anneau de lentille — est **identique à
+    /// `chaude`**, et doit le rester : c'est ce qui fait que la comparaison
+    /// porte sur l'aspect et non sur la géométrie.
+    pub fn froide_de(appetit: Self) -> Self {
+        appetit.refroidie(Self::INTERSTELLAR)
+    }
+
+    /// **Le traitement « disque froid », applicable à n'importe quel appétit.**
+    ///
+    /// ⚠️ **C'est la seule façon de ne pas écrire deux fois les écarts
+    /// d'appétit.** Le 5.4 avait posé la cible Interstellar en recopiant les
+    /// valeurs de `chaude` une à une ; la décliner en trois appétits par la
+    /// même méthode aurait signifié réécrire trois fois « mange moins, brille
+    /// moins, tourne moins » — et le jour où l'utilisateur retouche l'endormi,
+    /// une seule des deux familles bougerait. C'est le défaut que ce chantier
+    /// a payé cinq fois.
+    ///
+    /// D'où deux axes **orthogonaux** : l'appétit vient du régime reçu, la
+    /// teinte de cette méthode.
+    ///
+    /// **Absolu ou proportionnel, la distinction n'est pas de commodité** :
+    /// ce que la cible *impose* est absolu (teinte, gradient retiré, plafond
+    /// du beaming, minceur), ce à travers quoi l'appétit doit continuer de se
+    /// voir est proportionnel (éclat, turbulence, rotation, halo, cellules,
+    /// spirale). Mettre l'éclat en absolu rendrait les trois appétits froids
+    /// identiques, et il n'y aurait plus rien à décliner.
+    ///
+    /// ⚠️ Les rapports sont ceux **mesurés** entre `chaude()` et la cible
+    /// validée à l'écran le 2026-09-29, arrondis : `froide()` en ressort à
+    /// moins de 0,5 % de ce qui a été jugé (éclat 1,104 pour 1,1, turbulence
+    /// 0,247 pour 0,25, rotation 0,605 pour 0,6). Le reste est exact.
+    fn refroidie(self, cible: (Vec3, Vec3, &'static str)) -> Self {
+        Self {
+            // Corps noir froid. Reste ordonné R > G > B — le clipping additif
+            // emmène les crêtes vers le blanc, ce qui est aussi ce que fait
+            // Gargantua là où l'anneau de lentille se superpose à l'émission
+            // directe.
+            chaud: cible.0,
+            froid: cible.1,
+            // Quasi nul : c'est *la* signature de la cible. Pas tout à fait
+            // zéro, pour que le bord interne se détache encore du bord
+            // externe.
+            exposant_couleur: 0.15,
+            // 1,2 : la loi en D³ donnerait 8 à 10. L'effet est donc écrasé,
+            // pas atténué — assumé.
+            //
+            // ⚠️ Et **β ne bouge pas** : il est fixé par l'orbite, pas par la
+            // température. Un disque froid tourne aussi vite qu'un disque
+            // chaud au même rayon. C'est le plafond qui porte le retrait, ce
+            // qui le désigne pour ce qu'il est : un choix d'image.
+            beaming_max: 1.2,
+            // Le disque de Gargantua est célèbre pour sa minceur.
+            epaisseur: 0.03,
+            nappes: 2,
+            // ⚠️ Sans gradient radial, `chaleur` vaut ~1 **partout** et
+            // l'éclat frappe le disque entier au lieu d'un cœur. Gardé tel
+            // quel, il donne l'aplat saturé corrigé au 5.3 — d'où la
+            // réduction, qui s'applique à l'éclat de **chaque** appétit.
+            eclat: self.eclat * 0.69,
+            turbulence: self.turbulence * 0.38,
+            rotation: self.rotation * 0.55,
+            halo: self.halo * 1.4,
+            // ⚠️ Seules les cellules **radiales** se réduisent. L'azimutale
+            // est la période du hash : elle doit rester entière, sinon la
+            // couture réapparaît au raccord de l'angle.
+            cellules: vec2(self.cellules.x * 0.75, self.cellules.y),
+            spirale: self.spirale * 0.75,
+            cible: cible.2,
+            ..self
+        }
+    }
+
+    /// **Une cible froide : ses deux teintes et son nom, en un seul endroit.**
+    ///
+    /// ⚠️ Le nom voyage **avec** les couleurs. Séparés, il fallait l'écrire à
+    /// chaque application — une fois dans le preset nommé, une fois dans le
+    /// catalogue — et deux endroits qui décident du même fait finissent
+    /// toujours par diverger.
+    ///
+    /// Corps noir à **4500 K** : la température que Kip Thorne a spécifiée
+    /// pour Gargantua.
+    const INTERSTELLAR: (Vec3, Vec3, &'static str) =
+        (Vec3::new(1.0, 0.80, 0.56), Vec3::new(0.97, 0.69, 0.42), "Interstellar");
+
+    /// Corps noir plus froid encore, ~3000 K.
+    const BRAISE: (Vec3, Vec3, &'static str) =
+        (Vec3::new(1.0, 0.58, 0.28), Vec3::new(0.93, 0.40, 0.16), "braise");
+
+    /// **Cible « braise »** : la même mécanique que l'Interstellar, mais
+    /// franchement plus rouge, et une aura qui l'est aussi.
+    ///
+    /// L'aura suit **gratuitement** : le shader prend la couleur du halo dans
+    /// `mix(froid, chaud, 0.6)`, donc une teinte plus rouge rougit l'aura
+    /// sans qu'on ait à la traiter à part. Ce qui se règle ici est sa
+    /// **présence** — sans ce facteur, le quatrième variant ne se
+    /// distinguerait que par un détail de bord.
+    pub fn braise_de(appetit: Self) -> Self {
+        let r = appetit.refroidie(Self::BRAISE);
+        Self { halo: r.halo * 1.45, ..r }
+    }
+
+    /// **Les trois appétits, dans l'ordre. Source unique.**
+    ///
+    /// ⚠️ `regime()` y puise et le catalogue les décline : trois listes du
+    /// même fait avaient déjà divergé une fois dans ce chantier.
+    pub fn appetits() -> [Self; 3] {
+        [Self::endormie(), Self::chaude(), Self::vorace()]
+    }
+
+    /// **Tous les presets du catalogue. Source unique.**
+    ///
+    /// ⚠️ Cette liste était recopiée **quatre fois** — galerie des disques,
+    /// galerie des étoiles, vue isolée, et une garde. C'est le défaut le plus
+    /// tenace de ce chantier, et il allait resservir : ajouter un preset à
+    /// trois de ces quatre endroits se serait vu à l'écran, pas au test.
+    ///
+    /// C'est un **produit**, pas une liste : trois appétits × deux cibles
+    /// déclinées, plus la braise. Décliner une cible de plus coûte une ligne
+    /// — c'est exactement ce que le 5.5 est venu vérifier.
+    pub fn catalogue() -> Vec<Self> {
+        let mut out: Vec<Self> = Self::appetits().to_vec();
+        out.extend(Self::appetits().map(Self::froide_de));
+        // ⚠️ La braise n'est déclinée qu'une fois, sur l'appétit moyen : c'est
+        // une variante de **teinte**, demandée comme un quatrième aspect à
+        // regarder, pas comme un quatrième appétit.
+        out.push(Self::braise_de(Self::chaude()));
+        out
+    }
+
+    /// **Le libellé d'un preset** : ses deux axes, dans l'ordre de lecture.
+    ///
+    /// ⚠️ Assemblé **ici**. Trois vues l'affichent, et chacune aurait fini
+    /// par le composer à sa façon.
+    pub fn libelle(&self) -> String {
+        format!("{} {}", self.cible, self.nom)
     }
 
     /// **La ceinture de ce régime, prête à poser** — `None` quand il n'y en
@@ -265,22 +451,6 @@ impl Accretion {
         Some(DisqueConfig::debris_trou_noir(900, rayon * int, rayon * ext, masse))
     }
 
-    /// Nom lisible du régime, pour les vues de travail. ⚠️ Ici, et pas chez
-    /// celui qui l'affiche : le nommer par son **rang dans une liste** était
-    /// fragile — il suffisait que l'ordre change.
-    ///
-    /// Reconnu par sa ceinture (le vorace en a une) puis par son halo, qui
-    /// va à contre-courant de l'accrétion.
-    pub fn nom(&self) -> &'static str {
-        if self.ceinture.is_some() {
-            "vorace"
-        } else if self.halo > Self::chaude().halo {
-            "endormi"
-        } else {
-            "actif"
-        }
-    }
-
     /// **Le régime d'un trou noir, dérivé de sa graine.**
     ///
     /// ⚠️ Dérivé, jamais tiré : un `gen_range` de plus décalerait tout ce
@@ -292,13 +462,17 @@ impl Accretion {
     ///
     pub fn regime(graine: f32) -> Self {
         let u = (graine * 0.618_034).fract();
-        if u < 0.35 {
-            Self::endormie()
+        // ⚠️ Puise dans `appetits()` plutôt que de renommer les trois
+        // constructeurs : le tirage et le catalogue ne doivent pas pouvoir
+        // désigner deux jeux d'appétits différents.
+        let rang = if u < 0.35 {
+            0
         } else if u < 0.80 {
-            Self::chaude()
+            1
         } else {
-            Self::vorace()
-        }
+            2
+        };
+        Self::appetits()[rang]
     }
 }
 
@@ -609,13 +783,158 @@ mod tests {
     /// canal en tient lieu — le rouge sature d'abord, puis le vert, puis le
     /// bleu, et le cœur vire au blanc. Une teinte bleutée saturerait vers le
     /// **cyan** : c'était notre défaut.
+    ///
+    /// ⚠️ Balaie **tout le catalogue** : la règle ne tient pas à un preset,
+    /// elle tient au mode de mélange. Un preset orangé — la cible
+    /// Interstellar — y est soumis au même titre.
     #[test]
     fn la_teinte_chaude_sature_vers_le_blanc_et_non_le_cyan() {
-        let a = Accretion::chaude();
-        let c = a.chaud;
-        assert!(c.x >= c.y && c.y >= c.z, "teinte chaude mal ordonnée : {c:?}");
-        assert!(c.x > c.z, "teinte chaude plate : le clipping ne fera rien");
-        assert!(a.eclat > 1.0, "éclat sous 1 : rien ne saturera jamais");
+        for a in Accretion::catalogue() {
+            let (n, c) = (a.nom, a.chaud);
+            assert!(c.x >= c.y && c.y >= c.z, "{n} : teinte chaude mal ordonnée : {c:?}");
+            assert!(c.x > c.z, "{n} : teinte chaude plate : le clipping ne fera rien");
+            // ⚠️ L'éclat au-dessus de 1, lui, ne vaut **pas** pour tous, et
+            // j'avais étendu la garde sans y penser : le trou noir endormi
+            // est volontairement en deçà — ne plus brûler *est* son trait.
+            if n == "endormi" {
+                assert!(a.eclat < 1.0, "l'endormi s'est remis à brûler");
+            } else {
+                assert!(a.eclat > 1.0, "{n} : éclat sous 1, rien ne saturera jamais");
+            }
+        }
+    }
+
+    /// **Refroidir ne touche jamais à la géométrie — pour aucun appétit.**
+    ///
+    /// C'est la condition qui rend la comparaison lisible, posée dès la
+    /// décision (§5 de la recherche) : si les bornes, le pli ou l'anneau de
+    /// lentille divergeaient, on ne comparerait plus deux aspects mais deux
+    /// objets, et le côte-à-côte ne trancherait rien.
+    ///
+    /// ⚠️ Balaie **les trois appétits et les deux cibles froides** : la règle
+    /// tient au traitement, pas au preset qui a servi à la formuler.
+    #[test]
+    fn refroidir_ne_touche_pas_a_la_geometrie() {
+        for chaud in Accretion::appetits() {
+            for cible in [Accretion::INTERSTELLAR, Accretion::BRAISE] {
+                let f = chaud.refroidie(cible);
+                let ou = format!("{} -> {}", chaud.nom, f.cible);
+                assert_eq!(chaud.bornes, f.bornes, "{ou} : bornes");
+                assert_eq!(chaud.pli, f.pli, "{ou} : pli");
+                assert_eq!(chaud.anneau, f.anneau, "{ou} : anneau de lentille");
+                assert_eq!(chaud.bord_interne, f.bord_interne, "{ou} : bord interne");
+                assert_eq!(chaud.bord_externe, f.bord_externe, "{ou} : bord externe");
+                assert_eq!(chaud.ceinture, f.ceinture, "{ou} : ceinture");
+                // ⚠️ β non plus. La vitesse orbitale est imposée par le rayon,
+                // pas par la température : un disque froid tourne aussi vite
+                // qu'un disque chaud au même endroit. Le retrait du beaming
+                // passe par le **plafond**, et lui seul — c'est ce qui le
+                // désigne comme un choix d'image, non comme une autre
+                // physique.
+                assert_eq!(chaud.beta, f.beta, "{ou} : beta doit rester celui de l'orbite");
+                assert!(f.beaming_max < chaud.beaming_max, "{ou} : asymétrie non écrasée");
+                assert!(f.exposant_couleur < 0.3, "{ou} : température non constante en rayon");
+                // Sans gradient radial, `chaleur` vaut ~1 partout : l'éclat
+                // frappe le disque entier, et celui de la cible chaude y
+                // ferait l'aplat saturé corrigé au 5.3.
+                assert!(f.eclat < chaud.eclat, "{ou} : aplat garanti");
+                // La période azimutale du bruit reste **entière**, sinon la
+                // couture réapparaît au raccord de l'angle.
+                assert_eq!(f.cellules.y, f.cellules.y.floor(), "{ou} : période non entière");
+            }
+        }
+    }
+
+    /// **L'appétit se voit encore à travers la cible froide.**
+    ///
+    /// ⚠️ C'est l'intérêt du découpage en deux axes, et le piège qui va avec :
+    /// si l'éclat, la rotation ou la turbulence passaient en **absolu** dans
+    /// `refroidie`, les trois appétits froids deviendraient identiques et il
+    /// n'y aurait plus rien à décliner — trois cellules pour un seul objet.
+    #[test]
+    fn l_appetit_se_voit_encore_une_fois_refroidi() {
+        let [d, c, v] = Accretion::appetits().map(Accretion::froide_de);
+        for (nom, f) in [
+            ("éclat", (|a: &Accretion| a.eclat) as fn(&Accretion) -> f32),
+            ("rotation", |a| a.rotation),
+            ("turbulence", |a| a.turbulence),
+            ("étendue", |a| a.bornes.1),
+        ] {
+            assert!(f(&d) < f(&c), "{nom} : l'endormi froid n'est pas en deçà de l'actif froid");
+            assert!(f(&c) < f(&v), "{nom} : l'actif froid n'est pas en deçà du vorace froid");
+        }
+        // Le halo garde son sens contraire : moins l'astre accrète, plus ce
+        // qui lui reste diffuse au lieu de rayonner.
+        assert!(d.halo > c.halo, "l'endormi froid a perdu son halo pâle et large");
+        // ⚠️ Le beaming, lui, est **volontairement** à plat sur les trois :
+        // c'est précisément ce que la cible retire. L'y chercher serait
+        // demander à la cible de ne pas faire ce qu'on lui demande.
+        assert_eq!(d.beaming_max, v.beaming_max, "le plafond doit être celui de la cible");
+    }
+
+    /// **La braise est plus rouge que l'Interstellar, aura comprise.**
+    ///
+    /// L'aura suit gratuitement — le shader prend la couleur du halo dans
+    /// `mix(froid, chaud, 0.6)` — mais sa **présence** se règle, sans quoi le
+    /// quatrième variant ne se distinguerait que par un détail de bord.
+    #[test]
+    fn la_braise_est_plus_rouge_que_l_interstellar_aura_comprise() {
+        let chaude = Accretion::chaude();
+        let (f, b) = (Accretion::froide_de(chaude), Accretion::braise_de(chaude));
+        assert!(b.chaud.z < f.chaud.z, "teinte pas plus rouge : {:?}", b.chaud);
+        assert!(b.chaud.y < f.chaud.y, "teinte pas plus rouge : {:?}", b.chaud);
+        assert!(b.froid.z < f.froid.z, "bord externe pas plus rouge");
+        // La couleur de l'aura, telle que le shader la calcule.
+        let aura = |a: &Accretion| a.froid.lerp(a.chaud, 0.6);
+        assert!(aura(&b).z < aura(&f).z * 0.8, "aura pas franchement plus rouge");
+        assert!(b.halo > f.halo, "aura pas plus présente");
+        // Et l'ordre des canaux tient : une aura qui saturerait vers le cyan
+        // serait le défaut du 5.3, à l'envers.
+        assert!(aura(&b).x >= aura(&b).y && aura(&b).y >= aura(&b).z);
+    }
+
+    /// **Le catalogue expose des cellules distinctes, et le tirage n'a que les
+    /// appétits chauds.**
+    ///
+    /// Les deux moitiés comptent. **Au catalogue**, parce qu'un preset que
+    /// rien n'atteint est un preset qui n'existe pas — le piège exact qui
+    /// tenait le trou noir hors du jeu. **Hors du tirage**, parce qu'une cible
+    /// n'est pas un état d'astre mais une réponse concurrente à la question de
+    /// l'aspect : elles se jugent côte à côte avant qu'on tranche, et les
+    /// ajouter au tirage changerait tous les trous noirs à graine égale.
+    #[test]
+    fn le_catalogue_expose_des_cellules_distinctes_hors_du_tirage() {
+        let cat = Accretion::catalogue();
+        let libelles: Vec<String> = cat.iter().map(|a| a.libelle()).collect();
+        for attendu in ["chaud actif", "Interstellar endormi", "braise actif"] {
+            assert!(libelles.iter().any(|l| l == attendu), "« {attendu} » absent : {libelles:?}");
+        }
+        // ⚠️ Deux cellules identiques ne compareraient rien — et l'**éclat**
+        // ne suffit plus à les distinguer depuis que la braise partage celui
+        // de l'Interstellar actif. C'est la signature visible qu'on compare.
+        let sig = |a: &Accretion| {
+            format!("{:?}|{:?}|{}|{}|{:?}", a.chaud, a.froid, a.eclat, a.halo, a.bornes)
+        };
+        for (i, a) in cat.iter().enumerate() {
+            assert!(
+                !libelles[..i].contains(&libelles[i]),
+                "deux presets se nomment « {} »",
+                libelles[i]
+            );
+            let s = sig(a);
+            assert!(
+                !cat[..i].iter().any(|b| sig(b) == s),
+                "« {} » est la copie d'une cellule précédente",
+                libelles[i]
+            );
+        }
+        for k in 0..600 {
+            assert_eq!(
+                Accretion::regime(k as f32 * 1.37).cible,
+                "chaud",
+                "une cible visuelle a rejoint le tirage des astres"
+            );
+        }
     }
 
     /// **Les trois régimes se distinguent à l'œil**, et dans le bon sens.
@@ -687,20 +1006,15 @@ mod tests {
     #[test]
     fn chaque_regime_est_atteignable_et_reproductible() {
         assert_eq!(Accretion::regime(12.5).eclat, Accretion::regime(12.5).eclat);
+        let attendus = ["endormi", "actif", "vorace"];
         let mut vus = [0_usize; 3];
         for k in 0..600 {
-            let a = Accretion::regime(k as f32 * 1.37);
-            let rang = if a.ceinture.is_some() {
-                2
-            } else if a.halo > Accretion::chaude().halo {
-                0
-            } else {
-                1
-            };
+            let nom = Accretion::regime(k as f32 * 1.37).nom;
+            let rang = attendus.iter().position(|n| *n == nom).expect("régime inconnu au tirage");
             vus[rang] += 1;
         }
         for (i, n) in vus.iter().enumerate() {
-            assert!(*n > 30, "le régime {i} ne sort que {n} fois sur 600 : introuvable");
+            assert!(*n > 30, "le régime « {} » ne sort que {n} fois sur 600 : introuvable", attendus[i]);
         }
         // Le vorace reste le plus rare : c'est un état de crise.
         assert!(vus[2] < vus[1], "le vorace est plus courant que l'actif");

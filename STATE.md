@@ -21,17 +21,22 @@
 `.claude/worktrees/astres-v2`. **32 commits d'avance sur `main`, rien de
 fusionné, rien de poussé.**
 
-**Vérifié (2026-09-29)** : **851 tests verts** (863 avec le binaire `mhd`),
+**Vérifié (2026-09-30)** : **855 tests verts** (867 avec le binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
-**Le prochain pas** : sous-lot **5.4** — la variante « Interstellar » du
-disque d'accrétion, à comparer côte à côte avec les régimes du 5.3. Tout est
-préparé pour qu'elle ne soit qu'un **preset** de plus : le type `Accretion`
-porte déjà tout le vocabulaire, et trois régimes en sortent sans une ligne de
-shader.
+**5.3 validé** à l'écran, **5.4 jugé « très satisfaisant »**. Le **5.5 est
+livré** et **attend le jugement visuel** : la cible froide déclinée en trois
+appétits, plus une quatrième teinte « braise » (~3000 K, aura rouge).
 
-**Le sous-lot 5.3 est validé à l'écran** (2026-09-29). ⚠️ Le **5.4 attend un
-go explicite** de l'utilisateur : ne pas l'entamer de soi-même.
+Le 5.5 a séparé deux axes qui étaient confondus — l'**appétit** (`nom` :
+endormi / actif / vorace, le seul axe que le tirage connaît) et la **cible**
+(`cible` : chaud / Interstellar / braise). Le catalogue est leur **produit**,
+sept presets, et décliner une cible de plus coûte une ligne.
+
+**Le prochain pas** : **regarder les sept et trancher**. Galerie des étoiles
+(`E`), galerie des disques, vue isolée (touche `3`). ⚠️ **Rien n'est à coder
+avant ce verdict**, et **aucune cible froide n'est au tirage** : si l'une
+l'emporte, ce sont les constantes de `chaude()` qui bougeront.
 
 → Tout le détail, lot par lot, dans
 [`docs/suivi/astres_v2.md`](docs/suivi/astres_v2.md) — c'est lui qu'il faut

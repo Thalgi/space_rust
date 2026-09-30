@@ -44,32 +44,32 @@ fn catalogue() -> Vec<(&'static str, f32, f32, f32, f32)> {
     ]
 }
 
-/// **Les trois régimes du trou noir**, exposés côte à côte.
+/// **Tout le catalogue du trou noir**, exposé côte à côte : ses trois
+/// régimes, puis la cible visuelle concurrente.
 ///
 /// En jeu le régime se **dérive de la graine** : on tombe sur l'un des trois,
 /// et il faudrait régénérer jusqu'à voir les autres. Une planche-contact doit
-/// les montrer ensemble — c'est sa raison d'être.
+/// les montrer ensemble — c'est sa raison d'être. Et la cible Interstellar,
+/// qu'aucune graine n'atteint, ne se juge **que** dans une vue comme
+/// celle-ci.
 ///
 /// ⚠️ Le gabarit (rayon, température, luminosité) vient de
-/// `etoile::particuliere`, **pas d'une copie** : la galerie montre ce que le
-/// jeu produit, ou elle ne sert à rien.
-fn regimes_trou_noir() -> [Accretion; 3] {
-    [Accretion::endormie(), Accretion::chaude(), Accretion::vorace()]
-}
-
-/// Les cellules correspondantes. ⚠️ Séparée de [`regimes_trou_noir`] parce
-/// qu'elle construit des `Soleil`, ce qui exige le contexte graphique : une
-/// fonction qui le réclame ne se teste pas. La **décision** — quels régimes,
-/// sous quels noms — reste donc vérifiable.
+/// `etoile::particuliere`, et la liste des presets d'`Accretion::catalogue` :
+/// **pas d'une copie**, ni d'un côté ni de l'autre. La galerie montre ce que
+/// le jeu produit, ou elle ne sert à rien.
+///
+/// Elle construit des `Soleil`, ce qui exige le contexte graphique : elle ne
+/// se teste donc pas. La **décision** — quels presets, sous quels noms —
+/// est gardée chez `Accretion`, qui elle se teste.
 fn trous_noirs() -> Vec<(String, Soleil)> {
     let (tmin, tmax, rayon, lumi, _, mode) = crate::etoile::particuliere(0.0);
     let couleur = couleur_corps_noir((tmin + tmax) * 0.5);
-    regimes_trou_noir()
+    Accretion::catalogue()
         .into_iter()
         .map(|regime| {
             let s =
                 Variante::de_mode(mode).appliquer(Soleil::new(Vec3::ZERO, rayon, couleur, lumi));
-            (format!("Trou noir - {}", regime.nom()), s.avec_regime(regime))
+            (format!("Trou noir - {}", regime.libelle()), s.avec_regime(regime))
         })
         .collect()
 }
@@ -226,22 +226,27 @@ mod tests {
         assert!(!modes.contains(&5.0), "le trou noir est resté au catalogue : il y sera en double");
     }
 
-    /// **Les trois régimes sont exposés, et ce sont bien trois régimes
-    /// différents.** Trois cellules identiques ne compareraient rien.
+    /// **La planche-contact montre le produit complet** : chaque appétit sous
+    /// chaque cible déclinée, et dans le même ordre.
+    ///
+    /// ⚠️ C'est sa raison d'être. Une cible à qui il manquerait un appétit se
+    /// comparerait mal — on croirait juger deux aspects là où l'un des deux
+    /// mange simplement autrement.
     #[test]
-    fn les_trois_regimes_du_trou_noir_sont_exposes() {
-        let tn = regimes_trou_noir();
-        // Chacun se nomme, et les trois noms diffèrent : trois cellules
-        // identiques ne compareraient rien.
-        let noms: Vec<&str> = tn.iter().map(|r| r.nom()).collect();
-        for (i, n) in noms.iter().enumerate() {
-            assert!(!noms[..i].contains(n), "deux cellules montrent le régime « {n} »");
+    fn la_planche_contact_montre_chaque_appetit_sous_chaque_cible() {
+        let cat = Accretion::catalogue();
+        for cible in ["chaud", "Interstellar"] {
+            let noms: Vec<&str> =
+                cat.iter().filter(|a| a.cible == cible).map(|a| a.nom).collect();
+            assert_eq!(noms, ["endormi", "actif", "vorace"], "cible « {cible} »");
         }
-        let eclats: Vec<f32> = tn.iter().map(|r| r.eclat).collect();
-        for (i, e) in eclats.iter().enumerate() {
-            assert!(!eclats[..i].contains(e), "deux cellules ont le même éclat");
+        // La braise est une variante de **teinte**, demandée une seule fois :
+        // un quatrième aspect à regarder, pas un quatrième appétit.
+        assert_eq!(cat.iter().filter(|a| a.cible == "braise").count(), 1);
+        // Et la ceinture suit l'appétit, jamais la teinte : ce sont des
+        // cailloux, et `config_ceinture` ignore la cible.
+        for a in &cat {
+            assert_eq!(a.ceinture.is_some(), a.nom == "vorace", "{}", a.libelle());
         }
-        // Et le vorace, seul, traîne sa ceinture.
-        assert_eq!(tn.iter().filter(|r| r.ceinture.is_some()).count(), 1);
     }
 }

@@ -599,17 +599,14 @@ mod tests_disque {
     /// disque qui mordrait sur l'horizon se lirait comme une collerette collée
     /// à la sphère.
     ///
-    /// ⚠️ Balaie **les trois régimes** : les bornes sont portées par le
+    /// ⚠️ Balaie **tout le catalogue** : les bornes sont portées par le
     /// preset depuis qu'un trou noir vorace a un disque plus large qu'un
-    /// endormi, donc la règle doit valoir pour chacun.
+    /// endormi, donc la règle doit valoir pour chacun — y compris les
+    /// presets qui ne sont pas au tirage.
     #[test]
     fn le_disque_d_accretion_degage_l_horizon() {
-        let regimes = [
-            ("endormie", Accretion::endormie()),
-            ("chaude", Accretion::chaude()),
-            ("vorace", Accretion::vorace()),
-        ];
-        for (nom, a) in regimes {
+        for a in Accretion::catalogue() {
+            let nom = a.nom;
             let (int, ext) = a.bornes;
             assert!(int > 1.0, "{nom} : le disque mord sur l'ombre");
             // ⚠️ Et il la **serre** : r_ISCO / r_ombre = 6/5,196 = 1,155. Un

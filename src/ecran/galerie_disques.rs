@@ -221,11 +221,14 @@ impl GalerieDisques {
         // Trou noir stellaire : l'échelle n'est plus l'UA mais le rayon de
         // l'horizon. L'étoile est ici un vrai trou noir — sans quoi le disque
         // se jugerait contre une photosphère qui n'existe pas.
-        for (nom, reglage) in [
-            ("endormi", crate::disque::Accretion::endormie()),
-            ("actif", crate::disque::Accretion::chaude()),
-            ("vorace", crate::disque::Accretion::vorace()),
-        ] {
+        // ⚠️ La ceinture ne depend PAS de la cible visuelle : ce sont des
+        // cailloux, pas du gaz, et `config_ceinture` l ignore. Deux appetits
+        // voraces produiraient donc deux cellules rigoureusement identiques.
+        // Une seule suffit, et un doublon dans une planche-contact se lit
+        // comme une difference qu on cherche en vain.
+        let mut ceinture_posee = false;
+        for reglage in crate::disque::Accretion::catalogue() {
+            let nom = reglage.libelle();
             let r = 0.62_f32;
             // `sans_disque` : l objet catalogué ici est celui que la galerie
             // fournit, pas celui que l astre porte -- en additif, les deux
@@ -246,19 +249,16 @@ impl GalerieDisques {
                 2.6,
                 Vec::new(),
             );
-            // Le vorace traine en plus une ceinture de debris epars, bien
-            // au-dela de son disque : deux objets, deux echelles.
+            // Le vorace traine en plus une ceinture de debris epars, qui mord
+            // sur le bord externe de son disque : deux objets, deux echelles.
             if let Some(cfg) = reglage.config_ceinture(r, m) {
-                let tn2 = Soleil::new(Vec3::ZERO, r, vec3(1.0, 0.95, 0.9), 0.4)
-                    .avec_trou_noir()
-                    .sans_disque();
-                e(
-                    &format!("Ceinture eparse - trou noir {nom}"),
-                    cfg,
-                    tn2,
-                    2.2,
-                    Vec::new(),
-                );
+                if !ceinture_posee {
+                    ceinture_posee = true;
+                    let tn2 = Soleil::new(Vec3::ZERO, r, vec3(1.0, 0.95, 0.9), 0.4)
+                        .avec_trou_noir()
+                        .sans_disque();
+                    e("Ceinture eparse - trou noir vorace", cfg, tn2, 2.2, Vec::new());
+                }
             }
         }
         e(

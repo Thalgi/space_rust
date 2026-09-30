@@ -216,6 +216,30 @@ la galerie des disques peut les afficher l'un à côté de l'autre.
 Si l'une des deux l'emporte, l'autre reste au catalogue : elle documente le
 choix, et le coût d'un preset est nul.
 
+### Livré le 2026-09-29 : les deux cibles existent
+
+Le pari a tenu. La cible Interstellar aura coûté **un preset** — et pas une
+ligne de shader : la contrainte « ne
+différer que par des constantes » s'est vérifiée en pratique, et une garde la
+maintient (bornes, pli, anneau de lentille identiques).
+
+Trois écarts seulement, et le plus instructif est **celui qu'on n'a pas
+fait** : `beta` reste à 0,35. La vitesse orbitale est imposée par le rayon,
+pas par la température — un disque froid tourne aussi vite qu'un disque chaud
+au même endroit. C'est le **plafond** du beaming qui porte le retrait, ce qui
+le désigne pour ce qu'il est : un choix d'image, exactement comme dans le
+film, et non une autre physique.
+
+Second enseignement, celui-là inattendu : sans gradient radial, `chaleur`
+vaut ~1 **partout**, et l'éclat cesse de ne frapper qu'un cœur pour frapper
+le disque entier. L'éclat de la cible chaude (1,6) y produirait l'aplat saturé
+corrigé au 5.3 — il a fallu redescendre à 1,1. Deux constantes qu'on croyait
+indépendantes ne le sont pas.
+
+⚠️ `froide` n'est **pas** au tirage des astres : ce n'est pas un quatrième
+état de trou noir, c'est l'autre réponse à la même question. Elle ne se voit
+que dans les vues de travail, jusqu'au verdict.
+
 ---
 
 ## 6. Ce qui ne se jugera qu'à l'œil

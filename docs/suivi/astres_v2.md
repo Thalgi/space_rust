@@ -7,9 +7,10 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-09-29** : 851 tests verts, `cargo clippy --all-targets` à zéro
-avertissement. **Le sous-lot 5.3 est validé à l'écran.** Le **5.4 est le
-prochain**, et attend un go explicite de l'utilisateur.
+**État au 2026-09-30** : 855 tests verts, `cargo clippy --all-targets` à zéro
+avertissement. Les sous-lots **5.3 validé** et **5.4 jugé « très
+satisfaisant »**. Le **5.5 est livré** et attend son jugement : sept presets
+au catalogue, et le choix entre cibles reste ouvert.
 
 ---
 
@@ -32,7 +33,8 @@ prochain**, et attend un go explicite de l'utilisateur.
 | **5.1** — shader dédié | fait | `8c2cec6` |
 | **5.2** — le pli | fait | `f4a0e2d` |
 | **5.3** — l'aspect, corrigé sur mesures | **fait et validé à l'écran** | `c32e3bf` + 7 correctifs |
-| **5.4** — la variante Interstellar, à comparer | **à faire** | |
+| **5.4** — la cible Interstellar, à comparer | **fait**, jugée « très satisfaisante » | |
+| **5.5** — la cible froide déclinée en appétits, plus la braise | **fait**, **à juger à l'écran** | |
 | 6 à 13 | à faire | |
 
 Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
@@ -42,27 +44,72 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 
 ## Ce qu'il faut savoir pour reprendre
 
-### Le prochain pas : sous-lot 5.4
+### Le prochain pas : regarder les sept, puis trancher
 
-**Ce que c'est** : la cible **Interstellar** du disque d'accrétion — disque
-froid non accrétant, orangé, asymétrie réduite, ombre nette — à mettre
-**côte à côte** avec la cible « chaude » du 5.3 pour les juger ensemble.
-Décision de l'utilisateur, consignée dans
-[`conception/astres_v2_disque_accretion_2.md`](../conception/astres_v2_disque_accretion_2.md)
-§5.
+Le 5.4 a été jugé « très satisfaisant », et le 5.5 en a tiré les variantes
+demandées. **Ce qu'il reste à faire est un jugement, pas un codage.** Les sept
+presets sont visibles ensemble en galerie des étoiles, en galerie des disques
+et en vue isolée (touche `3`), sous les libellés « chaud / Interstellar /
+braise » × « endormi / actif / vorace ».
 
-**Ce qui est déjà prêt pour ça, et c'est l'essentiel** : tout le vocabulaire
-du disque vit dans le type `Accretion` (`disque/accretion.rs`), et
-`Accretion::chaude()` en est le premier preset. Le 5.4 est donc
-**`Accretion::froide()` plus une entrée de galerie** — aucune ligne de
-shader, aucune structure. Les valeurs à viser sont au §5 de la recherche :
-4500 K (la température que Kip Thorne a spécifiée pour Gargantua),
-température **constante en rayon** (donc `exposant_couleur` quasi nul),
-`beaming_max` proche de 1.
+⚠️ **Ne rien brancher avant le verdict.** Aucune cible froide n'est au tirage :
+si l'une l'emporte, ce sont les constantes de `chaude()` qui bougeront, pas un
+cas de plus.
 
-⚠️ **Et c'est tout l'intérêt de la comparaison** : si les deux variantes
-finissaient par différer autrement que par des constantes, elles ne se
-compareraient plus. Aucun `if` sur la variante dans le shader.
+**Les deux axes, depuis le 5.5.** C'est la structure à comprendre avant de
+toucher à quoi que ce soit ici :
+
+- **l'appétit** (`nom`) — combien l'astre mange. Trois valeurs, et c'est le
+  seul axe que le tirage connaît (`appetits()`, source unique dont `regime()`
+  puise).
+- **la cible** (`cible`) — de quoi ça a l'air. `refroidie()` applique une
+  teinte à **n'importe quel** appétit, et le catalogue est le produit des deux.
+
+Décliner une cible de plus coûte **une ligne**. C'est ce que le 5.5 est venu
+vérifier, et ça a marché du premier coup.
+
+⚠️ **Absolu ou proportionnel : la distinction porte tout.** Ce que la cible
+impose est absolu (teinte, gradient retiré, plafond du beaming, minceur) ; ce à
+travers quoi l'appétit doit continuer de se voir est proportionnel (éclat,
+turbulence, rotation, halo, cellules, spirale). Passer l'éclat en absolu
+rendrait les trois appétits froids identiques — trois cellules pour un seul
+objet. Gardé par `l_appetit_se_voit_encore_une_fois_refroidi`.
+
+Les rapports proportionnels sont ceux **mesurés** entre `chaude()` et la cible
+validée du 5.4, arrondis : la cible telle qu'elle a été jugée en ressort à
+moins de 0,5 % (éclat 1,104 pour 1,1, turbulence 0,247 pour 0,25, rotation
+0,605 pour 0,6). Le reste est exact. C'était la contrainte de l'exercice — un
+découpage ne doit pas redéfiner ce qui a déjà été validé à l'écran.
+
+**La braise**, quatrième teinte : ~3000 K, `chaud (1,0 / 0,58 / 0,28)`. Son
+aura suit **gratuitement** — le shader prend la couleur du halo dans
+`mix(froid, chaud, 0.6)` — et seule sa *présence* se règle (× 1,45), sans quoi
+la variante ne se distinguerait que par un détail de bord.
+
+**Les trois écarts de la cible froide, et rien d'autre.** Tous assumés comme
+non physiques : ce sont exactement les retraits qu'a faits le film.
+
+| | appétit « actif » | une fois refroidi | Pourquoi |
+|---|---|---|---|
+| teinte chaude | `(1.0, 0.97, 0.93)` | `(1.0, 0.80, 0.56)` | 4500 K, la valeur que Thorne a spécifiée pour Gargantua — **absolu** |
+| `exposant_couleur` | 2,2 | **0,15** | température **constante en rayon** : un disque froid n'accrète pas, il ne s'échauffe pas vers le centre — **absolu** |
+| `eclat` | 1,6 | **× 0,69** → 1,10 | sans gradient, `chaleur` vaut ~1 **partout** : l'éclat frappe le disque entier et 1,6 y ferait un aplat saturé. **Proportionnel**, pour que l'appétit se voie encore |
+| `beaming_max` | 4,0 | **1,2** | « exceedingly lopsided, with the hole's shadow barely discernible » — **absolu**, c'est ce que la cible retire |
+| `beta` | 0,35 | **0,35** | **inchangé** : la vitesse orbitale tient au rayon, pas à la température |
+| bornes, pli, anneau | — | **identiques** | sinon on ne compare plus deux aspects mais deux objets |
+
+Le dernier point est la condition de l'exercice, et il a sa garde
+(`refroidir_ne_touche_pas_a_la_geometrie`, qui balaie les trois appétits et les
+deux cibles froides). Le `beta` inchangé en est le corollaire honnête : c'est
+le **plafond** qui porte le retrait du beaming, ce qui le désigne pour ce qu'il
+est — un choix d'image, pas une autre physique.
+
+**Aucune cible froide n'est au tirage.** `regime()` ne tire que des appétits
+**chauds** : une cible n'est pas un état d'astre, c'est une réponse concurrente
+à la question de l'aspect. Les ajouter changerait tous les trous noirs à graine
+égale. Une garde tient les deux moitiés : présentes au catalogue (sinon elles
+n'existent pas — le piège qui tenait le trou noir hors du jeu), absentes du
+tirage.
 
 ### Ce qui reste ouvert, et que personne ne garde
 
@@ -121,6 +168,25 @@ Quatre occurrences, dont trois trouvées par l'utilisateur à l'écran :
   T Tauri sans disque, et un mode 6 qui y aurait donné un trou noir ;
 - le vocabulaire d'accrétion versé dans le `DisqueConfig` des anneaux de
   Saturne → sorti dans un type à part au 5.3.
+- la **liste des régimes**, recopiée **quatre fois** — galerie des disques,
+  galerie des étoiles, vue isolée, et une garde. Elle allait resservir au
+  5.4 : ajouter un preset à trois de ces quatre endroits ne se serait vu
+  qu'à l'écran. `Accretion::catalogue()` est désormais la seule liste.
+
+**Et sa cause profonde, trouvée au 5.5 : deux faits dans un seul champ.** Un
+preset mêlait *combien l'astre mange* et *de quoi ça a l'air*. Tant qu'il n'y
+avait qu'une cible, ça ne se voyait pas. À la seconde, décliner l'une par
+l'autre revenait à réécrire les trois écarts d'appétit pour chaque teinte — et
+le jour où l'utilisateur retouche l'endormi, une seule des deux familles
+bougerait. **La duplication n'était pas dans le code, elle était dans le
+type.** Séparer les deux axes a ramené la troisième cible à une ligne.
+
+**Et sa variante sournoise : un fait déduit au lieu d'être porté.** Le nom
+d'un régime était *reconstitué* — une ceinture ⇒ vorace, un halo élevé ⇒
+endormi, sinon actif. La déduction tenait pour trois presets qui
+s'ordonnaient. Le quatrième n'a aucun trait qui le trahisse : il se serait
+nommé « actif », et la galerie aurait affiché deux cellules du même nom.
+C'est un champ, maintenant.
 
 ### Un sabotage doit être vérifié, pas seulement lu
 
@@ -143,6 +209,14 @@ Deux autres pièges du red-check, rencontrés depuis :
 - **un sabotage resté en place.** La commande qui devait le défaire a échoué,
   et l'arbre a été annoncé propre à tort. C'est un test qui l'a rattrapé au
   coup suivant. **Relire avant d'annoncer**, ne pas se fier à la commande.
+- **restaurer par copie remonte le temps.** `Copy-Item` donne au fichier
+  restauré la date de **la sauvegarde**, donc plus ancienne que les
+  artefacts du build saboté. Cargo compare les dates : il conclut que rien
+  n'a changé et **relance le binaire saboté**. Au 5.4 ça s'est vu dans le
+  bon sens — deux échecs sur un arbre pourtant sain, et le fichier disait
+  bien la bonne valeur. Dans l'autre sens, c'est un sabotage qui passe au
+  vert sans qu'on sache pourquoi. Le contenu a raison contre le test :
+  vérifier le fichier, puis remettre sa date à l'heure avant de conclure.
 
 ### Mesurer désigne le coupable ; supposer coûte deux tours
 

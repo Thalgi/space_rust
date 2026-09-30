@@ -12,6 +12,11 @@
 - **Red-check systématique** : tout test ajouté est cassé volontairement sur sa
   cible pour vérifier qu'il rougit. **Sauvegarder le fichier dans le scratchpad
   avant de le saboter**, et le restaurer par copie — jamais par git.
+  ⚠️ **La copie remonte la date du fichier** à celle de la sauvegarde, donc
+  plus ancienne que les artefacts du build saboté : cargo en conclut que rien
+  n'a changé et **relance le binaire saboté**. Remettre la date à l'heure
+  après chaque restauration, et croire le **contenu** du fichier plutôt que
+  le résultat du test quand les deux se contredisent.
   Trois formes du même piège reviennent : un test qui **inspecte l'état** au
   lieu d'emprunter le vrai chemin de code, qui **fixe une variable** du scénario
   au lieu de la sonder (`libres()[0]`), ou qui se compare à **sa propre

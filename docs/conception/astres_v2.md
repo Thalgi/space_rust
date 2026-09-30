@@ -671,8 +671,42 @@ vorace (disque élargi de moitié plus une ceinture de débris qui mord sur son
 bord externe). Les trois ne diffèrent que par des **constantes**, portées par
 le type `Accretion` — c'est ce qui rendra le 5.4 possible au même prix.
 
-**5.4, à faire** : la variante **Interstellar**, à comparer côte à côte
-(§5 de la recherche). Elle ne doit être qu'un **preset** de plus.
+**5.4** : la cible **Interstellar**, livrée comme prévu — un **preset** de
+plus, sans une ligne de shader. Trois écarts avec la
+cible chaude, et rien d'autre : orangé à 4500 K **sans gradient radial**,
+beaming écrasé par son plafond (β reste inchangé — la vitesse orbitale tient
+au rayon, pas à la température), turbulence basse. Bornes, pli et anneau de
+lentille sont **identiques** : c'est ce qui fait porter la comparaison sur
+l'aspect et non sur la géométrie, et une garde le vérifie.
+
+Elle n'est **pas** au tirage des astres : ce n'est pas un quatrième état de
+trou noir, c'est l'autre réponse à la même question. Elle ne se voit donc que
+dans les vues de travail, jusqu'au verdict. **Jugée « très satisfaisante » à
+l'écran le 2026-09-30** — mais le choix entre les deux cibles reste ouvert, et
+rien n'est branché sur le tirage.
+
+**5.5** : la cible froide **déclinée en appétits**, plus une quatrième teinte.
+Demande de l'utilisateur au vu du 5.4 : les mêmes variantes que le 5.3, et une
+de plus, plus rouge, aura comprise.
+
+Le sous-lot est surtout un **découpage**. Jusque-là un preset mêlait deux
+questions — *combien l'astre mange* et *de quoi ça a l'air* — et les décliner
+l'une par l'autre aurait fait réécrire trois fois « mange moins, brille moins,
+tourne moins ». Les deux axes sont désormais séparés : `nom` porte l'appétit,
+`cible` la teinte, et `refroidie` applique une teinte à **n'importe quel**
+appétit. Le catalogue devient un produit, et une cible de plus coûte une ligne.
+
+⚠️ **La frontière entre absolu et proportionnel n'est pas de commodité.** Ce
+que la cible impose est absolu — teinte, gradient retiré, plafond du beaming,
+minceur. Ce à travers quoi l'appétit doit continuer de se voir est
+proportionnel — éclat, turbulence, rotation, halo, cellules, spirale. Mettre
+l'éclat en absolu rendrait les trois appétits froids identiques : trois
+cellules pour un seul objet. Une garde tient cette distinction
+(`l_appetit_se_voit_encore_une_fois_refroidi`).
+
+Sept presets au catalogue : trois appétits × deux cibles, plus la braise —
+déclinée une seule fois, puisque c'est une variante de **teinte** et non
+d'appétit.
 
 Trois points du pli, tous vérifiés :
 
