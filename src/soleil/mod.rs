@@ -12,7 +12,7 @@ use eruptions::{Boucle, Flare, Tache};
 use macroquad::models::Vertex;
 use macroquad::prelude::*;
 use macroquad::rand::gen_range;
-use materiau::{mat_plasma_partage, mats_soleil};
+use materiau::{mat_lentille, mat_plasma_partage, mats_soleil};
 use rendu::{texture_halo, TAILLE_HALO};
 
 // Doit correspondre à spots[8] dans le shader. Partagé entre taches ET
@@ -49,6 +49,11 @@ const MAX_TACHES: usize = 8;
 pub const PX_MIN: f32 = 4.0;
 
 /// Vide le cache de materials du soleil (hot-reload des shaders).
+/// **Pose le ciel que la lentille d'un trou noir échantillonnera** (lot 8.2).
+/// Réexporté ici : `rendu.rs` n'a pas à connaître l'organisation interne du
+/// module.
+pub use materiau::poser_fond_stellaire;
+
 pub fn vider_cache_materials() {
     materiau::vider_cache();
 }
@@ -114,6 +119,8 @@ pub struct Soleil {
     disques: Vec<Disque>,
     mats: Vec<Material>,  // un par passe de `PASSES` (disque, puis couronne)
     mat_plasma: Material, // billboards en blending additif (plasma lumineux)
+    /// Passe de lentille gravitationnelle : **trous noirs seuls** (lot 8.2).
+    mat_lentille: Material,
     halo: Texture2D,
     verts: Vec<Vertex>,
     inds: Vec<u16>,
@@ -212,6 +219,7 @@ impl Soleil {
             disques: Vec::new(),
             mats,
             mat_plasma,
+            mat_lentille: mat_lentille(),
             halo: texture_halo(TAILLE_HALO),
             verts: Vec::new(),
             inds: Vec::new(),

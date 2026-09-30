@@ -76,21 +76,34 @@ Mira et naine blanche pulsante (ZZ Ceti) d'un coup.
 depuis une **cubemap gravée du champ d'étoiles existant** (décision de
 l'utilisateur, 2026-09-30).
 
-**8.1 fait** : `Fond` grave son propre ciel en cubemap (`face_et_uv`,
-`direction_de`, `graver_faces`), verrouillé par trois gardes. ⚠️ **Pas encore
-consommé** — ses items portent un `allow(dead_code)` qui le dit. Le découpage est
-délibéré : la convention de cubemap ne se débogue pas à l'œil (un ciel d'étoiles
-aléatoires miroité ressemble à un ciel d'étoiles aléatoires), donc elle est
-verrouillée avant qu'une ligne de GLSL en dépende.
+**Le lot 8 est livré, à juger à l'écran.** `Fond` grave son propre ciel en
+cubemap (8.1), et une **passe de lentille dédiée** l'échantillonne dans des
+directions déviées (8.2). Lentille mince `β = θ − θ_E²/θ` : l'anneau d'Einstein
+et l'image secondaire en sortent tout seuls.
 
-**Le prochain pas : 8.2**, la déviation dans le shader. La formule, la liste des
-branchements et une **étape de validation** (sampler sans dévier : le quad élargi
-doit devenir invisible) sont écrites dans
-[`docs/suivi/astres_v2.md`](docs/suivi/astres_v2.md), section « lot 8 ».
+- La passe est dessinée **avant tout le reste de l'astre** : elle rend un ciel
+  **opaque** qui doit *remplacer* le fond déjà dessiné. Posée après, elle
+  effacerait l'arc du pli ; en additif, on verrait les deux ciels superposés.
+- **Un material à elle** (12ᵉ pipeline) : une texture déclarée oblige chaque
+  objet du material à la fournir — la coller au soleil aurait imposé une cubemap
+  à toutes les étoiles du jeu.
+- La déviation **s'éteint au bord du quad**, sinon le ciel dévié s'arrêterait net
+  sur une frontière invisible. Effet de bord utile : si la convention de cubemap
+  était fautive, ce bord trancherait — ça se voit d'un coup d'œil.
+- `RAYON_EINSTEIN = 1,35` rayon d'ombre : réglage d'image, facile à bouger.
+
+⚠️ **Une garde a cédé, délibérément** : « le double des pipelines tient sous 32 »
+interdisait tout nouveau shader à partir de 16. Remplacée par « huit emplacements
+libres ». À 17 sur 32 il reste 47 % du budget ; si ça remonte, **mutualiser**,
+pas relever le seuil.
 
 ⚠️ Limite de fond, pas de budget : une cubemap encode des directions **à
-l'infini**. Une planète qui passe derrière le trou noir ne sera ni déviée ni
+l'infini**. Une planète qui passe derrière le trou noir n'est ni déviée ni
 reprise dans l'anneau — elle a de la parallaxe, le champ d'étoiles non.
+
+**Le prochain pas** : lots **9 à 13** — comètes (9), distinction des types (10 :
+granulation paramétrée, assombrissement centre-bord), quasi-étoile (11), disques
+proto au tirage (12).
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de

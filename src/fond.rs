@@ -11,15 +11,8 @@ const LOT: usize = 400;
 /// donc toujours en arrière-plan quelle que soit la distance des objets.
 /// Côté d'une face de la cubemap du fond, en texels. Six faces de 256² pèsent
 /// 1,5 Mo — payé une fois, jamais par frame.
-#[allow(dead_code)] // consomme au 8.2
 const COTE_CUBE: usize = 256;
 
-/// ⚠️ **Non consommé tant que le 8.2 n'est pas là.** La cubemap est gravée et
-/// gardée, mais aucun shader ne l'échantillonne encore. Le découpage est
-/// délibéré : la convention de cubemap est la partie qu'on ne peut pas déboguer
-/// à l'œil — un ciel d'étoiles aléatoires miroité ressemble à un ciel d'étoiles
-/// aléatoires — et elle est verrouillée par trois gardes avant qu'une ligne de
-/// GLSL n'en dépende.#[allow(dead_code)]
 pub struct Fond {
     etoiles: Vec<(Vec3, f32, Color)>, // direction, taille, couleur
     mat: Material,
@@ -47,7 +40,6 @@ pub struct Fond {
 /// si bien qu'un `samplerCube` dans le shader reçoit bien un `GL_TEXTURE_CUBE_MAP`.
 /// C'est ce qui rend le lot 8 possible sans copie d'écran, comme
 /// `suivi/technique.md` l'avait noté.
-#[allow(dead_code)] // consomme au 8.2
 fn televerser_cubemap(faces: &[Vec<u8>], cote: usize) -> Texture2D {
     use macroquad::miniquad::{
         FilterMode, TextureAccess, TextureFormat, TextureKind, TextureParams, TextureSource,
@@ -83,7 +75,6 @@ fn televerser_cubemap(faces: &[Vec<u8>], cote: usize) -> Texture2D {
 /// aléatoires est miroité. Ça ne se verrait que dans l'anneau du trou noir, où
 /// le ciel dévié ne raccorderait pas le ciel autour. D'où [`direction_de`], son
 /// inverse exact, et la garde d'aller-retour.
-#[allow(dead_code)] // consomme au 8.2
 pub(crate) fn face_et_uv(dir: Vec3) -> (usize, f32, f32) {
     let a = dir.abs();
     let (face, sc, tc, ma) = if a.x >= a.y && a.x >= a.z {
@@ -108,7 +99,10 @@ pub(crate) fn face_et_uv(dir: Vec3) -> (usize, f32, f32) {
 }
 
 /// **L'inverse exact de [`face_et_uv`]**, et c'est cette exactitude qui se teste.
-#[allow(dead_code)] // consomme au 8.2
+// ⚠️ N'existe **que** pour la garde d'aller-retour : c'est elle qui vérifie la
+// convention de cubemap, et rien en production n'a besoin de l'inverse — le
+// shader échantillonne par direction, pas par face et coordonnées.
+#[cfg(test)]
 pub(crate) fn direction_de(face: usize, u: f32, v: f32) -> Vec3 {
     let (sc, tc) = (u * 2.0 - 1.0, v * 2.0 - 1.0);
     let d = match face {
@@ -129,7 +123,6 @@ pub(crate) fn direction_de(face: usize, u: f32, v: f32) -> Vec3 {
 /// s'ajoutent au lieu que la seconde efface la première : à 900 étoiles sur
 /// 393 216 texels la collision est rare, mais l'écrasement ferait disparaître
 /// une étoile du ciel dévié sans en retirer une du ciel dessiné.
-#[allow(dead_code)] // consomme au 8.2
 pub(crate) fn graver_faces(etoiles: &[(Vec3, f32, Color)], cote: usize) -> Vec<Vec<u8>> {
     let mut faces = vec![vec![0u8; cote * cote * 4]; 6];
     for (dir, taille, col) in etoiles {
@@ -186,7 +179,6 @@ impl Fond {
     ///
     /// Gravée au premier appel depuis les **mêmes** étoiles que celles qui sont
     /// dessinées, puis conservée.
-    #[allow(dead_code)] // consomme au 8.2
     pub fn cubemap(&mut self) -> Texture2D {
         if let Some(t) = &self.cube {
             return t.clone();

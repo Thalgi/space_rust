@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-09-30** : 874 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-09-30** : 882 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -45,8 +45,8 @@ silhouette « mince » n'a jamais été essayée.
 | **6.2** — la naine brune comme **centre** d'un système | **fait**, à juger à l'écran | |
 | **6.2 bis** — ses quatre classes dans la planche des étoiles | **fait** | |
 | **7** — pulsation : céphéide, Mira, ZZ Ceti | **fait**, à juger à l'écran | |
-| **8.1** — le ciel en cubemap, gravé depuis le champ existant | **fait** (pas encore consommé) | |
-| **8.2** — la déviation dans le shader du trou noir | **le prochain pas** | |
+| **8.1** — le ciel en cubemap, gravé depuis le champ existant | fait | `7f6e1aa` |
+| **8.2** — la déviation dans le shader du trou noir | **fait**, à juger à l'écran | |
 | 9 à 13 | à faire | |
 
 Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
@@ -105,11 +105,69 @@ miniquad lie la texture avec **sa propre cible** au moment du dessin
 `sampler2D`. Le premier `samplerCube` se serait présenté comme un uniform manquant
 côté Rust, et la garde de correspondance aurait accusé le shader au lieu d'elle-même.
 
-⚠️ **Le 8.1 n'est pas encore consommé** : rien ne l'échantillonne, et ses items
-portent un `allow(dead_code)` qui le dit. Le découpage est délibéré — verrouiller
-la convention avant qu'une ligne de GLSL en dépende.
+Le découpage était délibéré : verrouiller la convention avant qu'une ligne de
+GLSL en dépende. Le 8.2 l'a consommée sans avoir à y revenir.
 
-#### 8.2 — ce qu'il reste à faire
+#### 8.2 — la déviation, livrée
+
+**Une passe à part, dessinée avant tout le reste de l'astre.** L'ordre n'est pas
+un détail : la lentille rend un ciel **opaque**, qui doit *remplacer* le fond
+stellaire déjà dessiné. Posée après, elle effacerait l'arc du pli qui enjambe
+l'horizon ; posée en additif, on verrait le ciel réel **et** le ciel dévié
+superposés.
+
+**Un material à elle, et c'est ce qui a coûté le douzième pipeline.** Une texture
+déclarée sur un material oblige **chaque** objet qui s'en sert à la fournir : la
+coller au material du soleil aurait imposé une cubemap à toutes les étoiles du
+jeu pour le seul bénéfice des trous noirs. Elle est sautée quand aucun ciel n'a
+été posé — plusieurs écrans dessinent des étoiles sans passer par
+`Rendu::rendre`, et dessiner sans la texture ferait paniquer macroquad.
+
+**La formule.** Lentille mince : un objet dont la position non déviée est `β`
+apparaît en `θ`, avec `β = θ − θ_E²/θ`. On rend l'inverse — pour chaque pixel à
+`θ`, on va chercher le ciel à `β`. L'**anneau d'Einstein** en sort tout seul
+(`β = 0` en `θ = θ_E`, donc tout ce pourtour montre le point exactement
+derrière), et `β` négatif donne l'**image secondaire** de l'autre côté du centre,
+gratuitement, puisque `sin` change de signe.
+
+⚠️ **La déviation s'éteint au bord du quad.** Le quad est un objet de rendu, pas
+un objet du monde : sans extinction, le ciel dévié s'arrêterait net sur une
+frontière invisible et on verrait un disque de ciel décalé posé sur le ciel réel.
+Avec elle, `β` rejoint `θ` au bord, donc le ciel échantillonné y **est** le ciel
+réel. Effet de bord heureux : c'est ce qui rend la convention de cubemap
+vérifiable à l'œil — si elle était fautive, le bord du quad trancherait.
+
+**`atan` et non `r/dist`** pour l'angle apparent : au cadrage de la vue isolée
+(cinq rayons) l'approximation des petits angles se trompe de plus de 1 %, et
+l'anneau se placerait au mauvais endroit précisément là où on l'examine.
+
+**`RAYON_EINSTEIN = 1,35` rayon d'ombre** — réglage d'image, pas une constante :
+la formule décrit une masse ponctuelle et une source plane, ni l'une ni l'autre
+exacte ici. Posé un peu au-delà du bord de l'ombre pour que l'anneau se détache
+du noir sans se confondre avec le liseré ni avec l'anneau de lentille du disque,
+qui occupent déjà ce voisinage.
+
+#### ⚠️ Une garde a cédé, et pas par hasard
+
+`le_nombre_de_shaders_reste_sous_le_plafond` portait un invariant annexe : « le
+**double** des pipelines vivants tient sous le plafond de 32 ». À 17 pipelines,
+34 dépasse — la règle interdisait donc **tout** shader supplémentaire, à jamais.
+
+Ce n'était pas ce qu'elle voulait dire. Le risque réel est une panique au
+lancement au-delà de 32 ; le doublement n'en était qu'un proxy, choisi quand le
+dépôt tenait dans huit pipelines. Remplacé par ce qu'on veut vraiment garantir :
+**huit emplacements libres**. Relâchée délibérément, donc, et consignée comme
+telle — à 17 sur 32 il reste 47 % du budget, et si ce nombre remonte la réponse
+n'est plus de relever le seuil mais de **mutualiser des passes**.
+
+#### Ce que le lot 8 ne fait pas
+
+- **Une planète qui passe derrière le trou noir n'est ni déviée ni reprise dans
+  l'anneau.** Limite de fond, pas de budget : une cubemap encode des directions
+  à l'infini, et une planète à 40 unités a de la parallaxe.
+- **L'anneau montre un ciel de 700 à 900 étoiles**, celui de la vue. S'il paraît
+  vide, c'est que le ciel l'est — densifier le champ densifierait les deux
+  ensemble, ce qui est le comportement voulu.
 
 La formule est posée, il reste à la câbler. Pour un pixel à l'angle `θ` du centre
 (azimut `û`), la lentille mince donne la direction source `β = θ − θ_E²/θ` : un

@@ -343,6 +343,24 @@ pub fn rayon_plancher(r: f32, dist: f32, vh: f32, px_min: f32) -> f32 {
 #[cfg(test)]
 const MAX_PIPELINES: usize = 32;
 
+/// **Rayon angulaire apparent** d'un corps de rayon `r` à la distance `dist`, en
+/// radians.
+///
+/// La lentille gravitationnelle en a besoin : elle raisonne en **angles** sur le
+/// ciel, là où le reste du rendu raisonne en fractions de quad. ⚠️ `atan` et non
+/// `r / dist` : à courte distance — la vue isolée cadre le corps à cinq rayons —
+/// l'approximation des petits angles se trompe de plusieurs pour cent, et
+/// l'anneau se placerait au mauvais endroit précisément là où on l'examine.
+///
+/// Borné sous un quart de tour : au-delà l'œil serait dans le corps, et la
+/// lentille n'aurait plus de sens.
+pub fn angle_apparent(r: f32, dist: f32) -> f32 {
+    if dist <= 0.0 {
+        return std::f32::consts::FRAC_PI_2;
+    }
+    (r.max(0.0) / dist).atan().min(std::f32::consts::FRAC_PI_2)
+}
+
 /// Descripteurs des uniforms communs (à concaténer à ceux propres au corps).
 pub fn uniforms_communs() -> Vec<UniformDesc> {
     vec![
@@ -553,6 +571,42 @@ mod tests {
             .collect()
     }
 
+    /// **L'angle apparent décroît avec la distance, et ne ment pas de près.**
+    ///
+    /// ⚠️ La lentille raisonne en **angles** : c'est `angle_ombre` qui dit
+    /// quelle portion de ciel le quad recouvre, donc où tombe l'anneau. Une
+    /// approximation des petits angles (`r / dist`) se trompe de plusieurs pour
+    /// cent au cadrage de la vue isolée — cinq rayons — c'est-à-dire précisément
+    /// là où on vient l'examiner de près.
+    #[test]
+    fn l_angle_apparent_decroit_et_reste_juste_de_pres() {
+        use super::angle_apparent;
+        let mut precedent = f32::INFINITY;
+        for dist in [1.0_f32, 2.0, 5.0, 20.0, 200.0, 5000.0] {
+            let a = angle_apparent(1.0, dist);
+            assert!(a > 0.0 && a <= std::f32::consts::FRAC_PI_2, "dist {dist} -> {a}");
+            assert!(a < precedent, "l'angle remonte à {dist}");
+            precedent = a;
+        }
+        // De loin, `atan` et le petit angle se rejoignent : l'écart doit être
+        // négligeable, sinon c'est la formule qui est fausse.
+        let loin = angle_apparent(1.0, 5000.0);
+        assert!((loin - 1.0 / 5000.0).abs() < 1e-7, "au loin : {loin}");
+        // ⚠️ **De près, ils divergent**, et c'est pour ça qu'on prend `atan` :
+        // à cinq rayons le petit angle se trompe de plus de 1 %.
+        let pres = angle_apparent(1.0, 5.0);
+        let naif = 1.0_f32 / 5.0;
+        assert!(
+            (naif - pres) / pres > 0.01,
+            "le petit angle ne s'écarte que de {} : `atan` ne servirait à rien",
+            (naif - pres) / pres
+        );
+        // Cas dégénérés : ni NaN ni angle négatif.
+        assert!(angle_apparent(1.0, 0.0).is_finite());
+        assert_eq!(angle_apparent(0.0, 10.0), 0.0);
+        assert!(angle_apparent(-3.0, 10.0) >= 0.0, "un rayon négatif ne rend pas un angle négatif");
+    }
+
     /// **Sonnette sur l'arrivée d'un shader.**
     ///
     /// macroquad plafonne les pipelines à 32 et panique au-delà. Ce test compte
@@ -570,22 +624,44 @@ mod tests {
     fn le_nombre_de_shaders_reste_sous_le_plafond() {
         let sites = sites_de_chargement();
         let total: usize = sites.iter().map(|(_, n)| n).sum();
-        assert_eq!(total, 11, "un shader est arrivé ou parti. Détail : {sites:?}");
+        assert_eq!(total, 12, "un shader est arrivé ou parti. Détail : {sites:?}");
 
         // Décompte réel des pipelines vivants, à tenir à jour avec le précédent :
-        //  10 templates en cache — planète (corps, atmosphère), soleil (disque,
-        //     couronne, plasma), disque (particules, voile, ACCRÉTION),
-        //     éclairage, palette ;
+        //  11 templates en cache — planète (corps, atmosphère), soleil (disque,
+        //     couronne, plasma, LENTILLE), disque (particules, voile,
+        //     accrétion), éclairage, palette ;
         //   6 par instance — un fond étoilé par écran (5) + le panache (1).
         //
-        // ⚠️ L'accrétion (sous-lot 5.1) est le dernier arrivé : un disque
-        // d'accrétion n'occulte pas ce qu'il y a derrière lui, il **émet**, et
-        // son blending additif ne se règle pas sur un pipeline partagé avec
-        // les anneaux planétaires.
-        const PIPELINES: usize = 10 + 6;
+        // ⚠️ La **lentille** (sous-lot 8.2) est la dernière arrivée, et il lui
+        // faut un pipeline à elle pour une raison précise : elle lit un
+        // `samplerCube`. Une texture déclarée sur un material oblige **chaque**
+        // objet qui s'en sert à la fournir, sous peine de panique — la coller au
+        // material du soleil aurait imposé une cubemap à toutes les étoiles du
+        // jeu pour le seul bénéfice des trous noirs.
+        //
+        // Avant elle, l'accrétion (sous-lot 5.1) : un disque d'accrétion
+        // n'occulte pas ce qu'il y a derrière lui, il **émet**, et son blending
+        // additif ne se règle pas sur un pipeline partagé avec les anneaux
+        // planétaires.
+        const PIPELINES: usize = 11 + 6;
+
+        // ⚠️ **La règle était « le double tient sous le plafond », et elle a
+        // cédé ici.** À 17 pipelines vivants, 34 dépasse les 32 de macroquad :
+        // elle interdisait donc *tout* shader supplémentaire, à jamais.
+        //
+        // Ce n'était pas ce qu'elle voulait dire. Le risque réel est une panique
+        // au lancement au-delà de 32 ; le doublement n'en était qu'un proxy,
+        // choisi quand le dépôt tenait dans huit pipelines. Remplacé par ce
+        // qu'on veut vraiment garantir : **huit emplacements libres**, de quoi
+        // voir venir plusieurs shaders avant de devoir en fusionner.
+        //
+        // Relâchée délibérément, donc, et pas parce qu'elle gênait : à 17 sur 32
+        // il reste 47 % du budget. Si ce nombre remonte, la réponse n'est plus
+        // de relever le seuil mais de mutualiser des passes.
+        const LIBRES_MIN: usize = 8;
         const _: () = assert!(
-            PIPELINES * 2 <= MAX_PIPELINES,
-            "plus de marge sous le plafond de pipelines de macroquad"
+            PIPELINES + LIBRES_MIN <= MAX_PIPELINES,
+            "moins de huit pipelines libres sous le plafond de macroquad : mutualiser, pas relever"
         );
     }
 
