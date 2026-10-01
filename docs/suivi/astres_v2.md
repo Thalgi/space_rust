@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-10-01** : 883 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-10-01** : 887 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -46,7 +46,7 @@ silhouette « mince » n'a jamais été essayée.
 | **6.2 bis** — ses quatre classes dans la planche des étoiles | **fait** | |
 | **7** — pulsation : céphéide, Mira, ZZ Ceti | **fait**, à juger à l'écran | |
 | **8.1** — le ciel en cubemap, gravé depuis le champ existant | fait | `7f6e1aa` |
-| **8.2** — la déviation dans le shader du trou noir | fait, **+ 1 correctif**, à rejuger | |
+| **8.2** — la déviation dans le shader du trou noir | fait, **refondu sur recherche**, à rejuger | |
 | 9 à 13 | à faire | |
 
 Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
@@ -189,6 +189,41 @@ posent bien.
 "disc")`), sinon le test se trouve lui-même : il cite forcément ce qu'il cherche.
 C'est la troisième fois que ce piège apparaît sur ce chantier.
 
+
+#### ⚠️ Refonte 8.2 sur recherche (2026-10-01)
+
+Jugé « ça rend mal » après le correctif du carré. Recherche demandée, consignée
+dans [conception/astres_v2_lentille.md](../conception/astres_v2_lentille.md).
+**Deux défauts, tous deux mesurés, aucun de dosage.**
+
+**1. La formule n'était pas celle d'un trou noir.** J'avais pris la **lentille
+mince** `β = θ − θ_E²/θ` — une masse ponctuelle avec une source à distance
+finie. Elle ignore la sphère de photons, donc l'ombre, donc l'empilement d'images
+à son bord : tout ce qui fait reconnaître un trou noir. La littérature donne deux
+régimes, et les implémentations temps réel sérieuses emploient les deux : champ
+faible `2 r_s / b`, et **déviation forte de Darwin**
+`α = −π + ln[216(7−4√3)/(1−b_c/b)]`, qui **diverge** au bord de l'ombre.
+
+Heureuse surprise : le paramètre d'impact critique vaut `b_c = 2,598 r_s`, soit
+**exactement** le rayon d'ombre que le chantier emploie déjà. Dans nos unités
+`b_c = 1`, et les deux constantes se dérivent sans rien régler à l'œil.
+
+**2. Le quad était douze fois trop petit.** La déviation décroît en `1/b` :
+elle vaut encore **13°** à 3,4 rayons — où s'arrêtait mon quad — et ne tombe sous
+un pixel qu'au-delà de **1400**. Mon atténuation n'adoucissait donc pas un
+détail : elle **écrasait l'essentiel de l'effet** sur toute la moitié extérieure.
+
+⚠️ Mais la conclusion n'est pas « un quad de 1400 rayons ». Sur un champ
+d'étoiles **sans structure**, un décalage *rigide* est indétectable ; ce qui se
+voit est l'**étirement**, donc le gradient — et lui passe sous le pixel vers
+`b ≈ 6`. Douze rayons suffisent, et le faux gradient de l'atténuation y reste
+sub-pixel. **Les deux affirmations sont des tests**, pas des impressions.
+
+**Ce qui restera limité**, et qu'il ne faut pas espérer corriger par la lentille :
+la cubemap est **onze fois plus grossière** qu'un pixel d'écran (256 texels pour
+90°), donc les étoiles s'étaleront près de l'anneau ; et 700 à 900 étoiles sur
+toute la sphère n'en mettront que quelques-unes dans l'anneau. Densifier le ciel
+est un choix d'aspect **global**, à prendre explicitement — pas en douce ici.
 #### Ce que le lot 8 ne fait pas
 
 - **Une planète qui passe derrière le trou noir n'est ni déviée ni reprise dans

@@ -1,7 +1,7 @@
 #version 100
-// Lentille gravitationnelle **locale** d'un trou noir (lot 8.2).
+// Lentille gravitationnelle d'un trou noir (lot 8.2, refondu le 2026-10-01).
 //
-// Passe à part, et dessinée **avant** tout le reste de l'astre — avant même la
+// Passe à part, dessinée **avant** tout le reste de l'astre — avant même la
 // moitié arrière du disque d'accrétion. La raison est le blending : elle rend un
 // ciel **opaque**, qui doit *remplacer* le fond stellaire déjà dessiné et non s'y
 // ajouter. Posée plus tard, elle effacerait l'arc du pli qui enjambe l'horizon.
@@ -10,10 +10,7 @@
 // des directions à l'infini : le champ d'étoiles est à 3000 unités, donc
 // assimilable, mais une planète à 40 unités a de la parallaxe — sa direction
 // apparente dépend d'où est l'œil — et aucun échantillonnage par direction seule
-// ne peut la représenter. Une planète qui passe derrière l'horizon n'est donc ni
-// déviée ni reprise dans l'anneau. Parti pris assumé, décidé avec l'utilisateur
-// (`docs/suivi/astres_v2.md`, lot 8) ; la seule alternative correcte serait du
-// raymarching géodésique par pixel.
+// ne peut la représenter. Parti pris assumé, décidé avec l'utilisateur.
 precision highp float;
 
 varying vec2 v_q; // coordonnée du quad : |v_q| = 1 au bord de l'ombre
@@ -23,7 +20,8 @@ uniform vec3 cam_up;
 uniform vec3 to_cam;
 uniform float couronne;    // étendue du quad, en rayons de l'ombre
 uniform float angle_ombre; // rayon angulaire de l'ombre, en radians
-uniform float einstein;    // rayon d'Einstein, en rayons de l'ombre
+uniform float dev_faible;  // 2 r_s, numérateur du champ faible
+uniform float dev_forte;   // -pi + ln[216(7-4*sqrt(3))]
 uniform samplerCube fond;  // le ciel de CETTE vue (`fond::Fond::cubemap`)
 
 void main() {
@@ -37,34 +35,40 @@ void main() {
         return;
     }
 
+    // ⚠️ **Le paramètre d'impact EST la coordonnée du quad.** `b/b_c = θ/θ_s`,
+    // et `rr` vaut déjà `θ/θ_s` puisque `|v_q| = 1` tombe sur le bord de
+    // l'ombre, qui est `b_c`. Aucune conversion, donc aucune occasion de se
+    // tromper d'unité — celle qui a donné l'impostor carré.
+    float b = rr;
+
+    // **Déviation à deux régimes** (`astres_v2_lentille.md` §1). Le champ
+    // faible `2 r_s / b` est exact au loin ; la déviation forte de Darwin
+    // **diverge** au bord de l'ombre, et c'est elle qui fait l'image — l'anneau
+    // d'Einstein et l'empilement des images d'ordre supérieur en sortent seuls.
+    // Les deux se croisent à b = 1,764 ; on prend le plus grand, ce qui reste
+    // continu puisqu'ils se coupent.
+    //
+    // ⚠️ Les deux constantes sont **dupliquées** depuis `soleil/materiau.rs`,
+    // qui les dérive de `b_c = 3√3/2 r_s`. Un test de littéraux compare les deux
+    // textes, comme pour `PORTEE` du champ magnétique.
+    float alpha = max(dev_faible / b, dev_forte - log(1.0 - 1.0 / b));
+
+    // ⚠️ **Atténuation sur le tiers extérieur seulement.** Le quad est un objet
+    // de rendu, pas un objet du monde : sans elle, le ciel dévié s'arrêterait net
+    // sur une frontière invisible. Le faux gradient qu'elle introduit vaut
+    // environ 0,16 px par pixel à 12 rayons — sub-pixel, donc invisible, et
+    // c'est un test qui le vérifie, pas une impression.
+    alpha *= 1.0 - smoothstep(couronne * 0.66, couronne, rr);
+
+    // **La direction du ciel est à `θ + α` du centre de l'ombre.** Au loin
+    // `α → 0` et l'on retrouve la direction de visée ; au bord de l'ombre `α`
+    // dépasse π et le ciel s'y **enroule**, ce qui produit l'anneau puis les
+    // images d'ordre supérieur. C'est tout l'effet, et il ne coûte qu'un cosinus.
+    float phi = rr * angle_ombre + alpha;
+
     vec2 u = v_q / max(rr, 1e-4);
-    float theta = rr * angle_ombre; // angle depuis le centre de l'ombre
-
-    // **Lentille mince.** Un objet dont la position non déviée est `beta`
-    // apparaît en `theta`, avec `beta = theta - theta_E^2 / theta`. On rend donc
-    // l'inverse : pour chaque pixel à `theta`, on va chercher le ciel à `beta`.
-    //
-    // Un **anneau d'Einstein** en sort tout seul : à `theta = theta_E`, `beta`
-    // vaut 0, donc tout ce pourtour montre le point exactement derrière le trou
-    // noir. Et `beta` négatif — plus près que l'anneau — donne l'**image
-    // secondaire**, de l'autre côté du centre : c'est physiquement juste, et
-    // gratuit ici puisque `sin` change de signe.
-    //
-    // ⚠️ **La déviation s'éteint au bord du quad.** Le quad est un objet de
-    // rendu, pas un objet du monde : sans extinction, le ciel dévié s'arrêterait
-    // net sur une frontière invisible, et on verrait un disque de ciel décalé
-    // posé sur le ciel réel. Avec elle, `beta` rejoint `theta` au bord, donc le
-    // ciel échantillonné y **est** le ciel réel, et le raccord ne se voit pas.
-    // C'est aussi ce qui rend la convention de cubemap vérifiable à l'œil : si
-    // elle était fautive, le bord du quad trancherait.
-    float att = 1.0 - smoothstep(couronne * 0.5, couronne * 0.95, rr);
-    float e = einstein * angle_ombre;
-    float beta = theta - (e * e / max(theta, 1e-6)) * att;
-
-    // La direction de visée, tournée de `beta` depuis l'axe du trou noir dans le
-    // plan que porte l'azimut du pixel. `-to_cam` regarde vers l'astre.
     vec3 lat = u.x * cam_right + u.y * cam_up;
-    vec3 dir = normalize(-to_cam * cos(beta) + lat * sin(beta));
+    vec3 dir = normalize(-to_cam * cos(phi) + lat * sin(phi));
 
     gl_FragColor = vec4(textureCube(fond, dir).rgb, 1.0);
 }

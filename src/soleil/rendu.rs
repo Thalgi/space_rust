@@ -45,7 +45,11 @@ impl Soleil {
                     cam,
                     c,
                     r,
-                    self.couronne,
+                    // ⚠️ **Pas `self.couronne`.** La couronne vaut 3,4 rayons,
+                    // où la déviation atteint encore 13° : le quad coupait
+                    // l'effet en son milieu. Douze rayons contiennent tout
+                    // l'étirement visible (`astres_v2_lentille.md` §2).
+                    super::materiau::ETENDUE_LENTILLE,
                 );
                 // ⚠️ Pas `uniforms_standard` : il pose aussi `time`, que ce
                 // shader ne déclare pas — la déviation ne dépend que de la
@@ -54,12 +58,13 @@ impl Soleil {
                 m.set_uniform("cam_up", (cam.up.x, cam.up.y, cam.up.z));
                 let vers_cam = -cam.forward;
                 m.set_uniform("to_cam", (vers_cam.x, vers_cam.y, vers_cam.z));
-                m.set_uniform("couronne", self.couronne);
+                m.set_uniform("couronne", super::materiau::ETENDUE_LENTILLE);
                 m.set_uniform(
                     "angle_ombre",
                     crate::impostor::angle_apparent(r, (cam.pos - c).length()),
                 );
-                m.set_uniform("einstein", super::materiau::RAYON_EINSTEIN);
+                m.set_uniform("dev_faible", super::materiau::DEVIATION_FAIBLE);
+                m.set_uniform("dev_forte", super::materiau::DEVIATION_FORTE);
                 m.set_texture("fond", ciel);
                 gl_use_material(m);
                 let quad = Mesh {
