@@ -270,8 +270,38 @@ mod tests_ruban {
     }
 }
 
-/// Uniforms communs à tous les corps impostor : temps, repère caméra, et l'échelle
-/// `disc` du disque. `disc` doit valoir la même demi-taille que celle du quad.
+/// **Pose le quad d'un impostor ET son échelle `disc`.**
+///
+/// ⚠️ **Les deux disent le même fait, et les séparer les laisse diverger.** Le
+/// quad se pousse en **longueur monde** (`rayon × etendue`) tandis que `disc` est
+/// un **rapport** (`etendue`), parce que le vertex fait
+/// `v_q = (texcoord·2−1)·disc` : `|v_q| = 1` doit tomber sur la surface du corps.
+///
+/// Passer la longueur monde là où le rapport est attendu ne casse rien de
+/// visible côté Rust, ne déclenche aucune garde, et donne à l'écran un impostor
+/// **carré** — le `discard` radial du fragment ne mord plus, puisque `|v_q|`
+/// n'atteint jamais le seuil. C'est exactement ce qui est arrivé à la lentille
+/// du lot 8.2, et c'est la raison d'être de cette fonction : les deux valeurs ne
+/// se calculent plus qu'ici, à partir des deux mêmes nombres.
+pub fn poser_quad_impostor(
+    verts: &mut Vec<Vertex>,
+    inds: &mut Vec<u16>,
+    mat: &Material,
+    cam: &CameraInfo,
+    centre: Vec3,
+    rayon: f32,
+    etendue: f32,
+) {
+    push_quad(verts, inds, cam, centre, rayon * etendue, WHITE);
+    mat.set_uniform("disc", etendue);
+}
+
+/// Uniforms communs à tous les corps impostor : temps, repère caméra, et
+/// l'échelle `disc`.
+///
+/// ⚠️ `disc` est un **rapport**, pas une longueur : voir
+/// [`poser_quad_impostor`], qui le calcule avec la demi-taille du quad pour que
+/// les deux ne puissent plus se contredire.
 pub fn uniforms_standard(mat: &Material, cam: &CameraInfo, temps: f32, disc: f32) {
     mat.set_uniform("time", temps);
     mat.set_uniform("cam_right", (cam.right.x, cam.right.y, cam.right.z));
@@ -569,6 +599,56 @@ mod tests {
                 (n > 0).then_some((nom, n))
             })
             .collect()
+    }
+
+    /// **Personne ne pose `disc` de sa propre main.**
+    ///
+    /// ⚠️ `disc` est un **rapport** (`etendue`), alors que la demi-taille du quad
+    /// est une **longueur monde** (`rayon × etendue`). Les deux nombres décrivent
+    /// la même étendue et se ressemblent assez pour qu'on les confonde — ce que
+    /// j'ai fait au lot 8.2. Résultat : un impostor **carré**, parce que le
+    /// `discard` radial du fragment ne mordait plus, `|v_q|` n'atteignant jamais
+    /// son seuil.
+    ///
+    /// **Rien côté Rust ne pouvait le dire** : deux `f32`, deux appels corrects
+    /// isolément, aucun uniform manquant, aucune garde franchie. Seul l'écran l'a
+    /// montré. Faute de pouvoir vérifier ce qui part au GPU, cette garde
+    /// interdit le **geste** : `disc` ne se pose que dans les deux fonctions qui
+    /// le dérivent, et `poser_quad_impostor` le calcule avec la demi-taille du
+    /// quad pour que les deux ne puissent plus se contredire.
+    #[test]
+    fn personne_ne_pose_disc_de_sa_propre_main() {
+        // Les fichiers qui dessinent un impostor.
+        const DESSINEURS: [(&str, &str); 4] = [
+            ("soleil/rendu.rs", include_str!("soleil/rendu.rs")),
+            ("soleil/materiau.rs", include_str!("soleil/materiau.rs")),
+            ("planete/materiau.rs", include_str!("planete/materiau.rs")),
+            ("disque/accretion.rs", include_str!("disque/accretion.rs")),
+        ];
+        // ⚠️ Motif **assemblé à l'exécution**, sinon ce test se trouve
+        // lui-même : il cite forcément ce qu'il cherche, et un test qui se
+        // compte dans son propre décompte ne garde rien. Le piège est déjà
+        // apparu deux fois sur ce chantier.
+        let aiguille = format!("set_uniform(\"{}\"", "disc");
+        for (nom, src) in DESSINEURS {
+            let faute = src
+                .lines()
+                .filter(|l| !l.trim_start().starts_with("//"))
+                .any(|l| l.contains(&aiguille));
+            assert!(
+                !faute,
+                "{nom} pose `disc` lui-même : passer par `poser_quad_impostor` ou \
+                 `uniforms_standard`, sinon un rapport et une longueur finiront par se croiser"
+            );
+        }
+        // Et la source unique, elle, le pose bien — sans quoi la garde
+        // ci-dessus serait satisfaite par un `disc` que plus personne ne règle.
+        let ici = include_str!("impostor.rs");
+        assert_eq!(
+            ici.matches(&aiguille).count(),
+            2,
+            "`disc` doit se poser exactement dans `poser_quad_impostor` et `uniforms_standard`"
+        );
     }
 
     /// **L'angle apparent décroît avec la distance, et ne ment pas de près.**

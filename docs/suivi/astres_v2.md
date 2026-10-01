@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-09-30** : 882 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-10-01** : 883 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -46,7 +46,7 @@ silhouette « mince » n'a jamais été essayée.
 | **6.2 bis** — ses quatre classes dans la planche des étoiles | **fait** | |
 | **7** — pulsation : céphéide, Mira, ZZ Ceti | **fait**, à juger à l'écran | |
 | **8.1** — le ciel en cubemap, gravé depuis le champ existant | fait | `7f6e1aa` |
-| **8.2** — la déviation dans le shader du trou noir | **fait**, à juger à l'écran | |
+| **8.2** — la déviation dans le shader du trou noir | fait, **+ 1 correctif**, à rejuger | |
 | 9 à 13 | à faire | |
 
 Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
@@ -159,6 +159,35 @@ dépôt tenait dans huit pipelines. Remplacé par ce qu'on veut vraiment garanti
 **huit emplacements libres**. Relâchée délibérément, donc, et consignée comme
 telle — à 17 sur 32 il reste 47 % du budget, et si ce nombre remonte la réponse
 n'est plus de relever le seuil mais de **mutualiser des passes**.
+
+#### ⚠️ Correctif 8.2 : l'impostor carré (2026-10-01)
+
+**Signalé à l'écran** : un **rectangle** aux bords nets autour du trou noir.
+Mesuré sur la capture avant de supposer — rayon écran annoncé 99 px, rectangle
+d'environ 680 px de large, soit exactement `2 × 99 × 3,4` : le quad de lentille,
+montré **carré** au lieu d'être découpé en disque.
+
+**La cause** : `disc` est un **rapport** (`etendue`), alors que la demi-taille du
+quad est une **longueur monde** (`rayon × etendue`). J'ai passé la seconde là où
+le premier était attendu. Le vertex fait `v_q = (texcoord·2−1)·disc` : avec
+`disc = 0,62 × 3,4 = 2,1`, `|v_q|` plafonne à 2,97 dans les coins et
+`if (rr > couronne) discard` — seuil 3,4 — **ne mordait jamais**. Tout le carré
+passait.
+
+**Pourquoi rien ne l'a vu** : deux `f32`, deux appels corrects isolément, aucun
+uniform manquant, aucune garde franchie. Les deux nombres décrivent la **même
+étendue** et se ressemblent assez pour qu'on les confonde. C'est le genre de
+défaut que seul l'écran attrape.
+
+**La parade** : `impostor::poser_quad_impostor` pousse le quad **et** pose `disc`,
+à partir des deux mêmes nombres — ils ne peuvent plus se contredire. Et une garde
+interdit le geste : `personne_ne_pose_disc_de_sa_propre_main` refuse qu'un
+dessineur le règle à la main, et vérifie que les deux fonctions sanctionnées le
+posent bien.
+
+⚠️ Son motif est **assemblé à l'exécution** (`format!("set_uniform(\"{}\"",
+"disc")`), sinon le test se trouve lui-même : il cite forcément ce qu'il cherche.
+C'est la troisième fois que ce piège apparaît sur ce chantier.
 
 #### Ce que le lot 8 ne fait pas
 
@@ -576,6 +605,22 @@ Deux autres pièges du red-check, rencontrés depuis :
   bien la bonne valeur. Dans l'autre sens, c'est un sabotage qui passe au
   vert sans qu'on sache pourquoi. Le contenu a raison contre le test :
   vérifier le fichier, puis remettre sa date à l'heure avant de conclure.
+
+### Deux nombres qui décrivent la même chose dans deux unités
+
+Le défaut du 8.2 : `disc` est un **rapport**, la demi-taille du quad une
+**longueur monde**, et les deux décrivent la **même étendue**. Rien ne distingue
+un `f32` d'un autre `f32` ; les deux appels étaient corrects isolément ; aucune
+garde n'a bronché. Seul l'écran l'a montré, sous la forme d'un impostor **carré**.
+
+C'est une variante du « une source par fait » : ici le fait avait **deux
+expressions légitimes**, et c'est leur conversion qui s'est perdue. La parade
+n'est pas un test — rien côté Rust ne peut lire ce qui part au GPU — mais une
+fonction qui **dérive les deux ensemble**, plus une garde qui interdit de les
+poser séparément.
+
+Le signe qui devrait alerter : deux paramètres voisins de même type, dont l'un
+vaut l'autre multiplié par une grandeur du contexte.
 
 ### Un test qui affirme une conséquence garantie ne garde rien
 

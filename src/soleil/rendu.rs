@@ -32,8 +32,21 @@ impl Soleil {
             if let Some(ciel) = super::materiau::fond_stellaire() {
                 self.verts.clear();
                 self.inds.clear();
-                push_quad(&mut self.verts, &mut self.inds, cam, c, r * self.couronne, WHITE);
                 let m = &self.mat_lentille;
+                // ⚠️ **Le quad et `disc` ensemble.** `disc` est un **rapport**,
+                // pas une longueur monde : y passer `r * couronne` donnait un
+                // impostor **carré**, parce que le `discard` radial du fragment
+                // ne mordait plus — `|v_q|` n'atteignait jamais le seuil. Vu à
+                // l'écran, invisible au test.
+                crate::impostor::poser_quad_impostor(
+                    &mut self.verts,
+                    &mut self.inds,
+                    m,
+                    cam,
+                    c,
+                    r,
+                    self.couronne,
+                );
                 // ⚠️ Pas `uniforms_standard` : il pose aussi `time`, que ce
                 // shader ne déclare pas — la déviation ne dépend que de la
                 // géométrie, pas de l'horloge.
@@ -41,7 +54,6 @@ impl Soleil {
                 m.set_uniform("cam_up", (cam.up.x, cam.up.y, cam.up.z));
                 let vers_cam = -cam.forward;
                 m.set_uniform("to_cam", (vers_cam.x, vers_cam.y, vers_cam.z));
-                m.set_uniform("disc", r * self.couronne);
                 m.set_uniform("couronne", self.couronne);
                 m.set_uniform(
                     "angle_ombre",
