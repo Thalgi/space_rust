@@ -66,13 +66,6 @@ impl Rendu for RenduStandard {
         set_camera(&cam3d);
         clear_background(BLACK);
         fond.draw(cam); // étoiles lointaines (derrière tout)
-        // **Le même ciel, sous une forme qu'un shader sait lire** (lot 8) : la
-        // lentille d'un trou noir l'échantillonne dans des directions déviées.
-        // Posé ici parce que c'est le seul endroit où le `Fond` et le système
-        // sont tous deux en main — et chaque vue tire son propre champ
-        // d'étoiles, donc en prendre un autre afficherait dans l'anneau un ciel
-        // qui n'existe nulle part. Gravé au premier appel, puis conservé.
-        crate::soleil::poser_fond_stellaire(fond.cubemap());
         sys.draw_orbites(calques, cam);
         set_default_camera();
 

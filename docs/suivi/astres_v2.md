@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-10-01** : 887 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-10-01** : 874 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -45,8 +45,8 @@ silhouette « mince » n'a jamais été essayée.
 | **6.2** — la naine brune comme **centre** d'un système | **fait**, à juger à l'écran | |
 | **6.2 bis** — ses quatre classes dans la planche des étoiles | **fait** | |
 | **7** — pulsation : céphéide, Mira, ZZ Ceti | **fait**, à juger à l'écran | |
-| **8.1** — le ciel en cubemap, gravé depuis le champ existant | fait | `7f6e1aa` |
-| **8.2** — la déviation dans le shader du trou noir | fait, **refondu sur recherche**, à rejuger | |
+| **8.1** — le ciel en cubemap | **abandonné**, code retiré | `7f6e1aa` |
+| **8.2** — la déviation dans le shader | **abandonné**, code retiré | `dd55404`, `5e66b10` |
 | 9 à 13 | à faire | |
 
 Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
@@ -56,7 +56,40 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 
 ## Ce qu'il faut savoir pour reprendre
 
-### Le lot 8 : la lentille locale (2026-09-30)
+### ⚠️ Le lot 8 est ABANDONNÉ (2026-10-01)
+
+**Décision de l'utilisateur**, après deux livraisons et une refonte sur
+recherche : *« la lentille est devenue bien trop grosse »*. **Le code a été
+retiré** — shader, material, passe de dessin, cubemap, tout. Le dépôt est revenu
+à son état d'avant le 8.1.
+
+**Ce qui reste, et c'est le seul acquis** : la recherche,
+[conception/astres_v2_lentille.md](../conception/astres_v2_lentille.md), qui
+chiffre pourquoi l'effet est difficile. Quiconque reprendra ce lot doit la lire
+avant d'écrire une ligne — elle épargne les deux impasses que j'ai parcourues.
+
+**Pourquoi « trop grosse », et c'est la leçon** : la recherche a montré que la
+déviation décroît en `1/b` et ne tombe sous un pixel qu'au-delà de **1400**
+rayons d'ombre. J'en ai conclu qu'il fallait un quad de **12** rayons pour
+contenir l'étirement visible — chiffre juste, mais il produit à l'écran une
+distorsion qui **domine** le trou noir au lieu de l'habiller. Mes tests
+garantissaient que l'effet était *contenu* ; aucun ne disait qu'il devait rester
+**discret**. Le physiquement correct et le visuellement souhaitable divergent
+ici, et c'est exactement l'arbitrage que le §5 de la recherche sur le disque
+d'accrétion avait déjà rencontré — sauf que cette fois, aucun dosage ne
+réconcilie les deux.
+
+**Si le lot est repris**, les trois pistes dans l'ordre où je les tenterais :
+atténuer la déviation par un facteur d'image assumé (comme `beaming_max` pour
+le disque), ce qui revient à mentir sciemment sur `α` ; ou borner l'effet à un
+anneau fin autour de l'ombre sans toucher au reste du ciel ; ou l'abandonner
+définitivement, ce que la rareté des trous noirs rend très défendable.
+
+**Deux limites restent vraies** et vaudront pour toute reprise : la cubemap est
+onze fois plus grossière qu'un pixel d'écran, et 700 à 900 étoiles ne font pas
+une couronne.
+
+### Le lot 8, tel qu'il avait été conçu (archive)
 
 **Tranché avec l'utilisateur** : lentille **locale**, fond échantillonné depuis
 une **cubemap gravée du champ d'étoiles existant**.

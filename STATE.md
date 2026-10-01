@@ -21,7 +21,7 @@
 `.claude/worktrees/astres-v2`. **32 commits d'avance sur `main`, rien de
 fusionné, rien de poussé.**
 
-**Vérifié (2026-09-30)** : **855 tests verts** (867 avec le binaire `mhd`),
+**Vérifié (2026-10-01)** : **874 tests verts** (886 avec le binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
 **Le lot 5 est clos** (2026-09-30). Ses **sept presets de trou noir sont au
@@ -72,9 +72,18 @@ Mira et naine blanche pulsante (ZZ Ceti) d'un coup.
 - **Amplitudes réelles** pour la céphéide (10 %) et Mira (20 %) ; ZZ Ceti est
   exagérée et c'est assumé, comme `PX_MIN`. Les **périodes** sont compressées.
 
-**Le lot 8 est engagé, et tranché** : lentille **locale**, fond échantillonné
-depuis une **cubemap gravée du champ d'étoiles existant** (décision de
-l'utilisateur, 2026-09-30).
+⚠️ **Le lot 8 (lentille gravitationnelle) est ABANDONNÉ** (2026-10-01), et son
+**code retiré** : shader, material, passe, cubemap. Le dépôt est revenu à son
+état d'avant.
+
+**Ne pas le reprendre sans lire**
+[`docs/conception/astres_v2_lentille.md`](docs/conception/astres_v2_lentille.md),
+qui chiffre pourquoi il est difficile — et le journal, qui dit pourquoi il a été
+abandonné : la déviation physiquement correcte **domine** le trou noir au lieu de
+l'habiller. Mes tests garantissaient que l'effet était *contenu* ; aucun ne
+disait qu'il devait rester **discret**.
+
+**Ce qui suit décrit l'état supprimé**, gardé pour qui reprendrait le sujet.
 
 **Le lot 8 est livré, à juger à l'écran.** `Fond` grave son propre ciel en
 cubemap (8.1), et une **passe de lentille dédiée** l'échantillonne dans des
@@ -101,9 +110,9 @@ pas relever le seuil.
 l'infini**. Une planète qui passe derrière le trou noir n'est ni déviée ni
 reprise dans l'anneau — elle a de la parallaxe, le champ d'étoiles non.
 
-**Le prochain pas** : lots **9 à 13** — comètes (9), distinction des types (10 :
-granulation paramétrée, assombrissement centre-bord), quasi-étoile (11), disques
-proto au tirage (12).
+**Le prochain pas** : **lot 9 — les comètes.** Puis 10 (distinction des types :
+granulation paramétrée, assombrissement centre-bord), 11 (quasi-étoile), 12
+(disques proto au tirage).
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de

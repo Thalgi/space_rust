@@ -270,38 +270,8 @@ mod tests_ruban {
     }
 }
 
-/// **Pose le quad d'un impostor ET son échelle `disc`.**
-///
-/// ⚠️ **Les deux disent le même fait, et les séparer les laisse diverger.** Le
-/// quad se pousse en **longueur monde** (`rayon × etendue`) tandis que `disc` est
-/// un **rapport** (`etendue`), parce que le vertex fait
-/// `v_q = (texcoord·2−1)·disc` : `|v_q| = 1` doit tomber sur la surface du corps.
-///
-/// Passer la longueur monde là où le rapport est attendu ne casse rien de
-/// visible côté Rust, ne déclenche aucune garde, et donne à l'écran un impostor
-/// **carré** — le `discard` radial du fragment ne mord plus, puisque `|v_q|`
-/// n'atteint jamais le seuil. C'est exactement ce qui est arrivé à la lentille
-/// du lot 8.2, et c'est la raison d'être de cette fonction : les deux valeurs ne
-/// se calculent plus qu'ici, à partir des deux mêmes nombres.
-pub fn poser_quad_impostor(
-    verts: &mut Vec<Vertex>,
-    inds: &mut Vec<u16>,
-    mat: &Material,
-    cam: &CameraInfo,
-    centre: Vec3,
-    rayon: f32,
-    etendue: f32,
-) {
-    push_quad(verts, inds, cam, centre, rayon * etendue, WHITE);
-    mat.set_uniform("disc", etendue);
-}
-
-/// Uniforms communs à tous les corps impostor : temps, repère caméra, et
-/// l'échelle `disc`.
-///
-/// ⚠️ `disc` est un **rapport**, pas une longueur : voir
-/// [`poser_quad_impostor`], qui le calcule avec la demi-taille du quad pour que
-/// les deux ne puissent plus se contredire.
+/// Uniforms communs à tous les corps impostor : temps, repère caméra, et l'échelle
+/// `disc` du disque. `disc` doit valoir la même demi-taille que celle du quad.
 pub fn uniforms_standard(mat: &Material, cam: &CameraInfo, temps: f32, disc: f32) {
     mat.set_uniform("time", temps);
     mat.set_uniform("cam_right", (cam.right.x, cam.right.y, cam.right.z));
@@ -373,24 +343,6 @@ pub fn rayon_plancher(r: f32, dist: f32, vh: f32, px_min: f32) -> f32 {
 #[cfg(test)]
 const MAX_PIPELINES: usize = 32;
 
-/// **Rayon angulaire apparent** d'un corps de rayon `r` à la distance `dist`, en
-/// radians.
-///
-/// La lentille gravitationnelle en a besoin : elle raisonne en **angles** sur le
-/// ciel, là où le reste du rendu raisonne en fractions de quad. ⚠️ `atan` et non
-/// `r / dist` : à courte distance — la vue isolée cadre le corps à cinq rayons —
-/// l'approximation des petits angles se trompe de plusieurs pour cent, et
-/// l'anneau se placerait au mauvais endroit précisément là où on l'examine.
-///
-/// Borné sous un quart de tour : au-delà l'œil serait dans le corps, et la
-/// lentille n'aurait plus de sens.
-pub fn angle_apparent(r: f32, dist: f32) -> f32 {
-    if dist <= 0.0 {
-        return std::f32::consts::FRAC_PI_2;
-    }
-    (r.max(0.0) / dist).atan().min(std::f32::consts::FRAC_PI_2)
-}
-
 /// Descripteurs des uniforms communs (à concaténer à ceux propres au corps).
 pub fn uniforms_communs() -> Vec<UniformDesc> {
     vec![
@@ -413,15 +365,8 @@ pub mod verif {
     const IMPLICITES: &[&str] = &["Model", "Projection", "_Time"];
 
     /// Noms des uniforms **lus par le shader**, extraits des sources GLSL (vertex
-    /// et fragment). Les textures — `sampler2D`, `samplerCube` — sont déclarées
-    /// à part, dans `MaterialParams.textures`.
-    ///
-    /// ⚠️ Le filtre ne connaissait que `sampler2D`, parce que c'était le seul
-    /// type de texture du dépôt. Le premier `samplerCube` (le fond stellaire du
-    /// lot 8) se serait donc présenté comme un uniform manquant côté Rust, et la
-    /// garde de correspondance aurait accusé le shader au lieu d'elle-même.
-    /// C'est la règle qu'elle énonce déjà — « les textures sont déclarées à
-    /// part » — appliquée à toutes les textures.
+    /// et fragment). Les textures (`sampler2D`) sont déclarées à part, dans
+    /// `MaterialParams.textures`.
     pub fn uniforms_glsl(sources: &[&str]) -> BTreeSet<String> {
         let mut noms = BTreeSet::new();
         for src in sources {
@@ -433,7 +378,7 @@ pub mod verif {
                 let (Some(type_), Some(nom)) = (mots.next(), mots.next()) else {
                     continue;
                 };
-                if type_.starts_with("sampler") {
+                if type_ == "sampler2D" {
                     continue;
                 }
                 let nom = nom.split('[').next().unwrap_or(nom);
@@ -601,92 +546,6 @@ mod tests {
             .collect()
     }
 
-    /// **Personne ne pose `disc` de sa propre main.**
-    ///
-    /// ⚠️ `disc` est un **rapport** (`etendue`), alors que la demi-taille du quad
-    /// est une **longueur monde** (`rayon × etendue`). Les deux nombres décrivent
-    /// la même étendue et se ressemblent assez pour qu'on les confonde — ce que
-    /// j'ai fait au lot 8.2. Résultat : un impostor **carré**, parce que le
-    /// `discard` radial du fragment ne mordait plus, `|v_q|` n'atteignant jamais
-    /// son seuil.
-    ///
-    /// **Rien côté Rust ne pouvait le dire** : deux `f32`, deux appels corrects
-    /// isolément, aucun uniform manquant, aucune garde franchie. Seul l'écran l'a
-    /// montré. Faute de pouvoir vérifier ce qui part au GPU, cette garde
-    /// interdit le **geste** : `disc` ne se pose que dans les deux fonctions qui
-    /// le dérivent, et `poser_quad_impostor` le calcule avec la demi-taille du
-    /// quad pour que les deux ne puissent plus se contredire.
-    #[test]
-    fn personne_ne_pose_disc_de_sa_propre_main() {
-        // Les fichiers qui dessinent un impostor.
-        const DESSINEURS: [(&str, &str); 4] = [
-            ("soleil/rendu.rs", include_str!("soleil/rendu.rs")),
-            ("soleil/materiau.rs", include_str!("soleil/materiau.rs")),
-            ("planete/materiau.rs", include_str!("planete/materiau.rs")),
-            ("disque/accretion.rs", include_str!("disque/accretion.rs")),
-        ];
-        // ⚠️ Motif **assemblé à l'exécution**, sinon ce test se trouve
-        // lui-même : il cite forcément ce qu'il cherche, et un test qui se
-        // compte dans son propre décompte ne garde rien. Le piège est déjà
-        // apparu deux fois sur ce chantier.
-        let aiguille = format!("set_uniform(\"{}\"", "disc");
-        for (nom, src) in DESSINEURS {
-            let faute = src
-                .lines()
-                .filter(|l| !l.trim_start().starts_with("//"))
-                .any(|l| l.contains(&aiguille));
-            assert!(
-                !faute,
-                "{nom} pose `disc` lui-même : passer par `poser_quad_impostor` ou \
-                 `uniforms_standard`, sinon un rapport et une longueur finiront par se croiser"
-            );
-        }
-        // Et la source unique, elle, le pose bien — sans quoi la garde
-        // ci-dessus serait satisfaite par un `disc` que plus personne ne règle.
-        let ici = include_str!("impostor.rs");
-        assert_eq!(
-            ici.matches(&aiguille).count(),
-            2,
-            "`disc` doit se poser exactement dans `poser_quad_impostor` et `uniforms_standard`"
-        );
-    }
-
-    /// **L'angle apparent décroît avec la distance, et ne ment pas de près.**
-    ///
-    /// ⚠️ La lentille raisonne en **angles** : c'est `angle_ombre` qui dit
-    /// quelle portion de ciel le quad recouvre, donc où tombe l'anneau. Une
-    /// approximation des petits angles (`r / dist`) se trompe de plusieurs pour
-    /// cent au cadrage de la vue isolée — cinq rayons — c'est-à-dire précisément
-    /// là où on vient l'examiner de près.
-    #[test]
-    fn l_angle_apparent_decroit_et_reste_juste_de_pres() {
-        use super::angle_apparent;
-        let mut precedent = f32::INFINITY;
-        for dist in [1.0_f32, 2.0, 5.0, 20.0, 200.0, 5000.0] {
-            let a = angle_apparent(1.0, dist);
-            assert!(a > 0.0 && a <= std::f32::consts::FRAC_PI_2, "dist {dist} -> {a}");
-            assert!(a < precedent, "l'angle remonte à {dist}");
-            precedent = a;
-        }
-        // De loin, `atan` et le petit angle se rejoignent : l'écart doit être
-        // négligeable, sinon c'est la formule qui est fausse.
-        let loin = angle_apparent(1.0, 5000.0);
-        assert!((loin - 1.0 / 5000.0).abs() < 1e-7, "au loin : {loin}");
-        // ⚠️ **De près, ils divergent**, et c'est pour ça qu'on prend `atan` :
-        // à cinq rayons le petit angle se trompe de plus de 1 %.
-        let pres = angle_apparent(1.0, 5.0);
-        let naif = 1.0_f32 / 5.0;
-        assert!(
-            (naif - pres) / pres > 0.01,
-            "le petit angle ne s'écarte que de {} : `atan` ne servirait à rien",
-            (naif - pres) / pres
-        );
-        // Cas dégénérés : ni NaN ni angle négatif.
-        assert!(angle_apparent(1.0, 0.0).is_finite());
-        assert_eq!(angle_apparent(0.0, 10.0), 0.0);
-        assert!(angle_apparent(-3.0, 10.0) >= 0.0, "un rayon négatif ne rend pas un angle négatif");
-    }
-
     /// **Sonnette sur l'arrivée d'un shader.**
     ///
     /// macroquad plafonne les pipelines à 32 et panique au-delà. Ce test compte
@@ -704,44 +563,22 @@ mod tests {
     fn le_nombre_de_shaders_reste_sous_le_plafond() {
         let sites = sites_de_chargement();
         let total: usize = sites.iter().map(|(_, n)| n).sum();
-        assert_eq!(total, 12, "un shader est arrivé ou parti. Détail : {sites:?}");
+        assert_eq!(total, 11, "un shader est arrivé ou parti. Détail : {sites:?}");
 
         // Décompte réel des pipelines vivants, à tenir à jour avec le précédent :
-        //  11 templates en cache — planète (corps, atmosphère), soleil (disque,
-        //     couronne, plasma, LENTILLE), disque (particules, voile,
-        //     accrétion), éclairage, palette ;
+        //  10 templates en cache — planète (corps, atmosphère), soleil (disque,
+        //     couronne, plasma), disque (particules, voile, ACCRÉTION),
+        //     éclairage, palette ;
         //   6 par instance — un fond étoilé par écran (5) + le panache (1).
         //
-        // ⚠️ La **lentille** (sous-lot 8.2) est la dernière arrivée, et il lui
-        // faut un pipeline à elle pour une raison précise : elle lit un
-        // `samplerCube`. Une texture déclarée sur un material oblige **chaque**
-        // objet qui s'en sert à la fournir, sous peine de panique — la coller au
-        // material du soleil aurait imposé une cubemap à toutes les étoiles du
-        // jeu pour le seul bénéfice des trous noirs.
-        //
-        // Avant elle, l'accrétion (sous-lot 5.1) : un disque d'accrétion
-        // n'occulte pas ce qu'il y a derrière lui, il **émet**, et son blending
-        // additif ne se règle pas sur un pipeline partagé avec les anneaux
-        // planétaires.
-        const PIPELINES: usize = 11 + 6;
-
-        // ⚠️ **La règle était « le double tient sous le plafond », et elle a
-        // cédé ici.** À 17 pipelines vivants, 34 dépasse les 32 de macroquad :
-        // elle interdisait donc *tout* shader supplémentaire, à jamais.
-        //
-        // Ce n'était pas ce qu'elle voulait dire. Le risque réel est une panique
-        // au lancement au-delà de 32 ; le doublement n'en était qu'un proxy,
-        // choisi quand le dépôt tenait dans huit pipelines. Remplacé par ce
-        // qu'on veut vraiment garantir : **huit emplacements libres**, de quoi
-        // voir venir plusieurs shaders avant de devoir en fusionner.
-        //
-        // Relâchée délibérément, donc, et pas parce qu'elle gênait : à 17 sur 32
-        // il reste 47 % du budget. Si ce nombre remonte, la réponse n'est plus
-        // de relever le seuil mais de mutualiser des passes.
-        const LIBRES_MIN: usize = 8;
+        // ⚠️ L'accrétion (sous-lot 5.1) est le dernier arrivé : un disque
+        // d'accrétion n'occulte pas ce qu'il y a derrière lui, il **émet**, et
+        // son blending additif ne se règle pas sur un pipeline partagé avec
+        // les anneaux planétaires.
+        const PIPELINES: usize = 10 + 6;
         const _: () = assert!(
-            PIPELINES + LIBRES_MIN <= MAX_PIPELINES,
-            "moins de huit pipelines libres sous le plafond de macroquad : mutualiser, pas relever"
+            PIPELINES * 2 <= MAX_PIPELINES,
+            "plus de marge sous le plafond de pipelines de macroquad"
         );
     }
 

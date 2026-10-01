@@ -18,67 +18,6 @@ impl Soleil {
         let r = self.rayon_dessine(cam.pos);
         let rot = self.temps * 0.12;
 
-        // **La lentille, avant tout le reste** (lot 8.2).
-        //
-        // ⚠️ L'ordre n'est pas un détail : elle rend un ciel **opaque**, qui doit
-        // *remplacer* le fond stellaire déjà dessiné et non s'y ajouter. Posée
-        // après, elle effacerait l'arc du pli qui enjambe l'horizon — et posée en
-        // additif, on verrait le ciel réel *et* le ciel dévié superposés.
-        //
-        // Sautée s'il n'y a pas de ciel à échantillonner : plusieurs écrans
-        // dessinent des étoiles sans passer par `Rendu::rendre`, et dessiner sans
-        // la texture ferait paniquer macroquad.
-        if self.couronne_type > 4.5 {
-            if let Some(ciel) = super::materiau::fond_stellaire() {
-                self.verts.clear();
-                self.inds.clear();
-                let m = &self.mat_lentille;
-                // ⚠️ **Le quad et `disc` ensemble.** `disc` est un **rapport**,
-                // pas une longueur monde : y passer `r * couronne` donnait un
-                // impostor **carré**, parce que le `discard` radial du fragment
-                // ne mordait plus — `|v_q|` n'atteignait jamais le seuil. Vu à
-                // l'écran, invisible au test.
-                crate::impostor::poser_quad_impostor(
-                    &mut self.verts,
-                    &mut self.inds,
-                    m,
-                    cam,
-                    c,
-                    r,
-                    // ⚠️ **Pas `self.couronne`.** La couronne vaut 3,4 rayons,
-                    // où la déviation atteint encore 13° : le quad coupait
-                    // l'effet en son milieu. Douze rayons contiennent tout
-                    // l'étirement visible (`astres_v2_lentille.md` §2).
-                    super::materiau::ETENDUE_LENTILLE,
-                );
-                // ⚠️ Pas `uniforms_standard` : il pose aussi `time`, que ce
-                // shader ne déclare pas — la déviation ne dépend que de la
-                // géométrie, pas de l'horloge.
-                m.set_uniform("cam_right", (cam.right.x, cam.right.y, cam.right.z));
-                m.set_uniform("cam_up", (cam.up.x, cam.up.y, cam.up.z));
-                let vers_cam = -cam.forward;
-                m.set_uniform("to_cam", (vers_cam.x, vers_cam.y, vers_cam.z));
-                m.set_uniform("couronne", super::materiau::ETENDUE_LENTILLE);
-                m.set_uniform(
-                    "angle_ombre",
-                    crate::impostor::angle_apparent(r, (cam.pos - c).length()),
-                );
-                m.set_uniform("dev_faible", super::materiau::DEVIATION_FAIBLE);
-                m.set_uniform("dev_forte", super::materiau::DEVIATION_FORTE);
-                m.set_texture("fond", ciel);
-                gl_use_material(m);
-                let quad = Mesh {
-                    vertices: std::mem::take(&mut self.verts),
-                    indices: std::mem::take(&mut self.inds),
-                    texture: None,
-                };
-                draw_mesh(&quad);
-                gl_use_default_material();
-                self.verts = quad.vertices;
-                self.inds = quad.indices;
-            }
-        }
-
         // **Le disque, moitié arrière d'abord** : l'horizon la masquera.
         // Même encadrement qu'un anneau planétaire (`planete/mod.rs`), et
         // pour la même raison — sans lui, un disque translucide dessiné d'un
