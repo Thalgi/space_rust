@@ -52,6 +52,54 @@ pub fn push_quad(
 /// Un point d'un ruban : sa position **monde**, sa demi-largeur et sa couleur.
 pub type PointRuban = (Vec3, f32, Color);
 
+/// **Texture de halo radiale** : blanche, opaque au centre, éteinte au bord.
+///
+/// ⚠️ Elle vit ici parce que c'est elle qui donne au [`push_ruban`] son profil de
+/// **tube** : les UV d'un ruban la traversent par son milieu, du bord inférieur
+/// au bord supérieur, donc un dégradé radial y devient une section transversale —
+/// vive au centre, éteinte sur les bords. Sans elle, un ruban est une bande plate
+/// à bords francs.
+///
+/// Le soleil l'employait déjà pour ses boucles ; la queue d'une comète en a
+/// besoin du même. Deux générateurs du même dégradé auraient fini par ne plus se
+/// ressembler.
+pub fn texture_halo(taille: usize) -> Texture2D {
+    let mut bytes = vec![0u8; taille * taille * 4];
+    let centre = (taille as f32 - 1.0) / 2.0;
+    for y in 0..taille {
+        for x in 0..taille {
+            let dx = (x as f32 - centre) / centre;
+            let dy = (y as f32 - centre) / centre;
+            let a = (1.0 - (dx * dx + dy * dy).sqrt()).clamp(0.0, 1.0);
+            let a = a * a;
+            let i = (y * taille + x) * 4;
+            bytes[i] = 255;
+            bytes[i + 1] = 255;
+            bytes[i + 2] = 255;
+            bytes[i + 3] = (a * 255.0) as u8;
+        }
+    }
+    let t = Texture2D::from_rgba8(taille as u16, taille as u16, &bytes);
+    t.set_filter(FilterMode::Linear);
+    t
+}
+
+thread_local! {
+    static HALO_PARTAGE: RefCell<Option<Texture2D>> = const { RefCell::new(None) };
+}
+
+/// **Le halo partagé**, construit une fois. Pour qui dessine un ruban
+/// occasionnellement — une queue de comète — et n'a aucune raison d'en allouer
+/// un par objet.
+pub fn halo_partage() -> Texture2D {
+    HALO_PARTAGE.with(|c| {
+        if c.borrow().is_none() {
+            *c.borrow_mut() = Some(texture_halo(64));
+        }
+        c.borrow().clone().unwrap()
+    })
+}
+
 /// Empile un **ruban** — une bande continue le long d'une polyligne, dont la
 /// largeur et la couleur varient d'un point à l'autre.
 ///

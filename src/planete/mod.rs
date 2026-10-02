@@ -299,7 +299,15 @@ impl Astre for Planete {
     }
     fn maj_rail(&mut self, foyer: Vec3, t: f64) {
         if let Some(o) = &self.orbite_kep {
-            self.base.position = foyer + o.position(t);
+            // ⚠️ **La vitesse aussi.** Elle restait figée à sa valeur de `t = 0`
+            // depuis la construction : un corps sur rails n'en avait pas besoin,
+            // puisque sa position vient de l'orbite. La queue d'une comète, elle,
+            // s'incurve vers sa **traînée** — avec une vitesse périmée, elle se
+            // serait incurvée du même côté sur toute l'orbite. `position` passe
+            // déjà par `etat`, donc ça ne coûte rien.
+            let (p, v) = o.etat(t);
+            self.base.position = foyer + p;
+            self.base.vitesse = v;
         }
     }
     fn foyer(&self) -> Option<Foyer> {
@@ -395,6 +403,32 @@ impl Astre for Planete {
     fn draw(&mut self, cam: &CameraInfo) {
         let c = self.base.position;
         let r = self.base.rayon;
+
+        // **La queue d'une comète** (lot 9.2), avant le noyau : elle en part, et
+        // le noyau doit se poser par-dessus.
+        //
+        // ⚠️ Tout ce qui décide vit dans `crate::comete`, en fonctions **pures**
+        // et testables ; il ne reste ici que le ruban et le tirage. Le foyer est
+        // l'origine — les comètes sont posées sur `Foyer::Barycentre`, et une
+        // queue qui fuirait un autre point se verrait tout de suite.
+        if self.comete {
+            // Le seuil vient de **son** orbite : les systemes sont mis a
+            // l'echelle de leur etoile, donc un seuil en UA allumerait toutes
+            // les cometes d'une naine en permanence.
+            let seuil = self
+                .orbite_kep
+                .map(|o| crate::comete::seuil_activite(o.a, o.e))
+                .unwrap_or(0.0);
+            let pts = crate::comete::queue(c, Vec3::ZERO, self.base.vitesse, r, seuil);
+            if pts.len() >= 2 {
+                let mut v = Vec::new();
+                let mut i = Vec::new();
+                crate::impostor::push_ruban(&mut v, &mut i, cam, &pts);
+                let mesh =
+                    Mesh { vertices: v, indices: i, texture: Some(crate::impostor::halo_partage()) };
+                draw_mesh(&mesh);
+            }
+        }
 
         // Terrain précalculé (telluriques) : génération en thread de fond,
         // upload GPU quand le job aboutit. En attendant, placeholder (tex 1×1).

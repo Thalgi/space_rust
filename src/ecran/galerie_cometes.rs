@@ -93,11 +93,17 @@ impl GalerieCometes {
                     crate::systeme::G * crate::genese::MASSE_ETOILE,
                     m0,
                 );
-                let pos = orb.position(0.0);
+                let (pos, vit) = orb.etat(0.0);
                 let q = DEMI_GRAND_AXE * (1.0 - e);
                 cellules.push(Cellule {
                     libelle: format!("e {e:.2}   q {q:.2}   d {:.2}", pos.length()),
-                    comete: Planete::new(pos, Vec3::ZERO, 0.09, 1e-6, apparence_comete(), Vec::new())
+                    // ⚠️ **Avec son orbite et sa vitesse**, pas seulement sa
+                    // position : le seuil d'activité de la queue se dérive de
+                    // l'orbite (`comete::seuil_activite`), et sa courbure de la
+                    // vitesse. Sans elles, la planche montrerait des noyaux nus
+                    // — et c'est précisément la queue qu'elle sert à juger.
+                    comete: Planete::new(pos, vit, 0.09, 1e-6, apparence_comete(), Vec::new())
+                        .avec_orbite(orb)
                         .en_comete(),
                     trace: orb.polyligne(Orbite::N_TRACE),
                 });
@@ -250,6 +256,51 @@ mod tests {
         // plongeon à juger.
         let min = distances.iter().cloned().fold(f32::MAX, f32::min);
         assert!(min < max * 0.35, "aucune phase ne plonge : {distances:?}");
+    }
+
+    /// **La planche montre le cycle de la queue** : éteinte au bout froid,
+    /// allumée au bout chaud.
+    ///
+    /// ⚠️ C'est **sa raison d'être** depuis le 9.2, et rien d'autre ne le
+    /// garantissait : un sabotage qui retirait l'orbite des comètes de la planche
+    /// — donc leur seuil d'activité, donc leur queue — laissait tous les autres
+    /// tests verts. La planche aurait affiché des noyaux nus, et c'est
+    /// précisément la queue qu'elle sert à juger.
+    #[test]
+    fn la_planche_montre_la_queue_naitre_le_long_de_la_ligne() {
+        for e in excentricites() {
+            let seuil = crate::comete::seuil_activite(DEMI_GRAND_AXE, e);
+            let orb = Orbite::new(DEMI_GRAND_AXE, e, Vec3::X, Vec3::Z, 1000.0, 0.0);
+            let actif = |k: usize| {
+                let d = Orbite::new(DEMI_GRAND_AXE, e, Vec3::X, Vec3::Z, 1000.0, phase(k))
+                    .position(0.0)
+                    .length();
+                crate::comete::activite(d, seuil)
+            };
+            let _ = orb;
+            // Première case : l'aphélie, donc rien à montrer.
+            assert_eq!(actif(0), 0.0, "e {e} : la queue existe déjà à l'aphélie");
+            // Dernière : le périhélie, donc une queue franche.
+            //
+            // ⚠️ Le seuil n'est pas `> 0,9` : l'activité **plafonne** à 0,44 au
+            // périhélie, parce qu'elle s'allume à trois périhélies et croît en
+            // `(1 − d/seuil)²`. Attendre 1 serait attendre une comète posée sur
+            // son étoile. Ce qui compte est l'**écart** le long de la ligne.
+            let chaud = actif(PHASES - 1);
+            assert!(chaud > 0.3, "e {e} : la queue ne s'allume pas au périhélie ({chaud})");
+            let milieu = actif(PHASES / 2);
+            assert!(
+                chaud > milieu * 2.0,
+                "e {e} : la queue ne grandit pas assez en descendant ({milieu} -> {chaud})"
+            );
+            // Et elle croît le long de la ligne, sans redescendre.
+            let mut precedent = -1.0_f32;
+            for k in 0..PHASES {
+                let a = actif(k);
+                assert!(a >= precedent - 1e-6, "e {e} : la queue décroît à la case {k}");
+                precedent = a;
+            }
+        }
     }
 
     /// **Le rayon de la planche n'est pas celui du jeu**, et son demi-grand axe

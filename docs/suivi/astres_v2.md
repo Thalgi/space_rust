@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-10-02** : 881 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-10-02** : 888 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -48,7 +48,7 @@ silhouette « mince » n'a jamais été essayée.
 | **8.1** — le ciel en cubemap | **abandonné**, code retiré | `7f6e1aa` |
 | **8.2** — la déviation dans le shader | **abandonné**, code retiré | `dd55404`, `5e66b10` |
 | **9.1** — les comètes au tirage, et leur planche | **fait**, à juger à l'écran | |
-| **9.2** — la queue | à faire | |
+| **9.2** — la queue | **fait**, à juger à l'écran | |
 | 10 à 13 | à faire | |
 
 Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
@@ -58,6 +58,58 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 
 ## Ce qu'il faut savoir pour reprendre
 
+### Le lot 9.2 : la queue (2026-10-02)
+
+**Zéro pipeline de plus.** `impostor::push_ruban` existait déjà — il sert aux
+arches solaires — et sa doc disait que les UV d'un ruban traversent une texture
+de halo par son milieu, ce qui lui donne un profil de **tube**. Une queue de
+comète est exactement ça. Le générateur de cette texture a donc déménagé du
+soleil vers `impostor`, à côté de son usage, avec un exemplaire partagé : deux
+générateurs du même dégradé auraient fini par ne plus se ressembler.
+
+⚠️ **Tout ce qui décide est pur, et c'est délibéré.** `comete::queue` rend une
+liste de points ; elle ne dessine rien. `Planete::new` charge un material, donc
+exige le contexte graphique : une queue construite dans la méthode de dessin
+n'aurait eu **aucune garde**. Il ne reste dans `Planete::draw` que le ruban et
+le tirage.
+
+**Trois faits que les gardes tiennent** :
+
+- **Elle fuit l'étoile, pas la trajectoire.** C'est *l'erreur classique*, et elle
+  se voit tout de suite : une queue qui traîne derrière la comète comme un
+  sillage de bateau est fausse. Le vent stellaire chasse la poussière
+  **radialement**. Le test prend une vitesse perpendiculaire au rayon — le cas qui
+  sépare les deux hypothèses.
+- **Elle s'incurve**, et la courbure **croît** le long de la queue : les grains
+  gardent leur orbite et prennent du retard. Une queue rigoureusement droite
+  serait celle des **ions**, écartée par défaut au §8 bis.
+- **Elle naît à l'approche et s'efface au loin**, décision n° 1 : au froid, la
+  fonction rend une liste **vide** — pas une queue de longueur nulle, rien du
+  tout, et c'est l'état le plus fréquent d'une comète.
+
+⚠️ **Le seuil d'activité vient de l'orbite de la comète, pas d'une distance
+absolue.** Dans le réel la glace sublime vers 3 UA quelle que soit la comète ;
+mais les systèmes du jeu sont **mis à l'échelle** de leur étoile, si bien qu'un
+seuil en UA allumerait en permanence toutes les comètes d'une naine et jamais
+celles d'une supergéante. Il vaut donc **trois périhélies**, plafonné à l'aphélie
+pour qu'une orbite ronde ne fume pas partout.
+
+**Conséquence à connaître** : l'activité **plafonne à 0,44** au périhélie, jamais
+1 — elle s'allume à trois périhélies et croît en `(1 − d/seuil)²`. Les
+constantes visuelles sont calibrées là-dessus, et la garde assertait d'abord
+`> 0,5`, ce qui était une valeur et non un fait.
+
+**Trouvé en chemin** : `maj_rail` ne mettait à jour que la **position**. La
+vitesse restait figée à sa valeur de `t = 0` depuis la construction — sans
+conséquence pour un corps sur rails, mais la queue s'incurve vers sa traînée, et
+elle se serait donc incurvée du **même côté sur toute l'orbite**. `position`
+passant déjà par `etat`, la corriger ne coûte rien.
+
+⚠️ **Un sabotage a révélé un trou dans la planche** : lui retirer les orbites de
+ses comètes — donc leur seuil, donc leur queue — laissait **tous** les tests
+verts. Elle aurait affiché des noyaux nus, et c'est précisément la queue qu'elle
+sert à juger. Une garde dit maintenant que la queue est éteinte au bout froid de
+la ligne et franche au bout chaud.
 ### Le lot 9.1 : les comètes existent (2026-10-02)
 
 **Une catégorie morte prend vie.** `Categorie::Comete` existait depuis le début

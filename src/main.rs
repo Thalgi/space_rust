@@ -1,5 +1,6 @@
 mod astre;
 mod camera;
+mod comete;
 mod disque;
 mod ecran;
 mod engin;

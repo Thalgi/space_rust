@@ -21,7 +21,7 @@
 `.claude/worktrees/astres-v2`. **32 commits d'avance sur `main`, rien de
 fusionné, rien de poussé.**
 
-**Vérifié (2026-10-02)** : **881 tests verts** (893 avec le binaire `mhd`),
+**Vérifié (2026-10-02)** : **888 tests verts** (900 avec le binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
 **Le lot 5 est clos** (2026-09-30). Ses **sept presets de trou noir sont au
@@ -116,8 +116,13 @@ orbite — une ligne par excentricité, une colonne par phase. ⚠️ Le solveur
 Kepler décrochait de 6,5° à `e = 0,99` : il itère maintenant jusqu'à
 convergence.
 
-**Le prochain pas** : **9.2 — la queue**, orientée à l'opposé de l'étoile, qui
-naît à l'approche et s'efface au loin. Puis 10 (distinction des types :
+**Le 9.2 est livré** : la queue, à l'opposé de **l'étoile** (pas de la vitesse),
+incurvée vers la traînée comme une queue de poussière, qui naît à l'approche et
+s'efface au loin. Zéro pipeline de plus — `push_ruban` existait déjà.
+⚠️ Le seuil d'activité vient de **l'orbite de la comète**, pas d'une distance en
+UA : les systèmes sont mis à l'échelle de leur étoile.
+
+**Le prochain pas** : lot 10 (distinction des types :
 granulation paramétrée, assombrissement centre-bord), 11 (quasi-étoile), 12
 (disques proto au tirage).
 

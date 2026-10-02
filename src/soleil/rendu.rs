@@ -492,25 +492,13 @@ fn flush(verts: &mut Vec<Vertex>, inds: &mut Vec<u16>, tex: &Texture2D) {
     *inds = i;
 }
 
+/// ⚠️ **Le générateur a déménagé dans `impostor`**, à côté de `push_ruban` : sa
+/// doc y expliquait déjà que les UV d'un ruban traversent cette texture par son
+/// milieu pour donner le profil d'un tube. La queue d'une comète (lot 9.2) en a
+/// besoin du même, et deux générateurs d'un même dégradé auraient fini par ne
+/// plus se ressembler.
 pub(super) fn texture_halo(taille: usize) -> Texture2D {
-    let mut bytes = vec![0u8; taille * taille * 4];
-    let centre = (taille as f32 - 1.0) / 2.0;
-    for y in 0..taille {
-        for x in 0..taille {
-            let dx = (x as f32 - centre) / centre;
-            let dy = (y as f32 - centre) / centre;
-            let a = (1.0 - (dx * dx + dy * dy).sqrt()).clamp(0.0, 1.0);
-            let a = a * a;
-            let i = (y * taille + x) * 4;
-            bytes[i] = 255;
-            bytes[i + 1] = 255;
-            bytes[i + 2] = 255;
-            bytes[i + 3] = (a * 255.0) as u8;
-        }
-    }
-    let t = Texture2D::from_rgba8(taille as u16, taille as u16, &bytes);
-    t.set_filter(FilterMode::Linear);
-    t
+    crate::impostor::texture_halo(taille)
 }
 
 #[cfg(test)]
