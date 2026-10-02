@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-10-02** : 889 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-10-02** : 893 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -58,6 +58,40 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 
 ## Ce qu'il faut savoir pour reprendre
 
+### Le noyau et la queue, repris sur retour écran (2026-10-02)
+
+Deux défauts signalés : *« pour le moment c'est une bille »* et *« la traînée de
+la comète n'est pas visible »*.
+
+**1. Le noyau était une sphère.** Il passait par l'impostor, comme une planète.
+Un noyau de comète est un **patatoïde** : trop petit pour que sa gravité
+l'arrondisse, et creusé par la sublimation qui emporte la glace par plaques.
+`comete::noyau` rend désormais un maillage déformé par une somme de sinus,
+**dérivé de la graine** — deux comètes diffèrent, la même en redonne une
+identique.
+
+⚠️ **Glace et roche sur un second bruit, sans rapport avec le premier.** Un bruit
+unique pour la forme et la matière donnerait des creux systématiquement sombres —
+une balle peinte, pas un caillou. Une garde **mesure la corrélation** entre
+relief et clarté et refuse qu'elle dépasse 0,6 ; le sabotage qui fait calquer la
+texture sur le relief la fait rougir.
+
+⚠️ **Éclairé sur le CPU**, et c'est ce qui évite un pipeline de plus : deux cents
+sommets, un lambert par sommet ne coûte rien, et macroquad dessine un maillage à
+couleurs de sommets sans material. Zéro shader pour tout le lot 9.
+
+**2. La queue mesurait moins que le noyau.** Mesuré : sa longueur valait
+`0,55 × activité × distance`. Dans la galerie des comètes, où l'orbite tient en
+3,5 unités, ça donnait **0,085 unité** au périhélie pour un noyau de rayon 0,09 —
+plus courte que le caillou qui l'émet.
+
+⚠️ **La cause est que les deux échelles n'ont aucun rapport.** La longueur suit la
+distance à l'étoile, ce qui est juste ; mais le noyau a une taille **fixe et
+exagérée** (un vrai noyau de 11 km serait sub-pixel). D'où un **plancher en
+rayons de noyau** — vingt-cinq — en plus de la part proportionnelle. La queue
+fait maintenant onze rayons de noyau dans la galerie et vingt unités au périhélie
+de Halley. Une garde l'exige **aux deux échelles**, chacune prise à son propre
+périhélie.
 ### 1P/Halley dans le preset solaire (2026-10-02)
 
 Demandée par l'utilisateur : la skymap ne montrait de comètes qu'**au tirage**,

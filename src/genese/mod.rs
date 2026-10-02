@@ -895,7 +895,11 @@ fn poser_sur_rails(
     // 512 points = 6 Ko par planète, et rien à l'écran qu'on ne veuille voir.
     let orbite = orb.polyligne(crate::orbite::Orbite::N_TRACE);
     let corps = Planete::new(pos, vel, rayon, masse, app, orbite).avec_orbite(orb).avec_foyer(foyer);
-    let corps = if comete { corps.en_comete() } else { corps };
+    // ⚠️ La graine du noyau vient du **demi-grand axe et de l'excentricité** :
+    // dérivée, jamais tirée. Un `gen_range` de plus décalerait tout ce qui est
+    // tiré ensuite et changerait le système entier à graine égale — même piège
+    // que `champ::poles` et `temps_initial`.
+    let corps = if comete { corps.en_comete((a_au * 7.31 + e * 3.17).fract()) } else { corps };
     let idx = sys.ajouter(Box::new(corps));
     if let Some(n) = nom {
         sys.nommer(idx, n);

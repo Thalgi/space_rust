@@ -27,7 +27,21 @@ pub const SEUIL_ACTIVITE: f32 = 3.0;
 /// mille. À l'échelle du jeu, la rendre proportionnelle au noyau la rendrait
 /// invisible ; elle est donc proportionnelle à la **distance à l'étoile**, ce qui
 /// est à la fois plus juste et plus lisible.
-pub const LONGUEUR_MAX: f32 = 0.55;
+pub const LONGUEUR_MAX: f32 = 1.6;
+
+/// **Longueur minimale, en rayons de noyau.**
+///
+/// ⚠️ Sans elle, la queue était **invisible** — signalé à l'écran. Sa longueur
+/// est proportionnelle à la distance à l'étoile, ce qui est juste ; mais le
+/// noyau, lui, a une taille **fixe et exagérée** (un vrai noyau de 11 km serait
+/// sub-pixel). Les deux échelles n'ont donc aucun rapport : dans la galerie des
+/// comètes, où l'orbite tient en 3,5 unités, la queue mesurait 0,17 unité pour
+/// un noyau de 0,18 de diamètre — plus courte que le caillou qui l'émet.
+///
+/// Le plancher est en **rayons de noyau** parce que c'est à lui qu'on la compare
+/// à l'œil. Vingt-cinq : assez pour se lire comme une traînée, pas assez pour
+/// dominer un système.
+pub const LONGUEUR_MIN_NOYAUX: f32 = 25.0;
 
 /// Nombre de segments du ruban. Assez pour que la courbure se lise, assez peu
 /// pour qu'une comète reste un décor : trois comètes par système au plus.
@@ -106,7 +120,12 @@ pub fn queue(
     // anti-solaire qu'une direction indéfinie.
     let trainee = if vitesse.length_squared() > 1e-8 { -vitesse.normalize() } else { anti_solaire };
 
-    let longueur = LONGUEUR_MAX * a * dist;
+    // ⚠️ **Deux échelles sans rapport l'une avec l'autre.** La longueur physique
+    // suit la distance à l'étoile ; le noyau, lui, a une taille fixe et
+    // exagérée. Le plancher en rayons de noyau est ce qui rend la queue lisible
+    // quelle que soit l'échelle — sans lui, elle était plus courte que le
+    // caillou qui l'émet dans la galerie des comètes.
+    let longueur = (LONGUEUR_MAX * dist).max(LONGUEUR_MIN_NOYAUX * rayon_noyau) * a;
     let mut pts = Vec::with_capacity(SEGMENTS + 1);
     for k in 0..=SEGMENTS {
         let t = k as f32 / SEGMENTS as f32;
@@ -122,6 +141,83 @@ pub fn queue(
         pts.push((pos, demi_largeur, Color::new(0.80, 0.84, 0.95, alpha)));
     }
     pts
+}
+
+/// Résolution du noyau : parallèles × méridiens. Un patatoïde n'a pas besoin de
+/// finesse — il en a même besoin du contraire, les facettes se lisent comme des
+/// plans de fracture.
+const PARALLELES: usize = 10;
+const MERIDIENS: usize = 16;
+
+/// **Un sommet du noyau** : sa position (rayon unité), sa normale, sa couleur.
+pub type SommetNoyau = (Vec3, Vec3, Color);
+
+/// **Le maillage d'un noyau cométaire**, en rayon unité.
+///
+/// ⚠️ **Pas une bille.** Un noyau de comète est un **patatoïde** : trop petit
+/// pour que sa gravité l'arrondisse, et creusé par la sublimation qui emporte la
+/// glace par plaques. C'était signalé à l'écran — « pour le moment c'est une
+/// bille ».
+///
+/// Déformé par une somme de sinus sur la direction, ce qui donne des bosses
+/// franches sans bruit de Perlin ni table : **dérivé de la graine**, donc deux
+/// comètes diffèrent, et la même garde deux fois rend le même caillou.
+///
+/// **Glace et roche** se mélangent par plaques, sur une seconde somme sans
+/// rapport avec la première : la texture ne suit donc pas le relief, ce qui
+/// serait le défaut d'un bruit unique — un patatoïde dont les creux seraient
+/// systématiquement sombres se lirait comme une balle peinte.
+pub fn noyau(graine: f32) -> (Vec<SommetNoyau>, Vec<u16>) {
+    /// Roche : sombre, sèche, légèrement rousse. Un noyau est plus noir que du
+    /// charbon — albédo ~0,04.
+    const ROCHE: Vec3 = Vec3::new(0.16, 0.13, 0.11);
+    /// Glace fraîche, mise à nu par la sublimation : bleutée et bien plus claire.
+    const GLACE: Vec3 = Vec3::new(0.62, 0.70, 0.78);
+
+    let g = graine.fract().abs() * 17.3;
+    // Relief : trois harmoniques, de la bosse large au creux fin.
+    let relief = |d: Vec3| {
+        let a = (d.x * 2.1 + g).sin() * (d.y * 1.7 - g * 0.7).cos();
+        let b = (d.y * 3.9 - g * 1.3).sin() * (d.z * 3.1 + g).cos();
+        let c = (d.z * 6.7 + g * 2.1).sin() * (d.x * 5.3 - g).cos();
+        0.78 + 0.16 * a + 0.09 * b + 0.05 * c
+    };
+    // Plaques de glace : phases **sans rapport** avec celles du relief.
+    let glace = |d: Vec3| {
+        let v = (d.x * 4.3 - g * 2.7).sin() * (d.z * 3.7 + g * 1.9).cos()
+            + 0.6 * (d.y * 7.1 + g * 0.4).sin();
+        ((v * 0.9 + 0.35).clamp(0.0, 1.0)).powf(1.4)
+    };
+
+    let mut sommets = Vec::with_capacity((PARALLELES + 1) * (MERIDIENS + 1));
+    for i in 0..=PARALLELES {
+        let phi = std::f32::consts::PI * i as f32 / PARALLELES as f32;
+        let (sp, cp) = phi.sin_cos();
+        for j in 0..=MERIDIENS {
+            let theta = std::f32::consts::TAU * j as f32 / MERIDIENS as f32;
+            let (st, ct) = theta.sin_cos();
+            let dir = vec3(sp * ct, cp, sp * st);
+            let r = relief(dir);
+            let t = glace(dir);
+            let c = ROCHE.lerp(GLACE, t);
+            // ⚠️ Normale = la direction. Approximation assumée : le relief est
+            // doux et le noyau fait quelques pixels. Une vraie normale demanderait
+            // de dériver la somme de sinus, pour un gain que personne ne verra.
+            sommets.push((dir * r, dir, Color::new(c.x, c.y, c.z, 1.0)));
+        }
+    }
+    let mut indices = Vec::with_capacity(PARALLELES * MERIDIENS * 6);
+    let large = MERIDIENS + 1;
+    for i in 0..PARALLELES {
+        for j in 0..MERIDIENS {
+            let a = (i * large + j) as u16;
+            let b = (i * large + j + 1) as u16;
+            let c = ((i + 1) * large + j) as u16;
+            let d = ((i + 1) * large + j + 1) as u16;
+            indices.extend_from_slice(&[a, c, b, b, c, d]);
+        }
+    }
+    (sommets, indices)
 }
 
 #[cfg(test)]
@@ -186,6 +282,115 @@ mod tests {
         let aphelie = 40.0 * 1.96;
         assert!(s < aphelie * 0.2, "elle s'allume trop tôt : {s} pour un aphélie de {aphelie}");
         assert!(s > 40.0 * 0.04, "elle ne s'allume jamais : {s}");
+    }
+
+    /// **Le noyau est un patatoïde, pas une bille.**
+    ///
+    /// ⚠️ Signalé à l'écran. Un noyau de comète est trop petit pour que sa
+    /// gravité l'arrondisse, et la sublimation le creuse par plaques. Le test
+    /// mesure **l'écart des rayons** : une sphère parfaite le rendrait nul, et
+    /// c'est exactement l'état qu'on corrige.
+    #[test]
+    fn le_noyau_est_un_patatoide_et_non_une_bille() {
+        let (s, idx) = noyau(0.37);
+        assert!(!s.is_empty() && !idx.is_empty(), "maillage vide");
+        assert_eq!(idx.len() % 3, 0, "les indices ne forment pas des triangles");
+        assert!(
+            idx.iter().all(|i| (*i as usize) < s.len()),
+            "un indice sort du tableau de sommets"
+        );
+
+        let rayons: Vec<f32> = s.iter().map(|(p, _, _)| p.length()).collect();
+        let min = rayons.iter().cloned().fold(f32::MAX, f32::min);
+        let max = rayons.iter().cloned().fold(0.0_f32, f32::max);
+        // **Bosselé** : au moins 25 % d'écart entre le creux et la bosse.
+        assert!(max > min * 1.25, "rayons de {min} à {max} : c'est encore une bille");
+        // ⚠️ Mais **pas déchiqueté** : un rayon qui doublerait donnerait des
+        // pointes, et un rayon nul ou négatif retournerait la surface.
+        assert!(min > 0.3, "creux à {min} : la surface se retourne");
+        assert!(max < 1.6, "pointe à {max} : ce n'est plus un caillou");
+    }
+
+    /// **Il porte de la glace ET de la roche**, et le mélange ne suit pas le
+    /// relief.
+    ///
+    /// ⚠️ Un bruit unique pour la forme et la matière donnerait des creux
+    /// systématiquement sombres — une balle peinte, pas un caillou. Le test
+    /// mesure la **corrélation** entre les deux et refuse qu'elle soit forte.
+    #[test]
+    fn le_noyau_melange_glace_et_roche_sans_calquer_le_relief() {
+        let (s, _) = noyau(0.37);
+        let clair: Vec<f32> = s.iter().map(|(_, _, c)| c.r + c.g + c.b).collect();
+        let min = clair.iter().cloned().fold(f32::MAX, f32::min);
+        let max = clair.iter().cloned().fold(0.0_f32, f32::max);
+        assert!(max > min * 1.8, "teintes de {min} à {max} : une seule matière");
+        // Toutes les faces sont opaques : une transparence ici ferait voir
+        // l'intérieur du caillou.
+        assert!(s.iter().all(|(_, _, c)| c.a == 1.0), "un sommet translucide");
+
+        // Corrélation relief / clarté, en rangs grossiers : si les creux étaient
+        // toujours sombres, les deux classements coïncideraient.
+        let n = s.len() as f32;
+        let (mr, mc) = (
+            s.iter().map(|(p, _, _)| p.length()).sum::<f32>() / n,
+            clair.iter().sum::<f32>() / n,
+        );
+        let mut num = 0.0;
+        let (mut dr, mut dc) = (0.0, 0.0);
+        for (i, (p, _, _)) in s.iter().enumerate() {
+            let (a, b) = (p.length() - mr, clair[i] - mc);
+            num += a * b;
+            dr += a * a;
+            dc += b * b;
+        }
+        let correl = num / (dr.sqrt() * dc.sqrt()).max(1e-6);
+        assert!(
+            correl.abs() < 0.6,
+            "corrélation relief/matière de {correl} : la texture calque la forme"
+        );
+    }
+
+    /// **Deux comètes ne sont pas le même caillou**, et la même l'est toujours.
+    #[test]
+    fn le_noyau_depend_de_sa_graine_et_reste_reproductible() {
+        let (a, _) = noyau(0.11);
+        let (b, _) = noyau(0.73);
+        let (a2, _) = noyau(0.11);
+        assert_eq!(a.len(), b.len(), "les maillages n'ont pas la même structure");
+        let ecart = |x: &[SommetNoyau], y: &[SommetNoyau]| {
+            x.iter().zip(y).map(|(p, q)| (p.0 - q.0).length()).sum::<f32>() / x.len() as f32
+        };
+        assert!(ecart(&a, &b) > 0.02, "deux graines donnent le même caillou");
+        assert_eq!(ecart(&a, &a2), 0.0, "la même graine ne redonne pas le même caillou");
+    }
+
+    /// **La queue se voit, quelle que soit l'échelle.**
+    ///
+    /// ⚠️ Elle était **invisible** — signalé à l'écran. Sa longueur suit la
+    /// distance à l'étoile, ce qui est juste ; mais le noyau a une taille fixe et
+    /// exagérée, et les deux échelles n'ont aucun rapport. Dans la galerie, où
+    /// l'orbite tient en 3,5 unités, la queue était **plus courte que le noyau
+    /// qui l'émet**. Le test l'exige dans les deux régimes.
+    #[test]
+    fn la_queue_reste_plus_longue_que_son_noyau_a_toute_echelle() {
+        let rayon = 0.09_f32;
+        // Deux échelles **sans commune mesure** : la galerie des comètes, dont
+        // l'orbite tient en 3,5 unités, et Halley, dont le demi-grand axe fait
+        // 856 unités. Chacune est prise **à son propre périhélie**, le moment où
+        // la queue doit être la plus franche.
+        for (a, e) in [(3.5_f32, 0.9_f32), (856.0, 0.967)] {
+            let seuil = seuil_activite(a, e);
+            let perihelie = a * (1.0 - e);
+            let pts =
+                queue(vec3(perihelie, 0.0, 0.0), Vec3::ZERO, vec3(0.0, 0.0, 1.0), rayon, seuil);
+            assert!(!pts.is_empty(), "aucune queue au périhélie de ({a}, {e})");
+            let longueur = (pts.last().unwrap().0 - pts[0].0).length();
+            assert!(
+                longueur > rayon * 6.0,
+                "orbite ({a}, {e}) : queue de {longueur} pour un noyau de rayon {rayon} — \
+                 plus courte que le caillou qui l'émet, donc invisible"
+            );
+        }
     }
 
     /// **Halley s'allume là où elle doit**, et elle est rétrograde.

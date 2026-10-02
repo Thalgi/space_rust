@@ -104,7 +104,7 @@ impl GalerieCometes {
                     // — et c'est précisément la queue qu'elle sert à juger.
                     comete: Planete::new(pos, vit, 0.09, 1e-6, apparence_comete(), Vec::new())
                         .avec_orbite(orb)
-                        .en_comete(),
+                        .en_comete((e * 11.7 + k as f32 * 0.31).fract()),
                     trace: orb.polyligne(Orbite::N_TRACE),
                 });
             }

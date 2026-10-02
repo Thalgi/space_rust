@@ -73,6 +73,8 @@ pub struct Planete {
     role_central: Option<f32>,
     // Ce corps est une comète. Voir [`Planete::en_comete`].
     comete: bool,
+    // Maillage du noyau cométaire, en rayon unité. Vide pour tout le reste.
+    noyau: (Vec<crate::comete::SommetNoyau>, Vec<u16>),
 }
 
 impl Planete {
@@ -132,6 +134,7 @@ impl Planete {
             foyer: Foyer::Barycentre,
             role_central: None,
             comete: false,
+            noyau: (Vec::new(), Vec::new()),
         }
     }
 
@@ -148,8 +151,14 @@ impl Planete {
     /// `Categorie::Comete` existait depuis le début **sans que rien ne la
     /// produise** — une catégorie morte, du même genre que le trou noir avant
     /// le lot 4.
-    pub fn en_comete(mut self) -> Self {
+    ///
+    /// ⚠️ Le **maillage du noyau** est construit ici, une fois : un patatoïde,
+    /// pas la sphère de l'impostor. Un noyau de comète est trop petit pour que
+    /// sa gravité l'arrondisse — signalé à l'écran, « pour le moment c'est une
+    /// bille ».
+    pub fn en_comete(mut self, graine: f32) -> Self {
         self.comete = true;
+        self.noyau = crate::comete::noyau(graine);
         self
     }
 
@@ -428,6 +437,38 @@ impl Astre for Planete {
                     Mesh { vertices: v, indices: i, texture: Some(crate::impostor::halo_partage()) };
                 draw_mesh(&mesh);
             }
+
+            // **Le noyau : un patatoïde**, et non la sphère de l'impostor.
+            //
+            // ⚠️ **Éclairé sur le CPU**, et c'est ce qui évite un pipeline de
+            // plus : le maillage fait deux cents sommets, un lambert par sommet
+            // ne coûte rien, et macroquad sait dessiner un maillage à couleurs de
+            // sommets sans material. La lumière est l'étoile, à l'origine.
+            if self.noyau.0.len() >= 3 {
+                let vers_lumiere = (-c).normalize_or_zero();
+                let base = cam.rel(c);
+                let verts: Vec<Vertex> = self
+                    .noyau
+                    .0
+                    .iter()
+                    .map(|(p, n, col)| {
+                        // Un peu d'ambiante : la face nuit d'un caillou noir sur
+                        // fond noir disparaîtrait, et avec elle sa silhouette.
+                        let l = 0.12 + 0.88 * n.dot(vers_lumiere).max(0.0);
+                        Vertex::new2(
+                            base + *p * r,
+                            vec2(0.5, 0.5),
+                            Color::new(col.r * l, col.g * l, col.b * l, 1.0),
+                        )
+                    })
+                    .collect();
+                draw_mesh(&Mesh {
+                    vertices: verts,
+                    indices: self.noyau.1.clone(),
+                    texture: None,
+                });
+            }
+            return;
         }
 
         // Terrain précalculé (telluriques) : génération en thread de fond,
