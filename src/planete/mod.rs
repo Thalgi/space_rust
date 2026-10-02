@@ -71,6 +71,8 @@ pub struct Planete {
     // Ce corps tient la place d'une étoile, et rayonne cette luminosité.
     // Voir [`Planete::au_centre_du_systeme`].
     role_central: Option<f32>,
+    // Ce corps est une comète. Voir [`Planete::en_comete`].
+    comete: bool,
 }
 
 impl Planete {
@@ -129,7 +131,26 @@ impl Planete {
             orbite_kep: None,
             foyer: Foyer::Barycentre,
             role_central: None,
+            comete: false,
         }
+    }
+
+    /// **Ce corps est une comète.**
+    ///
+    /// ⚠️ Ne change que la **catégorie**, et c'est délibéré. Une comète est un
+    /// noyau sombre sur une orbite très excentrique : le corps est celui d'un
+    /// petit caillou, et tout ce qui la distingue au lot 9.1 tient dans son
+    /// orbite. La **queue** est du rendu neuf, et viendra au 9.2 — la poser ici
+    /// derrière ce drapeau mélangerait deux objets dans un seul type.
+    ///
+    /// La catégorie, elle, doit être juste **tout de suite** : c'est elle que
+    /// lisent le sélecteur, la fiche et la désignation, et
+    /// `Categorie::Comete` existait depuis le début **sans que rien ne la
+    /// produise** — une catégorie morte, du même genre que le trou noir avant
+    /// le lot 4.
+    pub fn en_comete(mut self) -> Self {
+        self.comete = true;
+        self
     }
 
     /// **Ce corps tient la place d'une étoile** : il reçoit donc le plancher en
@@ -257,7 +278,9 @@ fn config_anneau(rayon: f32, app: &Apparence) -> DisqueConfig {
 
 impl Astre for Planete {
     fn categorie(&self) -> Categorie {
-        if self.parent.is_some() {
+        if self.comete {
+            Categorie::Comete
+        } else if self.parent.is_some() {
             Categorie::Lune
         } else {
             Categorie::Planete

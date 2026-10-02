@@ -150,6 +150,79 @@ pub(crate) fn premiere_orbite(brute_ua: f32, rayon_etoile: f32) -> f32 {
 mod tests_orbite_interne {
     use super::*;
 
+    /// **Une comète plonge dans le système, et n'y tombe pas.**
+    ///
+    /// Les deux moitiés font la comète : si son périhélie restait au froid, elle
+    /// ne serait qu'un astéroïde lointain et sa queue (9.2) ne naîtrait jamais ;
+    /// s'il rasait l'étoile, elle y passerait.
+    ///
+    /// ⚠️ Le test appelle **la vraie fonction**, `orbite_comete`, et non une
+    /// recopie de son arithmétique. Le premier jet de ce lot la recopiait : un
+    /// sabotage qui retirait le plancher du périhélie **restait vert**, puisque
+    /// le test refaisait le calcul de son côté. Comparer une copie à une copie
+    /// ne prouve rien.
+    ///
+    /// ⚠️ Et c'est **ici** que vit la borne du périhélie, pas dans la fonction :
+    /// celle que j'y avais mise ne mordait jamais, donc aucun sabotage ne
+    /// pouvait la faire rougir. Le test, lui, rougit si l'on élargit la plage
+    /// d'excentricité ou si l'on rapproche le demi-grand axe.
+    #[test]
+    fn une_comete_plonge_dans_le_systeme_sans_tomber_sur_son_etoile() {
+        for ech in [0.2_f32, 0.5, 1.0, 3.0] {
+            for u_a in [0.0_f32, 0.5, 1.0] {
+                for u_e in [0.0_f32, 0.5, 1.0] {
+                    let (a, e) = orbite_comete(ech, u_a, u_e);
+                    let q = a * (1.0 - e); // périhélie, en UA
+                    let aphelie = a * (1.0 + e);
+                    let q_min = premiere_orbite(0.25 * ech, 0.0);
+
+                    assert!(e > 0.0 && e < 1.0, "ech {ech} : excentricité {e} hors d'une ellipse");
+                    assert!(
+                        q >= q_min - 1e-5,
+                        "ech {ech} : périhélie à {q} UA, sous le plancher de {q_min}"
+                    );
+                    // Et elle **plonge** : son aphélie dépasse largement son
+                    // périhélie, sinon l'orbite n'a rien d'une comète.
+                    assert!(
+                        aphelie > q * 5.0,
+                        "ech {ech} : aphélie {aphelie} pour un périhélie {q} — orbite trop ronde"
+                    );
+                }
+            }
+        }
+    }
+
+    /// **La catégorie `Comete` n'est plus morte.**
+    ///
+    /// ⚠️ Elle existait **depuis le début** avec un `allow(dead_code)`, reconnue
+    /// par la désignation, la fiche et le sélecteur — et **rien ne la
+    /// produisait**. C'est le piège exact qui a tenu le trou noir hors du jeu
+    /// jusqu'au lot 4 : un rendu qui existe, des branches qui l'attendent, et
+    /// aucun chemin pour y arriver.
+    #[test]
+    fn un_corps_marque_comete_rend_bien_sa_categorie() {
+        // ⚠️ `Planete::new` charge un material, donc le contexte graphique :
+        // impossible d'en bâtir une ici. On vérifie la **décision** à sa source,
+        // dans le texte — faute de mieux, et c'est dit.
+        // ⚠️ Motifs **assemblés à l'exécution**. Écrits en clair, ce test se
+        // trouve lui-même : il cite forcément ce qu'il cherche, et deux
+        // sabotages sont restés verts pour cette raison exacte. Troisième
+        // occurrence du piège sur ce chantier.
+        let marqueur = format!("en_{}(", "comete");
+        let pose = format!("ajouter_{}s(&mut sys", "comete");
+        let corps = include_str!("../planete/mod.rs");
+        assert!(corps.contains("Categorie::Comete"), "aucun corps ne rend la catégorie Comete");
+        assert!(corps.contains(&marqueur), "le marqueur `en_comete` a disparu");
+        // Et la genèse l'emploie : sans ça le marqueur existerait sans usage, ce
+        // qui est exactement l'état d'avant ce lot.
+        let ici = include_str!("mod.rs");
+        assert!(
+            ici.contains(&pose),
+            "les comètes ne sont plus posées dans un système : la catégorie redevient morte"
+        );
+        assert!(ici.contains(&marqueur), "le corps posé n'est plus marqué comète");
+    }
+
     /// **Aucun type du tirage n'a besoin du plancher — il doit rester inerte.**
     ///
     /// ⚠️ **Écrit d'abord à l'envers**, comme « la première planète tombe hors
@@ -511,6 +584,10 @@ fn construire_simple() -> (Systeme, String) {
         1400, ki * etoile::UA, ko * etoile::UA, masse_etoile,
     ))));
 
+    // **Les comètes.** Posées après les ceintures : elles les traversent, et
+    // c'est voulu — une comète qui plonge coupe le plan des planètes.
+    ajouter_cometes(&mut sys, masse_etoile, ech);
+
     let info = format!("Etoile {}  -  {} K", profil.nom(), profil.temperature as i32);
     (sys, info)
 }
@@ -773,6 +850,33 @@ pub(crate) fn ajouter_planete_autour(
     app: Apparence,
     nom: Option<&'static str>,
 ) -> usize {
+    poser_sur_rails(sys, foyer, masse_centrale, a_au, e, incl, rayon, masse, app, nom, false)
+}
+
+/// **Pose un corps sur rails autour d'un foyer.** Source unique de l'orbite, de
+/// la trace et du corps : planètes et comètes y passent toutes les deux.
+///
+/// ⚠️ `comete` ne change que la **catégorie**. Tout le reste — orbite de Kepler,
+/// foyer, polyligne de trace — est identique, et c'est **la** décision du lot 9 :
+/// une comète doit être un astre **sur rails**, au sens de `Foyer`/`Orbite`,
+/// parce qu'une destination de vol exige une position **prédictible**
+/// (`calculer_trajectoire` rend `None` sinon — c'est pourquoi une lune n'est pas
+/// une destination valide). La rattacher par `parent` l'aurait exclue du vol
+/// sans que rien ne le dise.
+#[allow(clippy::too_many_arguments)]
+fn poser_sur_rails(
+    sys: &mut Systeme,
+    foyer: Foyer,
+    masse_centrale: f32,
+    a_au: f32,
+    e: f32,
+    incl: f32,
+    rayon: f32,
+    masse: f32,
+    app: Apparence,
+    nom: Option<&'static str>,
+    comete: bool,
+) -> usize {
     let a_monde = a_au * etoile::UA;
     let phi: f32 = gen_range(0.0, TAU);
     let a1 = vec3(phi.cos(), 0.0, phi.sin());
@@ -790,11 +894,9 @@ pub(crate) fn ajouter_planete_autour(
     // donc une réserve haute ne coûte rien de loin ; elle sert de près.
     // 512 points = 6 Ko par planète, et rien à l'écran qu'on ne veuille voir.
     let orbite = orb.polyligne(crate::orbite::Orbite::N_TRACE);
-    let idx = sys.ajouter(Box::new(
-        Planete::new(pos, vel, rayon, masse, app, orbite)
-            .avec_orbite(orb)
-            .avec_foyer(foyer),
-    ));
+    let corps = Planete::new(pos, vel, rayon, masse, app, orbite).avec_orbite(orb).avec_foyer(foyer);
+    let corps = if comete { corps.en_comete() } else { corps };
+    let idx = sys.ajouter(Box::new(corps));
     if let Some(n) = nom {
         sys.nommer(idx, n);
     }
@@ -806,6 +908,85 @@ pub(crate) fn ajouter_planete_autour(
 /// `masse_etoile` est la masse de CETTE étoile (via `masse_luminosite`, pas la
 /// constante brute) : une planète orbite la masse de son hôte, pas un chiffre
 /// fixe qui ignorerait une naine rouge ou une géante bleue.
+/// **Bornes d'excentricité d'une comète.**
+///
+/// ⚠️ Le haut n'est pas choisi au hasard : 0,97 est celle de Halley (0,967), et
+/// le solveur de Kepler n'y est exact que depuis qu'il itère jusqu'à convergence
+/// (`orbite.rs` — à six itérations fixes il se trompait de 1,2° à cette
+/// excentricité). Au-delà, la comète passe l'essentiel de son temps trop loin
+/// pour qu'on la rencontre.
+pub(crate) const EXCENTRICITE_COMETE: (f32, f32) = (0.80, 0.97);
+
+/// **Nombre de comètes par système.** Une à trois, décidé par défaut au §8 bis
+/// de la conception (borne haute exclue).
+pub(crate) const NB_COMETES: (i32, i32) = (1, 4);
+
+/// **L'orbite d'une comète** : `(demi-grand axe en UA, excentricité)`.
+///
+/// ⚠️ **Pure, et c'est le point.** `u_a` et `u_e` dans `[0;1]` tiennent la place
+/// des tirages, exactement comme `echelle_systeme` : sans ça, la garde devrait
+/// **recopier** cette arithmétique pour l'éprouver — et comparer une copie à une
+/// copie ne prouve rien (`docs/methode.md`). C'est la faute que le premier jet
+/// de ce lot avait commise, et qu'un sabotage a révélée en restant vert.
+///
+/// Le demi-grand axe la place au **froid** ; l'excentricité lui fait traverser
+/// tout le système. C'est l'aller-retour qui la rend intéressante, et qui fera
+/// vivre la queue au 9.2.
+///
+/// ⚠️ **Aucune borne sur le périhélie, et c'est délibéré.** J'en avais posé une
+/// — « que la comète ne rase pas l'étoile » — avant de mesurer qu'elle ne mord
+/// **jamais** : à `e = 0,97`, `a(1−e)` vaut encore 3 % d'un demi-grand axe qui
+/// part de 14 fois l'échelle du système, soit largement au-delà du plancher. Du
+/// code défensif inatteignable, qu'aucun sabotage ne pouvait faire rougir. C'est
+/// la garde qui porte le fait, en vérifiant que le périhélie dégage **de
+/// lui-même** — et elle, elle rougit si l'on élargit l'excentricité ou si l'on
+/// rapproche le demi-grand axe.
+pub(crate) fn orbite_comete(ech: f32, u_a: f32, u_e: f32) -> (f32, f32) {
+    let a = (14.0 + 20.0 * u_a.clamp(0.0, 1.0)) * ech;
+    let (lo, hi) = EXCENTRICITE_COMETE;
+    (a, lo + (hi - lo) * u_e.clamp(0.0, 1.0))
+}
+
+/// **L'apparence d'un noyau cométaire** : sombre et sec.
+///
+/// Un noyau de comète est l'un des objets les plus **noirs** du système solaire
+/// — albédo de l'ordre de 0,04, plus sombre que du charbon. Le preset
+/// « Carbone » dit exactement ça, et le reprendre évite un preset tellurique de
+/// plus pour un corps de quelques pixels.
+pub(crate) fn apparence_comete() -> Apparence {
+    preset_tellurique("Carbone")
+}
+
+/// **Pose les comètes d'un système.**
+///
+/// ⚠️ **Sur rails, comme une planète** : la comète est un objet de jeu —
+/// cliquable, listée, avec sa fiche, et **destination de vol**. Une destination
+/// exige une position prédictible.
+fn ajouter_cometes(sys: &mut Systeme, masse_etoile: f32, ech: f32) {
+    for _ in 0..gen_range(NB_COMETES.0, NB_COMETES.1) {
+        let (a, e) = orbite_comete(ech, gen_range(0.0, 1.0), gen_range(0.0, 1.0));
+        // ⚠️ Inclinaisons franches, jusqu'à 60° : une comète ne vient pas du
+        // plan des planètes, et c'est ce qui la distingue d'un astéroïde au
+        // premier coup d'œil dans la vue système.
+        let incl = gen_range(0.0_f32, 1.05);
+        poser_sur_rails(
+            sys,
+            Foyer::Barycentre,
+            masse_etoile,
+            a,
+            e,
+            incl,
+            gen_range(0.05_f32, 0.12),
+            // Masse négligeable : une comète ne perturbe rien, et une masse
+            // nulle rendrait les barycentres indéfinis.
+            1e-6,
+            apparence_comete(),
+            None,
+            true,
+        );
+    }
+}
+
 // Meme liste que `ajouter_planete_autour`, foyer en moins.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn ajouter_planete(

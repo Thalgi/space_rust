@@ -26,7 +26,8 @@ mod vaisseau;
 
 use ecran::{
     Parametres,
-    Accueil, Categorie, Cible, Galerie, GalerieDisques, GalerieEtoiles, Objet, Skymap, SkymapV2,
+    Accueil, Categorie, Cible, Galerie, GalerieCometes, GalerieDisques, GalerieEtoiles, Objet, Skymap,
+    SkymapV2,
     SortieStarmap, Starmap, VueAssembleur, VueStation,
 };
 use macroquad::prelude::*;
@@ -55,6 +56,7 @@ enum Etat {
     Galerie(Box<Galerie>),
     GalerieDisques(Box<GalerieDisques>),
     GalerieEtoiles(Box<GalerieEtoiles>),
+    GalerieCometes(Box<GalerieCometes>),
     Station(Box<VueStation>),
     Assembleur(Box<VueAssembleur>),
     Parametres(Parametres),
@@ -117,6 +119,9 @@ async fn main() {
                         }
                         Cible::GalerieEtoiles => {
                             Etat::GalerieEtoiles(Box::new(GalerieEtoiles::new()))
+                        }
+                        Cible::GalerieCometes => {
+                            Etat::GalerieCometes(Box::new(GalerieCometes::new()))
                         }
                         Cible::Parametres => Etat::Parametres(Parametres::new()),
                         // On sort de la boucle de jeu plutôt que d'appeler
@@ -182,6 +187,11 @@ async fn main() {
                 }
             }
             Etat::GalerieEtoiles(g) => {
+                if g.frame() {
+                    etat = Etat::Accueil(Accueil::new());
+                }
+            }
+            Etat::GalerieCometes(g) => {
                 if g.frame() {
                     etat = Etat::Accueil(Accueil::new());
                 }

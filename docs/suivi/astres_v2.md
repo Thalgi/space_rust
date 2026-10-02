@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-10-01** : 874 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-10-02** : 881 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -47,7 +47,9 @@ silhouette « mince » n'a jamais été essayée.
 | **7** — pulsation : céphéide, Mira, ZZ Ceti | **fait**, à juger à l'écran | |
 | **8.1** — le ciel en cubemap | **abandonné**, code retiré | `7f6e1aa` |
 | **8.2** — la déviation dans le shader | **abandonné**, code retiré | `dd55404`, `5e66b10` |
-| 9 à 13 | à faire | |
+| **9.1** — les comètes au tirage, et leur planche | **fait**, à juger à l'écran | |
+| **9.2** — la queue | à faire | |
+| 10 à 13 | à faire | |
 
 Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 `crash.log` sorti du dépôt.
@@ -56,6 +58,59 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 
 ## Ce qu'il faut savoir pour reprendre
 
+### Le lot 9.1 : les comètes existent (2026-10-02)
+
+**Une catégorie morte prend vie.** `Categorie::Comete` existait depuis le début
+avec un `allow(dead_code)`, reconnue par la désignation, la fiche et le
+sélecteur — et **rien ne la produisait**. Même piège que le trou noir avant le
+lot 4 : un rendu qui attend, et aucun chemin pour y arriver.
+
+⚠️ **Sur rails, et ce n'est pas un détail d'implémentation.** La décision n° 1 du
+§8 bis fait de la comète un objet de jeu, donc une **destination de vol** — ce
+qui exige une position **prédictible** (`calculer_trajectoire` rend `None`
+sinon, et c'est pourquoi une lune n'est pas une destination valide). Elle passe
+donc par `poser_sur_rails`, la même fonction que les planètes, avec un
+`Foyer` et une `Orbite`. La rattacher par `parent` l'aurait exclue du vol
+sans que rien ne le dise.
+
+**Un défaut mesuré, trouvé avant d'écrire la génération** : le solveur de Kepler
+faisait **six itérations fixes**. Exact jusqu'à `e = 0,90`, puis l'écart
+angulaire atteignait **0,021 rad** à 0,97 et **0,114 rad — 6,5°** à 0,99. Halley
+est à 0,967 : les comètes vivent précisément là où il décrochait, et l'erreur est
+maximale **au périastre**, là où l'astre file le plus vite. Il itère maintenant
+jusqu'à convergence, avec un plafond — une planète quasi circulaire coûte
+toujours deux passes.
+
+**Et une planche-contact**, demandée par l'utilisateur faute d'objet de ce type.
+⚠️ Elle ne montre pas des corps mais des **orbites** : un noyau fait quelques
+pixels et se ressemble d'un exemplaire à l'autre. Une ligne par excentricité, une
+colonne par phase — de l'aphélie au périhélie. C'est la vue qui servira au 9.2 :
+la queue y naîtra et s'y effacera **le long de la ligne**.
+
+#### ⚠️ Trois gardes ne gardaient rien, et le red-check l'a dit
+
+1. **Une borne inatteignable.** J'avais posé un plancher sur le périhélie pour
+   que la comète ne rase pas l'étoile. Mesuré : il ne **mord jamais** — à
+   `e = 0,97`, `a(1−e)` vaut encore 3 % d'un demi-grand axe qui part de 14
+   fois l'échelle du système. Du code défensif qu'aucun sabotage ne pouvait faire
+   rougir. Retiré ; c'est la garde qui porte désormais le fait, en vérifiant que
+   le périhélie dégage **de lui-même** — et elle rougit si l'on élargit
+   l'excentricité.
+2. **Deux tests qui se trouvaient eux-mêmes**, en citant en clair la chaîne qu'ils
+   cherchaient dans le source. **Troisième occurrence** du piège sur ce chantier.
+   Motifs assemblés à l'exécution.
+3. **Deux tests qui recopiaient l'arithmétique** qu'ils éprouvaient — le calcul
+   de l'orbite, puis la formule de phase de la planche. Extraits en fonctions
+   pures (`orbite_comete`, `phase`), que la production **et** la garde
+   appellent.
+
+#### ⚠️ Et une erreur de manipulation, à ne pas refaire
+
+Mes sauvegardes de red-check nommaient les fichiers par leur **nom de base** :
+`genese/mod.rs` et `planete/mod.rs` ont donc partagé le même fichier, le
+second écrasant le premier. La restauration a écrit le mauvais contenu dans
+`genese/mod.rs`, et le travail du lot y a été **perdu** — rattrapé par `git
+checkout` puis refait. **Sauvegarder au chemin complet**, jamais au nom de base.
 ### ⚠️ Le lot 8 est ABANDONNÉ (2026-10-01)
 
 **Décision de l'utilisateur**, après deux livraisons et une refonte sur
