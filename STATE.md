@@ -21,7 +21,7 @@
 `.claude/worktrees/astres-v2`. **32 commits d'avance sur `main`, rien de
 fusionné, rien de poussé.**
 
-**Vérifié (2026-10-02)** : **888 tests verts** (900 avec le binaire `mhd`),
+**Vérifié (2026-10-02)** : **889 tests verts** (901 avec le binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
 **Le lot 5 est clos** (2026-09-30). Ses **sept presets de trou noir sont au
@@ -121,6 +121,10 @@ incurvée vers la traînée comme une queue de poussière, qui naît à l'approc
 s'efface au loin. Zéro pipeline de plus — `push_ruban` existait déjà.
 ⚠️ Le seuil d'activité vient de **l'orbite de la comète**, pas d'une distance en
 UA : les systèmes sont mis à l'échelle de leur étoile.
+
+**Le preset solaire porte 1P/Halley**, éléments réels et **rétrograde** (162°) :
+la skymap n'en montrait autrement qu'au tirage. Elle démarre à son périastre,
+donc en pleine queue.
 
 **Le prochain pas** : lot 10 (distinction des types :
 granulation paramétrée, assombrissement centre-bord), 11 (quasi-étoile), 12

@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-10-02** : 888 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-10-02** : 889 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -57,6 +57,29 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### 1P/Halley dans le preset solaire (2026-10-02)
+
+Demandée par l'utilisateur : la skymap ne montrait de comètes qu'**au tirage**,
+donc il fallait régénérer jusqu'à en croiser une. Le preset solaire en porte
+maintenant une, nommée et cliquable.
+
+**Éléments réels** : demi-grand axe 17,834 UA, excentricité 0,967, période ~75
+ans. Son périhélie tombe à **0,586 UA**, entre Mercure et Vénus — elle plonge au
+cœur du système, et c'est là que sa queue est la plus franche. Comme tout corps
+posé par `poser_sur_rails`, elle **démarre à son périastre** : le preset s'ouvre
+donc sur une comète en pleine activité.
+
+⚠️ **Inclinaison 162° : elle est RÉTROGRADE**, et ce n'est pas une coquille.
+Halley tourne à l'envers des planètes. Le modèle le rend **gratuitement** —
+au-delà de 90°, le vecteur perpendiculaire bascule et le sens de parcours
+s'inverse. Sa trace se parcourt donc dans l'autre sens que celle de la Terre.
+
+Ses éléments sont **nommés** (`presets::HALLEY`) plutôt qu'écrits en ligne :
+`construire_preset_solaire` tire des aléas, donc exige le contexte graphique et
+ne se teste pas. La garde atteint ainsi les trois faits qui comptent — périhélie
+entre Mercure et Vénus, inclinaison rétrograde, et queue qui s'allume entre 1 et
+2,5 UA mais reste éteinte à l'orbite de Jupiter.
 
 ### Le lot 9.2 : la queue (2026-10-02)
 

@@ -188,6 +188,40 @@ mod tests {
         assert!(s > 40.0 * 0.04, "elle ne s'allume jamais : {s}");
     }
 
+    /// **Halley s'allume là où elle doit**, et elle est rétrograde.
+    ///
+    /// Le preset solaire la porte pour qu'on ait une comète sous la main sans
+    /// régénérer. ⚠️ `construire_preset_solaire` tire des aléas, donc exige le
+    /// contexte graphique et ne se teste pas : ce sont ses **éléments** qui sont
+    /// nommés et éprouvés ici.
+    #[test]
+    fn halley_s_allume_entre_mars_et_la_terre_et_tourne_a_l_envers() {
+        let (a, e, incl) = crate::genese::presets::HALLEY;
+        let perihelie = a * (1.0 - e);
+        // Son périhélie tombe entre Vénus (0,72) et Mercure (0,39) : elle plonge
+        // donc au cœur du système, et c'est ce qui la rend spectaculaire.
+        assert!(
+            (0.39..0.72).contains(&perihelie),
+            "périhélie à {perihelie} UA : Halley ne plonge plus entre Mercure et Vénus"
+        );
+        // ⚠️ **Rétrograde.** Au-delà de 90°, le vecteur perpendiculaire bascule
+        // et le sens de parcours s'inverse : sa trace se lit à l'envers de celle
+        // des planètes. C'est exact, et c'est le détail qui se voit.
+        assert!(incl > 90.0, "inclinaison {incl}° : Halley ne tourne plus à l'envers");
+        assert!(incl < 180.0, "inclinaison {incl}° : hors de toute orbite");
+
+        // Et sa queue s'allume à la bonne distance. Dans le réel elle devient
+        // visible vers 1 à 2 UA ; le seuil du jeu vaut trois périhélies.
+        let seuil = seuil_activite(a, e);
+        assert!(
+            (1.0..2.5).contains(&seuil),
+            "seuil à {seuil} UA : Halley s'allume trop tôt ou trop tard"
+        );
+        // Éteinte au-delà de Jupiter, franche au périhélie.
+        assert_eq!(activite(5.2, seuil), 0.0, "elle fume encore à l'orbite de Jupiter");
+        assert!(activite(perihelie, seuil) > 0.3, "aucune queue à son périhélie");
+    }
+
     /// **La queue part à l'opposé de l'étoile, jamais de la vitesse.**
     ///
     /// ⚠️ C'est **l'erreur classique**, et elle se voit immédiatement : une queue

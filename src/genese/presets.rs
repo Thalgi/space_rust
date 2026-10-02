@@ -1,6 +1,7 @@
 use super::apparences::{gazeuse, tellurique};
 use super::{
-    ajouter_lune, ajouter_lune_reelle, ajouter_planete, ajouter_planete_autour, app_simple,
+    ajouter_comete, ajouter_lune, ajouter_lune_reelle, ajouter_planete, ajouter_planete_autour,
+    app_simple,
     deployer_arbre, masse_luminosite, preset_gazeuse, preset_tellurique, MASSE_ETOILE,
 };
 use crate::astre::Foyer;
@@ -262,6 +263,14 @@ pub fn ceintures_solaires() -> Vec<DisqueConfig> {
     ]
 }
 
+/// **Éléments orbitaux de 1P/Halley** : `(demi-grand axe UA, excentricité,
+/// inclinaison en degrés)`.
+///
+/// Valeurs réelles. Nommés plutôt qu'écrits en ligne pour qu'une garde puisse
+/// les atteindre : `construire_preset_solaire` tire des aléas, donc exige le
+/// contexte graphique et ne se teste pas.
+pub(crate) const HALLEY: (f32, f32, f32) = (17.834, 0.967, 162.26);
+
 pub fn construire_preset_solaire() -> (Systeme, String) {
     srand(42);
     let deg = std::f32::consts::PI / 180.0;
@@ -376,6 +385,34 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
     for cfg in ceintures_solaires() {
         sys.ajouter(Box::new(Disque::new(cfg)));
     }
+
+    // ===== 1P/Halley =====
+    //
+    // La comete du preset, pour qu'on en ait une sous la main sans regenerer :
+    // la skymap n'en montre autrement qu'au tirage, une a trois par systeme.
+    //
+    // Elements reels : demi-grand axe 17,834 UA, excentricite 0,967, periode
+    // ~75 ans. Son perihelie tombe a 0,586 UA -- entre Venus et Mercure -- et
+    // c'est la que sa queue est la plus franche.
+    //
+    // ⚠️ **Inclinaison de 162 degres : elle est RETROGRADE.** Ce n'est pas une
+    // coquille. Halley tourne a l'envers des planetes, et le modele le rend
+    // gratuitement : au-dela de 90 degres, le vecteur perpendiculaire bascule et
+    // le sens de parcours s'inverse. La trace se parcourt donc dans l'autre sens
+    // que celle de la Terre, ce qui est exact et se voit.
+    //
+    // Le noyau fait ~11 km : invisible a l'echelle vraie. Il garde donc le rayon
+    // des cometes tirees, qui est deja une exageration assumee -- c'est la queue
+    // qu'on vient voir, pas le caillou.
+    ajouter_comete(
+        &mut sys,
+        masse_soleil,
+        HALLEY.0,
+        HALLEY.1,
+        HALLEY.2 * deg,
+        0.08,
+        "Halley",
+    );
 
     // ===== L'ISS, en orbite terrestre =====
     // Le pont entre les deux moities du projet : la station est **assemblee**

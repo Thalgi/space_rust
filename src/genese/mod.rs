@@ -947,6 +947,39 @@ pub(crate) fn orbite_comete(ech: f32, u_a: f32, u_e: f32) -> (f32, f32) {
     (a, lo + (hi - lo) * u_e.clamp(0.0, 1.0))
 }
 
+/// **Une comète nommée**, pour les presets écrits à la main.
+///
+/// Même chemin que les comètes tirées — `poser_sur_rails`, donc **sur rails**,
+/// donc destination de vol possible. Seuls le nom et les éléments orbitaux
+/// viennent de l'appelant.
+///
+/// ⚠️ `m0 = 0` : comme tout corps posé ici, elle **démarre à son périastre**.
+/// Pour une comète c'est l'instant où sa queue est la plus franche — c'est donc
+/// le bon choix pour un preset qu'on ouvre pour la regarder.
+pub(crate) fn ajouter_comete(
+    sys: &mut Systeme,
+    masse_etoile: f32,
+    a_au: f32,
+    e: f32,
+    incl: f32,
+    rayon: f32,
+    nom: &'static str,
+) -> usize {
+    poser_sur_rails(
+        sys,
+        Foyer::Barycentre,
+        masse_etoile,
+        a_au,
+        e,
+        incl,
+        rayon,
+        1e-6,
+        apparence_comete(),
+        Some(nom),
+        true,
+    )
+}
+
 /// **L'apparence d'un noyau cométaire** : sombre et sec.
 ///
 /// Un noyau de comète est l'un des objets les plus **noirs** du système solaire
