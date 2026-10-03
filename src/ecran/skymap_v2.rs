@@ -384,7 +384,7 @@ impl SkymapV2 {
     /// plus désigner la même chose.
     fn marqueurs(&self, cam_info: &CameraInfo, aspect: f32) -> Vec<marqueur::Marqueur> {
         let ecran = vec2(screen_width(), screen_height());
-        let mut ms = marqueur::marqueurs_planetes(&self.sys, cam_info, ecran, aspect);
+        let mut ms = marqueur::marqueurs_racines(&self.sys, cam_info, ecran, aspect);
         if let Some(p) = marqueur::planete_active(&self.sys, self.fiche_ouverte) {
             ms.extend(marqueur::marqueurs_lunes(&self.sys, p, cam_info, ecran, aspect));
         }

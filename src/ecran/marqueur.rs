@@ -1,4 +1,4 @@
-//! **Marqueurs d'astres** : un petit triangle à taille écran fixe, planté sur
+//! **Marqueurs d'astres** : un petit repère à taille écran fixe, planté sur
 //! la position projetée d'un astre — pour voir et cliquer un corps qui, à
 //! l'échelle vraie, fait moins d'un pixel (Skymap V2,
 //! `docs/superpowers/specs/2026-09-22-skymap-v2-marqueurs-design.md`).
@@ -6,7 +6,7 @@
 //! **Le cœur est générique** : `marqueurs_pour`, `plus_proche` et `dessiner`
 //! ne manipulent que des indices d'astres, sans rien savoir de leur
 //! catégorie. Seules les fonctions de **sélection d'indices** en décident —
-//! aujourd'hui planètes racines et lunes. Marquer demain un vaisseau, une
+//! aujourd'hui astres de racine (planètes, comètes) et lunes. Marquer demain un vaisseau, une
 //! station ou une étoile, c'est écrire une fonction de sélection de plus, pas
 //! retoucher le cœur.
 //!
@@ -40,7 +40,7 @@ pub const ECART_PX: f32 = 16.0;
 
 /// Rayon de détection du survol et du clic, en pixels écran.
 ///
-/// Plus large que le triangle (8 × 10 px) : on doit pouvoir le cliquer sans
+/// Plus large que le repère (8 × 10 px) : on doit pouvoir le cliquer sans
 /// viser au pixel près — même esprit que la marge de `Systeme::pick`.
 pub const RAYON_HIT_PX: f32 = 14.0;
 
@@ -83,7 +83,7 @@ pub fn marqueurs_pour(
         .collect()
 }
 
-/// **De combien la pointe du triangle monte au-dessus du centre de l'astre.**
+/// **De combien la pointe du repère monte au-dessus du centre de l'astre.**
 ///
 /// Un décalage fixe en pixels se retrouverait DANS le disque dès qu'on
 /// approche : une planète qui remplit l'écran garderait sa pointe en plein
@@ -106,20 +106,35 @@ fn decalage_px(
     rayon_px + ECART_PX
 }
 
-/// Indices des planètes **racines** : catégorie `Planete` et sans parent.
+/// Indices des astres marqués **à la racine** : ceux qui n'orbitent pas
+/// autour d'un autre corps marqué, et qu'on doit pouvoir trouver sans rien
+/// avoir sélectionné d'abord.
 ///
-/// Le « sans parent » est une ceinture de sécurité : aujourd'hui une
-/// `Planete` qui a un parent se déclare `Lune` (`planete/mod.rs`), mais un
-/// corps qui recevrait à la fois un marqueur de planète et un de lune serait
-/// désigné deux fois.
-fn indices_planetes_racines(sys: &Systeme) -> impl Iterator<Item = usize> + '_ {
-    (0..sys.nb_astres())
-        .filter(|&i| sys.categorie_de(i) == Some(Categorie::Planete) && sys.parent_de(i).is_none())
+/// ⚠️ **Deux fois déjà, un filtre par catégorie a oublié la comète** : une
+/// fois sur les rails (`systeme/mod.rs`), une fois ici, où elle n'avait
+/// aucun marqueur et restait donc invisible. La liste est explicite parce
+/// qu'il n'y a rien à interroger — « mérite un repère de premier plan »
+/// n'est pas une capacité, c'est un choix. Mais
+/// [`chaque_categorie_dit_si_elle_est_marquee_a_la_racine`] les balaie
+/// toutes : une catégorie nouvelle y apparaît en défaut, et il faut la
+/// trancher pour que les tests repassent.
+fn marque_a_la_racine(cat: Categorie) -> bool {
+    matches!(cat, Categorie::Planete | Categorie::Comete)
 }
 
-/// Un marqueur par planète racine. Ne fait que choisir les indices.
-pub fn marqueurs_planetes(sys: &Systeme, cam: &CameraInfo, ecran: Vec2, aspect: f32) -> Vec<Marqueur> {
-    marqueurs_pour(sys, indices_planetes_racines(sys), cam, ecran, aspect)
+/// Le « sans parent » est une ceinture de sécurité : aujourd'hui une
+/// `Planete` qui a un parent se déclare `Lune` (`planete/mod.rs`), mais un
+/// corps qui recevrait à la fois un marqueur de racine et un de lune serait
+/// désigné deux fois.
+fn indices_racines(sys: &Systeme) -> impl Iterator<Item = usize> + '_ {
+    (0..sys.nb_astres()).filter(|&i| {
+        sys.categorie_de(i).is_some_and(marque_a_la_racine) && sys.parent_de(i).is_none()
+    })
+}
+
+/// Un marqueur par astre de racine. Ne fait que choisir les indices.
+pub fn marqueurs_racines(sys: &Systeme, cam: &CameraInfo, ecran: Vec2, aspect: f32) -> Vec<Marqueur> {
+    marqueurs_pour(sys, indices_racines(sys), cam, ecran, aspect)
 }
 
 /// Un marqueur par **lune** de `parent`.
@@ -168,10 +183,34 @@ pub fn planete_active(sys: &Systeme, selection: Option<usize>) -> Option<usize> 
     }
 }
 
-/// Triangle plein, base 8 px, hauteur 10 px, pointe en bas sur
+/// Boîte du marqueur : base 8 px, hauteur 10 px, **pointe en bas** sur
 /// `Marqueur::ecran` — donc au-dessus de l'astre, dégagée de son disque.
+/// Les deux formes tiennent dans la même boîte, pour que [`RAYON_HIT_PX`]
+/// vaille pour l'une comme pour l'autre.
 const DEMI_BASE_PX: f32 = 4.0;
 const HAUTEUR_PX: f32 = 10.0;
+
+/// **Le contour du marqueur, pointe en premier**, en pixels écran.
+///
+/// Une **comète** reçoit un losange, tout le reste un triangle : la forme
+/// dit le type d'astre là où la teinte dit déjà la sélection
+/// (`teinte_marqueur`), sans rien ajouter à lire. Le losange partage la
+/// pointe et la boîte du triangle ; il écarte seulement ses flancs à
+/// mi-hauteur et se referme sur un sommet haut.
+///
+/// Pur et rendu en données : le dessin n'a plus qu'à relier les points.
+fn contour(cat: Categorie, pointe: Vec2) -> Vec<Vec2> {
+    let (dx, h) = (DEMI_BASE_PX, HAUTEUR_PX);
+    match cat {
+        Categorie::Comete => vec![
+            pointe,
+            vec2(pointe.x - dx, pointe.y - h * 0.5),
+            vec2(pointe.x, pointe.y - h),
+            vec2(pointe.x + dx, pointe.y - h * 0.5),
+        ],
+        _ => vec![pointe, vec2(pointe.x - dx, pointe.y - h), vec2(pointe.x + dx, pointe.y - h)],
+    }
+}
 
 /// **Les quatre teintes de flèche**, en niveaux de gris : la couleur propre
 /// de l'astre est réservée à sa pastille dans la colonne, la carte se lit en
@@ -207,12 +246,17 @@ pub fn dessiner(sys: &Systeme, marqueurs: &[Marqueur], survole: Option<usize>, s
         let est_survole = survole == Some(m.idx);
         c.a = if est_survole { 1.0 } else { 0.85 };
 
-        let pointe = m.ecran;
-        let gauche = vec2(pointe.x - DEMI_BASE_PX, pointe.y - HAUTEUR_PX);
-        let droite = vec2(pointe.x + DEMI_BASE_PX, pointe.y - HAUTEUR_PX);
-        draw_triangle(pointe, gauche, droite, c);
+        let pts = contour(cat, m.ecran);
+        // Éventail depuis la pointe : trois points font un triangle, quatre
+        // un losange, sans un cas de dessin par forme.
+        for f in pts.windows(2).skip(1) {
+            draw_triangle(pts[0], f[0], f[1], c);
+        }
         if est_survole {
-            draw_triangle_lines(pointe, gauche, droite, 1.0, WHITE);
+            for i in 0..pts.len() {
+                let b = pts[(i + 1) % pts.len()];
+                draw_line(pts[i].x, pts[i].y, b.x, b.y, 1.0, WHITE);
+            }
         }
     }
 }
@@ -347,11 +391,12 @@ mod tests {
         assert!(!dans_cadre(vec2(10.0, -0.1), ECRAN));
     }
 
-    // **Planètes racines seulement**, et **lunes seulement** : ni l'étoile,
+    // **Astres de racine seulement**, et **lunes seulement** : ni l'étoile,
     // ni l'engin posté autour de la planète (le cas de l'ISS autour de la
-    // Terre), ni une planète qui aurait un parent.
+    // Terre), ni une planète qui aurait un parent. La **comète**, elle, est
+    // bien de la fête — sans quoi elle n'a aucun repère et reste invisible.
     #[test]
-    fn la_selection_ne_garde_que_planetes_racines_et_lunes() {
+    fn la_selection_ne_garde_que_les_racines_et_les_lunes() {
         let mut sys = Systeme::new();
         let etoile = poser(&mut sys, Categorie::Etoile, Vec3::ZERO, None);
         let terre = poser(&mut sys, Categorie::Planete, vec3(1.0, 0.0, 0.0), None);
@@ -359,15 +404,75 @@ mod tests {
         let iss = poser(&mut sys, Categorie::Engin, vec3(1.1, 0.0, 0.0), Some(terre));
         let planete_enfant = poser(&mut sys, Categorie::Planete, vec3(1.4, 0.0, 0.0), Some(terre));
         let mars = poser(&mut sys, Categorie::Planete, vec3(-2.0, 0.0, 0.0), None);
+        let halley = poser(&mut sys, Categorie::Comete, vec3(-3.0, 1.0, 0.0), None);
 
         let idx = |v: Vec<Marqueur>| v.into_iter().map(|m| m.idx).collect::<Vec<_>>();
-        let planetes = idx(marqueurs_planetes(&sys, &camera(), ECRAN, ASPECT));
-        assert_eq!(planetes, vec![terre, mars], "étoile {etoile}, lune, ISS et planète-enfant exclues");
-        assert!(!planetes.contains(&planete_enfant));
+        let racines = idx(marqueurs_racines(&sys, &camera(), ECRAN, ASPECT));
+        assert_eq!(racines, vec![terre, mars, halley], "étoile {etoile}, lune, ISS et planète-enfant exclues");
+        assert!(!racines.contains(&planete_enfant));
 
         let lunes = idx(marqueurs_lunes(&sys, terre, &camera(), ECRAN, ASPECT));
         assert_eq!(lunes, vec![lune], "l'ISS ({iss}) n'est pas une lune");
         assert!(marqueurs_lunes(&sys, mars, &camera(), ECRAN, ASPECT).is_empty());
+    }
+
+    /// **Chaque catégorie tranche**, pour qu'une nouvelle venue ne puisse pas
+    /// se glisser muette dans la carte comme la comète l'a fait. Balayage
+    /// exhaustif : ajouter un variant à `Categorie` fait rougir ce test tant
+    /// qu'on n'a pas dit, ici, s'il porte un repère de premier plan.
+    #[test]
+    fn chaque_categorie_dit_si_elle_est_marquee_a_la_racine() {
+        for cat in [
+            Categorie::Etoile,
+            Categorie::Planete,
+            Categorie::Lune,
+            Categorie::Asteroide,
+            Categorie::Comete,
+            Categorie::Engin,
+        ] {
+            let attendu = match cat {
+                // Les deux seuls corps qu'on cherche sans rien avoir
+                // sélectionné d'abord. La lune passe par sa planète,
+                // l'étoile se voit toute seule, l'astéroïde et l'engin
+                // relèvent d'autres itérations.
+                Categorie::Planete | Categorie::Comete => true,
+                Categorie::Etoile | Categorie::Lune | Categorie::Asteroide | Categorie::Engin => false,
+            };
+            assert_eq!(marque_a_la_racine(cat), attendu, "{cat:?}");
+        }
+    }
+
+    /// **Le losange de la comète et le triangle des autres**, même pointe,
+    /// même boîte. La boîte compte : [`RAYON_HIT_PX`] est réglé sur elle, et
+    /// une forme qui en sortirait se cliquerait moins bien que ce qu'on voit.
+    #[test]
+    fn le_contour_dit_la_categorie_sans_sortir_de_la_boite() {
+        let pointe = vec2(200.0, 300.0);
+        let losange = contour(Categorie::Comete, pointe);
+        assert_eq!(losange.len(), 4, "la comète a quatre sommets : {losange:?}");
+
+        for cat in [Categorie::Planete, Categorie::Lune, Categorie::Etoile, Categorie::Engin] {
+            assert_eq!(contour(cat, pointe).len(), 3, "{cat:?} garde le triangle");
+        }
+
+        for cat in [Categorie::Comete, Categorie::Planete] {
+            let pts = contour(cat, pointe);
+            assert_eq!(pts[0], pointe, "{cat:?} : la pointe vient en premier");
+            for p in &pts {
+                assert!((p.x - pointe.x).abs() <= DEMI_BASE_PX + 0.01, "{cat:?} déborde en x : {p:?}");
+                // y écran croît vers le bas : la forme monte au-dessus de la pointe.
+                assert!(
+                    p.y <= pointe.y + 0.01 && p.y >= pointe.y - HAUTEUR_PX - 0.01,
+                    "{cat:?} déborde en y : {p:?}"
+                );
+            }
+        }
+
+        // Ce qui fait un losange et non un triangle pointe en bas : des
+        // flancs écartés À MI-HAUTEUR, et un sommet qui se referme en haut.
+        assert_eq!(losange[1], vec2(pointe.x - DEMI_BASE_PX, pointe.y - HAUTEUR_PX * 0.5));
+        assert_eq!(losange[3], vec2(pointe.x + DEMI_BASE_PX, pointe.y - HAUTEUR_PX * 0.5));
+        assert_eq!(losange[2], vec2(pointe.x, pointe.y - HAUTEUR_PX), "le sommet haut est sur l'axe");
     }
 
     #[test]

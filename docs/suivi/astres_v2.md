@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-10-03** : 894 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-10-03** : 896 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -57,6 +57,35 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### Un losange pour la comète : le même filtre, la deuxième fois (2026-10-03)
+
+Signalé à l'écran : *« il faut lui mettre un marqueur à la comète car je ne la
+vois pas, pourquoi pas un diamant à la place du triangle »*.
+
+**La même cause que juste avant**, à un autre endroit :
+`indices_planetes_racines` ne gardait que `Categorie::Planete`. Halley bougeait
+désormais, mais sans repère à taille écran fixe elle faisait moins d'un pixel :
+rien à voir, rien à cliquer.
+
+C'est le **deuxième** filtre par catégorie que la comète traverse sans être vue,
+après la boucle des rails. Ici, contrairement aux rails, il n'y a **rien à
+interroger** : « mérite un repère de premier plan » n'est pas une capacité de
+l'astre, c'est un choix d'interface. La liste reste donc explicite
+(`marque_a_la_racine`), mais une garde la **balaie entièrement** : ajouter un
+variant à `Categorie` fait rougir le test tant qu'on n'a pas tranché, là, s'il
+porte un repère. La prochaine venue ne pourra plus se glisser muette.
+
+**La forme dit le type.** La teinte était déjà prise : elle porte la sélection
+(quatre niveaux de gris). Le `contour(cat, pointe)` est donc pur et rendu en
+**données** — la comète reçoit un losange, tout le reste le triangle — et le
+dessin n'a plus qu'un éventail depuis la pointe : trois points font un
+triangle, quatre un losange, sans un cas de dessin par forme.
+
+Le losange partage **la pointe et la boîte** du triangle (8 × 10 px) ; il écarte
+seulement ses flancs à mi-hauteur. Ce n'est pas cosmétique : `RAYON_HIT_PX` est
+réglé sur cette boîte, et une forme qui en sortirait se cliquerait moins bien
+que ce qu'on voit. La garde tient la boîte en plus du nombre de sommets.
 
 ### ⚠️ La comète ne bougeait pas : la catégorie morte, par l'autre bout (2026-10-03)
 
