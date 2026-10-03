@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-10-03** : 898 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-10-03** : 899 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -57,6 +57,45 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### ⚠️ La courbure était là et ne se voyait pas (2026-10-03)
+
+Signalé à l'écran : *« la queue, je pense, doit être en relation avec la
+trajectoire de la comète ; ce n'est pas le cas ici, on dirait que la queue est
+poussée toujours vers l'extérieur du système par le vent solaire, à voir si
+c'est à rectifier ou normal »*.
+
+**La moitié de l'observation est normale, et c'est la bonne moitié.** Une queue
+de comète est **anti-solaire** : elle fuit l'étoile quoi que fasse la comète. Sur
+le trajet de retour, la comète voyage donc **queue devant**. C'est exact, c'est
+contre-intuitif, et c'est précisément ce que `la_queue_fuit_l_etoile_et_non_la_trajectoire`
+tient depuis le lot 9.2 — le sillage de bateau est l'erreur classique.
+
+**L'autre moitié était un vrai défaut.** Le lien à la trajectoire existe : c'est
+la **courbure** de la queue de poussière, les grains qui gardent leur orbite et
+prennent du retard. Mesurée :
+
+| réglage | déviation à mi-opacité | au dernier point |
+|---|---|---|
+| `0.45` sur `t²` (avant) | **4,7°** | 24° |
+| `0.75` sur `t^1.3` (après) | **14,0°** | 37° |
+
+À 4,7°, la queue se lit **droite** : une queue d'ions, pas de poussière. Toute la
+courbure vivait **dans la partie transparente du ruban** — l'opacité décroît en
+`(1-t)^1,1`, et le `t²` ne faisait décrocher les grains qu'au bout, où il ne reste
+rien à voir.
+
+⚠️ **Et `la_queue_de_poussiere_s_incurve_vers_la_trainee` restait vert**, parce
+qu'il se contentait de constater que la courbure **existe** (`proche.dot(loin) <
+0.999`). C'est mot pour mot la leçon de la lentille du lot 8 : *mes tests
+garantissaient que l'effet était contenu, aucun ne disait qu'il devait se
+**voir***. La garde neuve mesure la déviation **au point où la queue a encore la
+moitié de son opacité**, jamais au bout du ruban — et elle borne par le haut, car
+au-delà de 60° ce n'est plus le vent stellaire qui mène mais le sillage.
+
+L'exposant est le réglage qui compte : il déplace la courbure vers le **corps
+éclairé** de la queue sans la rendre constante — près du noyau, la poussière vient
+d'être libérée et suit encore l'anti-solaire.
 
 ### La queue était un fil : deux échelles sans commune mesure, encore (2026-10-03)
 

@@ -71,14 +71,28 @@ pub const ECLAT: f32 = 1.0;
 /// pour qu'une comète reste un décor : trois comètes par système au plus.
 const SEGMENTS: usize = 14;
 
-/// **Part de traînée dans la direction de la queue.**
+/// **Part de traînée dans la direction de la queue**, et **où elle arrive**.
 ///
 /// ⚠️ **Une queue de poussière n'est pas droite.** Les grains libérés par le
 /// noyau gardent leur propre orbite et prennent du retard : la queue s'incurve
 /// entre l'anti-solaire et la trajectoire. C'est ce qui la distingue de la queue
 /// d'**ions**, celle-là rigoureusement anti-solaire, et c'est la différence qui
 /// se voit en premier sur une photographie.
-const COURBURE: f32 = 0.45;
+///
+/// ⚠️ **La courbure était réelle et invisible** — signalé à l'écran : *« on
+/// dirait que la queue est poussée toujours vers l'extérieur du système »*. À
+/// 0,45 sur un `t²`, la déviation valait **5,6° à mi-queue** et n'atteignait ses
+/// 24° qu'au tout dernier point, là où l'opacité est déjà tombée à rien. Toute
+/// la courbure vivait **dans la partie transparente** : la queue se lisait
+/// rigoureusement droite, donc comme une queue d'ions.
+///
+/// L'exposant est ce qui déplace la courbure vers le **corps éclairé** de la
+/// queue : plus il est bas, plus tôt les grains décrochent. À 1,3 la déviation
+/// vaut 14° là où la queue a encore la moitié de son opacité, et 37° au bout.
+/// Elle reste **progressive**, ce qui est le point physique : près du noyau la
+/// poussière vient d'être libérée et suit encore l'anti-solaire.
+const COURBURE: f32 = 0.75;
+const EXPOSANT_COURBURE: f32 = 1.3;
 
 /// **Activité d'une comète**, de 0 (inerte) à 1 (au plus près).
 ///
@@ -157,7 +171,7 @@ pub fn queue(
         // poussière vient d'être libérée et suit encore l'anti-solaire ; loin,
         // elle a pris son retard. Une courbure constante donnerait une queue
         // droite, simplement inclinée.
-        let dir = (anti_solaire + trainee * (COURBURE * t * t)).normalize();
+        let dir = (anti_solaire + trainee * (COURBURE * t.powf(EXPOSANT_COURBURE))).normalize();
         let pos = noyau + dir * (longueur * t);
         // ⚠️ **S'évase en fraction de SA LONGUEUR**, jamais du rayon du noyau :
         // voir [`LARGEUR_BASE`]. Le plancher au noyau ne sert qu'au cas d'une
@@ -563,6 +577,46 @@ mod tests {
             loin.dot(trainee) > proche.dot(trainee),
             "la courbure ne va pas vers la traînée"
         );
+    }
+
+    /// **La courbure doit se voir là où la queue est encore opaque.**
+    ///
+    /// ⚠️ Signalé à l'écran : *« la queue doit être en relation avec la
+    /// trajectoire, on dirait qu'elle est poussée toujours vers l'extérieur du
+    /// système »*. Elle l'était — et
+    /// [`la_queue_de_poussiere_s_incurve_vers_la_trainee`] restait **vert**,
+    /// parce qu'il se contentait de constater que la courbure **existe**. Elle
+    /// existait : 5,6° à mi-queue, 24° au dernier point, dont l'opacité est
+    /// nulle. Toute la courbure vivait dans la partie transparente.
+    ///
+    /// C'est la même leçon que la lentille du lot 8 : *mes tests garantissaient
+    /// que l'effet était là, aucun ne disait qu'il devait se **voir***. La garde
+    /// mesure donc la déviation **au point où la queue a encore la moitié de son
+    /// opacité**, et non au bout du ruban.
+    #[test]
+    fn la_courbure_se_voit_dans_la_partie_eclairee_de_la_queue() {
+        let noyau = vec3(10.0, 0.0, 0.0);
+        let vitesse = vec3(0.0, 0.0, 4.0); // perpendiculaire au rayon
+        let pts = queue(noyau, Vec3::ZERO, vitesse, 0.1, 30.0);
+        let anti_solaire = noyau.normalize();
+
+        // Le dernier point encore franchement visible : la moitié de l'opacité
+        // du ras du noyau.
+        let seuil_vu = pts[0].2.a * 0.5;
+        let (i, _) =
+            pts.iter().enumerate().rfind(|(_, p)| p.2.a >= seuil_vu).expect("aucun point visible");
+        assert!(i > 0, "la queue s'éteint dès son premier segment");
+
+        let dir = (pts[i].0 - noyau).normalize();
+        let angle = dir.dot(anti_solaire).clamp(-1.0, 1.0).acos().to_degrees();
+        assert!(
+            angle > 10.0,
+            "{angle}° d'écart à l'anti-solaire là où la queue se voit encore :              elle se lit droite, donc comme une queue d'ions"
+        );
+        // Mais pas repliée sur la trajectoire : au-delà de 60° ce n'est plus le
+        // vent stellaire qui mène, c'est un sillage de bateau — l'erreur
+        // classique, à l'envers.
+        assert!(angle < 60.0, "{angle}° : la queue traîne derrière comme un sillage");
     }
 
     /// **Au loin, aucune queue** — pas une queue de longueur nulle, rien du tout.

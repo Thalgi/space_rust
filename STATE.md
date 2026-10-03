@@ -21,7 +21,7 @@
 `.claude/worktrees/astres-v2`. **32 commits d'avance sur `main`, rien de
 fusionné, rien de poussé.**
 
-**Vérifié (2026-10-03)** : **898 tests verts** (910 avec le binaire `mhd`),
+**Vérifié (2026-10-03)** : **899 tests verts** (911 avec le binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
 **Le lot 5 est clos** (2026-09-30). Ses **sept presets de trou noir sont au
