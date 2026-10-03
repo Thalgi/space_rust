@@ -47,17 +47,9 @@ thread_local! {
 /// chaque vue, parce que c'est [`TAILLES_PRECHARGEES`] qui doit la couvrir : un
 /// `clamp` posé à l'œil dans un écran a suffi à faire graver une taille en
 /// pleine frame, donc à repeindre tout le texte en noir.
-// Mortes pour le binaire `mhd`, qui inclut ce module par `#[path]` sans
-// dessiner de liste. Le jeu, lui, s'en sert dans `station`, `skymap`,
-// `accueil` et `parametres`.
-#[allow(dead_code)]
 pub const TAILLE_MIN: f32 = 9.0;
 
 /// Plus grande taille demandée (le titre de l'accueil).
-// Mortes pour le binaire `mhd`, qui inclut ce module par `#[path]` sans
-// dessiner de liste. Le jeu, lui, s'en sert dans `station`, `skymap`,
-// `accueil` et `parametres`.
-#[allow(dead_code)]
 pub const TAILLE_MAX: f32 = 36.0;
 
 /// Tailles de glyphe gravées **au chargement**, avant la première frame.
@@ -209,6 +201,23 @@ pub async fn charger() {
 /// testable — `mesure` exige un contexte GL — il est donc rendu **difficile à
 /// écrire** : les deux fonctions ne sont que des enveloppes de celle-ci.
 fn preparer(t: &str, taille: f32) -> (Cow<'_, str>, u16) {
+    // ⚠️ **Borné ici, et non chez l'appelant.** [`TAILLE_MIN`] et [`TAILLE_MAX`]
+    // existaient déjà pour ça, mais rien ne les tenait : chaque vue était priée
+    // de s'y borner elle-même, et une vue qui oubliait faisait graver une taille
+    // hors de [`TAILLES_PRECHARGEES`] — donc grandir l'atlas en pleine frame.
+    //
+    // ⚠️ Et le pire n'est pas les carrés noirs. `taille as u16` **sature** : une
+    // taille absurde — une hauteur divisée par un compte nul, une largeur avant
+    // le premier redimensionnement — rend 65535. macroquad fabrique alors un
+    // glyphe de 65535 px, ne peut pas le ranger, et **double son atlas** jusqu'à
+    // l'y faire tenir (`text/atlas.rs`). À 32768 × 32768, `width * height * 4`
+    // déborde `u32`, vaut 0 en release, et miniquad casse sur
+    // `assert_eq!(0, 4294967296)`. Un chiffre de trop dans une vue, et le jeu
+    // meurt au lancement.
+    //
+    // `clamp` d'abord, `max(1.0)` ensuite : `clamp` panique sur un NaN, pas
+    // `max`, et une taille NaN doit donner un glyphe lisible, pas un plantage.
+    let taille = if taille.is_nan() { TAILLE_MIN } else { taille.clamp(TAILLE_MIN, TAILLE_MAX) };
     (assainir(t), (taille * ECHELLE).round().max(1.0) as u16)
 }
 
@@ -383,6 +392,52 @@ mod tests {
         assert_eq!(taille, (20.0 * ECHELLE).round() as u16, "l'echelle n'est pas appliquee");
         // Jamais zéro : une taille de glyphe nulle ne dessine rien.
         assert!(preparer("x", 0.0).1 >= 1, "taille de glyphe nulle");
+    }
+
+    /// **Aucune taille, si absurde soit-elle, ne sort de la plage gravée.**
+    ///
+    /// ⚠️ `les_tailles_du_jeu_sont_toutes_prechargees` balaie une **liste
+    /// relevée à la main** des tailles que le jeu demande aujourd'hui. Elle ne
+    /// dit rien de celle qu'une vue calculera demain — et c'est toujours une
+    /// taille **calculée** qui déborde : une hauteur divisée par un compte nul
+    /// rend l'infini, `as u16` sature à 65535, macroquad fabrique un glyphe de
+    /// 65535 px et **double son atlas** jusqu'à 32768 × 32768. Là,
+    /// `width * height * 4` déborde `u32`, vaut 0 en release, et miniquad meurt
+    /// sur `assert_eq!(0, 4294967296)`.
+    ///
+    /// Ce test ne relève donc rien : il balaie **l'absurde**, et c'est le
+    /// `clamp` de `preparer` qui doit le contenir.
+    #[test]
+    fn aucune_taille_absurde_ne_sort_de_la_plage_gravee() {
+        let eprouvettes = [
+            0.0,
+            -1.0,
+            f32::NAN,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::MAX,
+            f32::MIN,
+            1e9,
+            65535.0,
+            // Le cas réel : une hauteur divisée par une liste vide.
+            1080.0 / 0.0,
+            1e-9,
+        ];
+        for t in eprouvettes {
+            let (_, taille) = preparer("x", t);
+            assert!(
+                TAILLES_PRECHARGEES.contains(&taille),
+                "taille {t} -> glyphe {taille}, hors de la plage prechargee {:?} : \
+                 l'atlas grandirait en pleine frame",
+                TAILLES_PRECHARGEES
+            );
+        }
+        // Et la plage reste un intervalle **traversable** : si les deux bornes
+        // tombaient sur le même glyphe, le clamp aurait mangé toutes les tailles.
+        assert!(
+            preparer("x", TAILLE_MIN).1 < preparer("x", TAILLE_MAX).1,
+            "le bornage écrase toutes les tailles sur une seule"
+        );
     }
 
     // ⚠️ **L'invariant qui rend `graver` suffisant.**

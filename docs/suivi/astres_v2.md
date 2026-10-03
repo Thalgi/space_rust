@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-10-03** : 903 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-10-03** : 904 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -57,6 +57,49 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### ⚠️ Une taille de texte non bornée pouvait tuer le jeu (2026-10-03)
+
+Remonté depuis la console :
+
+```text
+miniquad-0.4.10\src\graphics\gl.rs:181: assertion `left == right` failed
+  left: 0
+ right: 4294967296
+```
+
+**Lu, pas deviné.** Cette ligne est `Texture::new`, qui vérifie
+`format.size(w, h) == bytes.len()`. 4 294 967 296, c'est **2³²** : la seule
+texture qui donne ce couple est une **32768 × 32768**, dont `w * h * 4` déborde
+`u32` et vaut 0 en release — tandis que son tampon, lui, fait bien 4 Gio.
+
+Une seule chose double de taille dans tout le programme : l'**atlas de glyphes**
+de macroquad (`text/atlas.rs`). Quand un glyphe n'y tient pas, il double ses deux
+côtés et recommence, en toutes lettres dans son commentaire : *« if we tried to
+fit gigantic texture into a small atlas, new_width will still be not enough »*.
+512 → 1024 → … → 32768, et miniquad meurt.
+
+**Pour qu'un glyphe soit gigantesque, il faut une taille gigantesque.** Or
+`preparer` faisait `(taille * ECHELLE).round().max(1.0) as u16`, et `as u16`
+**sature** : une hauteur divisée par un compte nul rend l'infini, qui devient
+65535. Un glyphe de 65535 px, et le jeu meurt au lancement.
+
+⚠️ `TAILLE_MIN` et `TAILLE_MAX` existaient **depuis la correction des carrés
+noirs**, et le commentaire du module disait déjà *« un `clamp` posé à l'œil dans
+un écran a suffi à faire graver une taille en pleine frame »*. La leçon avait été
+tirée, la conclusion pas : chaque vue restait priée de se borner elle-même. Le
+bornage est désormais **dans `preparer`**, le point de passage commun de `texte`
+et de `mesure` — là où il ne peut plus être oublié.
+
+Et la garde existante, `les_tailles_du_jeu_sont_toutes_prechargees`, balayait une
+**liste relevée à la main** des tailles demandées aujourd'hui : elle ne disait
+rien de celle qu'une vue calculera demain, et c'est toujours une taille
+**calculée** qui déborde. La nouvelle ne relève rien, elle balaie l'absurde —
+zéro, négatif, NaN, les deux infinis, `f32::MAX`, une division par zéro.
+
+**Non reproduit ici** : 40 s sur l'accueil avec le même binaire, sans incident.
+Le trou est réel et bouché à sa source ; reste à savoir quelle vue calculait la
+taille fautive, ce qu'une trace (`RUST_BACKTRACE=1`) dirait en une ligne.
 
 ### Lot 9.3 : cinq familles de comètes, et une galerie qui les compare (2026-10-03)
 
