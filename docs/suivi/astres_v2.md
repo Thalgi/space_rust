@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-10-02** : 893 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-10-03** : 894 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -58,6 +58,35 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 
 ## Ce qu'il faut savoir pour reprendre
 
+### ⚠️ La comète ne bougeait pas : la catégorie morte, par l'autre bout (2026-10-03)
+
+Signalé à l'écran : *« la comète placée dans le système solaire n'a pas de
+mouvement »*. Halley restait posée à son périastre, pour toujours.
+
+**La cause**, dans `Systeme::update` :
+
+```rust
+if a.categorie() == Categorie::Planete { … a.maj_rail(f, t); }
+```
+
+La boucle « sur rails » supposait **« sur rails ⇒ planète »**. C'était vrai tant
+que seules des planètes avaient un foyer. Dès que la comète est arrivée avec sa
+**propre** catégorie (lot 9.1), elle a cessé d'être avancée.
+
+⚠️ **C'est le piège de la catégorie morte retourné.** Jusqu'ici il se présentait
+comme « une catégorie que rien ne produit » — le trou noir avant le lot 4,
+`Comete` avant le 9.1. Ici c'est l'inverse : **rendre la catégorie juste a
+suffi à exclure l'astre d'un traitement qui le concernait**. Le défaut n'est pas
+dans la nouveauté, il est dans le filtre qui ne l'attendait pas.
+
+La règle qui en sort, et elle vaut au-delà de ce lot : **un filtre doit porter
+sur ce que l'astre sait faire, jamais sur ce qu'il est.** Le critère est
+désormais `a.foyer().is_some()` — avoir une orbite autour d'un foyer — et
+`maj_rail` est de toute façon inerte pour qui n'a pas d'orbite de Kepler.
+
+La garde balaie **toutes** les catégories, pour qu'une nouvelle venue n'ait pas à
+réapprendre la leçon, et vérifie aussi qu'un astre **sans** foyer n'est pas
+appelé pour rien — sinon le vrai critère serait masqué.
 ### Le noyau et la queue, repris sur retour écran (2026-10-02)
 
 Deux défauts signalés : *« pour le moment c'est une bille »* et *« la traînée de

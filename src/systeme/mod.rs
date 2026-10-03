@@ -541,9 +541,22 @@ impl Systeme {
         // ou barycentre P-type). Étoiles déjà repositionnées juste au-dessus.
         let pos: Vec<Vec3> = self.astres.iter().map(|a| a.corps().position).collect();
         for a in &mut self.astres {
-            if a.categorie() == Categorie::Planete {
-                let f = match a.foyer() {
-                    Some(Foyer::Etoile(i)) => pos.get(i).copied().unwrap_or(Vec3::ZERO),
+            // ⚠️ **Le critère est d'avoir un foyer, pas d'être une planète.**
+            //
+            // La condition portait sur `Categorie::Planete`, ce qui revenait à
+            // supposer « sur rails ⇒ planète ». Dès qu'une **comète** est arrivée
+            // avec sa propre catégorie (lot 9.1), elle a cessé d'être avancée :
+            // posée à son périastre, elle y restait pour toujours. Signalé à
+            // l'écran — « la comète n'a pas de mouvement ».
+            //
+            // C'est le piège de la catégorie morte **par l'autre bout** : rendre
+            // la catégorie juste a suffi à exclure l'astre d'un traitement qui le
+            // concernait. Un filtre doit porter sur ce que l'astre **sait faire**,
+            // jamais sur ce qu'il est. `maj_rail` est de toute façon inerte pour
+            // qui n'a pas d'orbite de Kepler.
+            if let Some(foyer) = a.foyer() {
+                let f = match foyer {
+                    Foyer::Etoile(i) => pos.get(i).copied().unwrap_or(Vec3::ZERO),
                     _ => Vec3::ZERO, // Barycentre
                 };
                 a.maj_rail(f, t);
@@ -641,6 +654,12 @@ mod tests_designation {
         /// Dernier `t` reçu par `Astre::suivre_trajectoire` (-1 = jamais
         /// appelé). Partagé avec le test, même raison que `dt_anim_recu`.
         t_trajectoire_recu: std::rc::Rc<std::cell::Cell<f64>>,
+        /// Dernier `t` reçu par `Astre::maj_rail` (-1 = jamais appelé).
+        ///
+        /// ⚠️ Posé après que la **comète du lot 9.1 est restée immobile** : la
+        /// boucle « sur rails » ne traitait que `Categorie::Planete`, et rien ne
+        /// disait qu'un astre à foyer pouvait être oublié.
+        t_rail_recu: std::rc::Rc<std::cell::Cell<f64>>,
     }
 
     impl CorpsEssai {
@@ -655,6 +674,7 @@ mod tests_designation {
                 dt_anim_recu: std::rc::Rc::new(std::cell::Cell::new(0.0)),
                 decalage_futur: None,
                 t_trajectoire_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
+                t_rail_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
             }
         }
 
@@ -678,6 +698,7 @@ mod tests_designation {
                 dt_anim_recu: mouchard.clone(),
                 decalage_futur: None,
                 t_trajectoire_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
+                t_rail_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
             }));
             (idx, mouchard)
         }
@@ -714,6 +735,55 @@ mod tests_designation {
         fn suivre_trajectoire(&mut self, t: f64) {
             self.t_trajectoire_recu.set(t);
         }
+        /// Enregistre le `t` reçu — sert à vérifier qu'un astre **à foyer** est
+        /// bien avancé sur ses rails, quelle que soit sa catégorie.
+        fn maj_rail(&mut self, _foyer: Vec3, t: f64) {
+            self.t_rail_recu.set(t);
+        }
+    }
+
+    /// **Tout astre à foyer est avancé sur ses rails, quelle que soit sa
+    /// catégorie.**
+    ///
+    /// ⚠️ La boucle ne traitait que `Categorie::Planete` — « sur rails ⇒
+    /// planète ». Dès qu'une **comète** est arrivée avec sa propre catégorie
+    /// (lot 9.1), elle a cessé d'être avancée : posée à son périastre, elle y
+    /// restait pour toujours, et sa queue avec elle. Signalé à l'écran.
+    ///
+    /// C'est le piège de la catégorie morte **par l'autre bout** : rendre la
+    /// catégorie juste a suffi à exclure l'astre d'un traitement qui le
+    /// concernait. Un filtre doit porter sur ce que l'astre **sait faire**.
+    ///
+    /// Le test balaie **toutes** les catégories, pour qu'une nouvelle venue
+    /// n'ait pas à réapprendre la leçon.
+    #[test]
+    fn tout_astre_a_foyer_est_avance_sur_ses_rails() {
+        for cat in [
+            Categorie::Planete,
+            Categorie::Comete,
+            Categorie::Asteroide,
+            Categorie::Lune,
+            Categorie::Engin,
+        ] {
+            let mut sys = Systeme::new();
+            let mut corps = CorpsEssai::neuf(cat, 5.0);
+            corps.foyer = Some(Foyer::Barycentre);
+            let mouchard = corps.t_rail_recu.clone();
+            sys.ajouter(Box::new(corps));
+            sys.update(0.5, DtAnimation(0.5));
+            assert!(
+                mouchard.get() >= 0.0,
+                "{cat:?} : à foyer mais jamais avancé sur ses rails — il restera figé"
+            );
+        }
+        // Et un astre **sans** foyer n'est pas appelé pour rien : une étoile n'a
+        // pas d'orbite de Kepler, et l'y envoyer masquerait le vrai critère.
+        let mut sys = Systeme::new();
+        let corps = CorpsEssai::neuf(Categorie::Etoile, 0.0);
+        let mouchard = corps.t_rail_recu.clone();
+        sys.ajouter(Box::new(corps));
+        sys.update(0.5, DtAnimation(0.5));
+        assert_eq!(mouchard.get(), -1.0, "un astre sans foyer a été mis sur rails");
     }
 
     /// **`attache` réconcilie deux façons d'être en orbite.**
@@ -767,6 +837,7 @@ mod tests_designation {
             dt_anim_recu: std::rc::Rc::new(std::cell::Cell::new(0.0)),
             decalage_futur: None,
             t_trajectoire_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
+            t_rail_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
         };
         sys.astres[idx] = Box::new(c);
     }
@@ -789,6 +860,7 @@ mod tests_designation {
             dt_anim_recu: std::rc::Rc::new(std::cell::Cell::new(0.0)),
             decalage_futur: Some(decalage),
             t_trajectoire_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
+            t_rail_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
         }));
 
         let attendu = sys.position(etoile) + decalage;
@@ -810,6 +882,7 @@ mod tests_designation {
             dt_anim_recu: std::rc::Rc::new(std::cell::Cell::new(0.0)),
             decalage_futur: Some(decalage),
             t_trajectoire_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
+            t_rail_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
         }));
         assert_eq!(sys.position_future_de(circumbinaire, 42.0), Some(decalage));
     }
@@ -829,6 +902,7 @@ mod tests_designation {
             dt_anim_recu: std::rc::Rc::new(std::cell::Cell::new(0.0)),
             decalage_futur: None,
             t_trajectoire_recu: mouchard.clone(),
+            t_rail_recu: std::rc::Rc::new(std::cell::Cell::new(-1.0)),
         }));
 
         sys.update(3.0, DtAnimation(0.0));
