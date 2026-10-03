@@ -75,6 +75,9 @@ pub struct Planete {
     comete: bool,
     // Maillage du noyau cométaire, en rayon unité. Vide pour tout le reste.
     noyau: (Vec<crate::comete::SommetNoyau>, Vec<u16>),
+    // Index dans `comete::CATALOGUE` : la matière du noyau et les queues qu'elle
+    // porte. Ignoré hors des comètes.
+    preset_comete: usize,
 }
 
 impl Planete {
@@ -135,6 +138,7 @@ impl Planete {
             role_central: None,
             comete: false,
             noyau: (Vec::new(), Vec::new()),
+            preset_comete: 0,
         }
     }
 
@@ -156,9 +160,17 @@ impl Planete {
     /// pas la sphère de l'impostor. Un noyau de comète est trop petit pour que
     /// sa gravité l'arrondisse — signalé à l'écran, « pour le moment c'est une
     /// bille ».
-    pub fn en_comete(mut self, graine: f32) -> Self {
+    pub fn en_comete(self, graine: f32) -> Self {
+        self.en_comete_preset(graine, crate::comete::preset_de_graine(graine))
+    }
+
+    /// La même, avec une **famille** choisie plutôt que tirée de la graine :
+    /// Halley est glacée parce qu'elle l'est, pas parce qu'un reste de division
+    /// l'a décidé.
+    pub fn en_comete_preset(mut self, graine: f32, preset: usize) -> Self {
         self.comete = true;
-        self.noyau = crate::comete::noyau(graine);
+        self.preset_comete = preset;
+        self.noyau = crate::comete::noyau_de(graine, crate::comete::preset(preset));
         self
     }
 
@@ -435,8 +447,11 @@ impl Astre for Planete {
                 .orbite_kep
                 .map(|o| crate::comete::seuil_activite(o.a, o.e))
                 .unwrap_or(0.0);
-            let pts = crate::comete::queue(c, cam.light_pos, self.base.vitesse, r, seuil);
-            if pts.len() >= 2 {
+            let p = crate::comete::preset(self.preset_comete);
+            // ⚠️ **Un ruban par queue, et un dessin par ruban.** Les empiler dans
+            // un seul maillage les ferait partager un ordre de tri : le trait
+            // d'ions passerait sous le voile de poussière une fois sur deux.
+            for pts in crate::comete::rubans(p, c, cam.light_pos, self.base.vitesse, r, seuil) {
                 let mut v = Vec::new();
                 let mut i = Vec::new();
                 crate::impostor::push_ruban(&mut v, &mut i, cam, &pts);

@@ -58,15 +58,6 @@ pub const LONGUEUR_MIN_NOYAUX: f32 = 25.0;
 pub const LARGEUR_BASE: f32 = 0.04;
 pub const LARGEUR_BOUT: f32 = 0.22;
 
-/// **Éclat de la queue**, au plus fort de son activité.
-///
-/// ⚠️ **Franchement exagéré, et demandé tel quel** : *« au pire on la rend
-/// extrêmement visible pour le moment au point que ce n'est pas naturel »*. Une
-/// vraie queue est un voile qu'on ne photographie qu'en pose longue ; à 0,5 elle
-/// disparaissait sur fond d'étoiles. À baisser quand le reste du rendu cométaire
-/// sera réglé — c'est une dette assumée, pas un choix physique.
-pub const ECLAT: f32 = 1.0;
-
 /// Nombre de segments du ruban. Assez pour que la courbure se lise, assez peu
 /// pour qu'une comète reste un décor : trois comètes par système au plus.
 const SEGMENTS: usize = 14;
@@ -93,6 +84,146 @@ const SEGMENTS: usize = 14;
 /// poussière vient d'être libérée et suit encore l'anti-solaire.
 const COURBURE: f32 = 0.75;
 const EXPOSANT_COURBURE: f32 = 1.3;
+
+/// **Les queues que porte une comète.**
+///
+/// ⚠️ Deux queues, et **deux physiques sans rapport** — c'est ce qu'une
+/// photographie montre en premier :
+/// - la **poussière** est chassée par la pression de radiation, mais ses grains
+///   gardent leur orbite et prennent du retard : large, courbe, jaunâtre ;
+/// - les **ions** sont emportés par le champ magnétique du vent stellaire, cent
+///   fois plus vite : fine, rigoureusement droite, bleue.
+///
+/// Toutes les comètes n'ont pas les deux. Une comète pauvre en gaz n'a que sa
+/// poussière ; une comète qui ne dégaze presque pas de grains n'a qu'un trait
+/// bleu.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TypeQueue {
+    Poussiere,
+    Ions,
+    Double,
+}
+
+/// **Une famille de comètes** : sa matière et ses queues.
+///
+/// ⚠️ Le noyau et la queue sortent de la **même** entrée, et c'est voulu : une
+/// comète carbonée crache de la poussière rousse, une comète riche en C₂ brille
+/// en vert des deux côtés. Deux tables séparées auraient fini par dériver.
+pub struct Preset {
+    pub nom: &'static str,
+    /// Teinte sombre du noyau — la croûte sèche.
+    pub roche: Vec3,
+    /// Teinte claire du noyau — la glace mise à nu par la sublimation.
+    pub glace: Vec3,
+    pub poussiere: Color,
+    pub ions: Color,
+    pub queues: TypeQueue,
+    /// **Multiplie l'activité pour donner l'opacité de ses queues.**
+    ///
+    /// ⚠️ **Franchement exagéré, et demandé tel quel** : *« au pire on la rend
+    /// extrêmement visible pour le moment au point que ce n'est pas naturel »*.
+    /// Une vraie queue est un voile qu'on ne photographie qu'en pose longue.
+    ///
+    /// ⚠️ **Il multiplie l'activité, il ne la remplace pas** — et c'est ce qui
+    /// manquait. Quand l'opacité valait l'activité, elle **plafonnait à 0,44**
+    /// au périhélie (la queue s'allume à trois périhélies et croît en
+    /// `(1 − d/seuil)²`) : aucune comète ne pouvait dépasser 44 % d'opacité,
+    /// quelle que soit sa matière. C'est le voile gris signalé à l'écran.
+    /// Au-delà de 2, le plateau est atteint au cœur du plongeon.
+    ///
+    /// C'est un trait de la famille, pas un réglage global : une comète presque
+    /// éteinte doit rester terne. Dette assumée sur les valeurs.
+    pub eclat: f32,
+}
+
+impl Preset {
+    /// Porte-t-elle une queue de poussière ? Une queue d'ions ?
+    pub fn a_poussiere(&self) -> bool {
+        matches!(self.queues, TypeQueue::Poussiere | TypeQueue::Double)
+    }
+    pub fn a_ions(&self) -> bool {
+        matches!(self.queues, TypeQueue::Ions | TypeQueue::Double)
+    }
+}
+
+/// **Le catalogue des comètes**, du plus commun au plus spectaculaire.
+///
+/// Chaque entrée est une famille réelle, pas une variation de curseur :
+/// l'apparence d'une comète dit **ce dont elle est faite**, et c'est ce que la
+/// galerie sert à comparer.
+pub static CATALOGUE: [Preset; 5] = [
+    // 1P/Halley. Le cas d'école : glace sale, les deux queues, franchement
+    // bleutée. C'est celle du préset solaire.
+    Preset {
+        nom: "Glacee (1P/Halley)",
+        roche: Vec3::new(0.14, 0.12, 0.11),
+        glace: Vec3::new(0.62, 0.72, 0.85),
+        poussiere: Color::new(0.82, 0.90, 1.00, 1.0),
+        ions: Color::new(0.45, 0.70, 1.00, 1.0),
+        queues: TypeQueue::Double,
+        eclat: 2.5,
+    },
+    // Hale-Bopp. Dégazage massif de grains : la queue de poussière domine, large
+    // et dorée, et c'est elle qu'on voit à l'œil nu.
+    Preset {
+        nom: "Poussiereuse (Hale-Bopp)",
+        roche: Vec3::new(0.22, 0.17, 0.12),
+        glace: Vec3::new(0.80, 0.74, 0.62),
+        poussiere: Color::new(1.00, 0.88, 0.62, 1.0),
+        ions: Color::new(0.60, 0.80, 1.00, 1.0),
+        queues: TypeQueue::Poussiere,
+        eclat: 2.2,
+    },
+    // Noyau carboné, presque épuisé : l'un des objets les plus noirs du système
+    // (albédo 0,04). Elle fume peu, et roux.
+    Preset {
+        nom: "Carbonee (presque eteinte)",
+        roche: Vec3::new(0.12, 0.09, 0.07),
+        glace: Vec3::new(0.45, 0.36, 0.32),
+        poussiere: Color::new(0.95, 0.62, 0.45, 1.0),
+        ions: Color::new(0.60, 0.70, 0.90, 1.0),
+        queues: TypeQueue::Poussiere,
+        eclat: 1.4,
+    },
+    // C/2011 W3 Lovejoy. Presque pas de grains : un trait bleu électrique,
+    // rigoureusement anti-solaire.
+    Preset {
+        nom: "Ionique (Lovejoy)",
+        roche: Vec3::new(0.16, 0.16, 0.18),
+        glace: Vec3::new(0.70, 0.80, 0.92),
+        poussiere: Color::new(0.80, 0.88, 1.00, 1.0),
+        ions: Color::new(0.40, 0.85, 1.00, 1.0),
+        queues: TypeQueue::Ions,
+        eclat: 2.6,
+    },
+    // ⚠️ **Le vert n'est pas une fantaisie** : c'est le carbone diatomique (C₂)
+    // de la chevelure, qui émet à 518 nm. Les comètes vertes existent, et elles
+    // le sont jusque dans leur coma.
+    Preset {
+        nom: "Verte au carbone C2 (Lulin)",
+        roche: Vec3::new(0.15, 0.16, 0.12),
+        glace: Vec3::new(0.60, 0.78, 0.65),
+        poussiere: Color::new(0.72, 1.00, 0.78, 1.0),
+        ions: Color::new(0.50, 1.00, 0.85, 1.0),
+        queues: TypeQueue::Double,
+        eclat: 2.2,
+    },
+];
+
+/// Le preset `i`, borné. Un index hors catalogue rend la première entrée plutôt
+/// que de paniquer : une comète mal étiquetée doit se dessiner quand même.
+pub fn preset(i: usize) -> &'static Preset {
+    &CATALOGUE[i.min(CATALOGUE.len() - 1)]
+}
+
+/// **Le preset d'une comète tirée au sort**, dérivé de sa graine.
+///
+/// ⚠️ Dérivé, jamais tiré : un `gen_range` de plus décalerait tout ce qui est
+/// tiré ensuite et changerait le système entier à graine égale — le piège de
+/// `champ::poles` et `temps_initial`.
+pub fn preset_de_graine(graine: f32) -> usize {
+    ((graine.fract().abs() * CATALOGUE.len() as f32) as usize).min(CATALOGUE.len() - 1)
+}
 
 /// **Activité d'une comète**, de 0 (inerte) à 1 (au plus près).
 ///
@@ -140,7 +271,8 @@ pub fn seuil_activite(demi_grand_axe: f32, excentricite: f32) -> f32 {
 /// classique, et elle se voit immédiatement : une queue qui traîne derrière la
 /// comète comme un sillage de bateau est fausse. Le vent stellaire chasse la
 /// poussière radialement ; la trajectoire ne fait que l'incurver.
-pub fn queue(
+pub fn queue_poussiere(
+    p: &Preset,
     noyau: Vec3,
     etoile: Vec3,
     vitesse: Vec3,
@@ -179,10 +311,88 @@ pub fn queue(
         // crache.
         let demi_largeur = (longueur * (LARGEUR_BASE + (LARGEUR_BOUT - LARGEUR_BASE) * t))
             .max(rayon_noyau * 0.9);
-        let alpha = a * (1.0 - t).powf(1.1) * ECLAT;
-        pts.push((pos, demi_largeur, Color::new(0.86, 0.90, 1.0, alpha)));
+        // ⚠️ **Plafonné, et c'est tout l'intérêt** : l'activité ne dépasse jamais
+        // 0,44 au périhélie, donc sans ce facteur la queue ne pouvait pas être
+        // franche. Voir [`ECLAT`].
+        let alpha = (a * p.eclat).min(1.0) * (1.0 - t).powf(1.1);
+        let c = p.poussiere;
+        pts.push((pos, demi_largeur, Color::new(c.r, c.g, c.b, alpha)));
     }
     pts
+}
+
+/// **Rapport de longueur de la queue d'ions à celle de poussière**, et sa
+/// finesse.
+///
+/// ⚠️ Les ions filent **cent fois plus vite** que les grains : leur queue est
+/// plus longue, et elle n'a pas le temps de s'évaser. C'est ce qui lui donne son
+/// allure de trait.
+const IONS_LONGUEUR: f32 = 1.4;
+const IONS_LARGEUR_BASE: f32 = 0.010;
+const IONS_LARGEUR_BOUT: f32 = 0.045;
+
+/// **La queue d'ions** : rigoureusement droite, fine, bleue.
+///
+/// ⚠️ **Aucune courbure, et c'est sa définition.** Les ions sont emportés par le
+/// champ magnétique du vent stellaire, bien trop vite pour que leur orbite
+/// propre compte. Une queue d'ions incurvée serait une queue de poussière mal
+/// peinte — et c'est le seul trait qui sépare les deux à l'œil.
+///
+/// Elle s'éteint aussi **plus lentement** que la poussière : un trait qui pâlit
+/// dès son premier tiers ne se lirait pas comme un trait.
+pub fn queue_ions(
+    p: &Preset,
+    noyau: Vec3,
+    etoile: Vec3,
+    rayon_noyau: f32,
+    seuil: f32,
+) -> Vec<PointRuban> {
+    let depuis_etoile = noyau - etoile;
+    let dist = depuis_etoile.length();
+    let a = activite(dist, seuil);
+    if a <= 0.0 || dist < 1e-4 {
+        return Vec::new();
+    }
+    let anti_solaire = depuis_etoile / dist;
+    let longueur =
+        (LONGUEUR_MAX * dist).max(LONGUEUR_MIN_NOYAUX * rayon_noyau) * a * IONS_LONGUEUR;
+    let mut pts = Vec::with_capacity(SEGMENTS + 1);
+    for k in 0..=SEGMENTS {
+        let t = k as f32 / SEGMENTS as f32;
+        let pos = noyau + anti_solaire * (longueur * t);
+        let demi_largeur = (longueur
+            * (IONS_LARGEUR_BASE + (IONS_LARGEUR_BOUT - IONS_LARGEUR_BASE) * t))
+            .max(rayon_noyau * 0.4);
+        let alpha = (a * p.eclat).min(1.0) * (1.0 - t).powf(0.6);
+        let c = p.ions;
+        pts.push((pos, demi_largeur, Color::new(c.r, c.g, c.b, alpha)));
+    }
+    pts
+}
+
+/// **Toutes les queues d'une comète**, dans l'ordre où il faut les dessiner :
+/// la poussière d'abord, large et diffuse, le trait d'ions par-dessus.
+///
+/// ⚠️ C'est ici, et nulle part dans le dessin, que se décide **quelle comète a
+/// quelle queue**. Une couche de rendu qui trancherait ça finirait par le
+/// trancher deux fois.
+pub fn rubans(
+    p: &Preset,
+    noyau: Vec3,
+    etoile: Vec3,
+    vitesse: Vec3,
+    rayon_noyau: f32,
+    seuil: f32,
+) -> Vec<Vec<PointRuban>> {
+    let mut v = Vec::new();
+    if p.a_poussiere() {
+        v.push(queue_poussiere(p, noyau, etoile, vitesse, rayon_noyau, seuil));
+    }
+    if p.a_ions() {
+        v.push(queue_ions(p, noyau, etoile, rayon_noyau, seuil));
+    }
+    v.retain(|r| r.len() >= 2);
+    v
 }
 
 /// Résolution du noyau : parallèles × méridiens. Un patatoïde n'a pas besoin de
@@ -209,12 +419,11 @@ pub type SommetNoyau = (Vec3, Vec3, Color);
 /// rapport avec la première : la texture ne suit donc pas le relief, ce qui
 /// serait le défaut d'un bruit unique — un patatoïde dont les creux seraient
 /// systématiquement sombres se lirait comme une balle peinte.
-pub fn noyau(graine: f32) -> (Vec<SommetNoyau>, Vec<u16>) {
-    /// Roche : sombre, sèche, légèrement rousse. Un noyau est plus noir que du
-    /// charbon — albédo ~0,04.
-    const ROCHE: Vec3 = Vec3::new(0.16, 0.13, 0.11);
-    /// Glace fraîche, mise à nu par la sublimation : bleutée et bien plus claire.
-    const GLACE: Vec3 = Vec3::new(0.62, 0.70, 0.78);
+///
+/// Les couleurs viennent du [`Preset`] : c'est **la matière** qui change d'une
+/// famille à l'autre, pas la forme — un patatoïde est un patatoïde.
+pub fn noyau_de(graine: f32, p: &Preset) -> (Vec<SommetNoyau>, Vec<u16>) {
+    let (roche, glace_c) = (p.roche, p.glace);
 
     let g = graine.fract().abs() * 17.3;
     // Relief : trois harmoniques, de la bosse large au creux fin.
@@ -241,7 +450,7 @@ pub fn noyau(graine: f32) -> (Vec<SommetNoyau>, Vec<u16>) {
             let dir = vec3(sp * ct, cp, sp * st);
             let r = relief(dir);
             let t = glace(dir);
-            let c = ROCHE.lerp(GLACE, t);
+            let c = roche.lerp(glace_c, t);
             // ⚠️ Normale = la direction. Approximation assumée : le relief est
             // doux et le noyau fait quelques pixels. Une vraie normale demanderait
             // de dériver la somme de sinus, pour un gain que personne ne verra.
@@ -265,6 +474,15 @@ pub fn noyau(graine: f32) -> (Vec<SommetNoyau>, Vec<u16>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Raccourcis de test : la première famille du catalogue, qui porte les deux
+    /// queues. Les gardes de géométrie ne dépendent pas de la famille.
+    fn q(noyau: Vec3, etoile: Vec3, vitesse: Vec3, rayon: f32, seuil: f32) -> Vec<PointRuban> {
+        queue_poussiere(&CATALOGUE[0], noyau, etoile, vitesse, rayon, seuil)
+    }
+    fn n(graine: f32) -> (Vec<SommetNoyau>, Vec<u16>) {
+        noyau_de(graine, &CATALOGUE[0])
+    }
 
     /// **La queue naît à l'approche et s'efface au loin.**
     ///
@@ -334,7 +552,7 @@ mod tests {
     /// c'est exactement l'état qu'on corrige.
     #[test]
     fn le_noyau_est_un_patatoide_et_non_une_bille() {
-        let (s, idx) = noyau(0.37);
+        let (s, idx) = n(0.37);
         assert!(!s.is_empty() && !idx.is_empty(), "maillage vide");
         assert_eq!(idx.len() % 3, 0, "les indices ne forment pas des triangles");
         assert!(
@@ -361,7 +579,7 @@ mod tests {
     /// mesure la **corrélation** entre les deux et refuse qu'elle soit forte.
     #[test]
     fn le_noyau_melange_glace_et_roche_sans_calquer_le_relief() {
-        let (s, _) = noyau(0.37);
+        let (s, _) = n(0.37);
         let clair: Vec<f32> = s.iter().map(|(_, _, c)| c.r + c.g + c.b).collect();
         let min = clair.iter().cloned().fold(f32::MAX, f32::min);
         let max = clair.iter().cloned().fold(0.0_f32, f32::max);
@@ -395,9 +613,9 @@ mod tests {
     /// **Deux comètes ne sont pas le même caillou**, et la même l'est toujours.
     #[test]
     fn le_noyau_depend_de_sa_graine_et_reste_reproductible() {
-        let (a, _) = noyau(0.11);
-        let (b, _) = noyau(0.73);
-        let (a2, _) = noyau(0.11);
+        let (a, _) = n(0.11);
+        let (b, _) = n(0.73);
+        let (a2, _) = n(0.11);
         assert_eq!(a.len(), b.len(), "les maillages n'ont pas la même structure");
         let ecart = |x: &[SommetNoyau], y: &[SommetNoyau]| {
             x.iter().zip(y).map(|(p, q)| (p.0 - q.0).length()).sum::<f32>() / x.len() as f32
@@ -424,7 +642,7 @@ mod tests {
             let seuil = seuil_activite(a, e);
             let perihelie = a * (1.0 - e);
             let pts =
-                queue(vec3(perihelie, 0.0, 0.0), Vec3::ZERO, vec3(0.0, 0.0, 1.0), rayon, seuil);
+                q(vec3(perihelie, 0.0, 0.0), Vec3::ZERO, vec3(0.0, 0.0, 1.0), rayon, seuil);
             assert!(!pts.is_empty(), "aucune queue au périhélie de ({a}, {e})");
             let longueur = (pts.last().unwrap().0 - pts[0].0).length();
             assert!(
@@ -455,7 +673,7 @@ mod tests {
             let seuil = seuil_activite(a, e);
             let perihelie = a * (1.0 - e);
             let pts =
-                queue(vec3(perihelie, 0.0, 0.0), Vec3::ZERO, vec3(0.0, 0.0, 1.0), rayon, seuil);
+                q(vec3(perihelie, 0.0, 0.0), Vec3::ZERO, vec3(0.0, 0.0, 1.0), rayon, seuil);
             let longueur = (pts.last().unwrap().0 - pts[0].0).length();
             let large = pts.last().unwrap().1 * 2.0;
             // Un cône de comète s'ouvre franchement : au bout, sa largeur vaut
@@ -478,7 +696,7 @@ mod tests {
     #[test]
     fn la_queue_est_franchement_opaque_a_son_pic() {
         let seuil = seuil_activite(856.0, 0.967);
-        let pts = queue(vec3(28.0, 0.0, 0.0), Vec3::ZERO, vec3(0.0, 0.0, 1.0), 0.08, seuil);
+        let pts = q(vec3(28.0, 0.0, 0.0), Vec3::ZERO, vec3(0.0, 0.0, 1.0), 0.08, seuil);
         let base = pts[0].2.a;
         assert!(base > 0.4, "opacité de {base} au ras du noyau : la queue est un voile");
         assert!(base <= 1.0, "opacité de {base} : hors bornes");
@@ -532,7 +750,7 @@ mod tests {
         let etoile = Vec3::ZERO;
         let noyau = vec3(10.0, 0.0, 0.0);
         let vitesse = vec3(0.0, 0.0, 4.0); // perpendiculaire au rayon
-        let pts = queue(noyau, etoile, vitesse, 0.1, 30.0);
+        let pts = q(noyau, etoile, vitesse, 0.1, 30.0);
         assert!(!pts.is_empty(), "aucune queue près de l'étoile");
         let anti_solaire = (noyau - etoile).normalize();
         for (p, _, _) in &pts {
@@ -563,7 +781,7 @@ mod tests {
         let etoile = Vec3::ZERO;
         let noyau = vec3(10.0, 0.0, 0.0);
         let vitesse = vec3(0.0, 0.0, 4.0);
-        let pts = queue(noyau, etoile, vitesse, 0.1, 30.0);
+        let pts = q(noyau, etoile, vitesse, 0.1, 30.0);
         let dir = |i: usize| (pts[i].0 - noyau).normalize();
         let proche = dir(2);
         let loin = dir(pts.len() - 1);
@@ -597,7 +815,7 @@ mod tests {
     fn la_courbure_se_voit_dans_la_partie_eclairee_de_la_queue() {
         let noyau = vec3(10.0, 0.0, 0.0);
         let vitesse = vec3(0.0, 0.0, 4.0); // perpendiculaire au rayon
-        let pts = queue(noyau, Vec3::ZERO, vitesse, 0.1, 30.0);
+        let pts = q(noyau, Vec3::ZERO, vitesse, 0.1, 30.0);
         let anti_solaire = noyau.normalize();
 
         // Le dernier point encore franchement visible : la moitié de l'opacité
@@ -619,6 +837,68 @@ mod tests {
         assert!(angle < 60.0, "{angle}° : la queue traîne derrière comme un sillage");
     }
 
+    /// **La queue d'ions est droite, celle de poussière ne l'est pas.**
+    ///
+    /// ⚠️ **C'est la seule chose qui sépare les deux à l'œil**, et donc tout
+    /// l'intérêt d'en avoir deux. Les ions sont emportés par le champ magnétique
+    /// du vent stellaire, cent fois plus vite que les grains : leur orbite propre
+    /// n'a pas le temps de compter. Une queue d'ions incurvée serait une queue de
+    /// poussière mal peinte, et le catalogue ne montrerait plus qu'une seule
+    /// physique sous deux noms.
+    ///
+    /// Les deux sont mesurées **dans le même cas**, celui où la vitesse est
+    /// perpendiculaire au rayon : c'est là que les deux hypothèses s'écartent le
+    /// plus.
+    #[test]
+    fn les_ions_filent_droit_la_poussiere_decroche() {
+        let p = &CATALOGUE[0]; // la famille qui porte les deux
+        let noyau = vec3(10.0, 0.0, 0.0);
+        let vitesse = vec3(0.0, 0.0, 4.0);
+        let anti_solaire = noyau.normalize();
+        let ecart = |pts: &[PointRuban]| {
+            let d = (pts.last().unwrap().0 - noyau).normalize();
+            d.dot(anti_solaire).clamp(-1.0, 1.0).acos().to_degrees()
+        };
+
+        let ions = queue_ions(p, noyau, Vec3::ZERO, 0.1, 30.0);
+        let poussiere = queue_poussiere(p, noyau, Vec3::ZERO, vitesse, 0.1, 30.0);
+        assert!(ecart(&ions) < 0.5, "la queue d'ions s'incurve de {}°", ecart(&ions));
+        assert!(
+            ecart(&poussiere) > 20.0,
+            "la poussière ne décroche pas ({}°) : les deux queues se confondent",
+            ecart(&poussiere)
+        );
+
+        // Plus longue et plus fine que la poussière : c'est ce qui en fait un
+        // trait. Mesuré au même endroit de chacune, son bout.
+        let long = |pts: &[PointRuban]| (pts.last().unwrap().0 - pts[0].0).length();
+        assert!(long(&ions) > long(&poussiere), "la queue d'ions ne dépasse pas celle de poussière");
+        assert!(
+            ions.last().unwrap().1 < poussiere.last().unwrap().1 * 0.5,
+            "la queue d'ions est aussi large que la poussière : ce n'est plus un trait"
+        );
+    }
+
+    /// **Une famille ne porte que les queues qu'elle déclare.**
+    ///
+    /// ⚠️ Sans ça, `TypeQueue` serait une étiquette décorative : le catalogue
+    /// annoncerait trois physiques et le dessin en montrerait toujours deux.
+    #[test]
+    fn chaque_famille_ne_porte_que_les_queues_qu_elle_declare() {
+        let (noyau, vitesse) = (vec3(10.0, 0.0, 0.0), vec3(0.0, 0.0, 4.0));
+        for p in CATALOGUE.iter() {
+            let n = rubans(p, noyau, Vec3::ZERO, vitesse, 0.1, 30.0).len();
+            let attendu = usize::from(p.a_poussiere()) + usize::from(p.a_ions());
+            assert_eq!(n, attendu, "« {} » ({:?}) dessine {n} queue(s)", p.nom, p.queues);
+            assert!(n >= 1, "« {} » n'a aucune queue", p.nom);
+        }
+        // Et le tirage reste dans le catalogue, quelle que soit la graine.
+        for k in 0..64 {
+            let i = preset_de_graine(k as f32 * 0.0137);
+            assert!(i < CATALOGUE.len(), "graine {k} : preset {i} hors catalogue");
+        }
+    }
+
     /// **Au loin, aucune queue** — pas une queue de longueur nulle, rien du tout.
     ///
     /// ⚠️ Un ruban vide ne coûte aucun sommet. C'est l'état le plus fréquent
@@ -627,16 +907,16 @@ mod tests {
     fn au_loin_la_queue_n_existe_pas() {
         let etoile = Vec3::ZERO;
         let loin = vec3(40.0, 0.0, 0.0);
-        assert!(queue(loin, etoile, vec3(0.0, 0.0, 1.0), 0.1, 30.0).is_empty());
+        assert!(q(loin, etoile, vec3(0.0, 0.0, 1.0), 0.1, 30.0).is_empty());
         // Et une comète posée sur son étoile ne produit pas de direction folle.
-        assert!(queue(etoile, etoile, Vec3::ZERO, 0.1, 30.0).is_empty());
+        assert!(q(etoile, etoile, Vec3::ZERO, 0.1, 30.0).is_empty());
     }
 
     /// **Elle s'évase et s'éteint vers son bout.** Une queue d'épaisseur ou
     /// d'opacité constante se lirait comme une barre.
     #[test]
     fn la_queue_s_evase_et_s_eteint() {
-        let pts = queue(vec3(10.0, 0.0, 0.0), Vec3::ZERO, vec3(0.0, 0.0, 4.0), 0.1, 30.0);
+        let pts = q(vec3(10.0, 0.0, 0.0), Vec3::ZERO, vec3(0.0, 0.0, 4.0), 0.1, 30.0);
         let (_, l0, c0) = pts[0];
         let (_, l1, c1) = *pts.last().unwrap();
         assert!(l1 > l0 * 3.0, "la queue ne s'évase pas : {l0} -> {l1}");

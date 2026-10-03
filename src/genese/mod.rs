@@ -850,7 +850,7 @@ pub(crate) fn ajouter_planete_autour(
     app: Apparence,
     nom: Option<&'static str>,
 ) -> usize {
-    poser_sur_rails(sys, foyer, masse_centrale, a_au, e, incl, rayon, masse, app, nom, false)
+    poser_sur_rails(sys, foyer, masse_centrale, a_au, e, incl, rayon, masse, app, nom, false, None)
 }
 
 /// **Pose un corps sur rails autour d'un foyer.** Source unique de l'orbite, de
@@ -876,6 +876,7 @@ fn poser_sur_rails(
     app: Apparence,
     nom: Option<&'static str>,
     comete: bool,
+    preset_comete: Option<usize>,
 ) -> usize {
     let a_monde = a_au * etoile::UA;
     let phi: f32 = gen_range(0.0, TAU);
@@ -899,7 +900,15 @@ fn poser_sur_rails(
     // dérivée, jamais tirée. Un `gen_range` de plus décalerait tout ce qui est
     // tiré ensuite et changerait le système entier à graine égale — même piège
     // que `champ::poles` et `temps_initial`.
-    let corps = if comete { corps.en_comete((a_au * 7.31 + e * 3.17).fract()) } else { corps };
+    let corps = if comete {
+        let graine = (a_au * 7.31 + e * 3.17).fract();
+        match preset_comete {
+            Some(i) => corps.en_comete_preset(graine, i),
+            None => corps.en_comete(graine),
+        }
+    } else {
+        corps
+    };
     let idx = sys.ajouter(Box::new(corps));
     if let Some(n) = nom {
         sys.nommer(idx, n);
@@ -960,6 +969,7 @@ pub(crate) fn orbite_comete(ech: f32, u_a: f32, u_e: f32) -> (f32, f32) {
 /// ⚠️ `m0 = 0` : comme tout corps posé ici, elle **démarre à son périastre**.
 /// Pour une comète c'est l'instant où sa queue est la plus franche — c'est donc
 /// le bon choix pour un preset qu'on ouvre pour la regarder.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn ajouter_comete(
     sys: &mut Systeme,
     masse_etoile: f32,
@@ -968,6 +978,7 @@ pub(crate) fn ajouter_comete(
     incl: f32,
     rayon: f32,
     nom: &'static str,
+    preset: usize,
 ) -> usize {
     poser_sur_rails(
         sys,
@@ -981,6 +992,7 @@ pub(crate) fn ajouter_comete(
         apparence_comete(),
         Some(nom),
         true,
+        Some(preset),
     )
 }
 
@@ -1020,6 +1032,8 @@ fn ajouter_cometes(sys: &mut Systeme, masse_etoile: f32, ech: f32) {
             apparence_comete(),
             None,
             true,
+            // Famille tirée de la graine du noyau : voir `comete::preset_de_graine`.
+            None,
         );
     }
 }

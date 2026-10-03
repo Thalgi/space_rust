@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-10-03** : 899 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-10-03** : 903 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -57,6 +57,77 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### Lot 9.3 : cinq familles de comètes, et une galerie qui les compare (2026-10-03)
+
+Signalé à l'écran, capture à l'appui : *« la queue d'ions n'est toujours pas
+assez visible ou théâtralisée, c'est très léger. Je voyais plus ça comme une
+comète un peu brillante et bleutée pour Halley. Il faut revoir la vue comète
+pour mettre des exemples avec plusieurs colorations par rapport à la matière et
+plusieurs types de queue. La vue comète avec des trajectoires n'est pas vraiment
+ce que je recherchais à la base. »*
+
+#### Pourquoi la queue restait grise
+
+⚠️ **`ECLAT` multipliait l'activité, et l'activité plafonne.** Au périhélie,
+`activite` vaut **0,44** — elle s'allume à trois périhélies et croît en
+`(1 − d/seuil)²`. L'opacité valant l'activité, aucune comète ne pouvait dépasser
+**44 % d'opacité**, quelle que soit sa matière et quoi qu'on règle par ailleurs.
+C'est le voile gris de la capture.
+
+Le facteur est désormais un **trait de la famille** (`Preset::eclat`, 1,4 à 2,6)
+et il est plafonné à 1 : au cœur du plongeon, la queue est franche, et une comète
+presque éteinte reste terne. Dette assumée sur les valeurs.
+
+#### Le catalogue
+
+| # | Famille | Noyau | Queues |
+|---|---|---|---|
+| 0 | Glacée (1P/Halley) | roche sombre, glace bleutée | poussière + ions |
+| 1 | Poussiéreuse (Hale-Bopp) | brun sableux | poussière dorée |
+| 2 | Carbonée (presque éteinte) | quasi noir, albédo 0,04 | poussière rousse |
+| 3 | Ionique (Lovejoy) | gris-bleu | ions seuls |
+| 4 | Verte au carbone C₂ (Lulin) | glace verdâtre | poussière + ions |
+
+Le vert n'est pas une fantaisie : c'est le **carbone diatomique C₂** de la
+chevelure, qui émet à 518 nm. Halley prend l'entrée 0 **explicitement** dans le
+préset solaire ; les comètes tirées piochent leur famille dans leur graine —
+dérivée, jamais tirée, sinon un `gen_range` de plus décalerait tout le système.
+
+#### La queue d'ions
+
+Une deuxième physique, pas une deuxième couleur : les ions sont emportés par le
+champ magnétique du vent stellaire, cent fois plus vite que les grains. Sa queue
+est donc **plus longue** (×1,4), **fine** (1 % à 4,5 % de sa longueur contre 4 %
+à 22 %), **rigoureusement droite** et elle **s'éteint plus lentement**. Une queue
+d'ions incurvée serait une queue de poussière mal peinte, et c'est le seul trait
+qui sépare les deux à l'œil : une garde le tient.
+
+#### La galerie refaite
+
+⚠️ **Elle montrait des orbites, elle montre des comètes.** L'argument du premier
+jet — un noyau fait quelques pixels et se ressemble d'un exemplaire à l'autre —
+était vrai du **noyau** et faux de la **comète** : ce qu'on vient voir, c'est la
+queue. Chaque case pose maintenant la même comète au même point de son plongeon
+et ne change **qu'une chose**, sa famille : toute différence visible vient donc
+de la matière, de rien d'autre.
+
+Le cadrage est **calculé** à partir des rubans eux-mêmes (`etendue_queues`), et
+non réglé à la main : la queue d'ions est la plus longue, et un cadre fixé sur
+« à peu près deux unités » la couperait au premier réglage de `comete`.
+
+#### ⚠️ Une garde avec une échappatoire
+
+`les_familles_se_distinguent_a_l_oeil` acceptait d'abord deux familles identiques
+**dès lors que leurs types de queue différaient** (`|| a.queues != b.queues`). Un
+sabotage qui recopiait les couleurs de « Glacée » dans « Poussiéreuse » l'a
+laissé **vert**. Or ce que la planche promet est la coloration **selon la
+matière** : deux cases de la même couleur ne l'illustrent pas, quoi qu'elles
+portent. La garde exige maintenant les deux écarts à la fois, sans échappatoire.
+
+C'est la même famille de faute que les tests qui se trouvent eux-mêmes : une
+disjonction de plus dans un `assert!` est une porte de sortie, et un catalogue de
+cinq gris serait passé par là.
 
 ### ⚠️ La courbure était là et ne se voyait pas (2026-10-03)
 

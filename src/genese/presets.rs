@@ -271,6 +271,10 @@ pub fn ceintures_solaires() -> Vec<DisqueConfig> {
 /// contexte graphique et ne se teste pas.
 pub(crate) const HALLEY: (f32, f32, f32) = (17.834, 0.967, 162.26);
 
+/// **La famille de Halley** dans `comete::CATALOGUE` : glacee, les deux queues,
+/// franchement bleutee. Choisie et non tiree -- c'est une comete qu'on connait.
+pub(crate) const PRESET_HALLEY: usize = 0;
+
 pub fn construire_preset_solaire() -> (Systeme, String) {
     srand(42);
     let deg = std::f32::consts::PI / 180.0;
@@ -412,6 +416,7 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
         HALLEY.2 * deg,
         0.08,
         "Halley",
+        PRESET_HALLEY,
     );
 
     // ===== L'ISS, en orbite terrestre =====
