@@ -417,9 +417,16 @@ impl Astre for Planete {
         // le noyau doit se poser par-dessus.
         //
         // ⚠️ Tout ce qui décide vit dans `crate::comete`, en fonctions **pures**
-        // et testables ; il ne reste ici que le ruban et le tirage. Le foyer est
-        // l'origine — les comètes sont posées sur `Foyer::Barycentre`, et une
-        // queue qui fuirait un autre point se verrait tout de suite.
+        // et testables ; il ne reste ici que le ruban et le tirage.
+        //
+        // ⚠️ **L'étoile, c'est `cam.light_pos`**, et non l'origine. Les deux se
+        // confondent dans le préset solaire et dans la galerie, ce qui rendait le
+        // raccourci invisible — mais une **binaire** met son barycentre à
+        // l'origine et ses étoiles ailleurs : la queue fuyait alors un point où
+        // il n'y a rien, et le noyau était éclairé du même mauvais côté.
+        // `systeme::rendu::eclairage` porte déjà la position de l'étoile
+        // primaire : la reprendre fait une source unique au lieu de deux
+        // vérités.
         if self.comete {
             // Le seuil vient de **son** orbite : les systemes sont mis a
             // l'echelle de leur etoile, donc un seuil en UA allumerait toutes
@@ -428,7 +435,7 @@ impl Astre for Planete {
                 .orbite_kep
                 .map(|o| crate::comete::seuil_activite(o.a, o.e))
                 .unwrap_or(0.0);
-            let pts = crate::comete::queue(c, Vec3::ZERO, self.base.vitesse, r, seuil);
+            let pts = crate::comete::queue(c, cam.light_pos, self.base.vitesse, r, seuil);
             if pts.len() >= 2 {
                 let mut v = Vec::new();
                 let mut i = Vec::new();
@@ -443,9 +450,10 @@ impl Astre for Planete {
             // ⚠️ **Éclairé sur le CPU**, et c'est ce qui évite un pipeline de
             // plus : le maillage fait deux cents sommets, un lambert par sommet
             // ne coûte rien, et macroquad sait dessiner un maillage à couleurs de
-            // sommets sans material. La lumière est l'étoile, à l'origine.
+            // sommets sans material. La lumière est l'étoile primaire, là où elle
+            // est vraiment — même source que la queue, juste au-dessus.
             if self.noyau.0.len() >= 3 {
-                let vers_lumiere = (-c).normalize_or_zero();
+                let vers_lumiere = (cam.light_pos - c).normalize_or_zero();
                 let base = cam.rel(c);
                 let verts: Vec<Vertex> = self
                     .noyau

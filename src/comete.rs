@@ -43,6 +43,30 @@ pub const LONGUEUR_MAX: f32 = 1.6;
 /// dominer un système.
 pub const LONGUEUR_MIN_NOYAUX: f32 = 25.0;
 
+/// **Demi-largeur de la queue, en fraction de SA PROPRE LONGUEUR** : à sa
+/// naissance au ras du noyau, puis à son bout.
+///
+/// ⚠️ **C'est le défaut qui la rendait invisible, et c'est le même que celui de
+/// [`LONGUEUR_MIN_NOYAUX`] : deux échelles sans rapport l'une avec l'autre.** La
+/// largeur suivait le **rayon du noyau** quand la longueur suit la **distance à
+/// l'étoile**. Halley au périhélie : 20 unités de long pour 0,15 de large — un
+/// fil de 1 pour 130, sub-pixel dès qu'on cadre le système. Il y avait bien une
+/// queue, elle était plus fine qu'un trait.
+///
+/// Une queue de comète est un **cône**, et son ouverture ne sait rien du caillou
+/// qui l'émet : c'est le rapport longueur/largeur qui se lit à l'œil.
+pub const LARGEUR_BASE: f32 = 0.04;
+pub const LARGEUR_BOUT: f32 = 0.22;
+
+/// **Éclat de la queue**, au plus fort de son activité.
+///
+/// ⚠️ **Franchement exagéré, et demandé tel quel** : *« au pire on la rend
+/// extrêmement visible pour le moment au point que ce n'est pas naturel »*. Une
+/// vraie queue est un voile qu'on ne photographie qu'en pose longue ; à 0,5 elle
+/// disparaissait sur fond d'étoiles. À baisser quand le reste du rendu cométaire
+/// sera réglé — c'est une dette assumée, pas un choix physique.
+pub const ECLAT: f32 = 1.0;
+
 /// Nombre de segments du ruban. Assez pour que la courbure se lise, assez peu
 /// pour qu'une comète reste un décor : trois comètes par système au plus.
 const SEGMENTS: usize = 14;
@@ -109,13 +133,13 @@ pub fn queue(
     rayon_noyau: f32,
     seuil: f32,
 ) -> Vec<PointRuban> {
-    let vers_etoile = noyau - etoile;
-    let dist = vers_etoile.length();
+    let depuis_etoile = noyau - etoile;
+    let dist = depuis_etoile.length();
     let a = activite(dist, seuil);
     if a <= 0.0 || dist < 1e-4 {
         return Vec::new();
     }
-    let anti_solaire = vers_etoile / dist;
+    let anti_solaire = depuis_etoile / dist;
     // Sans vitesse exploitable, la queue reste droite : mieux vaut une queue
     // anti-solaire qu'une direction indéfinie.
     let trainee = if vitesse.length_squared() > 1e-8 { -vitesse.normalize() } else { anti_solaire };
@@ -135,10 +159,14 @@ pub fn queue(
         // droite, simplement inclinée.
         let dir = (anti_solaire + trainee * (COURBURE * t * t)).normalize();
         let pos = noyau + dir * (longueur * t);
-        // S'évase en s'éloignant — la poussière se disperse — et s'éteint.
-        let demi_largeur = rayon_noyau * (0.9 + 5.0 * t);
-        let alpha = a * (1.0 - t).powf(1.6) * 0.5;
-        pts.push((pos, demi_largeur, Color::new(0.80, 0.84, 0.95, alpha)));
+        // ⚠️ **S'évase en fraction de SA LONGUEUR**, jamais du rayon du noyau :
+        // voir [`LARGEUR_BASE`]. Le plancher au noyau ne sert qu'au cas d'une
+        // queue naissante, pour qu'elle ne soit pas plus fine que ce qui la
+        // crache.
+        let demi_largeur = (longueur * (LARGEUR_BASE + (LARGEUR_BOUT - LARGEUR_BASE) * t))
+            .max(rayon_noyau * 0.9);
+        let alpha = a * (1.0 - t).powf(1.1) * ECLAT;
+        pts.push((pos, demi_largeur, Color::new(0.86, 0.90, 1.0, alpha)));
     }
     pts
 }
@@ -391,6 +419,55 @@ mod tests {
                  plus courte que le caillou qui l'émet, donc invisible"
             );
         }
+    }
+
+    /// **Une queue plus fine qu'un fil ne se voit pas**, quelle que soit
+    /// l'échelle.
+    ///
+    /// ⚠️ Signalé à l'écran une deuxième fois : *« me manque toujours la queue de
+    /// la comète »*. Il y en avait bien une, longue de 20 unités monde chez
+    /// Halley — mais large de 0,15, parce que la largeur suivait le **rayon du
+    /// noyau** quand la longueur suit la **distance à l'étoile**. Un fil de 1
+    /// pour 130, sub-pixel dès qu'on cadre le système.
+    ///
+    /// C'est le **même défaut** que celui qu'avait corrigé `LONGUEUR_MIN_NOYAUX`,
+    /// à l'autre bout de la même fonction : deux grandeurs réglées sur deux
+    /// échelles sans commune mesure. La garde tient donc le **rapport**, la seule
+    /// chose qui se lise à l'œil, et non une largeur absolue.
+    #[test]
+    fn la_queue_est_un_cone_et_non_un_fil() {
+        let rayon = 0.09_f32;
+        for (a, e) in [(3.5_f32, 0.9_f32), (856.0, 0.967)] {
+            let seuil = seuil_activite(a, e);
+            let perihelie = a * (1.0 - e);
+            let pts =
+                queue(vec3(perihelie, 0.0, 0.0), Vec3::ZERO, vec3(0.0, 0.0, 1.0), rayon, seuil);
+            let longueur = (pts.last().unwrap().0 - pts[0].0).length();
+            let large = pts.last().unwrap().1 * 2.0;
+            // Un cône de comète s'ouvre franchement : au bout, sa largeur vaut
+            // au moins le dixième de sa longueur. À 1/130, c'était un trait.
+            assert!(
+                large > longueur / 12.0,
+                "orbite ({a}, {e}) : {longueur} de long pour {large} de large — c'est un fil"
+            );
+            // Mais pas un ballon : une queue aussi large que longue ne se lirait
+            // plus comme une direction.
+            assert!(large < longueur * 0.8, "orbite ({a}, {e}) : queue aussi large que longue");
+            // Et jamais plus fine que le caillou qui l'émet, même à sa naissance.
+            assert!(pts[0].1 > rayon * 0.5, "la queue naît plus fine que son noyau");
+        }
+    }
+
+    /// **Elle se voit sur fond d'étoiles.** ⚠️ Exagéré et demandé tel quel : à
+    /// 0,22 d'opacité au mieux, la queue se perdait dans le champ. Dette
+    /// assumée, voir [`ECLAT`].
+    #[test]
+    fn la_queue_est_franchement_opaque_a_son_pic() {
+        let seuil = seuil_activite(856.0, 0.967);
+        let pts = queue(vec3(28.0, 0.0, 0.0), Vec3::ZERO, vec3(0.0, 0.0, 1.0), 0.08, seuil);
+        let base = pts[0].2.a;
+        assert!(base > 0.4, "opacité de {base} au ras du noyau : la queue est un voile");
+        assert!(base <= 1.0, "opacité de {base} : hors bornes");
     }
 
     /// **Halley s'allume là où elle doit**, et elle est rétrograde.

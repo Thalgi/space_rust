@@ -7,7 +7,7 @@ Journal du chantier décrit par
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
 n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
 
-**État au 2026-10-03** : 896 tests verts, clippy à zéro. **Le lot 5 est clos**
+**État au 2026-10-03** : 898 tests verts, clippy à zéro. **Le lot 5 est clos**
 (ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
 rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
 pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
@@ -57,6 +57,52 @@ Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### La queue était un fil : deux échelles sans commune mesure, encore (2026-10-03)
+
+Signalé à l'écran : *« me manque toujours la queue de la comète, au pire on la
+rend extrêmement visible pour le moment au point que ce n'est pas naturel, car
+je crois que son orientation a aussi quelques problèmes »*.
+
+**Mesuré avant d'affirmer.** Halley au périhélie, UA = 48 unités monde :
+
+| grandeur | valeur |
+|---|---|
+| distance à l'étoile | 28,1 |
+| seuil d'activité | 84,3 |
+| activité | 0,44 |
+| **longueur de queue** | **20,0** |
+| **demi-largeur au bout** | **0,47** |
+
+Il y avait bien une queue. Elle faisait **1 de large pour 130 de long** : un fil
+sub-pixel dès qu'on cadre le système. La largeur suivait le **rayon du noyau**
+(0,08) quand la longueur suit la **distance à l'étoile**.
+
+⚠️ **C'est exactement le défaut que `LONGUEUR_MIN_NOYAUX` avait déjà corrigé, à
+l'autre bout de la même fonction** : deux grandeurs réglées sur deux échelles
+qui n'ont aucun rapport l'une avec l'autre. Corriger la longueur ne l'avait pas
+corrigé pour la largeur — une faute de ce genre vit par membre, pas par
+fonction.
+
+La largeur est désormais une **fraction de la longueur de la queue**
+(`LARGEUR_BASE` → `LARGEUR_BOUT`, 4 % → 22 %), avec le rayon du noyau pour
+simple plancher. Une queue de comète est un **cône**, et son ouverture ne sait
+rien du caillou qui l'émet. La garde tient le **rapport**, la seule chose qui se
+lise à l'œil, et non une largeur absolue — et elle le tient aux deux échelles,
+la galerie et Halley.
+
+**`ECLAT` à 1,0**, contre 0,5 : exagéré et demandé tel quel. Une vraie queue est
+un voile qu'on ne photographie qu'en pose longue. **Dette assumée**, à baisser
+quand le reste du rendu cométaire sera réglé.
+
+**L'orientation, enfin** : la queue fuyait `Vec3::ZERO` et le noyau était
+éclairé depuis l'origine. Les deux se confondent avec l'étoile dans le préset
+solaire et dans la galerie, ce qui rendait le raccourci invisible — mais une
+**binaire** met son barycentre à l'origine et ses étoiles ailleurs : la queue
+fuyait un point où il n'y a rien, et le noyau était éclairé du mauvais côté.
+`systeme::rendu::eclairage` porte déjà `cam.light_pos` ; la reprendre fait une
+source unique au lieu de deux vérités. Pas de garde : c'est une couche de
+dessin, et `docs/methode.md` écarte les tests de rendu.
 
 ### Un losange pour la comète : le même filtre, la deuxième fois (2026-10-03)
 
