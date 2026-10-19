@@ -877,6 +877,12 @@ l'étoile reste un impostor, une sphère parfaite reconstruite dans un quad. Le
 relief ne déplace rien (il éclaire une pente calculée), le contour ne déforme
 que l'image — cible de clic et occultation restent sur un cercle.
 
+**Le lot 6 est clos le 2026-10-19**, validé à l'écran par l'utilisateur : la
+carbonée, l'ébullition, la supergéante rouge et la sdB point par point, les
+naines brunes globalement. L'outil qui a permis de juger chaque type en
+contexte réel — un système construit autour d'un type choisi, menu « choisir
+astre » de la Skymap V2 — est consigné au journal.
+
 ## 7. Hors périmètre
 
 **Rendre les arches visibles au cadrage par défaut** : tranché et chiffré par

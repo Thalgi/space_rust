@@ -13,8 +13,9 @@ zéro. **Le lot 5 est clos** (ses sept presets de trou noir sont au tirage), **l
 6 est livré** (supergéante rouge, sous-naine sdB, étoile carbonée, naine brune)
 et **prolongé d'un 6.3** (l'ébullition des géantes rouges), **le 7 aussi** (la
 pulsation : céphéide, Mira, ZZ Ceti), **le 8 abandonné**, **le 9 livré** (les
-comètes, 9.1 à 9.3). **Validation à l'écran du lot 6 en cours** : l'étoile
-carbonée est validée, le reste à suivre.
+comètes, 9.1 à 9.3). **Le lot 6 est clos et validé à l'écran**
+(2026-10-19) : point par point pour la carbonée, l'ébullition, la supergéante
+rouge et la sdB, globalement pour le reste.
 
 ⚠️ **La session du 2026-10-03 a été coupée net** à 17 h 07 par une erreur
 d'accès (« Your organization has disabled Claude subscription access »). Le
@@ -49,12 +50,13 @@ silhouette « mince » n'a jamais été essayée.
 | **5.4** — la cible Interstellar, à comparer | fait, jugée « très satisfaisante » | `689b8f4` |
 | **5.5** — la cible froide déclinée en appétits, plus la braise | fait | `689b8f4` |
 | **5 — clos** : les sept presets au tirage | **fait et tranché** | |
-| **6.1** — supergéante rouge, sous-naine, carbonée au tirage | fait, à juger à l'écran | `05bef4e` |
+| **6.1** — supergéante rouge, sous-naine, carbonée au tirage | **fait, validé à l'écran** (2026-10-19) | `05bef4e` |
 | **6.1 bis** — le défilé de la vue isolée couvre les ordinaires | **fait** | |
-| **6.2** — la naine brune comme **centre** d'un système | **fait**, à juger à l'écran | |
+| **6.2** — la naine brune comme **centre** d'un système | **fait, validé à l'écran** (2026-10-19) | |
 | **6.2 bis** — ses quatre classes dans la planche des étoiles | **fait** | |
 | **6.3** — géantes et supergéantes rouges en ébullition, stables et instables | **fait et validé à l'écran** (2026-10-19) | |
 | **6.3 bis** — filtre pixel (touche P) dans la galerie des étoiles | fait | |
+| **6 — clos** : validé à l'écran par l'utilisateur | **fait et tranché** (2026-10-19) | |
 | **7** — pulsation : céphéide, Mira, ZZ Ceti | **fait**, à juger à l'écran | |
 | **8.1** — le ciel en cubemap | **abandonné**, code retiré | `7f6e1aa` |
 | **8.2** — la déviation dans le shader | **abandonné**, code retiré | `dd55404`, `5e66b10` |

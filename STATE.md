@@ -33,8 +33,9 @@ d'un retour écran sur les comètes. Ce retour n'a **jamais été traité** :
 rendu voulu du 9.3 (poussière incurvée, ions droits), peut-être un défaut — à
 trancher à l'écran. Détail au journal, « Ce qui reste ouvert ».
 
-**En cours (2026-10-19) : la validation à l'écran du lot 6.** Fait : l'étoile
-carbonée (validée), et un **lot 6.3** né de cette validation — les géantes et
+**Le lot 6 est clos** (2026-10-19), **validé à l'écran** par l'utilisateur :
+supergéante rouge, sous-naine sdB, étoile carbonée, naines brunes — et un
+**lot 6.3** né de cette validation — les géantes et
 supergéantes rouges **bouillonnent** (grosses cellules de convection), avec un
 aspect stable et un instable tirés de la graine (35 % d'instables) :
 
@@ -46,9 +47,9 @@ aspect stable et un instable tirés de la graine (35 % d'instables) :
 
 Source unique : `etoile::ebullition(nom, instable)`, appliquée par
 `Variante::appliquer`. La **galerie des étoiles** montre les deux aspects côte
-à côte et a gagné le **filtre pixel (touche P)**. Reste à valider du lot 6 : la
-supergéante face à la géante (taille, éclat), la sdB face à la naine blanche
-(éclat), les quatre naines brunes, la naine brune au centre d'un système.
+à côte et a gagné le **filtre pixel (touche P)**. La validation a été
+donnée point par point (carbonée, ébullition, supergéante rouge, sdB) puis
+**globalement** pour le reste du lot (naines brunes, naine brune au centre).
 
 **Menu V2 (2026-10-19)** : la sauvegarde des systèmes est **mise de côté** (le
 code reste, la V1 s'en sert) ; le menu garde quatre presets (Solaire, Tau Ceti,
@@ -171,7 +172,8 @@ grossir l'atlas de glyphes jusqu'à 32768², et miniquad tuait le jeu à
 l'ouverture de la galerie des comètes. Le bornage vit désormais dans
 `police::preparer`, là où il ne peut plus être oublié.
 
-**Le prochain pas** : finir de valider le lot 6, trancher la comète, puis
+**Le prochain pas** : trancher la comète (retour écran du 3 octobre), valider
+à l'écran les lots 7 et 9, puis
 lot 10 (distinction des types : granulation paramétrée — **déjà faite pour les
 géantes rouges** par le 6.3 —, assombrissement centre-bord pour toutes),
 11 (quasi-étoile), 12 (disques proto au tirage).
