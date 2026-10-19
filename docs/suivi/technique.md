@@ -19,6 +19,50 @@
 | un uniform déclaré mais non lu vaut **zéro**, en silence | tests de correspondance uniforms ↔ GLSL |
 | `fwidth`/`dFdx`/`dFdy` **ne sont pas** dans GLSL ES 100 core | ne jamais y adosser un anti-crénelage — voir ci-dessous |
 | il n'y a **pas** de post-traitement global disponible | pas de bloom, pas de grab-pass : ce qui s'en approche se falsifie en géométrie |
+| en caméra 3D, le material **par défaut** de macroquad **écrit la profondeur** | tout ce qui est translucide passe par un material `depth_write: false` — voir ci-dessous |
+| un ruban oriente sa largeur sur la tangente **projetée à l'écran** | vu dans son axe, il se croise en rayons : pour une lueur, des **disques face caméra** — voir ci-dessous |
+
+---
+
+## ⚠️ Piège : le material par défaut écrit la profondeur (2026-10-19)
+
+Trouvé sur les queues de comète. En caméra 3D, macroquad dessine `draw_mesh`
+avec son pipeline `TRIANGLES_DEPTH_PIPELINE` : `depth_test: LessOrEqual`
+**et `depth_write: true`** (`quad_gl.rs`, lu dans les sources 0.4.15). Un
+maillage translucide dessiné ainsi inscrit dans le tampon de profondeur
+**tout son tracé, parties invisibles comprises** — une vitre que rien ne
+montre et qui rejette tout ce qui se dessine ensuite derrière elle.
+
+Les queues de comète l'ont révélé : la queue de poussière, tracée la première,
+masquait la queue d'ions partout où elles se recouvrent — près du noyau, si
+bien que le trait bleu « n'apparaissait qu'après la traînée de débris »,
+comme l'a décrit l'utilisateur (*« comme un genre de sticker »*).
+
+**Règle** : rien de translucide sur le material par défaut. Tous les autres
+objets translucides du dépôt avaient déjà le leur (`depth_write: false` dans
+`fond`, `planete/materiau`, `soleil/materiau`, `disque/voile`, `panache`,
+`accretion`) ; la queue était l'exception. Elle emprunte désormais celui du
+**plasma solaire** (additif, teste la profondeur sans l'écrire), sans
+pipeline de plus — `le_plasma_teste_la_profondeur_sans_l_ecrire` le garde,
+puisque deux usagers en dépendent.
+
+## ⚠️ Piège : un ruban vu dans son axe (2026-10-19)
+
+`impostor::push_ruban` oriente la largeur sur la tangente de la courbe
+**projetée dans le plan écran**. Quand la courbe pointe vers la caméra ou à
+l'opposé, cette projection tend vers zéro : chaque point prend une
+orientation de bruit d'arrondi, les quads voisins se croisent, et on voit
+*« plein de rayons qui se croisent »*. Le garde-fou existant (ne jamais
+retourner l'orientation d'un point au suivant) ne couvre que le changement de
+signe, pas le bruit.
+
+Pour une **arche** de plasma, vue surtout de côté, le ruban reste le bon
+choix. Pour une **queue de comète**, qu'on voit sous tous les angles et
+parfois dans l'axe, il ne l'est pas : même juste, une bande vue par la
+tranche ne fait pas une lueur ronde. Elle est passée en **chapelet de disques
+flous face caméra** (`comete::nuage`) : un disque n'a pas d'orientation, rien
+ne peut se croiser. Le recouvrement est compensé dans l'éclat (le halo
+`(1 − d)²` intègre à `2r/3` sur un diamètre).
 
 ---
 

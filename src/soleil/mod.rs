@@ -49,6 +49,12 @@ const MAX_TACHES: usize = 8;
 pub const PX_MIN: f32 = 4.0;
 
 /// Vide le cache de materials du soleil (hot-reload des shaders).
+/// **Le material des rubans lumineux** (plasma additif, sans écriture de
+/// profondeur), partagé : les arches du soleil, et les queues de comète.
+pub fn materiau_ruban_lumineux() -> Material {
+    mat_plasma_partage()
+}
+
 pub fn vider_cache_materials() {
     materiau::vider_cache();
 }

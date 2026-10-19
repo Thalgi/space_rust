@@ -100,21 +100,29 @@ fn charger_soleil(profondeur: bool) -> Material {
     .unwrap()
 }
 
+/// **Pipeline du plasma** : additif, testé en profondeur, **sans l'écrire**.
+///
+/// ⚠️ Deux usagers en dépendent désormais : les arches du soleil et les **queues
+/// de comète** (`planete::draw`). Une queue dessinée avec le material par défaut
+/// de macroquad écrivait la profondeur sur tout son ruban, parties transparentes
+/// comprises : la queue de poussière, tracée la première, masquait la queue
+/// d'ions là où les deux se recouvrent — c'est-à-dire près du noyau.
+fn pipeline_plasma() -> PipelineParams {
+    PipelineParams {
+        depth_test: Comparison::LessOrEqual,
+        depth_write: false,
+        color_blend: Some(BlendState::new(Equation::Add, BlendFactor::One, BlendFactor::One)),
+        ..Default::default()
+    }
+}
+
 fn charger_plasma() -> Material {
     load_material(
         ShaderSource::Glsl {
             vertex: &impostor::source("soleil_plasma.vert.glsl", VERT_PLASMA),
             fragment: &impostor::source("soleil_plasma.frag.glsl", FRAG_PLASMA),
         },
-        MaterialParams {
-            pipeline_params: PipelineParams {
-                depth_test: Comparison::LessOrEqual,
-                depth_write: false,
-                color_blend: Some(BlendState::new(Equation::Add, BlendFactor::One, BlendFactor::One)),
-                ..Default::default()
-            },
-            ..Default::default()
-        },
+        MaterialParams { pipeline_params: pipeline_plasma(), ..Default::default() },
     )
     .unwrap()
 }
@@ -212,6 +220,26 @@ mod tests {
             "la passe opaque doit être le disque (zone basse), pas la couronne"
         );
         assert!(*zone_translucide > 0.5, "la couronne doit être la zone haute");
+    }
+
+    /// **Le plasma ne cache rien derrière lui.**
+    ///
+    /// Ce material dessine les arches du soleil **et les queues de comète**. Il
+    /// teste la profondeur — un astre devant le cache — mais ne l'écrit pas : un
+    /// ruban translucide qui l'écrirait masquerait tout ce qui passe derrière ses
+    /// parties invisibles. C'est ce qui coupait la queue d'ions d'une comète
+    /// sous sa queue de poussière, près du noyau.
+    #[test]
+    fn le_plasma_teste_la_profondeur_sans_l_ecrire() {
+        let p = pipeline_plasma();
+        assert!(!p.depth_write, "un ruban translucide écrirait la profondeur de ses parties invisibles");
+        assert!(
+            matches!(p.depth_test, Comparison::LessOrEqual),
+            "sans test de profondeur, une queue passerait devant la planète qui la cache"
+        );
+        // Additif : sur le noir de l'espace, identique au mélange alpha ; là où
+        // deux queues se croisent, elles s'additionnent au lieu de se masquer.
+        assert!(p.color_blend.is_some());
     }
 
     /// Les deux passes doivent couvrir le quad **sans trou ni recouvrement** :

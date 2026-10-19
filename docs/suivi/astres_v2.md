@@ -8,7 +8,7 @@ Journal du chantier décrit par
 n'est poussé. 70 commits d'avance sur `main` au 2026-10-03 — `main` n'en a
 aucun que la branche n'ait pas, la fusion sera une avance rapide.
 
-**État au 2026-10-19** : 906 tests verts (919 avec le binaire `mhd`), clippy à
+**État au 2026-10-19** : 914 tests verts (927 avec le binaire `mhd`), clippy à
 zéro. **Le lot 5 est clos** (ses sept presets de trou noir sont au tirage), **le
 6 est livré** (supergéante rouge, sous-naine sdB, étoile carbonée, naine brune)
 et **prolongé d'un 6.3** (l'ébullition des géantes rouges), **le 7 aussi** (la
@@ -18,9 +18,14 @@ comètes, 9.1 à 9.3). **Le lot 6 est clos et validé à l'écran**
 rouge et la sdB, globalement pour le reste.
 
 ⚠️ **La session du 2026-10-03 a été coupée net** à 17 h 07 par une erreur
-d'accès (« Your organization has disabled Claude subscription access »). Le
-dernier message de l'utilisateur n'a **jamais été traité** — voir « Ce qui reste
-ouvert » plus bas, *la courbe et la droite de la comète*.
+d'accès (« Your organization has disabled Claude subscription access »). Son
+dernier message, *la courbe et la droite de la comète*, n'a été repris que le
+2026-10-19 — voir le lot 9.4.
+
+**Arrêt du 2026-10-19 au soir** : les queues de comète sont en plein réglage
+(9.4). Deux choses n'ont pas encore été vues à l'écran : les bouffées
+divisées par deux, et le chapelet de nuages sous l'angle qui croisait les
+rayons. C'est par là que reprendre.
 
 Deux dettes restent, petites et consignées plus bas : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de
@@ -62,7 +67,8 @@ silhouette « mince » n'a jamais été essayée.
 | **8.2** — la déviation dans le shader | **abandonné**, code retiré | `dd55404`, `5e66b10` |
 | **9.1** — les comètes au tirage, et leur planche | **fait**, à juger à l'écran | |
 | **9.2** — la queue | **fait**, à juger à l'écran | `cd9da64` + 4 correctifs |
-| **9.3** — cinq familles de comètes, queue d'ions, galerie refaite | **fait**, retour écran en attente (voir « Ce qui reste ouvert ») | `8712a5a` |
+| **9.3** — cinq familles de comètes, queue d'ions, galerie refaite | **fait** | `8712a5a` |
+| **9.4** — queues reprises : vitre de profondeur, bouffées, chapelet de nuages | **fait**, en cours de réglage à l'écran (2026-10-19) | |
 | 10 à 12 | à faire | |
 
 Trois correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`), le
@@ -72,6 +78,101 @@ l'ouverture de la galerie des comètes (`ba66d72`).
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### Lot 9.4 : les queues de comète reprises sur retour écran (2026-10-19)
+
+Reprise du retour resté sans réponse le 3 octobre (*« une courbe et une
+droite »*), puis quatre allers-retours à l'écran dans la même soirée.
+
+#### La courbe et la droite : voulues, et expliquées
+
+C'était le rendu **voulu** du 9.3 — Halley porte les deux queues. L'utilisateur
+a demandé à comprendre pourquoi une queue fuit l'étoile ; l'explication donnée,
+gardée ici parce qu'elle est la raison de toute la mécanique :
+
+- **Pas de sillage dans le vide.** Un sillage existe parce qu'un bateau avance
+  *dans* l'eau qui le freine ; rien ne retient ce que la comète perd.
+- **L'étoile souffle.** Sa lumière exerce une pression (infime, mais suffisante
+  sur un grain d'un micron) et son vent stellaire (~400 km/s) part d'elle dans
+  toutes les directions. Ce que la comète libère est emporté **à l'opposé de
+  l'étoile** : une chevelure dans le vent, qui dit d'où vient le vent et non
+  où l'on marche. D'où une comète qui s'éloigne **queue devant**.
+- **Deux queues, deux souffles.** La **poussière** (grains, poussée par la
+  lumière, lente) garde un peu de l'élan de la comète et s'incurve ; les
+  **ions** (gaz ionisé, emporté par le vent stellaire ~100× plus vite) filent
+  droit et bleus. C'est la photo de Hale-Bopp.
+
+#### La vitre invisible : la queue d'ions coupée près du noyau
+
+*« La queue ionique n'est pas en contact avec la comète, elle apparaît après
+la traînée de débris […] comme un genre de sticker […] un problème de
+transparence. »* — exact. Les queues passaient par le material **par défaut**
+de macroquad, qui en caméra 3D **écrit la profondeur** (lu dans
+`quad_gl.rs`) sur tout le ruban, parties transparentes comprises. La
+poussière, tracée la première, posait une vitre invisible qui rejetait les
+ions derrière elle. Elles passent désormais par le material du **plasma
+solaire** (additif, teste la profondeur sans l'écrire) : zéro pipeline de
+plus, et sur le noir de l'espace l'additif rend comme le mélange alpha. Garde :
+`le_plasma_teste_la_profondeur_sans_l_ecrire`, **red-check fait**. Piège
+consigné dans [`technique.md`](technique.md).
+
+#### Des bouffées, pas un flagelle
+
+*« Ajouter un peu de fluctuation […] pour éviter que ça ressemble à un sabre
+laser. »* Premier jet : des ondes d'éclat et de largeur qui descendent la
+queue, plus un ondoiement latéral en torsade. **Refusé** : *« ça fait un peu
+flagelle, moi je voyais plus ça comme un effet de prout »*.
+
+Second jet, retenu : **des bouffées** (`comete::bouffees`, `fluctuer`). La
+comète lâche des nuages par à-coups — départ décalé au hasard, force inégale —
+qui naissent au noyau (il s'éclaire à l'émission), descendent la queue en
+**doublant de taille** et pâlissent ; entre deux, un léger creux vers le bout.
+⚠️ **Aucun point ne se déplace** : la courbe reste celle de la physique, seuls
+l'éclat et la largeur bougent. L'horloge (`temps_comete`) suit celle du jeu,
+donc la pause fige les queues ; la graine décale les phases.
+
+| | Poussière | Ions |
+|---|---|---|
+| Cadence | 0,45 bouffée/s | 0,9 /s |
+| Descente de la queue | 6 s | 2,5 s |
+| Éclat au cœur | +60 % | +80 % |
+| Gonflement | +22,5 % | +30 % |
+| Étendue à la naissance | 4,5 % de la queue | 2,5 % |
+| Creux entre deux | 25 % | 35 % |
+
+Le gonflement et l'étendue ont été **divisés par deux** à la demande, en fin
+de soirée (« divise la taille des panaches par deux »). Les queues sont passées
+au passage de 14 à **32 segments** : les ondes du premier jet y montraient des
+facettes.
+
+Gardes : `la_queue_bouffe_sans_serpenter` (aucun point ne bouge, éclat et
+largeur valides, quelque chose change) et
+`une_bouffee_descend_du_noyau_vers_le_bout` — **red-checks faits** :
+gonflement retiré, puis nuages qui remontent.
+
+#### Des rayons qui se croisent : du ruban au chapelet de nuages
+
+*« Dans certains angles de vue la queue donne un aspect où plein de rayons se
+croisent, comme si le fait que ce soit une bande causait des erreurs […] il
+faut peut-être passer d'une bande à un volume 3D. »* — exact aussi.
+`push_ruban` oriente la largeur sur la tangente **projetée à l'écran** ; queue
+pointée vers la caméra, cette projection s'annule, chaque point prend une
+orientation de bruit et les quads se croisent. Et une bande vue par la tranche
+ne fait pas une lueur ronde.
+
+La queue est devenue un **chapelet de disques flous face caméra**
+(`comete::nuage`), rééchantillonné tous les demi-rayons, sur le même material
+et la même texture de halo : un disque n'a pas d'orientation, rien ne se
+croise, et vue dans l'axe la queue devient une lueur ronde. Les disques
+s'additionnent, donc chacun est atténué du recouvrement (`3·PAS_NUAGE/2`,
+le halo intégrant à `2r/3` sur un diamètre) : la queue garde l'éclat du ruban.
+Gardes : `le_chapelet_couvre_la_queue_sans_trou` et
+`l_eclat_du_chapelet_est_celui_du_ruban` — **red-checks faits**. Le ruban
+reste celui des arches solaires, vues surtout de côté.
+
+**Non vu à l'écran au moment de l'arrêt** : la division par deux des
+bouffées, et le chapelet sous l'angle qui posait problème. Si les nuages se
+devinent un par un, baisser `PAS_NUAGE` (0,5).
 
 ### Menu V2 : la sauvegarde mise de côté, « choisir astre » ajouté (2026-10-19)
 
@@ -1217,16 +1318,10 @@ pas choisir.
 
 ### Ce qui reste ouvert, et que personne ne garde
 
-- ⚠️ **La comète : « une courbe et une droite »** — dernier message de
-  l'utilisateur le 2026-10-03, 17 h 07, **jamais traité** (la session a été
-  coupée par une erreur d'accès). Mot pour mot : *« Je crois que t'as trouvé le
-  pb car ça crashait quand je sélectionnais la vue comètes, encore des
-  correctifs à faire je pense car le rendu a une courbe et une droite provenant
-  de la comète. »* La capture jointe (`images/11.png` du dossier temporaire de
-  la session) **n'existe plus**. Deux lectures possibles : c'est le rendu
-  **voulu** du 9.3 — queue de poussière incurvée, queue d'ions rigoureusement
-  droite (une garde le tient) — ou un vrai défaut. À trancher à l'écran avant
-  de toucher à quoi que ce soit. Le crash, lui, est corrigé (`ba66d72`).
+- ✅ ~~**La comète : « une courbe et une droite »**~~ — retour du 2026-10-03
+  resté sans réponse, **soldé le 2026-10-19** (lot 9.4) : la courbe et la
+  droite étaient voulues, mais la droite était coupée près du noyau par une
+  vitre de profondeur invisible.
 - **Le GLSL ne compile qu'au lancement.** Aucun test du dépôt ne peut le
   vérifier. C'est arrivé une fois au 5.3 — une variable employée dix lignes
   avant sa déclaration, panic au démarrage. `verif::usage_avant_declaration`

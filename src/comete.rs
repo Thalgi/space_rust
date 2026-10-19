@@ -58,9 +58,11 @@ pub const LONGUEUR_MIN_NOYAUX: f32 = 25.0;
 pub const LARGEUR_BASE: f32 = 0.04;
 pub const LARGEUR_BOUT: f32 = 0.22;
 
-/// Nombre de segments du ruban. Assez pour que la courbure se lise, assez peu
-/// pour qu'une comète reste un décor : trois comètes par système au plus.
-const SEGMENTS: usize = 14;
+/// Nombre de segments du ruban. Assez pour que la courbure se lise **et que la
+/// fluctuation ondule sans facettes** (14 jusqu'au 2026-10-19 : trois ondes le
+/// long d'une queue n'y avaient que cinq points chacune), assez peu pour qu'une
+/// comète reste un décor — trois par système au plus, 64 triangles par queue.
+const SEGMENTS: usize = 32;
 
 /// **Part de traînée dans la direction de la queue**, et **où elle arrive**.
 ///
@@ -384,15 +386,196 @@ pub fn rubans(
     rayon_noyau: f32,
     seuil: f32,
 ) -> Vec<Vec<PointRuban>> {
+    rubans_par_sorte(p, noyau, etoile, vitesse, rayon_noyau, seuil)
+        .into_iter()
+        .map(|(_, r)| r)
+        .collect()
+}
+
+/// [`rubans`], chacun avec sa sorte (`true` : ions). La seule fonction qui
+/// décide quelle comète porte quelle queue ; les deux autres la lisent.
+fn rubans_par_sorte(
+    p: &Preset,
+    noyau: Vec3,
+    etoile: Vec3,
+    vitesse: Vec3,
+    rayon_noyau: f32,
+    seuil: f32,
+) -> Vec<(bool, Vec<PointRuban>)> {
     let mut v = Vec::new();
     if p.a_poussiere() {
-        v.push(queue_poussiere(p, noyau, etoile, vitesse, rayon_noyau, seuil));
+        v.push((false, queue_poussiere(p, noyau, etoile, vitesse, rayon_noyau, seuil)));
     }
     if p.a_ions() {
-        v.push(queue_ions(p, noyau, etoile, rayon_noyau, seuil));
+        v.push((true, queue_ions(p, noyau, etoile, rayon_noyau, seuil)));
     }
-    v.retain(|r| r.len() >= 2);
+    v.retain(|(_, r)| r.len() >= 2);
     v
+}
+
+/// **Les queues telles qu'on les dessine** : [`rubans`], puis [`fluctuer`] à
+/// l'instant `temps`. `graine` décale les phases : deux comètes ne
+/// palpitent pas ensemble.
+#[allow(clippy::too_many_arguments)]
+pub fn rubans_animes(
+    p: &Preset,
+    noyau: Vec3,
+    etoile: Vec3,
+    vitesse: Vec3,
+    rayon_noyau: f32,
+    seuil: f32,
+    temps: f32,
+    graine: f32,
+) -> Vec<Vec<PointRuban>> {
+    rubans_par_sorte(p, noyau, etoile, vitesse, rayon_noyau, seuil)
+        .into_iter()
+        .map(|(ions, mut r)| {
+            fluctuer(&mut r, if ions { &FLUCT_IONS } else { &FLUCT_POUSSIERE }, temps, graine);
+            r
+        })
+        .collect()
+}
+
+/// **Réglages des bouffées d'une sorte de queue.**
+///
+/// ⚠️ **Des bouffées, pas des ondes** (2026-10-19). Le premier jet faisait
+/// serpenter la queue — ondes d'éclat et ondoiement latéral — et ça s'est lu
+/// comme un **flagelle**. Ce qui était voulu : *« un effet de prout »*, des
+/// nuages de gaz lâchés par à-coups. La queue ne bouge donc plus de côté ;
+/// elle **s'épaissit et s'éclaire par paquets** qui naissent au noyau et
+/// descendent en gonflant.
+pub struct Fluctuation {
+    /// Bouffées lâchées par seconde (en moyenne : leur départ est décalé au
+    /// hasard, sinon elles tomberaient au métronome).
+    cadence: f32,
+    /// Secondes qu'une bouffée met à descendre toute la queue.
+    traversee: f32,
+    /// Surcroît d'éclat au cœur d'une bouffée, en part.
+    eclat: f32,
+    /// Gonflement de la largeur au cœur d'une bouffée, en part.
+    largeur: f32,
+    /// Étendue d'une bouffée à sa naissance, en part de la queue. Elle
+    /// **double** en descendant : un nuage se dilate.
+    taille: f32,
+    /// Creux entre les bouffées vers le bout de la queue, en part de l'éclat :
+    /// sans lui, les nuages se posent sur un trait continu au lieu de le
+    /// former.
+    creux: f32,
+}
+
+/// **La poussière** : de gros nuages lents et rares — des grains lourds.
+pub const FLUCT_POUSSIERE: Fluctuation =
+    Fluctuation { cadence: 0.45, traversee: 6.0, eclat: 0.6, largeur: 0.225, taille: 0.045, creux: 0.25 };
+
+/// **Les ions** : des bouffées plus serrées et plus rapides — le vent stellaire
+/// les emporte cent fois plus vite que les grains.
+pub const FLUCT_IONS: Fluctuation =
+    Fluctuation { cadence: 0.9, traversee: 2.5, eclat: 0.8, largeur: 0.3, taille: 0.025, creux: 0.35 };
+
+/// Pseudo-hasard dans `[0 ; 1[`, déterministe. Le contexte graphique n'est pas
+/// requis : la fonction reste testable, et une comète redonne les mêmes
+/// bouffées à graine égale.
+fn hachage(k: f32, graine: f32) -> f32 {
+    ((k * 12.9898 + graine * 78.233).sin() * 43_758.547).fract().abs()
+}
+
+/// **Intensité des bouffées au point `s`** de la queue (0 au noyau, 1 au bout),
+/// à l'instant `temps` : la somme des nuages vivants, chacun une cloche qui
+/// avance du noyau vers le bout, s'élargit et pâlit en route.
+pub fn bouffees(s: f32, temps: f32, f: &Fluctuation, graine: f32) -> f32 {
+    let vivantes = (f.cadence * f.traversee).ceil() as i32 + 2;
+    let derniere = (temps * f.cadence).floor() as i32;
+    let mut total = 0.0;
+    for k in (derniere - vivantes)..=(derniere + 1) {
+        let kf = k as f32;
+        // Départ décalé au hasard d'un tiers d'intervalle au plus.
+        let depart = (kf + 0.35 * hachage(kf, graine)) / f.cadence;
+        let age = temps - depart;
+        if !(0.0..f.traversee).contains(&age) {
+            continue;
+        }
+        let pos = age / f.traversee;
+        // Des bouffées inégales : un prout n'est jamais le même que le
+        // précédent.
+        let force = 0.55 + 0.45 * hachage(kf + 17.0, graine);
+        let sigma = f.taille * (1.0 + pos);
+        let d = (s - pos) / sigma;
+        total += force * (1.0 - 0.5 * pos) * (-d * d).exp();
+    }
+    total.min(1.5)
+}
+
+/// **Fait vivre une queue par bouffées**, pour qu'elle ne se lise pas comme un
+/// sabre laser (demandé le 2026-10-19) — ni comme un flagelle (premier jet).
+///
+/// Chaque bouffée **éclaire** et **épaissit** la queue là où elle passe ; entre
+/// deux, la queue se creuse un peu vers le bout. ⚠️ **Aucun point ne se
+/// déplace** : la courbe reste celle de la physique (poussière incurvée, ions
+/// droits), seuls l'éclat et la largeur bougent. À l'émission, le noyau
+/// s'éclaire : c'est le départ du nuage.
+pub fn fluctuer(pts: &mut [PointRuban], f: &Fluctuation, temps: f32, graine: f32) {
+    let n = pts.len();
+    if n < 2 {
+        return;
+    }
+    for (k, (_, demi, c)) in pts.iter_mut().enumerate() {
+        let s = k as f32 / (n - 1) as f32;
+        let b = bouffees(s, temps, f, graine);
+        c.a = (c.a * (1.0 - f.creux * s.sqrt() + f.eclat * b)).clamp(0.0, 1.0);
+        *demi *= 1.0 + f.largeur * b;
+    }
+}
+
+/// **Écart entre deux nuages, en part de leur rayon.** Assez serré pour que la
+/// queue se lise continue — à la moitié du rayon, les disques flous se
+/// recouvrent à quatre — et c'est ce recouvrement que [`nuage`] compense.
+const PAS_NUAGE: f32 = 0.5;
+
+/// **Une queue en chapelet de nuages** (2026-10-19) : des disques flous face à
+/// la caméra, rééchantillonnés le long de la queue tous les [`PAS_NUAGE`]
+/// rayons. Chaque élément est `(centre, rayon, couleur)`.
+///
+/// ⚠️ **Pourquoi plus de ruban.** Le ruban orientait sa largeur sur la
+/// tangente **projetée à l'écran** : queue pointée vers la caméra ou à
+/// l'opposé, cette projection s'annule, chaque point prend une orientation de
+/// bruit d'arrondi et les quads se croisent — *« plein de rayons qui se
+/// croisent »*, signalé à l'écran. Et même juste, une bande vue par la tranche
+/// ne fait pas une lueur ronde. Un disque flou n'a pas d'orientation : rien ne
+/// peut se croiser, sous aucun angle, et la queue vue de face devient la
+/// lueur qu'elle est.
+///
+/// ⚠️ **L'éclat est compensé du recouvrement.** Les nuages s'additionnent : sur
+/// l'axe, un pixel reçoit la somme de tous ceux qui le couvrent. Le halo
+/// (`(1 − d)²`) intègre à `2r/3` le long d'un diamètre ; au pas `PAS_NUAGE·r`,
+/// la somme vaut donc `2 / (3 · PAS_NUAGE)` fois l'éclat d'un nuage. Chacun est
+/// divisé d'autant, et la queue garde l'éclat qu'avait le ruban.
+pub fn nuage(pts: &[PointRuban]) -> Vec<PointRuban> {
+    let mut out = Vec::new();
+    if pts.len() < 2 {
+        return out;
+    }
+    let compense = 3.0 * PAS_NUAGE / 2.0;
+    for w in pts.windows(2) {
+        let ((p0, r0, c0), (p1, r1, c1)) = (w[0], w[1]);
+        let seg = (p1 - p0).length();
+        // Au moins un nuage par segment, puis assez pour tenir le pas sur le
+        // plus petit des deux rayons.
+        let rmin = r0.min(r1).max(1e-6);
+        let n = ((seg / (PAS_NUAGE * rmin)).ceil() as usize).max(1);
+        for k in 0..n {
+            let t = k as f32 / n as f32;
+            let c = Color::new(
+                c0.r + (c1.r - c0.r) * t,
+                c0.g + (c1.g - c0.g) * t,
+                c0.b + (c1.b - c0.b) * t,
+                (c0.a + (c1.a - c0.a) * t) * compense,
+            );
+            out.push((p0.lerp(p1, t), r0 + (r1 - r0) * t, c));
+        }
+    }
+    let (p, r, c) = pts[pts.len() - 1];
+    out.push((p, r, Color::new(c.r, c.g, c.b, c.a * compense)));
+    out
 }
 
 /// Résolution du noyau : parallèles × méridiens. Un patatoïde n'a pas besoin de
@@ -928,5 +1111,111 @@ mod tests {
             assert!(c.a <= precedent + 1e-6, "l'opacité remonte le long de la queue");
             precedent = c.a;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_fluctuation {
+    use super::*;
+
+    /// Une queue d'ions de Halley au périhélie, prête à fluctuer.
+    fn ions() -> Vec<PointRuban> {
+        queue_ions(preset(0), vec3(30.0, 0.0, 0.0), Vec3::ZERO, 0.1, 90.0)
+    }
+
+    /// **Des bouffées, pas un flagelle** : la queue s'éclaire et s'épaissit
+    /// par paquets, mais **aucun point ne bouge** — la courbe reste celle de la
+    /// physique. Le premier jet la faisait serpenter, et c'est précisément ce
+    /// qui a été refusé à l'écran.
+    #[test]
+    fn la_queue_bouffe_sans_serpenter() {
+        let brut = ions();
+        let mut change = false;
+        for f in [&FLUCT_IONS, &FLUCT_POUSSIERE] {
+            for k in 0..60 {
+                let mut r = brut.clone();
+                fluctuer(&mut r, f, k as f32 * 0.23, 0.37);
+                for (a, b) in r.iter().zip(&brut) {
+                    assert_eq!(a.0, b.0, "un point a bougé : c'est le flagelle refusé");
+                    assert!((0.0..=1.0).contains(&a.2.a), "éclat {} hors de [0 ; 1]", a.2.a);
+                    assert!(a.1 > 0.0, "largeur nulle ou négative");
+                    change |= (a.1 - b.1).abs() > b.1 * 0.05;
+                }
+            }
+        }
+        assert!(change, "aucune bouffée : la queue est restée un sabre laser");
+    }
+
+    /// **Une bouffée naît au noyau et descend la queue.** Le sens compte : un
+    /// nuage qui remonterait vers le noyau serait aspiré, pas relâché.
+    #[test]
+    fn une_bouffee_descend_du_noyau_vers_le_bout() {
+        let f = &FLUCT_POUSSIERE;
+        let pic = |t: f32| {
+            (0..=200)
+                .map(|i| i as f32 / 200.0)
+                .map(|s| (s, bouffees(s, t, f, 0.37)))
+                .fold((0.0, 0.0), |m, x| if x.1 > m.1 { x } else { m })
+        };
+        let mut vus = 0;
+        for k in 0..400 {
+            let t = k as f32 * 0.05;
+            let (s0, b0) = pic(t);
+            let (s1, _) = pic(t + 0.05);
+            // Un seul nuage net et loin des bords : son pic doit avancer.
+            if b0 > 0.3 && s0 > 0.1 && s0 < 0.8 && (s1 - s0).abs() < 0.2 {
+                assert!(s1 >= s0, "à t = {t} le nuage remonte : {s0} -> {s1}");
+                vus += 1;
+            }
+        }
+        assert!(vus > 20, "trop peu de bouffées observées ({vus}) : le test ne prouverait rien");
+    }
+}
+
+#[cfg(test)]
+mod tests_nuage {
+    use super::*;
+
+    /// **Le chapelet couvre la queue sans trou**, de bout en bout, et reste
+    /// d'une taille raisonnable.
+    ///
+    /// - il part du noyau et finit au bout de la queue ;
+    /// - deux nuages voisins ne s'écartent jamais de plus de `PAS_NUAGE` fois
+    ///   le plus petit de leurs rayons : au-delà, la queue se lirait en perles ;
+    /// - le compte tient dans un maillage (`u16`) avec une large marge, même
+    ///   pour la queue d'ions, la plus fine par rapport à sa longueur.
+    #[test]
+    fn le_chapelet_couvre_la_queue_sans_trou() {
+        for (nom, pts) in [
+            ("ions", queue_ions(preset(0), vec3(30.0, 0.0, 0.0), Vec3::ZERO, 0.1, 90.0)),
+            ("poussière", queue_poussiere(preset(0), vec3(30.0, 0.0, 0.0), Vec3::ZERO, Vec3::Z, 0.1, 90.0)),
+        ] {
+            let n = nuage(&pts);
+            assert_eq!(n[0].0, pts[0].0, "{nom} : le chapelet ne part pas du noyau");
+            assert_eq!(n.last().unwrap().0, pts.last().unwrap().0, "{nom} : il s'arrête avant le bout");
+            for w in n.windows(2) {
+                let ecart = (w[1].0 - w[0].0).length();
+                assert!(
+                    ecart <= PAS_NUAGE * w[0].1.min(w[1].1) * 1.01 + 1e-5,
+                    "{nom} : trou de {ecart} entre deux nuages de rayon {} et {}",
+                    w[0].1,
+                    w[1].1
+                );
+            }
+            assert!(n.len() * 4 < 4000, "{nom} : {} nuages, bien trop pour une queue", n.len());
+        }
+    }
+
+    /// **L'éclat est compensé du recouvrement** : un nuage vaut l'éclat du
+    /// ruban divisé par le nombre de ceux qui se superposent sur l'axe.
+    /// Sans ça, la queue en chapelet brillerait près de trois fois plus fort
+    /// que le ruban qu'elle remplace.
+    #[test]
+    fn l_eclat_du_chapelet_est_celui_du_ruban() {
+        let pts = queue_ions(preset(0), vec3(30.0, 0.0, 0.0), Vec3::ZERO, 0.1, 90.0);
+        let n = nuage(&pts);
+        let attendu = pts[0].2.a * 3.0 * PAS_NUAGE / 2.0;
+        assert!((n[0].2.a - attendu).abs() < 1e-5, "{} au lieu de {attendu}", n[0].2.a);
+        assert!(n[0].2.a < pts[0].2.a, "le nuage n'est pas plus pâle que le ruban : rien n'est compensé");
     }
 }

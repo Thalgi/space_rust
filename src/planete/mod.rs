@@ -78,6 +78,11 @@ pub struct Planete {
     // Index dans `comete::CATALOGUE` : la matière du noyau et les queues qu'elle
     // porte. Ignoré hors des comètes.
     preset_comete: usize,
+    // Horloge et graine de la fluctuation des queues (`comete::fluctuer`) :
+    // l'horloge avance avec le jeu (pause comprise), la graine décale les
+    // phases pour que deux comètes ne palpitent pas ensemble.
+    temps_comete: f32,
+    graine_comete: f32,
 }
 
 impl Planete {
@@ -139,6 +144,8 @@ impl Planete {
             comete: false,
             noyau: (Vec::new(), Vec::new()),
             preset_comete: 0,
+            temps_comete: 0.0,
+            graine_comete: 0.0,
         }
     }
 
@@ -170,6 +177,7 @@ impl Planete {
     pub fn en_comete_preset(mut self, graine: f32, preset: usize) -> Self {
         self.comete = true;
         self.preset_comete = preset;
+        self.graine_comete = graine;
         self.noyau = crate::comete::noyau_de(graine, crate::comete::preset(preset));
         self
     }
@@ -416,6 +424,9 @@ impl Astre for Planete {
         if let Some(a) = &mut self.anneau {
             a.update(dt);
         }
+        if self.comete {
+            self.temps_comete += dt;
+        }
     }
     fn orbite(&self) -> &[Vec3] {
         &self.orbite
@@ -448,17 +459,43 @@ impl Astre for Planete {
                 .map(|o| crate::comete::seuil_activite(o.a, o.e))
                 .unwrap_or(0.0);
             let p = crate::comete::preset(self.preset_comete);
-            // ⚠️ **Un ruban par queue, et un dessin par ruban.** Les empiler dans
-            // un seul maillage les ferait partager un ordre de tri : le trait
-            // d'ions passerait sous le voile de poussière une fois sur deux.
-            for pts in crate::comete::rubans(p, c, cam.light_pos, self.base.vitesse, r, seuil) {
+            // ⚠️ **Le material du plasma solaire, pas celui par défaut.** Celui
+            // de macroquad, en caméra 3D, **écrit la profondeur** — sur tout le
+            // ruban, parties transparentes comprises. La queue de poussière,
+            // tracée la première, posait donc un écran invisible : la queue
+            // d'ions était rejetée partout où elle passait derrière, c'est-à-dire
+            // près du noyau, et n'apparaissait qu'au-delà de la poussière.
+            // Le plasma teste la profondeur sans l'écrire, et il est additif :
+            // sur le noir de l'espace c'est le même rendu, et là où les deux
+            // queues se croisent elles s'additionnent au lieu de se masquer.
+            // Zéro pipeline de plus : c'est celui des arches du soleil.
+            let mat = crate::soleil::materiau_ruban_lumineux();
+            gl_use_material(&mat);
+            // Animées : voir `comete::fluctuer`, sans quoi les queues se lisent
+            // comme des sabres laser.
+            let queues = crate::comete::rubans_animes(
+                p,
+                c,
+                cam.light_pos,
+                self.base.vitesse,
+                r,
+                seuil,
+                self.temps_comete,
+                self.graine_comete,
+            );
+            for pts in queues {
                 let mut v = Vec::new();
                 let mut i = Vec::new();
-                crate::impostor::push_ruban(&mut v, &mut i, cam, &pts);
+                // ⚠️ **Un chapelet de nuages, plus un ruban** : vue dans l'axe,
+                // une bande se croisait en rayons (`comete::nuage`).
+                for (centre, rayon, couleur) in crate::comete::nuage(&pts) {
+                    crate::impostor::push_quad(&mut v, &mut i, cam, centre, rayon, couleur);
+                }
                 let mesh =
                     Mesh { vertices: v, indices: i, texture: Some(crate::impostor::halo_partage()) };
                 draw_mesh(&mesh);
             }
+            gl_use_default_material();
 
             // **Le noyau : un patatoïde**, et non la sphère de l'impostor.
             //
