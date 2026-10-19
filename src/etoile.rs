@@ -146,16 +146,60 @@ pub(crate) fn ordinaire(p: f32, q: f32) -> Gabarit {
     }
 }
 
+/// **Pas de balayage des tables** : 1/1000. La bande la plus étroite (O bleue,
+/// 1,3 % du tirage) y tient treize échantillons.
+const PAS_BALAYAGE: usize = 1000;
+
+/// **Les types que le tirage sait produire**, dans l'ordre des tables :
+/// particulières d'abord, puis ordinaires.
+///
+/// ⚠️ **Balayés, pas recopiés.** Une liste écrite à la main oublierait le
+/// prochain type ajouté à [`ordinaire`] ou à [`particuliere`] — c'est ainsi que
+/// le trou noir est resté hors du jeu jusqu'au lot 4.
+pub fn types_du_tirage() -> Vec<&'static str> {
+    let mut noms: Vec<&'static str> = Vec::new();
+    let pas = |k: usize| k as f32 / PAS_BALAYAGE as f32;
+    let tables = (0..PAS_BALAYAGE)
+        .map(|k| particuliere(pas(k)))
+        .chain((0..PAS_BALAYAGE).map(|k| ordinaire(pas(k), 0.5)));
+    for g in tables {
+        if !noms.contains(&g.4) {
+            noms.push(g.4);
+        }
+    }
+    noms
+}
+
+/// **Gabarit d'un type nommé**, `q` donnant sa place dans la plage de rayon et
+/// de luminosité (voir [`ordinaire`]). `None` si le tirage ne le connaît pas.
+pub(crate) fn gabarit_du_type(nom: &str, q: f32) -> Option<Gabarit> {
+    (0..PAS_BALAYAGE)
+        .map(|k| k as f32 / PAS_BALAYAGE as f32)
+        .flat_map(|p| [particuliere(p), ordinaire(p, q)])
+        .find(|g| g.4 == nom)
+}
+
 impl ProfilEtoile {
     /// Tire une étoile au hasard : une particulière dans 5 % des cas, sinon une
     /// ordinaire ([`ordinaire`], où vit toute la table).
     pub fn aleatoire() -> Self {
         let v: f32 = gen_range(0.0, 1.0);
-        let (tmin, tmax, rayon, lumi, nom, couronne) = if v < PART_PARTICULIERES {
+        let g = if v < PART_PARTICULIERES {
             particuliere(gen_range(0.0, 1.0))
         } else {
             ordinaire(gen_range(0.0, 1.0), gen_range(0.0, 1.0))
         };
+        Self::depuis_gabarit(g)
+    }
+
+    /// **Une étoile d'un type choisi** — le menu « choisir astre » de la vue
+    /// système, outil de mise au point. Seuls la température et la place dans
+    /// la plage sont tirées. `None` si le tirage ne connaît pas ce type.
+    pub fn du_type(nom: &str) -> Option<Self> {
+        gabarit_du_type(nom, gen_range(0.0, 1.0)).map(Self::depuis_gabarit)
+    }
+
+    fn depuis_gabarit((tmin, tmax, rayon, lumi, nom, couronne): Gabarit) -> Self {
         let temperature = gen_range(tmin, tmax);
         Self {
             temperature,
@@ -743,5 +787,35 @@ mod tests_activite {
             assert!((0.15..=1.0).contains(&a), "rayon {rayon} -> {a}, hors bornes");
             precedent = a;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_types {
+    use super::*;
+
+    /// **Chaque type du tirage est listé une fois, et se retrouve par son nom.**
+    ///
+    /// C'est ce que le menu « choisir astre » promet : cliquer un nom construit
+    /// un système autour de **ce** type. Un nom listé sans gabarit retomberait
+    /// sur un tirage quelconque, et le menu mentirait sans que rien ne casse.
+    #[test]
+    fn chaque_type_du_tirage_se_retrouve_par_son_nom() {
+        let types = types_du_tirage();
+        for (i, nom) in types.iter().enumerate() {
+            assert!(!types[..i].contains(nom), "« {nom} » listé deux fois");
+            for q in [0.0, 0.5, 1.0] {
+                let g = gabarit_du_type(nom, q).unwrap_or_else(|| panic!("« {nom} » sans gabarit"));
+                assert_eq!(g.4, *nom);
+            }
+        }
+        // Les deux tables au complet : 7 particulières, 16 ordinaires. Si ce
+        // compte bouge, un type est arrivé ou parti — le menu suit tout seul,
+        // ce test dit seulement qu'on l'a remarqué.
+        assert_eq!(types.len(), 23, "{types:?}");
+        for attendu in ["Trou noir", "T Tauri (jeune)", "Naine brune", "O (bleue)", "Mira"] {
+            assert!(types.contains(&attendu), "« {attendu} » absent : {types:?}");
+        }
+        assert!(gabarit_du_type("Licorne", 0.5).is_none());
     }
 }

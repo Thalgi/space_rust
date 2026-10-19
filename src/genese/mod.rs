@@ -446,16 +446,28 @@ mod tests_orbite_interne {
 pub fn construire_systeme(seed: u64) -> (Systeme, String) {
     srand(seed);
     match seed % 100 {
-        0..=54 => construire_simple(),  // ~55 % : étoile unique
+        // ⚠️ L'étoile est tirée ICI, juste après `srand`, exactement où
+        // `construire_simple` la tirait avant de la recevoir en argument : la
+        // séquence aléatoire ne bouge pas, une graine donne le même système.
+        0..=54 => construire_simple(ProfilEtoile::aleatoire()), // ~55 % : étoile unique
         55..=82 => construire_multiple(2), // binaire
         83..=93 => construire_multiple(3), // trinaire hiérarchique
         _ => construire_multiple(4),       // quadruple
     }
 }
 
+/// **Un système d'une étoile, autour d'un type choisi** — le menu « choisir
+/// astre » de la vue système, outil de mise au point : pour voir une naine
+/// brune au centre d'un système sans attendre ses 3 % au tirage. Toujours une
+/// étoile unique ; le reste (planètes, ceintures, comètes) est tiré comme
+/// d'habitude. `None` si le tirage ne connaît pas ce type.
+pub fn construire_systeme_autour(seed: u64, nom: &str) -> Option<(Systeme, String)> {
+    srand(seed);
+    Some(construire_simple(ProfilEtoile::du_type(nom)?))
+}
+
 /// Système à une seule étoile (Titius-Bode + ceintures). `srand` déjà appelé.
-fn construire_simple() -> (Systeme, String) {
-    let profil = ProfilEtoile::aleatoire();
+fn construire_simple(profil: ProfilEtoile) -> (Systeme, String) {
     // Masse de l'unique étoile : dérivée de sa luminosité, pas la constante
     // brute -- une naine froide ne pèse pas comme une géante bleue.
     // ⚠️ Sauf un trou noir : ce qu'il rayonne vient de son disque, pas d'une

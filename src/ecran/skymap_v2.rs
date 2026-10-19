@@ -2,10 +2,10 @@ use crate::astre::CameraInfo;
 use crate::camera::Camera;
 use crate::fond::Fond;
 use crate::genese::{
-    charger_presets, construire_preset_alpha_centauri, construire_preset_avatar,
-    construire_preset_binaire, construire_preset_proxima, construire_preset_quadruple,
-    construire_preset_solaire, construire_preset_tau_ceti, construire_preset_trinaire,
-    construire_systeme, sauver_presets, PresetSauve,
+    construire_preset_alpha_centauri, construire_preset_avatar, construire_preset_binaire,
+    construire_preset_proxima, construire_preset_quadruple, construire_preset_solaire,
+    construire_preset_tau_ceti, construire_preset_trinaire, construire_systeme,
+    construire_systeme_autour,
 };
 use super::{bandeau, fiche, liste, marqueur, selecteur, trace_orbite};
 use crate::menu::{ActionMenu, Menu};
@@ -20,6 +20,8 @@ use crate::camera::DIST_DEFAUT;
 /// Sert à le reconstruire à l'identique lors du hot-reload des shaders.
 enum Source {
     Graine(u64),
+    /// Graine + type d'étoile imposé (menu « choisir astre »).
+    Astre(u64, &'static str),
     Solaire,
     TauCeti,
     Avatar,
@@ -42,7 +44,6 @@ pub struct SkymapV2 {
     cam: Camera,
     rendu: RenduStandard,
     menu: Menu,
-    presets: Vec<PresetSauve>,
     source: Source,
     vitesse: f32,
     pause: bool,
@@ -112,8 +113,7 @@ impl SkymapV2 {
             fond: Fond::new(900),
             cam: Camera::new(DIST_DEFAUT),
             rendu: RenduStandard::new(),
-            menu: Menu::new(),
-            presets: charger_presets(),
+            menu: Menu::v2(),
             source: Source::Solaire,
             vitesse: 1.0,
             pause: false,
@@ -186,13 +186,6 @@ impl SkymapV2 {
             }
         }
 
-        // Saisie d'un nom de preset -> sauvegarde JSON.
-        if let Some(nom) = self.menu.clavier() {
-            self.presets.push(PresetSauve { nom: nom.clone(), graine: self.seed });
-            sauver_presets(&self.presets);
-            self.info = nom;
-        }
-
         self.sys.reglages_etoile(freq, forme, puissance, alea);
 
         // UI -> action éventuelle + zone cliquable (pour bloquer la caméra).
@@ -204,7 +197,7 @@ impl SkymapV2 {
         let outils = bandeau::strip_outils(ecran_ui);
         let sous_bandeau = bandeau::hauteur_occupee(ecran_ui);
         let (sur_menu, action) =
-            self.menu.input(m, clic, self.presets.len(), self.cam.focus_actif(), outils, sous_bandeau);
+            self.menu.input(m, clic, &[], self.cam.focus_actif(), outils, sous_bandeau);
         if let Some(a) = action {
             self.appliquer(a);
         }
@@ -373,7 +366,7 @@ impl SkymapV2 {
         self.bandeau_dessiner(ecran_ui);
         self.selecteur_dessiner(ecran_ui, bandeau::hauteur_occupee(ecran_ui), m);
         self.fiche_dessiner(ecran_ui, m);
-        self.menu.dessiner(m, &self.presets, self.cam.focus_actif(),
+        self.menu.dessiner(m, &[], self.cam.focus_actif(),
             bandeau::strip_outils(ecran_ui), bandeau::hauteur_occupee(ecran_ui));
         false
     }
@@ -735,6 +728,9 @@ impl SkymapV2 {
     fn reconstruire(&self) -> (Systeme, String) {
         match &self.source {
             Source::Graine(g) => construire_systeme(*g),
+            Source::Astre(g, nom) => {
+                construire_systeme_autour(*g, nom).unwrap_or_else(|| construire_systeme(*g))
+            }
             Source::Solaire => construire_preset_solaire(),
             Source::TauCeti => construire_preset_tau_ceti(),
             Source::Avatar => construire_preset_avatar(),
@@ -829,14 +825,26 @@ impl SkymapV2 {
                 self.cam.set_dist(1400.0);
                 self.cam.reset_focus();
             }
-            ActionMenu::Charger(idx) => {
-                self.seed = self.presets[idx].graine;
-                let (s, _) = construire_systeme(self.seed);
+            ActionMenu::Astre(nom) => {
+                // Une nouvelle graine à chaque clic : recliquer le même type
+                // donne un autre système (et, pour les géantes rouges ou le trou
+                // noir, possiblement un autre aspect ou un autre régime).
+                self.seed = nouvelle_graine(self.seed);
+                // `None` est impossible pour un nom venu de la liste (elle est
+                // balayée dans les tables du tirage) ; retomber sur un tirage
+                // quelconque vaut mieux que fermer le jeu.
+                let (s, i) = construire_systeme_autour(self.seed, nom)
+                    .unwrap_or_else(|| construire_systeme(self.seed));
                 self.sys = s;
-                self.info = self.presets[idx].nom.clone();
-                self.source = Source::Graine(self.seed);
+                self.info = i;
+                self.source = Source::Astre(self.seed, nom);
                 self.appliquer_vue();
             }
+            // Sauvegarde mise de côté (2026-10-19) : pas de systèmes sauvés à
+            // charger au menu V2…
+            ActionMenu::Charger(_) => {}
+            // … et QUITTER sort sans rien écrire.
+            ActionMenu::Quitter => std::process::exit(0),
             ActionMenu::Aleatoire => {
                 self.seed = nouvelle_graine(self.seed);
                 let (s, i) = construire_systeme(self.seed);
@@ -846,10 +854,6 @@ impl SkymapV2 {
                 self.appliquer_vue();
             }
             ActionMenu::Retour => self.cam.reset_focus(),
-            ActionMenu::Quitter => {
-                sauver_presets(&self.presets);
-                std::process::exit(0);
-            }
         }
         // Toutes les branches sauf Retour/Quitter remplacent `self.sys` — vider
         // sans conditionner à laquelle est la garantie qui ne peut pas rater la

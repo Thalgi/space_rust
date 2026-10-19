@@ -71,6 +71,52 @@ l'ouverture de la galerie des comètes (`ba66d72`).
 
 ## Ce qu'il faut savoir pour reprendre
 
+### Menu V2 : la sauvegarde mise de côté, « choisir astre » ajouté (2026-10-19)
+
+Demandé par l'utilisateur, **comme outil de mise au point** (« gros chantier
+mais ça va aider au debug ») : le dernier point du lot 6 — une naine brune au
+centre d'un système — ne se voyait qu'à ses 3 % au tirage.
+
+**Le menu MINITEL de la Skymap V2** devient : SYSTEME SOLAIRE, TAU CETI, ALPHA
+CENTAURI A+B, PROXIMA CENTAURI, **CHOISIR ASTRE >**, + ALEATOIRE, **QUITTER**.
+
+- **Retiré** (V2 seulement) : sauver ce système, la liste des systèmes sauvés,
+  « quitter (sauve) » — *« on le garde sous le coude pour plus tard »*. Le code
+  de persistance (`genese::persistance`, `presets.json`) **reste** : la
+  Skymap V1 garde son menu d'origine et s'en sert toujours. QUITTER sort sans
+  rien écrire. Retirés aussi parce que non demandés : Avatar, Binaire,
+  Trinaire, Quadruple (leurs constructeurs restent, la V1 les propose).
+- **+ ALEATOIRE est gardé** : choix par défaut, ni sauvegarde ni preset.
+- **CHOISIR ASTRE >** ouvre une page « ASTRES » sur deux colonnes : les
+  **23 types** du tirage et « < RETOUR ». Un clic construit un **système à une
+  étoile** de ce type (`genese::construire_systeme_autour`), le reste tiré comme
+  d'habitude. Nouvelle graine à chaque clic : recliquer donne un autre système,
+  et pour les géantes rouges ou le trou noir, possiblement un autre aspect ou un
+  autre régime.
+
+**Comment c'est branché.**
+
+- `etoile::types_du_tirage()` **balaie** les tables `particuliere` et
+  `ordinaire` (pas 1/1000 ; la bande la plus étroite, l'O bleue, y tient treize
+  échantillons) au lieu d'une liste recopiée — un type ajouté demain apparaît
+  au menu sans qu'on y touche. `gabarit_du_type(nom, q)` retrouve le gabarit,
+  `ProfilEtoile::du_type(nom)` en fait un profil.
+- `construire_simple` **reçoit** son profil au lieu de le tirer.
+  `construire_systeme` le tire **au même endroit de la séquence** (juste après
+  `srand`) : une graine donne toujours le même système.
+- Les lignes du menu sont devenues des **données** (`Menu::entrees`, libellé +
+  `Choix`) au lieu d'une chaîne de `if i == 3` : trois contenus (V1, V2, liste
+  des astres) partagent les clics **et** le dessin, qui lisent la même liste.
+  `Menu::v2()` choisit le contenu ; `Source::Astre(graine, type)` permet au
+  hot-reload (R) de reconstruire le même système.
+
+**Tests** : `chaque_type_du_tirage_se_retrouve_par_son_nom` (23 types, aucun en
+double, chacun retrouvé), `le_menu_v2_sans_sauvegarde_avec_la_liste_des_astres`
+(V1 intacte comprise) et `la_liste_des_astres_couvre_chaque_type_du_tirage`.
+**Red-checks faits** sur les deux derniers : « QUITTER (SAUVE) » remis au menu
+V2, puis la liste tronquée à cinq types — les deux cassent. **Vu à l'écran et
+validé** par l'utilisateur ; QUITTER ajouté à sa demande.
+
 ### Lot 6.3 : les géantes rouges bouillonnent (2026-10-19)
 
 **La demande, dans les mots de l'utilisateur**, en validant le lot 6 : rajouter

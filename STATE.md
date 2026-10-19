@@ -49,6 +49,13 @@ Source unique : `etoile::ebullition(nom, instable)`, appliquée par
 à côte et a gagné le **filtre pixel (touche P)**. Reste à valider du lot 6 : la
 supergéante face à la géante (taille, éclat), la sdB face à la naine blanche
 (éclat), les quatre naines brunes, la naine brune au centre d'un système.
+
+**Menu V2 (2026-10-19)** : la sauvegarde des systèmes est **mise de côté** (le
+code reste, la V1 s'en sert) ; le menu garde quatre presets (Solaire, Tau Ceti,
+Alpha Centauri, Proxima), + ALEATOIRE et QUITTER, et gagne **CHOISIR ASTRE >** :
+la liste des 23 types du tirage, un clic = un système autour de ce type. C'est
+**l'outil de mise au point** pour juger un type sans attendre sa chance au
+tirage (`genese::construire_systeme_autour`).
 ⚠️ Le bouillonnement tourne en jeu sur toutes les géantes rouges : son coût de
 rendu de près n'a **pas été mesuré**.
 

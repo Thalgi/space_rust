@@ -1,8 +1,10 @@
 mod dessin;
 
+use crate::genese::PresetSauve;
 use macroquad::prelude::*;
 
 /// Action que `main` doit appliquer (charger un système, etc.).
+#[derive(Clone, Copy)]
 pub enum ActionMenu {
     Solaire,
     TauCeti,
@@ -14,8 +16,25 @@ pub enum ActionMenu {
     Quadruple,
     Charger(usize),
     Aleatoire,
+    /// Un système aléatoire autour de ce type d'étoile (menu V2, « choisir astre »).
+    Astre(&'static str),
     Quitter,
     Retour,
+}
+
+/// **Ce que fait une ligne du menu.** Les lignes sont des données, pas des
+/// index : la V1, la V2 et la liste des astres n'ont pas les mêmes, et une
+/// chaîne de `if i == 3` par variante aurait fini par se désaccorder de ce
+/// qu'affiche `dessiner`.
+#[derive(Clone, Copy)]
+enum Choix {
+    Action(ActionMenu),
+    /// Saisie du nom d'un système à sauvegarder (V1 seulement).
+    Saisie,
+    /// Ouvre la liste des types d'étoiles (V2).
+    ListeAstres,
+    /// Revient de la liste au menu.
+    FermerListe,
 }
 
 /// Menu Minitel + boutons d'affichage. Gère son propre état (ouvert, saisie de nom,
@@ -28,6 +47,12 @@ pub struct Menu {
     pub orbites_etoiles: bool, // orbites des étoiles (systèmes multiples)
     pub orbites_lunes: bool,   // orbites des lunes, autour de leur planète
     pub zone: bool,
+    /// **Menu de la Skymap V2** : sans sauvegarde (mise de côté le
+    /// 2026-10-19), quatre presets, et la liste des astres pour la mise au
+    /// point. La V1 garde son menu d'origine.
+    v2: bool,
+    /// La liste des astres est ouverte à la place du menu.
+    liste_astres: bool,
 }
 
 impl Menu {
@@ -40,7 +65,65 @@ impl Menu {
             orbites_etoiles: true,
             orbites_lunes: false, // nombreuses : encombrantes par défaut
             zone: true,
+            v2: false,
+            liste_astres: false,
         }
+    }
+
+    /// Le menu de la Skymap V2 (voir le champ `v2`).
+    pub fn v2() -> Self {
+        Self { v2: true, ..Self::new() }
+    }
+
+    /// **Les lignes affichées**, dans l'ordre : libellé et effet.
+    fn entrees(&self, presets: &[PresetSauve]) -> Vec<(String, Choix)> {
+        use ActionMenu::*;
+        let a = |s: &str, x: ActionMenu| (s.to_string(), Choix::Action(x));
+        if self.liste_astres {
+            // Les types du tirage, **balayés** dans ses tables : un type ajouté
+            // demain apparaît ici sans qu'on y touche.
+            let mut v: Vec<(String, Choix)> = crate::etoile::types_du_tirage()
+                .into_iter()
+                .map(|n| (n.to_uppercase(), Choix::Action(Astre(n))))
+                .collect();
+            v.push(("< RETOUR".into(), Choix::FermerListe));
+            return v;
+        }
+        if self.v2 {
+            // Sauvegarde des systèmes mise de côté le 2026-10-19 : le code de
+            // persistance reste (`genese::persistance`, la V1 s'en sert).
+            return vec![
+                a("SYSTEME SOLAIRE", Solaire),
+                a("TAU CETI", TauCeti),
+                a("ALPHA CENTAURI A+B", AlphaCentauri),
+                a("PROXIMA CENTAURI", Proxima),
+                ("CHOISIR ASTRE >".into(), Choix::ListeAstres),
+                a("+ ALEATOIRE", Aleatoire),
+                // Quitte sans rien écrire : la sauvegarde est mise de côté.
+                a("QUITTER", Quitter),
+            ];
+        }
+        let mut v = vec![
+            a("SYSTEME SOLAIRE", Solaire),
+            a("TAU CETI", TauCeti),
+            a("AVATAR (PANDORA)", Avatar),
+            a("ALPHA CENTAURI A+B", AlphaCentauri),
+            a("PROXIMA CENTAURI", Proxima),
+            a("BINAIRE A+B", Binaire),
+            a("TRINAIRE (A-B)+C", Trinaire),
+            a("QUADRUPLE 2+2", Quadruple),
+        ];
+        v.extend(presets.iter().enumerate().map(|(i, p)| (p.nom.clone(), Choix::Action(Charger(i)))));
+        v.push(a("+ ALEATOIRE", Aleatoire));
+        v.push(("SAUVER CE SYSTEME".into(), Choix::Saisie));
+        v.push(a("QUITTER (SAUVE)", Quitter));
+        v
+    }
+
+    /// Colonnes du panneau : deux pour la liste des astres, qui en compte
+    /// vingt-quatre — sur une seule, elle sortirait d'un écran de 700 px.
+    fn colonnes(&self) -> usize {
+        if self.liste_astres { 2 } else { 1 }
     }
 
     // ===== Bascules d'outillage : **la bande du bas** =====
@@ -115,15 +198,24 @@ impl Menu {
         let pris = Self::LARGEUR_MENU * 2.0 + 12.0;
         Rect::new(outils.x, outils.y, (outils.w - pris).max(40.0), outils.h)
     }
-    /// Panneau modal, centre, **sous** le bandeau de ressources.
-    fn menu_rect(&self, n_presets: usize, haut: f32) -> Rect {
-        let n = 11 + n_presets;
-        let h = 40.0 + n as f32 * 30.0 + if self.saisie { 40.0 } else { 0.0 };
-        Rect::new(screen_width() * 0.5 - 150.0, haut, 300.0, h)
+    /// Panneau modal, centre, **sous** le bandeau de ressources. `n` : nombre
+    /// de lignes.
+    fn menu_rect(&self, n: usize, haut: f32) -> Rect {
+        let cols = self.colonnes();
+        let rangs = n.div_ceil(cols);
+        let l = 300.0 * cols as f32 - 40.0 * (cols - 1) as f32;
+        let h = 40.0 + rangs as f32 * 30.0 + if self.saisie { 40.0 } else { 0.0 };
+        Rect::new(screen_width() * 0.5 - l * 0.5, haut, l, h)
     }
-    fn entry_rect(&self, i: usize, n_presets: usize, haut: f32) -> Rect {
-        let mr = self.menu_rect(n_presets, haut);
-        Rect::new(mr.x + 12.0, mr.y + 34.0 + i as f32 * 30.0, mr.w - 24.0, 26.0)
+    /// Ligne `i` sur `n`, rangées **en colonnes** (on lit de haut en bas).
+    fn entry_rect(&self, i: usize, n: usize, haut: f32) -> Rect {
+        let mr = self.menu_rect(n, haut);
+        let cols = self.colonnes();
+        let rangs = n.div_ceil(cols).max(1);
+        let lc = (mr.w - 24.0) / cols as f32;
+        let (col, rang) = (i / rangs, i % rangs);
+        let jeu = if cols > 1 { 6.0 } else { 0.0 };
+        Rect::new(mr.x + 12.0 + col as f32 * lc, mr.y + 34.0 + rang as f32 * 30.0, lc - jeu, 26.0)
     }
 
     /// Gestion des clics. Renvoie (souris_sur_ui, action éventuelle).
@@ -135,11 +227,13 @@ impl Menu {
         &mut self,
         m: Vec2,
         clic: bool,
-        n_presets: usize,
+        presets: &[PresetSauve],
         focus: bool,
         outils: Rect,
         haut: f32,
     ) -> (bool, Option<ActionMenu>) {
+        let entrees = self.entrees(presets);
+        let n = entrees.len();
         let (bo, boe, bl, bz, bn, re) = (
             Self::btn(outils, 0),
             Self::btn(outils, 1),
@@ -148,7 +242,7 @@ impl Menu {
             Self::bouton(outils),
             Self::retour(outils),
         );
-        let mr = self.menu_rect(n_presets, haut);
+        let mr = self.menu_rect(n, haut);
         let mut action = None;
         if clic {
             if bo.contains(m) {
@@ -161,14 +255,13 @@ impl Menu {
                 self.zone = !self.zone;
             } else if bn.contains(m) {
                 self.ouvert = !self.ouvert;
+                // Rouvert, le menu repart de sa page principale.
+                self.liste_astres = false;
             } else if focus && re.contains(m) {
                 action = Some(ActionMenu::Retour);
             } else if self.ouvert && !self.saisie {
-                for i in 0..(11 + n_presets) {
-                    if self.entry_rect(i, n_presets, haut).contains(m) {
-                        action = self.activer(i, n_presets);
-                        break;
-                    }
+                if let Some(i) = (0..n).find(|i| self.entry_rect(*i, n, haut).contains(m)) {
+                    action = self.activer(entrees[i].1);
                 }
             }
         }
@@ -181,40 +274,76 @@ impl Menu {
         (sur_ui, action)
     }
 
-    fn activer(&mut self, i: usize, n: usize) -> Option<ActionMenu> {
-        // 0 Solaire | 1 TauCeti | 2 Avatar | 3 AlphaCentauri | 4 Proxima | 5 Binaire |
-        // 6 Trinaire | 7 Quadruple | 8..8+n presets | 8+n Aleatoire | 9+n Sauver | 10+n Quitter
-        let a = if i == 0 {
-            Some(ActionMenu::Solaire)
-        } else if i == 1 {
-            Some(ActionMenu::TauCeti)
-        } else if i == 2 {
-            Some(ActionMenu::Avatar)
-        } else if i == 3 {
-            Some(ActionMenu::AlphaCentauri)
-        } else if i == 4 {
-            Some(ActionMenu::Proxima)
-        } else if i == 5 {
-            Some(ActionMenu::Binaire)
-        } else if i == 6 {
-            Some(ActionMenu::Trinaire)
-        } else if i == 7 {
-            Some(ActionMenu::Quadruple)
-        } else if i < 8 + n {
-            Some(ActionMenu::Charger(i - 8))
-        } else if i == 8 + n {
-            Some(ActionMenu::Aleatoire)
-        } else if i == 9 + n {
-            self.saisie = true;
-            self.nom.clear();
-            None
-        } else {
-            Some(ActionMenu::Quitter)
-        };
-        if a.is_some() {
-            self.ouvert = false;
+    fn activer(&mut self, c: Choix) -> Option<ActionMenu> {
+        match c {
+            Choix::Action(a) => {
+                self.ouvert = false;
+                self.liste_astres = false;
+                Some(a)
+            }
+            Choix::Saisie => {
+                self.saisie = true;
+                self.nom.clear();
+                None
+            }
+            Choix::ListeAstres => {
+                self.liste_astres = true;
+                None
+            }
+            Choix::FermerListe => {
+                self.liste_astres = false;
+                None
+            }
         }
-        a
+    }
+}
+
+#[cfg(test)]
+mod tests_entrees {
+    use super::*;
+
+    fn libelles(m: &Menu) -> Vec<String> {
+        m.entrees(&[]).into_iter().map(|(l, _)| l).collect()
+    }
+
+    /// **Le menu V2 n'a plus rien de la sauvegarde**, garde ses quatre presets
+    /// et ouvre la liste des astres. Demandé le 2026-10-19.
+    #[test]
+    fn le_menu_v2_sans_sauvegarde_avec_la_liste_des_astres() {
+        let m = Menu::v2();
+        let l = libelles(&m);
+        for absent in ["SAUVER CE SYSTEME", "QUITTER (SAUVE)", "AVATAR (PANDORA)", "BINAIRE A+B"] {
+            assert!(!l.iter().any(|x| x == absent), "« {absent} » encore au menu V2 : {l:?}");
+        }
+        for present in ["SYSTEME SOLAIRE", "TAU CETI", "ALPHA CENTAURI A+B", "PROXIMA CENTAURI", "CHOISIR ASTRE >", "QUITTER"] {
+            assert!(l.iter().any(|x| x == present), "« {present} » manque au menu V2 : {l:?}");
+        }
+        // Et un système sauvegardé n'y apparaît pas, même s'il en existe.
+        let p = [PresetSauve { nom: "MON SYSTEME".into(), graine: 7 }];
+        assert!(!m.entrees(&p).iter().any(|(x, _)| x == "MON SYSTEME"));
+        // La V1, elle, n'a pas bougé.
+        assert!(libelles(&Menu::new()).iter().any(|x| x == "SAUVER CE SYSTEME"));
+    }
+
+    /// **La liste des astres propose chaque type du tirage**, chacun menant à
+    /// un système autour de lui, plus un retour.
+    #[test]
+    fn la_liste_des_astres_couvre_chaque_type_du_tirage() {
+        let mut m = Menu::v2();
+        let i = m.entrees(&[]).iter().position(|(l, _)| l == "CHOISIR ASTRE >").unwrap();
+        let choix = m.entrees(&[])[i].1;
+        assert!(m.activer(choix).is_none(), "ouvrir la liste ne doit rien charger");
+        let e = m.entrees(&[]);
+        let types = crate::etoile::types_du_tirage();
+        for t in &types {
+            let trouve = e.iter().any(|(_, c)| matches!(c, Choix::Action(ActionMenu::Astre(n)) if n == t));
+            assert!(trouve, "« {t} » absent de la liste des astres");
+        }
+        assert_eq!(e.len(), types.len() + 1, "un type de trop ou un retour manquant");
+        // Le retour ramène au menu, sans rien charger.
+        let retour = e.last().unwrap().1;
+        assert!(m.activer(retour).is_none());
+        assert!(libelles(&m).iter().any(|x| x == "CHOISIR ASTRE >"));
     }
 }
 

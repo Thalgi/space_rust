@@ -54,29 +54,17 @@ impl Menu {
         if !self.ouvert {
             return;
         }
-        let mr = self.menu_rect(presets.len(), haut);
-        minitel_panel(mr, "* MINITEL * MENU");
-        let mut labels: Vec<String> = vec![
-            "SYSTEME SOLAIRE".into(),
-            "TAU CETI".into(),
-            "AVATAR (PANDORA)".into(),
-            "ALPHA CENTAURI A+B".into(),
-            "PROXIMA CENTAURI".into(),
-            "BINAIRE A+B".into(),
-            "TRINAIRE (A-B)+C".into(),
-            "QUADRUPLE 2+2".into(),
-        ];
-        for p in presets {
-            labels.push(p.nom.clone());
-        }
-        labels.push("+ ALEATOIRE".into());
-        labels.push("SAUVER CE SYSTEME".into());
-        labels.push("QUITTER (SAUVE)".into());
-        for (i, lab) in labels.iter().enumerate() {
-            minitel_ligne(self.entry_rect(i, presets.len(), haut), lab, m);
+        // Les lignes viennent de `entrees`, la même source que les clics.
+        let entrees = self.entrees(presets);
+        let n = entrees.len();
+        let mr = self.menu_rect(n, haut);
+        let titre = if self.liste_astres { "* MINITEL * ASTRES" } else { "* MINITEL * MENU" };
+        minitel_panel(mr, titre);
+        for (i, (lab, _)) in entrees.iter().enumerate() {
+            minitel_ligne(self.entry_rect(i, n, haut), lab, m);
         }
         if self.saisie {
-            let y = mr.y + 34.0 + labels.len() as f32 * 30.0 + 6.0;
+            let y = mr.y + 34.0 + n as f32 * 30.0 + 6.0;
             crate::police::texte(&format!("NOM: {}_", self.nom), mr.x + 12.0, y + 16.0, 20.0, Color::new(0.9, 1.0, 0.6, 1.0));
             crate::police::texte("[ENTREE] valider   [ECHAP] annuler", mr.x + 12.0, y + 34.0, 14.0, Color::new(0.5, 0.8, 0.7, 1.0));
         }

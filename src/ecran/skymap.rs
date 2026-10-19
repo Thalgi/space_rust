@@ -215,7 +215,7 @@ impl Skymap {
         let outils = bandeau::strip_outils(ecran_ui);
         let sous_bandeau = bandeau::hauteur_occupee(ecran_ui);
         let (sur_menu, action) =
-            self.menu.input(m, clic, self.presets.len(), self.cam.focus_actif(), outils, sous_bandeau);
+            self.menu.input(m, clic, &self.presets, self.cam.focus_actif(), outils, sous_bandeau);
         if let Some(a) = action {
             self.appliquer(a);
         }
@@ -789,6 +789,8 @@ impl Skymap {
                 sauver_presets(&self.presets);
                 std::process::exit(0);
             }
+            // La liste des astres n'existe qu'au menu V2.
+            ActionMenu::Astre(_) => {}
         }
         // Toutes les branches sauf Retour/Quitter remplacent `self.sys` — vider
         // sans conditionner à laquelle est la garantie qui ne peut pas rater la
