@@ -98,6 +98,13 @@ pub struct Soleil {
     /// Dérivée du type par `etoile::pulsation`, appliquée par
     /// `Variante::appliquer`.
     pulse: (f32, f32),
+    /// **Ébullition de surface** (2026-10-19) : `0` garde la granulation
+    /// fine, au-delà la surface devient de grosses cellules qui gonflent et
+    /// éclatent, et l'étoile gonfle de −2 % à +3 %. `1` = cellules géantes,
+    /// `0,5` = plus nombreuses. Dérivée du type par `etoile::ebullition`.
+    ebullition: f32,
+    /// [`EBUL_PLAT`], [`EBUL_RELIEF`] ou [`EBUL_CONTOUR`].
+    ebul_style: f32,
     /// **Disque de matière autour de l'étoile** — accrétion d'un trou noir,
     /// disque protosolaire d'une jeune étoile.
     ///
@@ -172,6 +179,36 @@ fn facteur_pulsation(amplitude: f32, periode: f32, temps: f32) -> f32 {
     1.0 + amp * (std::f32::consts::TAU * temps / periode.max(1e-3)).sin()
 }
 
+/// **Styles d'ébullition**, que le shader lit dans `ebul_style`.
+pub const EBUL_PLAT: f32 = 0.0;
+/// La chaleur sert de hauteur : chaque bulle a un flanc éclairé, un flanc ombré.
+pub const EBUL_RELIEF: f32 = 1.0;
+/// Le bord du disque se soulève là où une grosse bulle passe sur le limbe.
+pub const EBUL_CONTOUR: f32 = 2.0;
+
+/// **Part des étoiles bouillonnantes qui sont instables.** Choix par défaut,
+/// faute d'enjeu : assez pour en croiser, pas au point d'en faire la règle.
+const PART_INSTABLE: f32 = 0.35;
+
+/// **Cette étoile est-elle instable ?** Dérivé de la graine, jamais tiré : un
+/// `gen_range` de plus décalerait tout ce qui suit et changerait le système
+/// entier à graine égale — même piège que [`normale_disque`].
+fn est_instable(graine: f32) -> bool {
+    (graine * 0.618_034).fract() < PART_INSTABLE
+}
+
+/// **Gonflement d'une surface en ébullition** : de −2 % à +3 % du rayon, au
+/// hasard plutôt qu'en cadence. Trois sinus de fréquences sans commune mesure :
+/// leur somme ne repasse jamais par le même motif, et c'est ce qui la sépare de
+/// la respiration régulière d'une céphéide. La graine décale l'horloge : deux
+/// étoiles ne gonflent pas ensemble.
+fn facteur_ebullition(graine: f32, temps: f32) -> f32 {
+    let t = temps + graine;
+    let s = (t * 0.53).sin() + 0.6 * (t * 0.97 + 1.3).sin() + 0.3 * (t * 1.71 + 2.1).sin();
+    // s ∈ [−1,9 ; 1,9], ramené sur [0,98 ; 1,03].
+    1.005 + 0.025 * s / 1.9
+}
+
 fn temps_initial(graine: f32) -> f32 {
     // Un demi-tour de graine : large devant les rythmes du spectacle (une
     // tache vit 8 à 16 s), sans partir si loin que les `f32` s'épaississent.
@@ -209,6 +246,8 @@ impl Soleil {
             couronne_type: 0.0,
             zone_hab: true,
             pulse: (0.0, 1.0),
+            ebullition: 0.0,
+            ebul_style: 0.0,
             disques: Vec::new(),
             mats,
             mat_plasma,
@@ -262,6 +301,21 @@ impl Soleil {
         // que lui se teste.
         self.pulse = (amplitude, periode);
         self
+    }
+
+    /// **Surface en ébullition** : voir les champs `ebullition` et `ebul_style`.
+    /// Le jeu passe par [`Self::avec_ebullition_du_type`] ; seule la galerie
+    /// l'appelle directement, pour montrer les deux aspects côte à côte.
+    pub fn avec_ebullition(mut self, e: f32, style: f32) -> Self {
+        self.ebullition = e.clamp(0.0, 1.0);
+        self.ebul_style = style;
+        self
+    }
+
+    /// **L'ébullition propre au type**, stable ou instable selon la graine.
+    pub fn avec_ebullition_du_type(self, nom: &str) -> Self {
+        let (e, style) = crate::etoile::ebullition(nom, est_instable(self.graine));
+        self.avec_ebullition(e, style)
     }
 
     /// Marque l'étoile comme rémanent compact (pulsar/magnétar/étoile à neutrons) :
@@ -384,7 +438,10 @@ impl Soleil {
     /// rayon nul ou négatif ferait disparaître l'étoile et renverrait une cible
     /// de clic vide.
     pub(super) fn facteur_pulse(&self) -> f32 {
-        facteur_pulsation(self.pulse.0, self.pulse.1, self.temps)
+        // L'ébullition passe par ici pour la même raison que la pulsation :
+        // `rayon_dessine` et la cible de clic en dérivent.
+        let ebul = if self.ebullition > 0.0 { facteur_ebullition(self.graine, self.temps) } else { 1.0 };
+        facteur_pulsation(self.pulse.0, self.pulse.1, self.temps) * ebul
     }
 
     /// **Part de la pulsation dans l'éclat** : le carré du facteur de rayon.
@@ -552,6 +609,43 @@ mod tests {
         }
         // Une période nulle ne divise pas par zéro.
         assert!(facteur_pulsation(0.2, 0.0, 1.0).is_finite());
+    }
+
+    /// **Le gonflement d'ébullition reste entre −2 % et +3 %**, et passe des
+    /// deux côtés de 1.
+    #[test]
+    fn l_ebullition_gonfle_entre_moins_deux_et_plus_trois_pour_cent() {
+        use super::facteur_ebullition;
+        let (mut bas, mut haut) = (f32::INFINITY, f32::NEG_INFINITY);
+        for k in 0..20000 {
+            let f = facteur_ebullition(123.4, k as f32 * 0.05);
+            bas = bas.min(f);
+            haut = haut.max(f);
+        }
+        assert!(bas >= 0.98 - 1e-4 && haut <= 1.03 + 1e-4, "{bas} à {haut}");
+        assert!(bas < 0.99 && haut > 1.02, "trop sage : {bas} à {haut}");
+    }
+
+    /// **Les deux aspects existent, et le tirage atteint les deux.**
+    ///
+    /// Stable et instable se distinguent pour chaque type qui bouillonne (sans
+    /// quoi la galerie montrerait deux cases identiques), Mira est toujours
+    /// instable, et la part d'instables tirée de la graine est celle annoncée.
+    #[test]
+    fn les_geantes_rouges_ont_un_aspect_stable_et_un_instable() {
+        use super::{est_instable, PART_INSTABLE};
+        use crate::etoile::ebullition;
+        for nom in ["Geante rouge", "Supergeante rouge"] {
+            assert!(ebullition(nom, false).0 > 0.0, "{nom} stable ne bouillonne pas");
+            assert_ne!(ebullition(nom, false), ebullition(nom, true), "{nom} : un seul aspect");
+        }
+        assert_eq!(ebullition("Mira", false), ebullition("Mira", true), "Mira doit rester instable");
+        assert_eq!(ebullition("Mira", false), ebullition("Geante rouge", true));
+        assert_eq!(ebullition("G (jaune)", true).0, 0.0, "une étoile ordinaire s'est mise à bouillir");
+
+        let n = 5000;
+        let instables = (0..n).filter(|k| est_instable(*k as f32 * 0.2)).count() as f32 / n as f32;
+        assert!((instables - PART_INSTABLE).abs() < 0.05, "{instables} instables pour {PART_INSTABLE} visés");
     }
 
     /// **Et il ne mange pas l'orbite de Mercure.**

@@ -15,14 +15,42 @@
 > « Où trouver quoi »). **Ne pas recommencer** : un fait qui se raconte va dans
 > un journal, pas ici.
 
-## Reprendre ici (état au 2026-09-26)
+## Reprendre ici (état au 2026-10-19)
 
 **Chantier en cours : Astres V2.** Branche `chantier-astres`, worktree
-`.claude/worktrees/astres-v2`. **32 commits d'avance sur `main`, rien de
-fusionné, rien de poussé.**
+`.claude/worktrees/astres-v2`. **Plus de 70 commits d'avance sur `main`, rien
+de fusionné, rien de poussé.** `main` n'a aucun commit que la branche n'ait
+pas : la fusion sera une avance rapide. ⚠️ Depuis le dossier principal, la
+branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
+worktree) : on travaille **dans le worktree**.
 
-**Vérifié (2026-10-03)** : **904 tests verts** (917 avec le binaire `mhd`),
+**Vérifié (2026-10-19)** : **906 tests verts** (919 avec le binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
+
+⚠️ **La session du 2026-10-03 a été coupée** par une erreur d'accès, au milieu
+d'un retour écran sur les comètes. Ce retour n'a **jamais été traité** :
+*« le rendu a une courbe et une droite provenant de la comète »*. Peut-être le
+rendu voulu du 9.3 (poussière incurvée, ions droits), peut-être un défaut — à
+trancher à l'écran. Détail au journal, « Ce qui reste ouvert ».
+
+**En cours (2026-10-19) : la validation à l'écran du lot 6.** Fait : l'étoile
+carbonée (validée), et un **lot 6.3** né de cette validation — les géantes et
+supergéantes rouges **bouillonnent** (grosses cellules de convection), avec un
+aspect stable et un instable tirés de la graine (35 % d'instables) :
+
+| Type | Stable | Instable |
+|---|---|---|
+| Géante rouge | à plat | contour irrégulier |
+| Supergéante rouge | à plat | relief éclairé |
+| Mira | — | toujours instable (contour), pulsation allégée à 15 % |
+
+Source unique : `etoile::ebullition(nom, instable)`, appliquée par
+`Variante::appliquer`. La **galerie des étoiles** montre les deux aspects côte
+à côte et a gagné le **filtre pixel (touche P)**. Reste à valider du lot 6 : la
+supergéante face à la géante (taille, éclat), la sdB face à la naine blanche
+(éclat), les quatre naines brunes, la naine brune au centre d'un système.
+⚠️ Le bouillonnement tourne en jeu sur toutes les géantes rouges : son coût de
+rendu de près n'a **pas été mesuré**.
 
 **Le lot 5 est clos** (2026-09-30). Ses **sept presets de trou noir sont au
 tirage** : l'utilisateur a préféré garder la variété plutôt que choisir une
@@ -126,9 +154,20 @@ UA : les systèmes sont mis à l'échelle de leur étoile.
 la skymap n'en montrait autrement qu'au tirage. Elle démarre à son périastre,
 donc en pleine queue.
 
-**Le prochain pas** : lot 10 (distinction des types :
-granulation paramétrée, assombrissement centre-bord), 11 (quasi-étoile), 12
-(disques proto au tirage).
+**Le 9.3 est livré** (2026-10-03) : cinq familles de comètes (glacée/Halley,
+poussiéreuse, carbonée, ionique, verte au C₂), une **queue d'ions** droite,
+fine et plus longue à côté de la queue de poussière, et une galerie refaite qui
+montre des **comètes** au lieu d'orbites. Retour écran en attente (ci-dessus).
+
+**Correctif hors lot** (`ba66d72`) : une taille de texte non bornée faisait
+grossir l'atlas de glyphes jusqu'à 32768², et miniquad tuait le jeu à
+l'ouverture de la galerie des comètes. Le bornage vit désormais dans
+`police::preparer`, là où il ne peut plus être oublié.
+
+**Le prochain pas** : finir de valider le lot 6, trancher la comète, puis
+lot 10 (distinction des types : granulation paramétrée — **déjà faite pour les
+géantes rouges** par le 6.3 —, assombrissement centre-bord pour toutes),
+11 (quasi-étoile), 12 (disques proto au tirage).
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de

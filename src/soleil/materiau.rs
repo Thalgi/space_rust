@@ -64,6 +64,8 @@ fn uniforms_soleil() -> Vec<UniformDesc> {
         UniformDesc::array(UniformDesc::new("spots", UniformType::Float4), super::MAX_TACHES),
         UniformDesc::new("zone", UniformType::Float1),
         UniformDesc::new("graine", UniformType::Float1),
+        UniformDesc::new("ebullition", UniformType::Float1),
+        UniformDesc::new("ebul_style", UniformType::Float1),
         UniformDesc::array(
             UniformDesc::new("poles", UniformType::Float4),
             super::champ::NB_POLES,

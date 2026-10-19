@@ -76,6 +76,8 @@ impl Soleil {
             mat.set_uniform("couronne_type", self.couronne_type);
             mat.set_uniform("zone", zone);
             mat.set_uniform("graine", self.graine);
+            mat.set_uniform("ebullition", self.ebullition);
+            mat.set_uniform("ebul_style", self.ebul_style);
             mat.set_uniform_array("spots", &spots[..]);
             mat.set_uniform_array("poles", &champ_uniforme[..]);
 

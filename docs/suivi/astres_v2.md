@@ -5,12 +5,21 @@ Journal du chantier décrit par
 
 **Où se trouve le travail** : branche `chantier-astres`, dans le worktree
 `.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
-n'est poussé. 32 commits d'avance sur `main` au 2026-09-26.
+n'est poussé. 70 commits d'avance sur `main` au 2026-10-03 — `main` n'en a
+aucun que la branche n'ait pas, la fusion sera une avance rapide.
 
-**État au 2026-10-03** : 904 tests verts, clippy à zéro. **Le lot 5 est clos**
-(ses sept presets de trou noir sont au tirage), **le 6 est livré** (supergéante
-rouge, sous-naine sdB, étoile carbonée, naine brune) et **le 7 aussi** : la
-pulsation, donc céphéide, Mira et ZZ Ceti. Tout est **à juger à l'écran**.
+**État au 2026-10-19** : 906 tests verts (919 avec le binaire `mhd`), clippy à
+zéro. **Le lot 5 est clos** (ses sept presets de trou noir sont au tirage), **le
+6 est livré** (supergéante rouge, sous-naine sdB, étoile carbonée, naine brune)
+et **prolongé d'un 6.3** (l'ébullition des géantes rouges), **le 7 aussi** (la
+pulsation : céphéide, Mira, ZZ Ceti), **le 8 abandonné**, **le 9 livré** (les
+comètes, 9.1 à 9.3). **Validation à l'écran du lot 6 en cours** : l'étoile
+carbonée est validée, le reste à suivre.
+
+⚠️ **La session du 2026-10-03 a été coupée net** à 17 h 07 par une erreur
+d'accès (« Your organization has disabled Claude subscription access »). Le
+dernier message de l'utilisateur n'a **jamais été traité** — voir « Ce qui reste
+ouvert » plus bas, *la courbe et la droite de la comète*.
 
 Deux dettes restent, petites et consignées plus bas : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de
@@ -44,19 +53,193 @@ silhouette « mince » n'a jamais été essayée.
 | **6.1 bis** — le défilé de la vue isolée couvre les ordinaires | **fait** | |
 | **6.2** — la naine brune comme **centre** d'un système | **fait**, à juger à l'écran | |
 | **6.2 bis** — ses quatre classes dans la planche des étoiles | **fait** | |
+| **6.3** — géantes et supergéantes rouges en ébullition, stables et instables | **fait et validé à l'écran** (2026-10-19) | |
+| **6.3 bis** — filtre pixel (touche P) dans la galerie des étoiles | fait | |
 | **7** — pulsation : céphéide, Mira, ZZ Ceti | **fait**, à juger à l'écran | |
 | **8.1** — le ciel en cubemap | **abandonné**, code retiré | `7f6e1aa` |
 | **8.2** — la déviation dans le shader | **abandonné**, code retiré | `dd55404`, `5e66b10` |
 | **9.1** — les comètes au tirage, et leur planche | **fait**, à juger à l'écran | |
-| **9.2** — la queue | **fait**, à juger à l'écran | |
-| 10 à 13 | à faire | |
+| **9.2** — la queue | **fait**, à juger à l'écran | `cd9da64` + 4 correctifs |
+| **9.3** — cinq familles de comètes, queue d'ions, galerie refaite | **fait**, retour écran en attente (voir « Ce qui reste ouvert ») | `8712a5a` |
+| 10 à 12 | à faire | |
 
-Deux correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`) et le
-`crash.log` sorti du dépôt.
+Trois correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`), le
+`crash.log` sorti du dépôt, et la taille de texte non bornée qui tuait le jeu à
+l'ouverture de la galerie des comètes (`ba66d72`).
 
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### Lot 6.3 : les géantes rouges bouillonnent (2026-10-19)
+
+**La demande, dans les mots de l'utilisateur**, en validant le lot 6 : rajouter
+de la variété d'aspect aux géantes et supergéantes rouges. Pas le gonflement de
+la céphéide, qu'il ne voulait pas reproduire, mais *« un effet où l'étoile est
+plus tumultueuse […] une boule de matière en effervescence »*, *« comme de l'eau
+bouillant dans une casserole »*, avec une couronne aussi large qu'avant. Mené en
+**essai jetable** dans la galerie (« on expérimente puis on optimisera
+après »), puis adopté.
+
+C'est la suite directe de la dette « la pulsation est trop sage » (lot 7, plus
+bas) : *« j'aurais préféré un côté tumultueux plus asymétrique »*. Elle était
+renvoyée à une V3 pour la céphéide ; elle trouve ici sa réponse pour les géantes
+rouges et pour Mira, **sans toucher à la forme d'onde de la pulsation**.
+
+⚠️ **Aucune trace écrite** des premières idées sur Bételgeuse (« ce qu'on
+hypothétisait au début ») : ni dans les docs, ni dans les deux sessions encore
+sur le disque. Le brief ci-dessus est donc la seule source.
+
+#### Ce qui a été fait
+
+**Un réglage `ebullition` sur le shader stellaire** (`soleil.frag.glsl`), à 0
+pour toutes les autres étoiles, qui restent strictement inchangées — chaque
+terme ajouté est un `mix(…, ebullition)` ou est gardé par `ebullition > 0`.
+Au-delà de 0 :
+
+- **De grosses cellules de convection** à la place de la granulation fine : un
+  bruit cellulaire 3D (`cellules`, Worley 3×3×3) sur la direction de la surface,
+  dont les centres **dérivent** lentement — une cellule roule, elle n'est pas
+  posée. Échelle `mix(5,0 ; 2,2 ; ebullition)` : à 1, quatre à cinq cellules
+  d'un bord à l'autre, comme les cellules géantes observées sur Bételgeuse ; à
+  0,5, plus nombreuses et plus petites.
+- **Un cycle de vie par cellule** (`bulles`) : elle gonfle en dôme clair, éclate
+  d'un coup en éclair chaud, refroidit en sombre, recommence. Sa phase vient de
+  son identité, donc **deux voisines ne sont jamais au même moment** — c'est
+  ce qui fait la casserole et pas la respiration.
+- **Deux couches** (`bouillon`) : les grosses bulles, et de plus petites, plus
+  vives, qui crèvent dessus (×2,7 en échelle, ×1,6 en vitesse, 30 % du poids).
+  Le grain fin d'origine reste en sourdine (±0,125) : sans lui, du plastique.
+- **Un bord assombri** au lieu de l'anneau clair (`rim` éteint par
+  `ebullition`) : la boule a du volume.
+- **Une couronne effilochée** en panaches qui bougent (halo par défaut
+  seulement), même largeur qu'avant.
+- **Un gonflement aléatoire de −2 % à +3 %** du rayon, demandé ensuite :
+  `facteur_ebullition`, trois sinus de fréquences sans commune mesure (0,53 ;
+  0,97 ; 1,71 rad/s), donc un motif qui ne se répète jamais — l'opposé de la
+  sinusoïde de la céphéide. Décalé par la graine. Il passe par `facteur_pulse`,
+  **le même chemin que la pulsation** : `rayon_dessine`, donc la cible de clic,
+  et l'éclat (au carré, soit ≈ −4 % à +6 %).
+
+#### Deux défauts du premier jet, vus à l'écran
+
+*« L'effet où les stries grises disparaissent subitement est-il
+corrigible ? »* — deux causes, corrigées toutes deux :
+
+1. **Le cycle ne se refermait pas.** Il finissait refroidi et sombre, et
+   `fract` le remettait à neuf d'une image à l'autre : la plaque grise
+   s'effaçait d'un coup. Chaque terme du cycle (gonflement, éclat,
+   refroidissement) revient désormais à zéro **avant** la fin du cycle.
+2. **La frontière entre deux cellules tranchait net** : c'est là que la
+   cellule la plus proche change, et sa phase avec elle. Tout ce qui est
+   propre à une cellule s'y éteint maintenant (`interieur`, sur `F2 − F1`).
+
+*« Le gris sombre est trop présent »* : cinq réglages s'additionnaient. Couleur
+la plus sombre 22 % → **50 %** de la teinte (un rouge sombre, plus un
+gris-noir), sillons −0,45 → **−0,28**, refroidissement −0,30 → **−0,18**,
+assombrissement du bord 45 % → **65 %**, ombre du relief 35 % → **60 %**. Les
+dômes et les éclats n'ont pas bougé : même contraste, plus clair.
+
+#### Trois styles, essayés côte à côte
+
+À la question *« l'aspect est-il projeté sur la surface ou en 3D ? »* :
+**projeté.** L'étoile est un impostor — un quad face caméra où le shader
+reconstruit une sphère parfaite. Le bruit est calculé en 3D (il enveloppe
+l'étoile sans couture et tourne avec elle), mais il est **peint** : pas de
+relief, et un contour parfaitement rond. Deux façons de donner du volume ont
+été essayées, en cases séparées :
+
+| Style | Constante | Ce qu'il fait |
+|---|---|---|
+| à plat | `EBUL_PLAT` (0) | le bouillonnement seul |
+| **relief** | `EBUL_RELIEF` (1) | la chaleur sert de **hauteur** ; sa pente, mesurée par différences finies, incline la normale, et une lumière fixe (haut gauche, côté caméra) éclaire un flanc de chaque dôme et ombre l'autre. Seul compte l'**écart** à la sphère lisse, sinon l'étoile serait à moitié dans l'ombre |
+| **contour** | `EBUL_CONTOUR` (2) | le bord du disque se soulève jusqu'à ~5 % là où une grosse bulle passe sur le limbe |
+
+⚠️ **Le contour est calculé avant l'aiguillage des deux passes, et identique
+dans les deux.** Le disque (opaque) et la couronne (translucide) se partagent le
+quad sur `rr <= limbe` contre `rr > limbe` ; si l'une calculait un bord et
+l'autre un autre, un liseré vide ou un recouvrement les séparerait. La couronne
+part aussi du bord réel (`(rr − limbe) / (couronne − limbe)`). La variable
+s'appelait d'abord `bord`, comme celle des taches plus bas dans le même `main` :
+légal en GLSL, trompeur à lire — renommée `limbe`.
+
+⚠️ **Le contour ne déforme que l'image.** Cible de clic, occultation et arches
+restent sur un cercle. Les 5 % sont sous la marge de 40 % de `Systeme::pick`.
+
+#### Tranché par l'utilisateur (2026-10-19)
+
+| Type | Stable | Instable |
+|---|---|---|
+| Géante rouge | à plat, ébullition 0,5 | **contour**, ébullition 1 |
+| Supergéante rouge | à plat, ébullition 1 | **relief**, ébullition 1 |
+| **Mira** | — | **toujours instable** : contour, ébullition 1 |
+
+Et **la pulsation de Mira est allégée de 20 % à 15 %** : elle bouillonne
+désormais aussi, et les deux mouvements s'additionnent. Les anciens modèles des
+deux types (granulation fine) sont **remplacés**, en jeu comme en galerie.
+
+**Par défaut, faute d'enjeu** (à rouvrir si le tirage déçoit) : **35 %** des
+géantes et supergéantes rouges sont instables (`PART_INSTABLE`). Ce n'est pas
+un choix de l'utilisateur.
+
+#### Comment c'est branché
+
+- **`etoile::ebullition(nom, instable) -> (échelle, style)`** : la table
+  ci-dessus, seule source. Une étoile ordinaire rend `(0, plat)`.
+- **`soleil::est_instable(graine)`** : **dérivé** de la graine (nombre d'or),
+  jamais tiré — un `gen_range` de plus décalerait tout le système à graine
+  égale, même piège que `normale_disque` et `champ::poles`.
+- **`Soleil::avec_ebullition_du_type(nom)`**, appelé par
+  **`Variante::appliquer`**, l'unique endroit qui configure une étoile d'après
+  son type : genèse, systèmes multiples, vue isolée et galerie en héritent
+  d'un coup. `la_source_unique_construit_toutes_les_variantes` le vérifie.
+- **La galerie** force les deux aspects (`aspects(nom)`, puis
+  `avec_ebullition` en direct) : en jeu on tombe sur l'un ou l'autre, la
+  planche-contact doit montrer les deux. Les cases s'appellent « Geante rouge -
+  stable / - instable », à la place des anciennes, dans la séquence.
+- Deux uniforms de plus au shader stellaire (`ebullition`, `ebul_style`),
+  tenus d'accord avec la déclaration Rust par
+  `uniforms_soleil_correspondent_au_shader`.
+
+#### 6.3 bis : le filtre pixel dans la galerie des étoiles
+
+Demandé pour valider le rendu final. **Touche P**, même cycle et même réglage
+global que partout (net → pixel → pixel + palette). Même mécanique que la
+galerie tellurique : une cible basse résolution, chaque cellule y garde son
+viewport **divisé par `PIX`**, dans le repère bas-gauche GL, et
+`pixel::blit` remonte le tout et quantifie si demandé. Pas de copie du blit :
+c'est ce que garde `tests_partage` dans `ecran/pixel.rs`.
+
+#### Tests, et ce qui ne se teste pas
+
+- `l_ebullition_gonfle_entre_moins_deux_et_plus_trois_pour_cent` — **red-check
+  fait** : amplitude doublée, le test casse.
+- `les_geantes_rouges_ont_un_aspect_stable_et_un_instable` — deux aspects
+  distincts par type, Mira toujours instable et égale à la géante instable, une
+  étoile ordinaire ne bout pas, et la part d'instables tirée de la graine est à
+  ±5 % de `PART_INSTABLE`. **Red-check fait** : supergéante instable ramenée à
+  plat, le test casse sur « un seul aspect ».
+
+⚠️ **Rien dans ce dépôt ne compile le GLSL** (pas de contexte graphique dans les
+tests, aucun validateur installé). Le shader n'a été vérifié qu'à l'écran, par
+l'utilisateur.
+
+**Ne se jugent qu'à l'œil** : que ça bouille sans trembler, que les plaques ne
+sautent plus, que le relief se lise comme un relief, que le contour ne fasse pas
+engrenage.
+
+#### Dette consignée
+
+- **Coût de rendu.** Le bouillonnement tourne **en jeu** sur toutes les géantes
+  et supergéantes rouges : deux bruits cellulaires (2 × 27 cellules) par pixel,
+  **trois fois plus** avec le relief (différences finies), plus un pour le
+  contour. Négligeable au cadrage par défaut (quelques pixels), à **mesurer de
+  près** avant de conclure. Piste si besoin : une seule couche au-delà d'une
+  certaine distance, ou le gradient analytique au lieu des différences finies.
+- Les panaches de couronne coûtent un `fbm` à **toutes** les couronnes, même à
+  `ebullition = 0` (multiplié par zéro, pas sauté). Petit, à garder en tête.
+- Le relief et le contour sont **exclusifs** dans le shader (un seul style).
+  Les combiner est trivial si un jour un type en a besoin.
 
 ### ⚠️ Une taille de texte non bornée pouvait tuer le jeu (2026-10-03)
 
@@ -775,6 +958,14 @@ Deux pistes, par coût croissant, à reprendre en V3 :
   que le mot « tumultueux » demande, et c'est plus difficile à doser sans
   basculer dans le tremblement.
 
+**Mise à jour du 2026-10-19 (lot 6.3)** : le « tumultueux » a trouvé une
+réponse **par la surface**, pas par l'onde. Les géantes et supergéantes rouges
+bouillonnent, et **Mira aussi** — toujours dans son aspect instable, pulsation
+allégée à 15 %. Le gonflement d'ébullition (−2 % à +3 %) est d'ailleurs la
+seconde piste ci-dessus, sous une autre forme : trois sinus sans commune
+mesure, donc jamais deux cycles superposables. **La céphéide, elle, n'a pas
+changé** : sa sinusoïde reste la dette V3.
+
 Deux autres manques, relevés par lecture du code et **non** signalés par
 l'utilisateur — à garder sous le coude, pas à traiter d'office :
 
@@ -978,6 +1169,16 @@ pas choisir.
 
 ### Ce qui reste ouvert, et que personne ne garde
 
+- ⚠️ **La comète : « une courbe et une droite »** — dernier message de
+  l'utilisateur le 2026-10-03, 17 h 07, **jamais traité** (la session a été
+  coupée par une erreur d'accès). Mot pour mot : *« Je crois que t'as trouvé le
+  pb car ça crashait quand je sélectionnais la vue comètes, encore des
+  correctifs à faire je pense car le rendu a une courbe et une droite provenant
+  de la comète. »* La capture jointe (`images/11.png` du dossier temporaire de
+  la session) **n'existe plus**. Deux lectures possibles : c'est le rendu
+  **voulu** du 9.3 — queue de poussière incurvée, queue d'ions rigoureusement
+  droite (une garde le tient) — ou un vrai défaut. À trancher à l'écran avant
+  de toucher à quoi que ce soit. Le crash, lui, est corrigé (`ba66d72`).
 - **Le GLSL ne compile qu'au lancement.** Aucun test du dépôt ne peut le
   vérifier. C'est arrivé une fois au 5.3 — une variable employée dix lignes
   avant sa déclaration, panic au démarrage. `verif::usage_avant_declaration`

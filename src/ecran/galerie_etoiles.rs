@@ -131,6 +131,20 @@ fn naines_brunes() -> Vec<(String, Box<dyn Astre>)> {
         .collect()
 }
 
+/// **Les aspects d'un type à exposer** : `None` pour un type à aspect unique,
+/// sinon ses deux formes, stable puis instable.
+///
+/// ⚠️ En jeu, l'aspect se dérive de la graine : on tombe sur l'un ou l'autre.
+/// La planche les force tous les deux — c'est la seule vue où on les compare.
+fn aspects(nom: &str) -> Vec<Option<bool>> {
+    use crate::etoile::ebullition;
+    if ebullition(nom, false) != ebullition(nom, true) {
+        vec![Some(false), Some(true)]
+    } else {
+        vec![None]
+    }
+}
+
 /// Galerie « planche-contact » des types d'étoiles (visualisation/calibration).
 ///
 /// ⚠️ Les cellules sont des **`Astre`**, et non des `Soleil`. Depuis le lot 6.2
@@ -141,28 +155,41 @@ fn naines_brunes() -> Vec<(String, Box<dyn Astre>)> {
 pub struct GalerieEtoiles {
     cellules: Vec<(String, Box<dyn Astre>)>,
     scroll: f32,
+    /// Cible basse résolution du filtre pixel (recréée si la fenêtre change).
+    cible: Option<RenderTarget>,
+    rt_dims: (u32, u32),
 }
 
 impl GalerieEtoiles {
     pub fn new() -> Self {
         let cellules = catalogue()
             .into_iter()
-            .map(|(nom, rayon, temp, lumi, mode)| {
-                // ⚠️ `couleur_etoile`, pas `couleur_corps_noir` : une étoile
-                // carbonée doit sa teinte à un filtre moléculaire, et la
-                // vitrine la montrerait orange là où le jeu la peint rouge.
-                let s = Soleil::new(Vec3::ZERO, rayon, couleur_etoile(nom, temp), lumi);
-                // ⚠️ **La même source que la genèse.** Cette chaîne était
-                // recopiée ici, et les deux avaient déjà divergé : le
-                // `mode > 4.5` local attrapait aussi le mode 6, et le T Tauri
-                // du catalogue restait au mode 1, donc sans disque.
-                let s = Variante::de_mode(mode).appliquer(s, nom);
-                (nom.to_string(), Box::new(s) as Box<dyn Astre>)
+            .flat_map(|(nom, rayon, temp, lumi, mode)| {
+                aspects(nom).into_iter().map(move |instable| {
+                    // ⚠️ `couleur_etoile`, pas `couleur_corps_noir` : une étoile
+                    // carbonée doit sa teinte à un filtre moléculaire, et la
+                    // vitrine la montrerait orange là où le jeu la peint rouge.
+                    let s = Soleil::new(Vec3::ZERO, rayon, couleur_etoile(nom, temp), lumi);
+                    // ⚠️ **La même source que la genèse.** Cette chaîne était
+                    // recopiée ici, et les deux avaient déjà divergé : le
+                    // `mode > 4.5` local attrapait aussi le mode 6, et le T Tauri
+                    // du catalogue restait au mode 1, donc sans disque.
+                    let s = Variante::de_mode(mode).appliquer(s, nom);
+                    let (s, libelle) = match instable {
+                        None => (s, nom.to_string()),
+                        Some(i) => {
+                            let (e, style) = crate::etoile::ebullition(nom, i);
+                            let etat = if i { "instable" } else { "stable" };
+                            (s.avec_ebullition(e, style), format!("{nom} - {etat}"))
+                        }
+                    };
+                    (libelle, Box::new(s) as Box<dyn Astre>)
+                })
             })
             .chain(trous_noirs())
             .chain(naines_brunes())
             .collect();
-        Self { cellules, scroll: 0.0 }
+        Self { cellules, scroll: 0.0, cible: None, rt_dims: (0, 0) }
     }
 
     /// Une frame. Renvoie `true` pour revenir à l'accueil (Échap).
@@ -174,9 +201,29 @@ impl GalerieEtoiles {
             crate::soleil::vider_cache_materials();
             *self = Self::new();
         }
+        if is_key_pressed(KeyCode::P) {
+            // Cycle NET -> PIXEL -> PIXEL+PALETTE, sur le réglage global.
+            crate::reglages::regler_rendu(crate::reglages::mode_rendu().suivant());
+        }
         let dt = get_frame_time().min(0.05);
 
-        clear_background(Color::new(0.01, 0.01, 0.03, 1.0));
+        let fond = Color::new(0.01, 0.01, 0.03, 1.0);
+        clear_background(fond);
+
+        // Filtre pixel : même mécanique que la galerie tellurique — une cible
+        // basse résolution, chaque cellule y garde son viewport divisé par
+        // `PIX`, et `pixel::blit` remonte le tout (et quantifie si demandé).
+        let pixelise = crate::reglages::mode_rendu().pixelise();
+        if pixelise {
+            let dims = super::pixel::dimensions();
+            if self.rt_dims != dims || self.cible.is_none() {
+                self.cible = Some(super::pixel::nouvelle_cible(dims.0, dims.1));
+                self.rt_dims = dims;
+            }
+            set_camera(&Camera2D { render_target: self.cible.clone(), ..Default::default() });
+            clear_background(fond);
+            set_default_camera();
+        }
 
         let n = self.cellules.len().max(1);
         let top = 48.0;
@@ -204,7 +251,7 @@ impl GalerieEtoiles {
                 continue;
             }
             let pos = vec3(0.0, 0.0, 7.5); // recul pour cadrer couronne / jets / vent
-            let cam3d = Camera3D {
+            let mut cam3d = Camera3D {
                 position: pos,
                 target: Vec3::ZERO,
                 up: Vec3::Y,
@@ -218,6 +265,18 @@ impl GalerieEtoiles {
                 )),
                 ..Default::default()
             };
+            if pixelise {
+                // Même repère bas-gauche que le rendu direct, divisé par
+                // l'échelle : le blit (`flip_y`) préserve les hauteurs GL.
+                let p = super::pixel::PIX as f32;
+                cam3d.render_target = self.cible.clone();
+                cam3d.viewport = Some((
+                    (cell_x / p) as i32,
+                    ((screen_height() - (cell_y + render_h)) / p) as i32,
+                    (cw / p) as i32,
+                    (render_h / p) as i32,
+                ));
+            }
             set_camera(&cam3d);
 
             let (right, up, forward) = crate::camera::base_camera(Vec3::ZERO - pos);
@@ -241,6 +300,11 @@ impl GalerieEtoiles {
 
         // --- Phase 2D : texte après une seule remise en caméra écran. ---
         set_default_camera();
+        if pixelise {
+            if let Some(rt) = &self.cible {
+                super::pixel::blit(&rt.texture);
+            }
+        }
         let col = Color::new(0.9, 0.85, 0.6, 1.0);
         for (nom, cell_x, y) in &labels {
             let tw = crate::police::mesure(nom, 18);
@@ -249,7 +313,7 @@ impl GalerieEtoiles {
 
         draw_rectangle(0.0, 0.0, screen_width(), top, Color::new(0.01, 0.01, 0.03, 1.0));
         crate::police::texte(
-            "GALERIE DES ETOILES   -   molette: defiler   R: shaders   Echap: menu",
+            "GALERIE DES ETOILES   -   molette: defiler   R: shaders   P: filtre pixel   Echap: menu",
             12.0,
             30.0,
             18.0,

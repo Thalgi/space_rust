@@ -264,9 +264,30 @@ pub fn activite_type(rayon: f32, luminosite: f32) -> f32 {
 pub fn pulsation(nom: &str) -> (f32, f32) {
     match nom {
         "Cepheide" => (0.10, 7.0),
-        "Mira" => (0.20, 16.0),
+        // Allégée de 20 % (réel) à 15 % le 2026-10-19 : elle bouillonne aussi
+        // désormais (`ebullition`), et les deux mouvements s'additionnent.
+        "Mira" => (0.15, 16.0),
         "Naine blanche pulsante (ZZ Ceti)" => (0.04, 1.4),
         _ => (0.0, 0.0),
+    }
+}
+
+/// **Ébullition de surface d'un type** : `(échelle, style)`, ce que reçoit
+/// `Soleil::avec_ebullition`. `(0, plat)` : la granulation fine ordinaire.
+///
+/// Jugé à l'écran le 2026-10-19 : la géante et la supergéante rouges ont un
+/// aspect **stable** (grosses cellules peintes à plat) et un aspect
+/// **instable** — le contour qui se déforme pour la géante, le relief pour la
+/// supergéante. Qui est instable se dérive de la graine (`soleil::est_instable`).
+/// Mira l'est toujours : géante de la branche asymptotique, elle pulse en plus.
+pub fn ebullition(nom: &str, instable: bool) -> (f32, f32) {
+    use crate::soleil::{EBUL_CONTOUR, EBUL_PLAT, EBUL_RELIEF};
+    match (nom, instable) {
+        ("Geante rouge", false) => (0.5, EBUL_PLAT),
+        ("Geante rouge", true) | ("Mira", _) => (1.0, EBUL_CONTOUR),
+        ("Supergeante rouge", false) => (1.0, EBUL_PLAT),
+        ("Supergeante rouge", true) => (1.0, EBUL_RELIEF),
+        _ => (0.0, EBUL_PLAT),
     }
 }
 

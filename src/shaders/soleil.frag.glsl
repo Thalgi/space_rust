@@ -12,6 +12,8 @@ uniform float couronne_type;   // 0 = halo, 1 = jets bipolaires (pulsar), 2 = ve
 uniform vec4 spots[8]; // xyz = direction (repère surface), w = rayon effectif
 uniform float zone;    // 0 = disque de l'étoile (opaque), 1 = couronne (translucide)
 uniform float graine;  // graine de surface, propre à chaque étoile
+uniform float ebullition; // 0 = granulation fine ; > 0 = cellules qui bouillonnent (essai)
+uniform float ebul_style; // essai : 0 = peint à plat, 1 = relief par l'éclairage, 2 = contour irrégulier
 
 // **Le champ magnétique de l'étoile** (sous-lot 3.4) : xyz = direction d'un
 // pôle (repère surface), w = force SIGNÉE, le signe étant la polarité.
@@ -51,9 +53,96 @@ float fbm(vec3 p) {
     return v;
 }
 
+vec3 hash3(vec3 p) {
+    return vec3(hash(p), hash(p + 17.13), hash(p + 31.71));
+}
+
+// **Cellules de convection** (essai d'ébullition) : distance au centre de la
+// cellule la plus proche (x), à la seconde (y), identité de la plus proche (z).
+// Les centres dérivent lentement : une cellule roule, elle n'est pas posée.
+vec3 cellules(vec3 p, float t) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    float f1 = 8.0;
+    float f2 = 8.0;
+    float id = 0.0;
+    for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+            for (int z = -1; z <= 1; z++) {
+                vec3 g = vec3(float(x), float(y), float(z));
+                vec3 h = hash3(i + g);
+                vec3 r = g + 0.5 + 0.38 * sin(t + 6.2831 * h) - f;
+                float dd = dot(r, r);
+                if (dd < f1) {
+                    f2 = f1;
+                    f1 = dd;
+                    id = h.x;
+                } else if (dd < f2) {
+                    f2 = dd;
+                }
+            }
+        }
+    }
+    return vec3(sqrt(f1), sqrt(f2), id);
+}
+
+// **Chaleur d'une couche de bulles** : 0 = sillon froid, 1 = bulle qui crève.
+// Chaque cellule vit à son rythme (son identité décale sa phase) : elle gonfle
+// lentement, éclate d'un coup, refroidit, recommence — une casserole, pas une
+// respiration : deux cellules voisines ne sont jamais au même moment.
+float bulles(vec3 p, float t, float vitesse) {
+    vec3 c = cellules(p, t * 0.25);
+    float vie = fract(t * vitesse + c.z * 13.7);
+    // ⚠️ Un cycle qui se REFERME : à vie = 1, tout est revenu à l'état de
+    // vie = 0. Le premier jet finissait refroidi, sombre, et `fract` le
+    // remettait à neuf d'un coup : les plaques grises s'effaçaient d'une
+    // image à l'autre.
+    float gonfle = smoothstep(0.0, 0.62, vie) * (1.0 - smoothstep(0.62, 0.80, vie));
+    float eclat = smoothstep(0.60, 0.68, vie) * (1.0 - smoothstep(0.68, 0.85, vie));
+    float refroid = smoothstep(0.70, 0.85, vie) * (1.0 - smoothstep(0.88, 1.0, vie));
+    // Le dôme : une tache claire qui grossit au centre de la cellule.
+    float dome = 1.0 - smoothstep(0.0, mix(0.18, 0.62, gonfle), c.x);
+    // ⚠️ Ce qui est propre à UNE cellule s'éteint à sa frontière : c'est là
+    // que la cellule la plus proche change, et sa phase avec elle. Sans ce
+    // fondu, la frontière tranchait net entre deux états.
+    float interieur = smoothstep(0.0, 0.22, c.y - c.x);
+    // Le sillon : sombre là où deux cellules se touchent.
+    float sillon = 1.0 - smoothstep(0.0, 0.14, c.y - c.x);
+    float propre = dome * (0.30 + 0.35 * gonfle) + eclat * 0.55 - refroid * 0.18;
+    return clamp(0.40 + propre * interieur - sillon * 0.28, 0.0, 1.0);
+}
+
+// Les deux couches de bulles : les grosses, et les petites qui crèvent dessus.
+float bouillon(vec3 pb) {
+    return mix(bulles(pb, time, 0.05), bulles(pb * 2.7 + 11.0, time * 1.6, 0.09), 0.30);
+}
+
+// Rotation propre : du repère monde au repère de la surface, qui tourne.
+vec3 tourner(vec3 n) {
+    float a = time * 0.12;
+    float ca = cos(a); float sa = sin(a);
+    return vec3(n.x * ca - n.z * sa, n.y, n.x * sa + n.z * ca);
+}
+
 void main() {
     float rr = length(v_q);
     if (rr > couronne) discard;
+
+    // Décalage propre à cette étoile : le bruit ci-dessous ne dépend que
+    // de la DIRECTION, donc sans lui toutes les étoiles portent le même
+    // motif de granulation, au pixel près.
+    vec3 dec = vec3(graine, graine * 1.7, graine * 0.3);
+    float ech = mix(5.0, 2.2, ebullition);
+
+    // **Contour irrégulier** (essai, `ebul_style` 2) : le bord du disque se
+    // soulève là où une grosse bulle passe sur le limbe. ⚠️ Calculé AVANT
+    // l'aiguillage des passes, et identique dans les deux : sinon disque et
+    // couronne ne se rejoindraient plus et un liseré vide les séparerait.
+    float limbe = 1.0;
+    if (ebul_style > 1.5) {
+        vec3 dl = tourner(normalize(v_q.x * cam_right + v_q.y * cam_up + 1e-4 * to_cam));
+        limbe = 1.0 + 0.10 * (bulles(dl * ech + dec, time, 0.05) - 0.45);
+    }
 
     // DEUX PASSES, une seule source.
     //
@@ -69,8 +158,8 @@ void main() {
     // GLSL ES 100 ne sait pas couper l'écriture de profondeur par fragment, d'où
     // deux pipelines (`zone`) sur le même shader. Même remède que pour les
     // planètes : corps opaque d'un côté, halo sans profondeur de l'autre.
-    if (zone > 0.5 && rr <= 1.0) discard; // passe couronne
-    if (zone < 0.5 && rr > 1.0) discard;  // passe corps
+    if (zone > 0.5 && rr <= limbe) discard; // passe couronne
+    if (zone < 0.5 && rr > limbe) discard;  // passe corps
 
     if (couronne_type > 4.5) {
         // ===== TROU NOIR (stylisé, sans lentille gravitationnelle) =====
@@ -105,19 +194,12 @@ void main() {
         return;
     }
 
-    if (rr <= 1.0) {
-        float z = sqrt(max(0.0, 1.0 - rr * rr));
-        vec3 n = normalize(v_q.x * cam_right + v_q.y * cam_up + z * to_cam);
-
-        // Rotation propre.
-        float a = time * 0.12;
-        float ca = cos(a); float sa = sin(a);
-        vec3 d = vec3(n.x * ca - n.z * sa, n.y, n.x * sa + n.z * ca);
-
-        // Décalage propre à cette étoile : le bruit ci-dessous ne dépend que
-        // de la DIRECTION, donc sans lui toutes les étoiles portent le même
-        // motif de granulation, au pixel près.
-        vec3 dec = vec3(graine, graine * 1.7, graine * 0.3);
+    if (rr <= limbe) {
+        // Sphère de rayon `limbe` dans cette direction (1 hors contour irrégulier).
+        float rs = rr / limbe;
+        float z = sqrt(max(0.0, 1.0 - rs * rs));
+        vec3 n = normalize((v_q.x * cam_right + v_q.y * cam_up) / limbe + z * to_cam);
+        vec3 d = tourner(n);
 
         // --- Le champ magnétique, ici ---
         // Somme de noyaux en cloche, un par pôle : exactement ce que calcule
@@ -172,6 +254,40 @@ void main() {
         float camp = fbm(d * 16.0 + dec + 50.0);
         col += smoothstep(0.66, 0.72, camp) * teinte * 0.5;
 
+        if (ebullition > 0.0) {
+            // **Ébullition** (essai) : quelques cellules géantes sur une
+            // supergéante, comme Bételgeuse, plus nombreuses sur une géante.
+            // Deux couches : les grosses bulles, et de plus petites, plus
+            // vives, qui crèvent à leur surface.
+            vec3 pb = d * ech + dec + warp * 0.6;
+            float h0 = bouillon(pb);
+            // Le grain fin reste, en sourdine : sans lui, du plastique.
+            float h = h0 + (gran - 0.5) * 0.25;
+            vec3 cb = mix(teinte * 0.50, teinte * 0.95, smoothstep(0.15, 0.55, h));
+            cb = mix(cb, cHot, smoothstep(0.62, 0.95, h));
+            col = mix(col, cb, clamp(ebullition * 2.0, 0.0, 1.0));
+
+            if (ebul_style > 0.5 && ebul_style < 1.5) {
+                // **Relief par l'éclairage** (essai) : la chaleur sert de
+                // hauteur, sa pente incline la normale, et une lumière fixe
+                // (haut gauche, côté caméra) éclaire un flanc de chaque dôme
+                // et ombre l'autre. Seul compte l'ÉCART à la sphère lisse :
+                // l'étoile ne doit pas se retrouver à moitié dans l'ombre.
+                vec3 ref = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), step(0.99, abs(d.y)));
+                vec3 t1 = normalize(cross(d, ref));
+                vec3 t2 = cross(d, t1);
+                float e = 0.015;
+                float hx = bouillon(pb + t1 * (e * ech));
+                float hy = bouillon(pb + t2 * (e * ech));
+                vec3 pente = ((hx - h0) * t1 + (hy - h0) * t2) / e;
+                vec3 nb = normalize(d - pente * 0.06);
+                vec3 lum = tourner(normalize(-0.55 * cam_right + 0.65 * cam_up + 0.55 * to_cam));
+                col *= clamp(1.0 + 2.0 * (dot(nb, lum) - dot(d, lum)), 0.60, 1.6);
+            }
+            // Un bord assombri : la boule a du volume au lieu d'un anneau clair.
+            col *= mix(1.0, mix(0.65, 1.0, sqrt(z)), ebullition);
+        }
+
         // Un champ fort bloque la convection bien AVANT de creuser une tache :
         // c'est le voile sombre qui entoure un groupe. Sans lui, la tache
         // s'arrête net sur une surface qui l'ignore — la moitié de l'effet
@@ -219,7 +335,7 @@ void main() {
 
         // Bord renforcé (limb brightening) -> anneau lumineux.
         float rim = smoothstep(0.45, 0.0, z);
-        col += rim * teinte * 0.55;
+        col += rim * teinte * 0.55 * (1.0 - ebullition);
 
         gl_FragColor = vec4(col, 1.0);
     } else if (couronne_type > 0.5 && couronne_type < 1.5) {
@@ -273,12 +389,15 @@ void main() {
         gl_FragColor = vec4(windcol, clamp(w, 0.0, 1.0) * 0.85);
     } else {
         // Couronne : décroît de r=1 à r=couronne ; forme modulée par couronne_irreg.
-        float g = 1.0 - (rr - 1.0) / (couronne - 1.0);
+        float g = 1.0 - (rr - limbe) / (couronne - limbe);
         g = clamp(g, 0.0, 1.0);
         float ang = atan(v_q.y, v_q.x);
         float ray = fbm(vec3(cos(ang) * 3.0, sin(ang) * 3.0, time * 0.05) + 10.0);
         float spik = mix(1.0, 0.35 + 1.3 * ray, couronne_irreg);
         g = pow(g, 1.7) * spik;
+        // Ébullition (essai) : la couronne s'effiloche en panaches qui bougent.
+        float panache = fbm(vec3(cos(ang) * 2.2, sin(ang) * 2.2, time * 0.18) + 30.0);
+        g *= mix(1.0, 0.35 + 1.5 * panache, ebullition);
         gl_FragColor = vec4(teinte, clamp(g, 0.0, 1.0) * 0.6);
     }
 }

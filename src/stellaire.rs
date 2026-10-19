@@ -91,7 +91,7 @@ impl Variante {
     /// étoiles — ne pulse pas.
     pub fn appliquer(self, s: crate::soleil::Soleil, nom: &str) -> crate::soleil::Soleil {
         let (amp, periode) = crate::etoile::pulsation(nom);
-        let s = s.avec_pulsation(amp, periode);
+        let s = s.avec_pulsation(amp, periode).avec_ebullition_du_type(nom);
         match self {
             Variante::Normale => s,
             Variante::Jets => s.avec_jets(),
@@ -320,6 +320,7 @@ mod tests_variante {
             "avec_trou_noir(",
             "avec_disque_protosolaire(",
             "avec_pulsation(",
+            "avec_ebullition_du_type(",
         ] {
             assert!(ici.contains(builder), "`Variante::appliquer` ne sait pas faire `{builder}`");
         }

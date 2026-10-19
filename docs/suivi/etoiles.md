@@ -11,7 +11,10 @@ Légende : `[ ]` à faire · `[x]` fait · `[~]` partiel
 
 **Types** (`etoile.rs::ProfilEtoile::aleatoire`) :
 - [x] Séquence principale **O B A F G K M** (couleur corps noir, rayon/lumi croissants).
-- [x] **Géante rouge** (énorme, froide, lumineuse).
+- [x] **Géante rouge** (énorme, froide, lumineuse). **Surface en ébullition depuis le
+  2026-10-19** (lot 6.3) : grosses cellules de convection qui gonflent et éclatent, au lieu de
+  la granulation fine. Deux aspects tirés de la graine — **stable** (à plat) ou **instable**
+  (contour qui se déforme). Journal : [`astres_v2.md`](astres_v2.md), lot 6.3.
 - [x] **Naine blanche** (minuscule, très chaude, peu lumineuse).
 
 **Rendu** (`soleil.frag.glsl` + `soleil/`) :
@@ -30,9 +33,14 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
 ## Types standard manquants
 
 - [x] **Supergéante rouge** (Bételgeuse) : preset galerie (colossale, froide, lumineuse).
+  **Au tirage** depuis le lot 6.1 (2026-09-30). **En ébullition** depuis le lot 6.3
+  (2026-10-19) : cellules géantes, quatre ou cinq d'un bord à l'autre ; aspect **stable**
+  (à plat) ou **instable** (relief éclairé).
 - [x] **Supergéante bleue** (Rigel) : preset galerie + vent stellaire (`couronne_type 2`).
 - [x] **Sous-naine** (subdwarf) : preset galerie (petite/chaude).
-- [ ] **Naine brune** (déjà côté gazeuses) : à relier ? (chevauchement géante/étoile).
+- [x] **Naine brune** (déjà côté gazeuses) : reliée au lot 6.2 (2026-09-30) — elle peut tenir le
+  **centre** d'un système, rendue en géante gazeuse ; ses quatre classes (M, L, T, Y) sont
+  dans la galerie des étoiles.
 - [x] **Protoétoile / T Tauri** : preset galerie + jets bipolaires, **et son disque
   protosolaire** depuis le 2026-09-26 (mode de couronne 6, `Variante::Proto`). Il partageait
   le mode 1 avec l'étoile à neutrons, qui n'a que faire d'un berceau de planètes.
@@ -43,9 +51,13 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
 - [x] **Pulsar** : faisceau bipolaire qui **tourne** (effet phare) + flash périodique (`couronne_type 3`).
 - [x] **Wolf-Rayet** : **vent stellaire** turbulent en expansion, bleu-violet (`couronne_type 2`).
 - [x] **Étoile carbonée (C)** : preset galerie (rouge sombre profond).
-- [ ] **Variable céphéide / Mira** : **pulsation** (rayon + luminosité qui oscillent).
+- [x] **Variable céphéide / Mira** : **pulsation** (rayon + luminosité qui oscillent), lot 7
+  (2026-09-30). Céphéide 10 %, Mira **15 %** (20 % jusqu'au 2026-10-19). **Mira bouillonne**
+  en plus, toujours dans l'aspect instable des géantes rouges (contour). La sinusoïde de la
+  céphéide reste jugée « trop sage » : dette V3.
 - [~] **Étoile à flares** (naine M active) : preset galerie présent ; sursauts/CME pas encore (cf. recherche).
-- [ ] **Naine blanche pulsante (ZZ Ceti)** : oscillation rapide de luminosité.
+- [x] **Naine blanche pulsante (ZZ Ceti)** : oscillation rapide de luminosité, lot 7 (amplitude
+  exagérée à 4 %, assumé).
 - [~] **Trou noir** (accrétion) : preset galerie présent (`couronne_type 5` = horizon noir + anneau
   de photons + disque d'accrétion incliné, Doppler + spirale, **stylisé**). Reste : lentille
   gravitationnelle (arc du disque au-dessus de l'horizon) — le vrai gros morceau. *(2026-07-04)*
@@ -76,7 +88,9 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
       (bulle de plasma qui se détache et s'éloigne). À rechercher : déclenchement (reconnexion
       magnétique au-dessus des taches), forme (ruban + boucle post-flare), animation, couleur.
       Plus fréquent sur naines M actives / T Tauri / étoiles jeunes.
-- [ ] **Granulation paramétrée** : échelle/contraste selon le type (fine pour naines,
+- [~] **Granulation paramétrée** — *partiel depuis le 2026-10-19* : les géantes et supergéantes
+      rouges (et Mira) ont leurs cellules géantes (uniform `ebullition`) ; les autres types
+      gardent la recette commune, reste du lot 10. Échelle/contraste selon le type (fine pour naines,
       grossière pour supergéantes), `gran_scale`/`gran_contraste`.
 - [ ] **Pulsation** : rayon et luminosité modulés par le temps (`pulse_amp`, `pulse_freq`).
 - [ ] **Taux d'activité** : densité de taches/éruptions selon le type (naines M & jeunes = +).

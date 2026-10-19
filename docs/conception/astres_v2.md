@@ -835,6 +835,48 @@ au-dessus du rayon peint. Seule la marge respire.
 ZZ Ceti a le gabarit d'une naine blanche. Le §3 bis l'autorise — une
 représentation distincte à l'écran, pas forcément une teinte distincte.
 
+⚠️ **Révisé le 2026-10-19** : l'amplitude de Mira passe de 20 % à **15 %**,
+parce qu'elle bouillonne désormais aussi (§6 nonies) et que les deux mouvements
+s'additionnent.
+
+## 6 nonies. Le lot 6.3 : les géantes rouges bouillonnent (2026-10-19)
+
+Ajouté en validant le lot 6, à la demande de l'utilisateur : plus de variété
+d'aspect pour la géante et la supergéante rouges, *« une boule de matière en
+effervescence »*, *« comme de l'eau bouillant dans une casserole »* — et
+explicitement **pas** le gonflement régulier de la céphéide. Mené en essai dans
+la galerie, puis adopté. Le récit, les réglages et les deux défauts corrigés
+sont au journal ([`../suivi/astres_v2.md`](../suivi/astres_v2.md), lot 6.3).
+
+**Ce qui a été décidé, et par qui :**
+
+| Type | Stable | Instable |
+|---|---|---|
+| Géante rouge | grosses cellules peintes à plat (ébullition 0,5) | **contour** irrégulier (ébullition 1) |
+| Supergéante rouge | grosses cellules peintes à plat (ébullition 1) | **relief** par l'éclairage (ébullition 1) |
+| Mira | — | toujours instable : contour, pulsation allégée à 15 % |
+
+- **L'utilisateur** a choisi l'association aspect → type (« la géante en
+  ébullition rend bien une géante stable, la supergéante contour rendrait bien
+  une géante instable… »), le remplacement des anciens modèles, l'instabilité
+  de Mira et l'allègement de sa pulsation.
+- **Choix par défaut, faute d'enjeu** : 35 % d'instables au tirage
+  (`soleil::PART_INSTABLE`), dérivé de la graine.
+
+**Lien avec le lot 10 (§3 ter, distinguer les types entre eux).** Ce lot en
+règle **une part** sans l'avoir prévu : la granulation n'est plus « la même
+recette pour une naine M et une supergéante » — les géantes rouges ont
+désormais des cellules de convection géantes, ce que la §3 ter réclamait
+(« une fraction du rayon stellaire »). Le bord assombri de l'ébullition
+anticipe aussi le limbe du lot 10, **pour ces seuls types**. Restent au lot 10 :
+la granulation paramétrée des autres types, l'assombrissement centre-bord pour
+**toutes** les étoiles (décision 3 du §8 bis), l'activité par type.
+
+**Le relief et le contour sont des impostures assumées**, comme `PX_MIN` :
+l'étoile reste un impostor, une sphère parfaite reconstruite dans un quad. Le
+relief ne déplace rien (il éclaire une pente calculée), le contour ne déforme
+que l'image — cible de clic et occultation restent sur un cercle.
+
 ## 7. Hors périmètre
 
 **Rendre les arches visibles au cadrage par défaut** : tranché et chiffré par
