@@ -42,6 +42,11 @@ pub struct Calques {
     pub planetes_pleines: bool,
     /// Orbites des étoiles entre elles (systèmes multiples).
     pub etoiles: bool,
+    /// Trajectoires des **comètes**, à part de celles des planètes
+    /// (2026-10-20) : une orbite cométaire traverse tout le système, et sur un
+    /// système garni elle relie visuellement des planètes qui n'ont rien à
+    /// voir entre elles. Son propre interrupteur, et une teinte plus sombre.
+    pub cometes: bool,
     /// Orbites des lunes, centrées sur leur planète.
     pub lunes: bool,
     /// Anneaux de la zone habitable.

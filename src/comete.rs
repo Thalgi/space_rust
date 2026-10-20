@@ -27,7 +27,10 @@ pub const SEUIL_ACTIVITE: f32 = 3.0;
 /// mille. À l'échelle du jeu, la rendre proportionnelle au noyau la rendrait
 /// invisible ; elle est donc proportionnelle à la **distance à l'étoile**, ce qui
 /// est à la fois plus juste et plus lisible.
-pub const LONGUEUR_MAX: f32 = 1.6;
+///
+/// **Divisée par quatre le 2026-10-20** (1,6 → 0,4), à la demande : « plus
+/// réaliste ». La largeur, proportionnelle à la longueur, suit d'elle-même.
+pub const LONGUEUR_MAX: f32 = 0.4;
 
 /// **Longueur minimale, en rayons de noyau.**
 ///
@@ -39,9 +42,10 @@ pub const LONGUEUR_MAX: f32 = 1.6;
 /// un noyau de 0,18 de diamètre — plus courte que le caillou qui l'émet.
 ///
 /// Le plancher est en **rayons de noyau** parce que c'est à lui qu'on la compare
-/// à l'œil. Vingt-cinq : assez pour se lire comme une traînée, pas assez pour
-/// dominer un système.
-pub const LONGUEUR_MIN_NOYAUX: f32 = 25.0;
+/// à l'œil. Vingt-cinq jusqu'au 2026-10-20, **divisé par quatre** avec
+/// [`LONGUEUR_MAX`] : au périhélie de la galerie (activité 0,44), la queue fait
+/// encore 2,8 rayons de noyau — plus longue que le caillou, de peu.
+pub const LONGUEUR_MIN_NOYAUX: f32 = 6.25;
 
 /// **Demi-largeur de la queue, en fraction de SA PROPRE LONGUEUR** : à sa
 /// naissance au ras du noyau, puis à son bout.
@@ -413,9 +417,15 @@ fn rubans_par_sorte(
     v
 }
 
-/// **Les queues telles qu'on les dessine** : [`rubans`], puis [`fluctuer`] à
-/// l'instant `temps`. `graine` décale les phases : deux comètes ne
-/// palpitent pas ensemble.
+/// **Les queues telles qu'on les dessine** : chacune en chapelet de nuages
+/// ([`nuage`]), puis [`fluctuer`] à l'instant `temps`. Chaque élément est un
+/// nuage `(centre, rayon, couleur)`. `graine` décale les phases : deux comètes
+/// ne palpitent pas ensemble.
+///
+/// ⚠️ **Les bouffées se calculent sur le chapelet, pas sur la queue brute.**
+/// Divisées par quatre (2026-10-20), elles sont plus étroites que l'écart
+/// entre deux points de la queue : évaluées là, elles n'existeraient qu'au
+/// passage d'un point et clignoteraient. Le chapelet est bien plus serré.
 #[allow(clippy::too_many_arguments)]
 pub fn rubans_animes(
     p: &Preset,
@@ -429,9 +439,10 @@ pub fn rubans_animes(
 ) -> Vec<Vec<PointRuban>> {
     rubans_par_sorte(p, noyau, etoile, vitesse, rayon_noyau, seuil)
         .into_iter()
-        .map(|(ions, mut r)| {
-            fluctuer(&mut r, if ions { &FLUCT_IONS } else { &FLUCT_POUSSIERE }, temps, graine);
-            r
+        .map(|(ions, r)| {
+            let mut n = nuage(&r);
+            fluctuer(&mut n, if ions { &FLUCT_IONS } else { &FLUCT_POUSSIERE }, temps, graine);
+            n
         })
         .collect()
 }
@@ -465,12 +476,12 @@ pub struct Fluctuation {
 
 /// **La poussière** : de gros nuages lents et rares — des grains lourds.
 pub const FLUCT_POUSSIERE: Fluctuation =
-    Fluctuation { cadence: 0.45, traversee: 6.0, eclat: 0.6, largeur: 0.225, taille: 0.045, creux: 0.25 };
+    Fluctuation { cadence: 0.45, traversee: 6.0, eclat: 0.6, largeur: 0.056, taille: 0.011, creux: 0.25 };
 
 /// **Les ions** : des bouffées plus serrées et plus rapides — le vent stellaire
 /// les emporte cent fois plus vite que les grains.
 pub const FLUCT_IONS: Fluctuation =
-    Fluctuation { cadence: 0.9, traversee: 2.5, eclat: 0.8, largeur: 0.3, taille: 0.025, creux: 0.35 };
+    Fluctuation { cadence: 0.9, traversee: 2.5, eclat: 0.8, largeur: 0.075, taille: 0.006, creux: 0.35 };
 
 /// Pseudo-hasard dans `[0 ; 1[`, déterministe. Le contexte graphique n'est pas
 /// requis : la fonction reste testable, et une comète redonne les mêmes
@@ -514,12 +525,23 @@ pub fn bouffees(s: f32, temps: f32, f: &Fluctuation, graine: f32) -> f32 {
 /// droits), seuls l'éclat et la largeur bougent. À l'émission, le noyau
 /// s'éclaire : c'est le départ du nuage.
 pub fn fluctuer(pts: &mut [PointRuban], f: &Fluctuation, temps: f32, graine: f32) {
-    let n = pts.len();
-    if n < 2 {
+    if pts.len() < 2 {
         return;
     }
-    for (k, (_, demi, c)) in pts.iter_mut().enumerate() {
-        let s = k as f32 / (n - 1) as f32;
+    // ⚠️ **L'abscisse est la distance parcourue**, pas le rang du point : les
+    // nuages du chapelet sont plus serrés près du noyau, où ils sont plus
+    // petits. Par le rang, une bouffée accélérerait en descendant.
+    let mut abscisses = Vec::with_capacity(pts.len());
+    let mut cumul = 0.0;
+    for (k, p) in pts.iter().enumerate() {
+        if k > 0 {
+            cumul += (p.0 - pts[k - 1].0).length();
+        }
+        abscisses.push(cumul);
+    }
+    let total = cumul.max(1e-6);
+    for ((_, demi, c), d) in pts.iter_mut().zip(abscisses) {
+        let s = d / total;
         let b = bouffees(s, temps, f, graine);
         c.a = (c.a * (1.0 - f.creux * s.sqrt() + f.eclat * b)).clamp(0.0, 1.0);
         *demi *= 1.0 + f.largeur * b;
@@ -828,8 +850,11 @@ mod tests {
                 q(vec3(perihelie, 0.0, 0.0), Vec3::ZERO, vec3(0.0, 0.0, 1.0), rayon, seuil);
             assert!(!pts.is_empty(), "aucune queue au périhélie de ({a}, {e})");
             let longueur = (pts.last().unwrap().0 - pts[0].0).length();
+            // Plus long que le **diamètre** du caillou : c'est le fait. Le seuil
+            // valait six rayons tant que la queue était démesurée ; elle a été
+            // divisée par quatre à la demande (2026-10-20, « plus réaliste »).
             assert!(
-                longueur > rayon * 6.0,
+                longueur > rayon * 2.0,
                 "orbite ({a}, {e}) : queue de {longueur} pour un noyau de rayon {rayon} — \
                  plus courte que le caillou qui l'émet, donc invisible"
             );

@@ -8,7 +8,7 @@ Journal du chantier décrit par
 n'est poussé. 70 commits d'avance sur `main` au 2026-10-03 — `main` n'en a
 aucun que la branche n'ait pas, la fusion sera une avance rapide.
 
-**État au 2026-10-19** : 914 tests verts (927 avec le binaire `mhd`), clippy à
+**État au 2026-10-20** : 915 tests verts (928 avec le binaire `mhd`), clippy à
 zéro. **Le lot 5 est clos** (ses sept presets de trou noir sont au tirage), **le
 6 est livré** (supergéante rouge, sous-naine sdB, étoile carbonée, naine brune)
 et **prolongé d'un 6.3** (l'ébullition des géantes rouges), **le 7 aussi** (la
@@ -22,10 +22,9 @@ d'accès (« Your organization has disabled Claude subscription access »). Son
 dernier message, *la courbe et la droite de la comète*, n'a été repris que le
 2026-10-19 — voir le lot 9.4.
 
-**Arrêt du 2026-10-19 au soir** : les queues de comète sont en plein réglage
-(9.4). Deux choses n'ont pas encore été vues à l'écran : les bouffées
-divisées par deux, et le chapelet de nuages sous l'angle qui croisait les
-rayons. C'est par là que reprendre.
+**Le lot 9 est clos** (2026-10-20), validé à l'écran par l'utilisateur :
+*« on peut valider le chantier comète »*. Restent les lots 7 (à juger à
+l'écran) et 10 à 12 (à faire).
 
 Deux dettes restent, petites et consignées plus bas : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de
@@ -65,10 +64,12 @@ silhouette « mince » n'a jamais été essayée.
 | **7** — pulsation : céphéide, Mira, ZZ Ceti | **fait**, à juger à l'écran | |
 | **8.1** — le ciel en cubemap | **abandonné**, code retiré | `7f6e1aa` |
 | **8.2** — la déviation dans le shader | **abandonné**, code retiré | `dd55404`, `5e66b10` |
-| **9.1** — les comètes au tirage, et leur planche | **fait**, à juger à l'écran | |
-| **9.2** — la queue | **fait**, à juger à l'écran | `cd9da64` + 4 correctifs |
+| **9.1** — les comètes au tirage, et leur planche | **fait, validé** | |
+| **9.2** — la queue | **fait, validé** | `cd9da64` + 4 correctifs |
 | **9.3** — cinq familles de comètes, queue d'ions, galerie refaite | **fait** | `8712a5a` |
-| **9.4** — queues reprises : vitre de profondeur, bouffées, chapelet de nuages | **fait**, en cours de réglage à l'écran (2026-10-19) | |
+| **9.4** — queues reprises : vitre de profondeur, bouffées, chapelet de nuages, queue ÷ 4 | **fait, validé** (2026-10-20) | `da67058` + suite |
+| **9.5** — trajectoires de comète à part : teinte assombrie, bascule RING / COMET | **fait, validé** (2026-10-20) | |
+| **9 — clos** : validé à l'écran par l'utilisateur | **fait et tranché** (2026-10-20) | |
 | 10 à 12 | à faire | |
 
 Trois correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`), le
@@ -170,9 +171,50 @@ Gardes : `le_chapelet_couvre_la_queue_sans_trou` et
 `l_eclat_du_chapelet_est_celui_du_ruban` — **red-checks faits**. Le ruban
 reste celui des arches solaires, vues surtout de côté.
 
-**Non vu à l'écran au moment de l'arrêt** : la division par deux des
-bouffées, et le chapelet sous l'angle qui posait problème. Si les nuages se
-devinent un par un, baisser `PAS_NUAGE` (0,5).
+#### Le lendemain : la queue divisée par quatre (2026-10-20)
+
+*« Réduire de nouveau la longueur et le volume par 4, que ça soit plus
+réaliste »* — précisé : **la queue et les bouffées**, les deux.
+
+- **La queue** : `LONGUEUR_MAX` 1,6 → **0,4** et `LONGUEUR_MIN_NOYAUX` 25 →
+  **6,25**. La largeur, fraction de la longueur (un cône), suit d'elle-même.
+  Halley au périhélie : ~5 unités de queue au lieu de ~20. Dans la galerie,
+  où le plancher décide, 2,8 rayons de noyau. Jugé à l'écran : *« de loin ça
+  va, ça ne donne pas un effet où la comète a un panache qui relie deux
+  planètes »*.
+- **Les bouffées**, encore ÷ 4 : étendue 1,1 % (poussière) et 0,6 % (ions) de
+  la queue, gonflement +5,6 % et +7,5 %.
+- ⚠️ **Elles sont désormais calculées sur le chapelet** (`rubans_animes` :
+  `nuage` puis `fluctuer`), et le long de la **distance parcourue**. Plus
+  étroites que l'écart entre deux points de la queue, évaluées sur la queue
+  brute, elles n'auraient existé qu'au passage d'un point — un clignotement.
+- **Deux gardes à revoir.** `la_queue_reste_plus_longue_que_son_noyau`
+  exigeait six rayons : ramenée au **diamètre** (deux rayons), le fait qu'elle
+  énonce depuis toujours (« plus courte que le caillou qui l'émet »). Et
+  `le_cadre_tient_l_etoile_et_le_bout_de_la_queue` a montré un **vrai défaut**
+  du cadrage de la galerie : il partait du centre de l'étoile, pas de son bord ;
+  la marge le cachait tant que la queue était longue. Corrigé, **red-check
+  fait**.
+
+#### Les trajectoires de comète à part (lot 9.5, 2026-10-20)
+
+*« Il faut changer la couleur de la trajectoire des comètes, pourquoi pas
+ajouter un bouton pour les faire apparaître et disparaître comme pour planet
+ring. La couleur actuelle est 444448, il faudrait l'assombrir. »*
+
+- **Une teinte à elles** : `COL_COMETES`, le gris des planètes **assombri de
+  moitié** (0,36 / 0,36 / 0,40 contre 0,72 / 0,72 / 0,76). Le #444448 mesuré
+  à l'écran était `COL_PLEIN` après transparence et filtre ; attendu vers
+  #222224. Garde : `la_comete_se_trace_plus_sombre_que_la_planete` (au moins
+  15 de clarté Lab en dessous, sans tomber sous 20) — **red-check fait**.
+- **Un calque à elles** : `Calques::cometes`, et une **5ᵉ bascule RING / COMET**
+  dans la bande d'outils, **après** ZONE / HABITABLE pour ne pas déplacer les
+  quatre autres sous la souris. Le menu étant partagé, la V1 l'a aussi. Les
+  tests de mise en page existants couvrent les cinq bascules, de 640 à
+  1920 px.
+- ⚠️ **Trouvé en chemin** : RING / MOONS manquait à la liste `sur_ui` du menu.
+  Un clic dessus basculait le calque **et** passait à la caméra. Corrigé avec
+  la nouvelle bascule.
 
 ### Menu V2 : la sauvegarde mise de côté, « choisir astre » ajouté (2026-10-19)
 
@@ -1318,6 +1360,19 @@ pas choisir.
 
 ### Ce qui reste ouvert, et que personne ne garde
 
+- ⚠️ **Le crash de la texture 32768² est revenu** (2026-10-20), une fois, puis
+  pas au relancement. `miniquad gl.rs:181`, `assert_eq!(0, 4294967296)` : le
+  **même** que le 3 octobre. Le correctif de l'époque (`ba66d72`, tailles de
+  texte bornées dans `police::preparer`) reposait sur une hypothèse **jamais
+  reproduite** — il n'était donc pas la cause, ou pas la seule. Écarté par
+  lecture depuis : le texte (borné, glyphes ≤ 22 px), le facteur DPI (fixé à
+  l'ouverture par miniquad), les icônes, vignettes et atlas de terrain (côtés
+  fixes), les cibles de rendu (pas d'octets, pas d'assertion). Non reproduit
+  en trois lancements de 15 s : c'est une **action** qui le déclenche, et le
+  3 octobre c'était l'ouverture de la galerie des comètes. **Prochaine
+  occurrence : la pile d'appels** (`$env:RUST_BACKTRACE=1; cargo run
+  --release`), qui dira en une ligne qui crée cette texture. Ne pas corriger
+  avant.
 - ✅ ~~**La comète : « une courbe et une droite »**~~ — retour du 2026-10-03
   resté sans réponse, **soldé le 2026-10-19** (lot 9.4) : la courbe et la
   droite étaient voulues, mais la droite était coupée près du noyau par une

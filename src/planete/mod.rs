@@ -483,12 +483,12 @@ impl Astre for Planete {
                 self.temps_comete,
                 self.graine_comete,
             );
-            for pts in queues {
+            for nuages in queues {
                 let mut v = Vec::new();
                 let mut i = Vec::new();
                 // ⚠️ **Un chapelet de nuages, plus un ruban** : vue dans l'axe,
                 // une bande se croisait en rayons (`comete::nuage`).
-                for (centre, rayon, couleur) in crate::comete::nuage(&pts) {
+                for (centre, rayon, couleur) in nuages {
                     crate::impostor::push_quad(&mut v, &mut i, cam, centre, rayon, couleur);
                 }
                 let mesh =

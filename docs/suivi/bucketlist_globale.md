@@ -46,8 +46,11 @@ exactement le même système (reproductible, partageable).
 
 - [x] **Lunes** : orbite analytique autour de leur planète (suivent la planète), 3 max par planète.
 - [x] **Anneaux** des géantes (Saturne larges/inclinés, Uranus quasi verticaux) + occlusion correcte (2 passes).
-- [ ] **Comètes** : orbite très excentrique + **queue** pointant à l'opposé de l'étoile.
-      (`Categorie::Comete` existe, mais aucune comète n'est encore engendrée.)
+- [x] **Comètes** : orbite très excentrique + **queue** pointant à l'opposé de l'étoile.
+      Lot 9 du chantier astres, **clos le 2026-10-20** : sur rails (destination de vol),
+      1P/Halley dans le système solaire, cinq familles, queues de poussière et d'ions
+      en bouffées, trajectoires à part (RING / COMET). Journal :
+      [`astres_v2.md`](astres_v2.md).
 - [x] **Disque épars** et **nuage de Oort** (coquille sphérique) dans le preset solaire —
       quatre familles de petits corps au total.
 - [x] **Anneaux d'Uranus et de Neptune** au catalogue (la galerie et la vue système

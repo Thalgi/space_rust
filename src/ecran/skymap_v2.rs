@@ -316,6 +316,7 @@ impl SkymapV2 {
                     planetes: self.menu.orbites,
                     planetes_pleines: true,
                     etoiles: self.menu.orbites_etoiles,
+                    cometes: self.menu.orbites_cometes,
                     // Le calque global tout-ou-rien est coupé en V2 : les
                     // orbites de lunes n'apparaissent que pour la planète
                     // sélectionnée (spec §6.4), quel que soit le bouton — et

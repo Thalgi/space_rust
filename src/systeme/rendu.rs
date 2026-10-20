@@ -11,6 +11,11 @@ pub(super) const COL_PLANETES: Color = Color::new(0.13, 0.78, 0.75, 0.75); // sa
 /// (`ecran::trace_orbite::COL_LUNES`, 0,58), pour que la hiérarchie se lise —
 /// la planète porte la lune.
 const COL_PLEIN: Color = Color::new(0.72, 0.72, 0.76, 0.55);
+/// Trajectoires des **comètes** en trait plein : le même gris, **assombri de
+/// moitié** (2026-10-20). Elles traversent le système de part en part ; à
+/// l'éclat des planètes, elles dominaient la vue alors qu'elles sont
+/// secondaires. Le rang se lit à la clarté : planète, puis comète.
+const COL_COMETES: Color = Color::new(0.36, 0.36, 0.40, 0.55);
 pub(super) const COL_ETOILES: Color = Color::new(0.85, 0.80, 0.55, 0.32); // paille, discret
 pub(super) const COL_LUNES: Color = Color::new(0.62, 0.55, 0.90, 0.38); // violet pâle
 pub(super) const COL_ZONE: Color = Color::new(0.30, 0.90, 0.40, 0.45); // vert habitable
@@ -76,6 +81,7 @@ impl Systeme {
             planetes: orbites_planetes,
             planetes_pleines,
             etoiles: orbites_etoiles,
+            cometes: orbites_cometes,
             lunes: orbites_lunes,
             zone: montrer_zone,
             focus,
@@ -126,10 +132,15 @@ impl Systeme {
 
         // Trajectoires des PLANÈTES (ellipses pleines), centrées sur LEUR foyer
         // (étoile hôte S-type, ou barycentre P-type).
-        if orbites_planetes {
+        if orbites_planetes || orbites_cometes {
             for (idx, a) in self.astres.iter().enumerate() {
                 let pts = a.orbite();
                 if pts.is_empty() {
+                    continue;
+                }
+                // Chacune son interrupteur : la comète a le sien.
+                let comete = a.categorie() == Categorie::Comete;
+                if (comete && !orbites_cometes) || (!comete && !orbites_planetes) {
                     continue;
                 }
                 let centre = match a.foyer() {
@@ -140,7 +151,8 @@ impl Systeme {
                     None => light,
                 };
                 if planetes_pleines {
-                    dessiner_plein(pts, centre, attenue(COL_PLEIN, opacite(idx)), cam);
+                    let col = if comete { COL_COMETES } else { COL_PLEIN };
+                    dessiner_plein(pts, centre, attenue(col, opacite(idx)), cam);
                 } else {
                     dessiner_points(pts, centre, attenue(COL_PLANETES, opacite(idx)), cam);
                 }
@@ -494,6 +506,21 @@ mod tests_calques {
     ///
     /// Mesuré en **Lab**, où la distance approche la différence perçue, et non
     /// en RGB, où deux couleurs éloignées numériquement peuvent se ressembler.
+    /// **La trajectoire d'une comète est plus sombre que celle d'une planète**
+    /// — c'est tout l'objet de sa teinte (2026-10-20) — sans disparaître pour
+    /// autant dans le fond noir.
+    #[test]
+    fn la_comete_se_trace_plus_sombre_que_la_planete() {
+        let clarte = |c: Color| lab(c).x;
+        assert!(
+            clarte(COL_COMETES) < clarte(COL_PLEIN) - 15.0,
+            "comète ({:.1}) à peine plus sombre que la planète ({:.1})",
+            clarte(COL_COMETES),
+            clarte(COL_PLEIN)
+        );
+        assert!(clarte(COL_COMETES) > 20.0, "trajectoire de comète noyée dans le fond noir");
+    }
+
     #[test]
     fn les_calques_ne_se_confondent_pas() {
         let calques = [

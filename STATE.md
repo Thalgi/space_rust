@@ -24,19 +24,26 @@ pas : la fusion sera une avance rapide. ⚠️ Depuis le dossier principal, la
 branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
 worktree) : on travaille **dans le worktree**.
 
-**Vérifié (2026-10-19)** : **914 tests verts** (927 avec le binaire `mhd`),
+**Vérifié (2026-10-20)** : **915 tests verts** (928 avec le binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
-**⚠️ Reprendre ici : les queues de comète, en plein réglage (lot 9.4,
-2026-10-19).** Le retour du 3 octobre (« une courbe et une droite ») est soldé :
+**Le lot 9 (comètes) est clos** (2026-10-20), validé à l'écran. Le retour du
+3 octobre (« une courbe et une droite ») est soldé :
 les deux queues étaient voulues, mais la queue d'ions était coupée près du
 noyau par la queue de poussière, qui écrivait la profondeur (material par
 défaut de macroquad). Corrigé, puis sur retours écran : des **bouffées** (« effet
 de prout », après un premier jet en ondulations refusé comme « flagelle »), et
 une queue en **chapelet de nuages** face caméra au lieu d'un ruban, qui se
-croisait en rayons vue dans son axe. **Pas encore vu à l'écran** : les
-bouffées divisées par deux, et le chapelet sous l'angle fautif. Détail au
-journal, lot 9.4 ; pièges du moteur dans `docs/suivi/technique.md`.
+croisait en rayons vue dans son axe. Le lendemain, queue et bouffées
+**divisées par quatre** (« plus réaliste »), et les trajectoires de comète
+mises à part : teinte assombrie, **bascule RING / COMET** (9.5). Détail au
+journal, lots 9.4 et 9.5 ; pièges du moteur dans `docs/suivi/technique.md`.
+
+⚠️ **Crash intermittent** : la texture 32768² (`miniquad gl.rs:181`) est
+revenue une fois le 2026-10-20, puis pas au relancement. Le correctif du
+3 octobre n'en était pas la cause. **À la prochaine occurrence, la pile
+d'appels** (`$env:RUST_BACKTRACE=1; cargo run --release`) — ne rien corriger
+avant. Voir le journal, « Ce qui reste ouvert ».
 
 **Le lot 6 est clos** (2026-10-19), **validé à l'écran** par l'utilisateur :
 supergéante rouge, sous-naine sdB, étoile carbonée, naines brunes — et un
@@ -177,8 +184,7 @@ grossir l'atlas de glyphes jusqu'à 32768², et miniquad tuait le jeu à
 l'ouverture de la galerie des comètes. Le bornage vit désormais dans
 `police::preparer`, là où il ne peut plus être oublié.
 
-**Le prochain pas** : finir de régler les queues de comète (9.4), valider à
-l'écran le reste du lot 9 (les cinq familles, Halley) et le lot 7, puis
+**Le prochain pas** : valider à l'écran le lot 7 (pulsation), puis
 lot 10 (distinction des types : granulation paramétrée — **déjà faite pour les
 géantes rouges** par le 6.3 —, assombrissement centre-bord pour toutes),
 11 (quasi-étoile), 12 (disques proto au tirage).

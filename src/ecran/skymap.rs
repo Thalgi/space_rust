@@ -318,6 +318,7 @@ impl Skymap {
                     planetes: self.menu.orbites,
                     planetes_pleines: false, // V1 : semis de points, inchangé
                     etoiles: self.menu.orbites_etoiles,
+                    cometes: self.menu.orbites_cometes,
                     lunes: self.menu.orbites_lunes,
                     zone: self.menu.zone,
                     focus: self.cam.focus(),

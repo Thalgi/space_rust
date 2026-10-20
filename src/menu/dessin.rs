@@ -33,7 +33,7 @@ impl Menu {
     }
 
     pub fn dessiner(&self, m: Vec2, presets: &[PresetSauve], focus: bool, outils: Rect, haut: f32) {
-        // Les quatre calques de lecture : un « double carré » chacun, le sujet
+        // Les cinq calques de lecture : un « double carré » chacun, le sujet
         // écrit sur deux étages et l'état porté par la COULEUR DU FOND — plus
         // besoin de lire « : ON » pour savoir (voir `ui::bascule_double`).
         for (i, (haut_txt, bas_txt, actif)) in [
@@ -41,6 +41,7 @@ impl Menu {
             ("RING", "STAR", self.orbites_etoiles),
             ("RING", "MOONS", self.orbites_lunes),
             ("ZONE", "HABITABLE", self.zone),
+            ("RING", "COMET", self.orbites_cometes),
         ]
         .into_iter()
         .enumerate()

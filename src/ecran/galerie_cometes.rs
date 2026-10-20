@@ -106,10 +106,14 @@ fn demi_champ(hauteur: f32) -> f32 {
 /// [`demi_champ`], et deux chemins vers la même grandeur finissent par diverger.
 fn cadrage() -> (f32, f32, f32) {
     const MARGE: f32 = 1.12;
-    let x1 = position_comete().x + etendue_queues();
+    // ⚠️ De **l'étoile entière** au bout de la queue. Le cadre partait du
+    // centre de l'étoile : tant que la queue était longue, la marge couvrait
+    // son rayon ; divisée par quatre (2026-10-20), l'étoile sortait du cadre.
+    let (x0, x1) = (-RAYON_ETOILE, position_comete().x + etendue_queues());
+    let demi = (x1 - x0) * 0.5 * MARGE;
     // Inverse de `demi_champ` : la hauteur qui donne exactement la largeur voulue.
-    let hauteur = x1 * 0.5 * MARGE * RATIO_CASE / (FOVY * 0.5).to_radians().tan();
-    (x1 * 0.5, hauteur, demi_champ(hauteur))
+    let hauteur = demi * RATIO_CASE / (FOVY * 0.5).to_radians().tan();
+    ((x0 + x1) * 0.5, hauteur, demi_champ(hauteur))
 }
 
 /// Une case : sa famille, et la comète qui la montre.

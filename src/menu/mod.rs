@@ -47,6 +47,7 @@ pub struct Menu {
     pub orbites_etoiles: bool, // orbites des étoiles (systèmes multiples)
     pub orbites_lunes: bool,   // orbites des lunes, autour de leur planète
     pub zone: bool,
+    pub orbites_cometes: bool, // trajectoires des comètes (2026-10-20)
     /// **Menu de la Skymap V2** : sans sauvegarde (mise de côté le
     /// 2026-10-19), quatre presets, et la liste des astres pour la mise au
     /// point. La V1 garde son menu d'origine.
@@ -65,6 +66,7 @@ impl Menu {
             orbites_etoiles: true,
             orbites_lunes: false, // nombreuses : encombrantes par défaut
             zone: true,
+            orbites_cometes: true,
             v2: false,
             liste_astres: false,
         }
@@ -138,10 +140,11 @@ impl Menu {
 
     /// Largeur des bascules, dans l'ordre ou elles se suivent.
     ///
-    /// Les quatre sont les calques de lecture (RING/PLANET, RING/STAR,
-    /// RING/MOONS, ZONE/HABITABLE) : des « doubles carres », un mot par
-    /// etage.
-    const LARGEURS: [f32; 4] = [76.0, 76.0, 76.0, 88.0];
+    /// Les cinq sont les calques de lecture (RING/PLANET, RING/STAR,
+    /// RING/MOONS, ZONE/HABITABLE, RING/COMET) : des « doubles carres », un
+    /// mot par etage. RING/COMET est arrive le 2026-10-20, en dernier pour ne
+    /// pas deplacer les quatre autres sous le doigt.
+    const LARGEURS: [f32; 5] = [76.0, 76.0, 76.0, 88.0, 76.0];
     /// Hauteur d'une bascule a une ligne (MENU, RETOUR).
     const HAUT_BTN: f32 = 26.0;
     /// Hauteur d'un double carre : deux etages plus le filet.
@@ -166,13 +169,8 @@ impl Menu {
 
     /// Les bascules, pour les tests de mise en page.
     #[cfg(test)]
-    fn bascules(outils: Rect) -> [Rect; 4] {
-        [
-            Self::btn(outils, 0),
-            Self::btn(outils, 1),
-            Self::btn(outils, 2),
-            Self::btn(outils, 3),
-        ]
+    fn bascules(outils: Rect) -> [Rect; 5] {
+        std::array::from_fn(|i| Self::btn(outils, i))
     }
 
     /// Largeur du couple MENU / RETOUR, reserve a **droite** de la bande.
@@ -234,11 +232,12 @@ impl Menu {
     ) -> (bool, Option<ActionMenu>) {
         let entrees = self.entrees(presets);
         let n = entrees.len();
-        let (bo, boe, bl, bz, bn, re) = (
+        let (bo, boe, bl, bz, bc, bn, re) = (
             Self::btn(outils, 0),
             Self::btn(outils, 1),
             Self::btn(outils, 2),
             Self::btn(outils, 3),
+            Self::btn(outils, 4),
             Self::bouton(outils),
             Self::retour(outils),
         );
@@ -253,6 +252,8 @@ impl Menu {
                 self.orbites_lunes = !self.orbites_lunes;
             } else if bz.contains(m) {
                 self.zone = !self.zone;
+            } else if bc.contains(m) {
+                self.orbites_cometes = !self.orbites_cometes;
             } else if bn.contains(m) {
                 self.ouvert = !self.ouvert;
                 // Rouvert, le menu repart de sa page principale.
@@ -265,9 +266,13 @@ impl Menu {
                 }
             }
         }
+        // ⚠️ `bl` (RING/MOONS) manquait à cette liste : un clic dessus
+        // passait aussi à la caméra. Toutes les bascules y sont désormais.
         let sur_ui = bo.contains(m)
             || boe.contains(m)
+            || bl.contains(m)
             || bz.contains(m)
+            || bc.contains(m)
             || bn.contains(m)
             || (focus && re.contains(m))
             || (self.ouvert && mr.contains(m));
