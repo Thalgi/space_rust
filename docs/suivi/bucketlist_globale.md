@@ -177,13 +177,18 @@ exactement le même système (reproductible, partageable).
 ## 9. Types d'étoiles — manques
 
 - [x] **Naine rouge (M)**, **naine blanche** (minuscule, très chaude/bleutée), **géante rouge** (énorme, froide) — variantes au tirage.
-- [~] **Supergéante bleue** faite. Densités/masses cohérentes : toujours à faire
-      (`MASSE_ETOILE` reste fixe à 1000, cf. ligne suivante).
-- [ ] **Masse gravitationnelle dépendante du type** (actuellement fixe à 1000).
-- [ ] **Activité variable** : taux d'éruptions/taches plus élevé pour les naines M et étoiles jeunes.
-- [ ] **Pulsation/variabilité** (étoiles variables) : luminosité qui oscille légèrement.
+- [x] **Supergéante bleue** faite, et sa surface depuis le lot 10 (2026-10-20). Masses
+      cohérentes : faites (ligne suivante).
+- [x] **Masse gravitationnelle dépendante du type** : lot 0 du chantier astres (2026-09-24),
+      dérivée de la luminosité ; masses propres pour le trou noir et la naine brune.
+- [x] **Activité variable** : lot 3 (`etoile::activite_type`), naines actives, géantes calmes.
+- [x] **Pulsation/variabilité** : lot 7 (2026-09-30, clos le 2026-10-20) — céphéide, Mira,
+      ZZ Ceti. L'éclat n'est **visible à l'image** que pour la céphéide ; les autres types
+      variables sont un chantier ultérieur (conception astres §6 decies).
 - [~] **Classes spéciales** : pulsar, magnétar, étoile à neutrons **faits** (`etoile.rs`, et
-      `est_remnant()` leur retire la zone habitable). Wolf-Rayet : toujours à faire.
+      `est_remnant()` leur retire la zone habitable) — **à refaire** (lot futur 13 : peints
+      dans le plan de l'écran). Wolf-Rayet **faite**, surface en relief depuis le lot 10.
+      Étoiles vertes et naine noire : lots futurs 14 et 15.
 - [x] **Une étoile se lit comme une étoile en vue système** (2026-08-09, § P.3 bis).
       À l'échelle vraie elle fait **1,14 px de rayon** au cadrage par défaut : ni teinte, ni
       tache, ni couronne ne peut s'y voir. Plancher en pixels `soleil::PX_MIN = 8`, qui
