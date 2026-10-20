@@ -24,7 +24,7 @@ pas : la fusion sera une avance rapide. ⚠️ Depuis le dossier principal, la
 branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
 worktree) : on travaille **dans le worktree**.
 
-**Vérifié (2026-10-20)** : **920 tests verts** (933 avec le binaire `mhd`),
+**Vérifié (2026-10-20)** : **921 tests verts** (934 avec le binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
 **Le lot 9 (comètes) est clos** (2026-10-20), validé à l'écran. Le retour du
@@ -190,10 +190,22 @@ grossir l'atlas de glyphes jusqu'à 32768², et miniquad tuait le jeu à
 l'ouverture de la galerie des comètes. Le bornage vit désormais dans
 `police::preparer`, là où il ne peut plus être oublié.
 
+**Lots futurs** (demandés le 2026-10-20, **après** 10 à 12) : 13 — refaire
+pulsar, étoile à neutrons et magnétar (peints dans le plan de l'écran, le
+défaut du trou noir d'avant le lot 5) ; 14 — étoiles vertes (n'existent pas :
+fantaisie à trancher) ; 15 — naine noire (écartée le 24 septembre, rouverte).
+Détail en conception §6 undecies.
+
+**Le lot 10 est clos** (2026-10-20), validé à l'écran : chaque type a sa
+surface (`etoile::surface`) — chaudes presque lisses, grain plus fin pour les
+denses, **bord assombri pour toutes** (le Soleil change d'aspect) ;
+supergéante bleue et Wolf-Rayet mêlent surface lisse et ébullition (WR en
+relief). Les surfaces validées en ébullition gardent leur bord d'origine,
+incohérence assumée.
+
 **Le prochain pas** : **tous les lots livrés sont validés.** Restent à
-construire : lot 10 (distinction des types : granulation paramétrée — **déjà faite pour les
-géantes rouges** par le 6.3 —, assombrissement centre-bord pour toutes),
-11 (quasi-étoile), 12 (disques proto au tirage).
+construire, **dans l'ordre** : 11 (quasi-étoile), 12 (disques proto au
+tirage, hypergéante, Be, Herbig Ae/Be), puis les lots futurs 13 à 15.
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de

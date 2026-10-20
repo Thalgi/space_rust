@@ -909,6 +909,34 @@ lumineux est justement le signe distinctif que la §3 lui promettait), et
 peut-être des variables à éclipses. Chacune avec son amplitude et son rythme,
 jugés à l'écran un par un. La mécanique est faite ; manquent les décisions.
 
+## 6 undecies. Lots futurs, demandés le 2026-10-20 — après les lots 10 à 12
+
+*« Pour moi les pulsar, étoiles à neutrons et magnétar doivent être refaits,
+plus j'aimerais qu'on ajoute les étoiles vertes + naine noire. »* — **à faire
+dans l'ordre, après les lots 10 à 12.** Aucun lot existant ne les couvre.
+
+| # | Sujet | Ce qu'il faut savoir avant de commencer |
+|---|---|---|
+| 13 | **Refaire les rémanents** : pulsar, étoile à neutrons, magnétar | ⚠️ Ils ont **le défaut du trou noir d'avant le lot 5** : peints dans le **plan de l'écran**. Les jets suivent l'axe vertical du quad (`v_q.y`, `soleil.frag.glsl`), les arcs du magnétar aussi : ils restent verticaux à l'écran quand on tourne autour, ne suivent aucun axe de l'étoile, et ne se voient jamais de face ni de biais. Remède du lot 5 transposable : un **vrai axe magnétique** dans le monde. Ce qui gêne l'utilisateur au-delà n'a pas encore été demandé — **première question du lot**. |
+| 14 | **Étoiles vertes** | ⚠️ **Il n'en existe pas** : une étoile dont le pic tombe dans le vert émet aussi du rouge et du bleu, l'œil la voit blanche (le vert des comètes « Lulin » est une **raie**, le C₂, pas un corps noir). Le chantier a suivi le réel jusqu'ici : ce serait un **choix de fantaisie assumé**, à trancher par l'utilisateur en ouvrant le lot. |
+| 15 | **Naine noire** | ⚠️ **Écartée le 2026-09-24** (§3 bis : « par définition invisible ») — et l'univers est trop jeune pour en contenir une. **Rouverte par l'utilisateur**, qui a posé la règle. Il lui faut une représentation distincte : silhouette qui masque le fond, faible lueur infrarouge, ou centre froid d'un système comme la naine brune. |
+
+## 6 duodecies. Le lot 10, livré et clos (2026-10-20)
+
+La §3 ter est soldée pour l'essentiel. **Chaque type a sa surface**
+(`etoile::surface`) : chaudes presque lisses (pas de convection en surface
+au-dessus de ~7 000 K), grain d'autant plus fin que l'étoile est dense, et
+**assombrissement centre-bord pour toutes** — décision 3 du §8 bis appliquée,
+le Soleil change d'aspect. Supergéante bleue et Wolf-Rayet **mêlent** la
+surface lisse et l'ébullition (zone convective sous la surface ; photosphère
+dans un vent grumeleux pour la WR), sur retour écran. L'activité par type
+existait depuis le lot 3.
+
+**Reste de la §3 ter** : l'aplatissement des rotateurs rapides, qui rejoint
+l'étoile Be du lot 12. **Exception assumée à la décision 3** : les surfaces
+validées en ébullition (géantes rouges, Mira, céphéide, ZZ Ceti) gardent leur
+bord d'origine. Détail et tableau des valeurs au journal.
+
 ## 7. Hors périmètre
 
 **Rendre les arches visibles au cadrage par défaut** : tranché et chiffré par

@@ -355,7 +355,72 @@ pub fn ebullition(nom: &str, instable: bool) -> (f32, f32) {
         ("Supergeante rouge", false) => (1.0, EBUL_PLAT),
         ("Supergeante rouge", true) => (1.0, EBUL_RELIEF),
         ("Naine blanche pulsante (ZZ Ceti)", _) | ("Cepheide", _) => (0.25, EBUL_PLAT),
+        // Lot 10 : une étoile massive chaude a une zone convective SOUS sa
+        // surface (pic d'opacité du fer, ~150-200 kK) qui l'agite par en
+        // dessous ; on ne voit pas la surface d'une Wolf-Rayet, sa
+        // photosphère est dans son vent grumeleux — d'où le relief. Réglages
+        // fins dans [`reglage_ebullition`].
+        ("Supergeante bleue", _) => (0.25, EBUL_PLAT),
+        ("Wolf-Rayet", _) => (0.35, EBUL_RELIEF),
         _ => (0.0, EBUL_PLAT),
+    }
+}
+
+/// **Réglages fins de l'ébullition d'un type** : `(finesse des cellules,
+/// clarté minimale)`. `(1, 0,5)` pour tous, sauf deux, jugés à l'écran le
+/// 2026-10-20 :
+/// - la **supergéante bleue** a des cellules 2,5 fois plus fines : ses
+///   structures sont minuscules devant son rayon, et une étoile aussi grande
+///   se lisse à grande échelle ;
+/// - la **Wolf-Rayet** a des fonds éclaircis (0,7) : ses grumeaux restaient
+///   trop sombres.
+pub fn reglage_ebullition(nom: &str) -> (f32, f32) {
+    match nom {
+        "Supergeante bleue" => (2.5, 0.5),
+        "Wolf-Rayet" => (1.0, 0.7),
+        _ => (1.0, 0.5),
+    }
+}
+
+/// **Surface propre au type** (lot 10) : `(échelle du grain, contraste du
+/// grain, assombrissement du bord)`, ce que reçoit `Soleil::avec_surface`.
+///
+/// Jugé à l'écran le 2026-10-20. Deux règles physiques :
+/// - **pas de convection en surface au-dessus de ~7 000 K** : O, B, A, les
+///   naines blanches, la sdB, les rémanents sont presque lisses ; F est la
+///   transition ;
+/// - **plus l'étoile est dense, plus le grain est fin** : naine M plus fine que
+///   le Soleil ; une géante froide, plus grossière.
+///
+/// Et l'**assombrissement centre-bord pour toutes** (§8 bis, décision 3), plus
+/// marqué chez les froides (u ≈ 0,8) que chez les chaudes (u ≈ 0,3).
+///
+/// ⚠️ **Sauf les surfaces déjà validées en ébullition** — géantes et
+/// supergéantes rouges, Mira, céphéide, ZZ Ceti : leur bord a été réglé avec
+/// leur ébullition (lots 6.3 et 7.1), elles gardent `(11, 1, 0)`, le rendu
+/// d'avant le lot. Un nom vide (les presets écrits à la main, dont le Soleil)
+/// prend le réglage G : le Soleil change d'aspect, c'est voulu.
+pub fn surface(nom: &str) -> (f32, f32, f32) {
+    match nom {
+        "O (bleue)" => (11.0, 0.10, 0.30),
+        "B (bleu-blanc)" => (11.0, 0.15, 0.35),
+        "A (blanche)" => (11.0, 0.25, 0.45),
+        "F (blanc-jaune)" => (13.0, 0.60, 0.55),
+        "K (orange)" => (14.0, 1.00, 0.70),
+        "M (naine rouge)" => (20.0, 0.85, 0.80),
+        "Naine blanche" => (30.0, 0.08, 0.50),
+        "Sous-naine (sdB)" => (30.0, 0.08, 0.40),
+        "Supergeante bleue" => (9.0, 0.10, 0.35),
+        "Wolf-Rayet" => (11.0, 0.10, 0.30),
+        // Jamais vus en essai : la règle physique, à juger à l'écran.
+        "Etoile carbonee (C)" => (9.0, 1.00, 0.80),
+        "T Tauri (jeune)" => (14.0, 1.00, 0.70),
+        "Pulsar" | "Etoile a neutrons" | "Magnetar" => (11.0, 0.10, 0.30),
+        // Surfaces validées avec leur ébullition : inchangées.
+        "Geante rouge" | "Supergeante rouge" | "Mira" | "Cepheide"
+        | "Naine blanche pulsante (ZZ Ceti)" => (11.0, 1.00, 0.0),
+        // G, le Soleil des presets (nom vide), et tout le reste.
+        _ => (11.0, 1.00, 0.60),
     }
 }
 

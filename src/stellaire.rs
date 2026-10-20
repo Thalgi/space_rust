@@ -94,6 +94,7 @@ impl Variante {
         let s = s
             .avec_pulsation(amp, periode)
             .avec_ebullition_du_type(nom)
+            .avec_surface_du_type(nom)
             .avec_eclat_visible(crate::etoile::eclat_visible(nom));
         match self {
             Variante::Normale => s,
@@ -325,6 +326,7 @@ mod tests_variante {
             "avec_pulsation(",
             "avec_ebullition_du_type(",
             "avec_eclat_visible(",
+            "avec_surface_du_type(",
         ] {
             assert!(ici.contains(builder), "`Variante::appliquer` ne sait pas faire `{builder}`");
         }

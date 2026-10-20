@@ -21,7 +21,9 @@ Légende : `[ ]` à faire · `[x]` fait · `[~]` partiel
 - [x] **Granulation** : domain warping animé (convection bouillonnante).
 - [x] **Campfires** (points brillants épars).
 - [x] **Taches** actives (assombrissement local, venant du CPU, max 8).
-- [x] **Limb brightening** (anneau lumineux au bord).
+- [x] ~~**Limb brightening** (anneau lumineux au bord).~~ **Remplacé le 2026-10-20** (lot 10)
+  par un **assombrissement centre-bord**, l'inverse et le réel : `1 − u(1 − μ)`, u de 0,3
+  (chaudes) à 0,8 (naine M). Sauf les surfaces validées en ébullition, qui gardent le leur.
 - [x] **Couronne** : décroissance radiale + **spicules** (`couronne_irreg`), large/irrégulière si lumineuse.
 - [x] **Éruptions/boucles** (plasma additif), taille/forme de couronne selon le type.
 
@@ -88,10 +90,11 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
       (bulle de plasma qui se détache et s'éloigne). À rechercher : déclenchement (reconnexion
       magnétique au-dessus des taches), forme (ruban + boucle post-flare), animation, couleur.
       Plus fréquent sur naines M actives / T Tauri / étoiles jeunes.
-- [~] **Granulation paramétrée** — *partiel depuis le 2026-10-19* : les géantes et supergéantes
-      rouges (et Mira) ont leurs cellules géantes (uniform `ebullition`) ; les autres types
-      gardent la recette commune, reste du lot 10. Échelle/contraste selon le type (fine pour naines,
-      grossière pour supergéantes), `gran_scale`/`gran_contraste`.
+- [x] **Granulation paramétrée** — **fait le 2026-10-20** (lot 10) : `etoile::surface` donne à
+      chaque type son échelle et son contraste de grain (uniform `surface`). Les chaudes
+      (> ~7 000 K) sont presque lisses, les denses ont le grain plus fin ; les géantes rouges,
+      Mira, la céphéide et ZZ Ceti ont leur ébullition, la supergéante bleue et la
+      Wolf-Rayet un mélange des deux.
 - [ ] **Pulsation** : rayon et luminosité modulés par le temps (`pulse_amp`, `pulse_freq`).
 - [ ] **Taux d'activité** : densité de taches/éruptions selon le type (naines M & jeunes = +).
 - [x] **Vent stellaire** (WR/supergéantes bleues) : couronne épaisse turbulente colorée (`couronne_type 2`).

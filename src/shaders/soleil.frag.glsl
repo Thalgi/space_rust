@@ -18,6 +18,15 @@ uniform float ebul_style; // 0 = peint à plat, 1 = relief par l'éclairage, 2 =
 // (`soleil::eclat_surfacique`). 1 au repos. Sans lui, ni le sursaut ni la
 // pulsation n'atteignaient l'image : ils n'éclairaient que les planètes.
 uniform float eclat;
+// Surface propre au type (lot 10, essai) : x = échelle du grain (11 = celle
+// d'origine), y = contraste du grain (1 = d'origine, 0 = surface lisse),
+// z = assombrissement du bord (0 = le bord ÉCLAIRCI d'origine).
+uniform vec3 surface;
+// Réglages de l'ébullition (lot 10, essai) : x = finesse des cellules (1 =
+// d'origine, 2 = deux fois plus petites), y = clarté minimale du bouillonnement
+// (0,5 = d'origine ; plus haut, le fond des cellules et l'ombre du relief
+// s'éclaircissent).
+uniform vec2 ebul_reglage;
 
 // **Le champ magnétique de l'étoile** (sous-lot 3.4) : xyz = direction d'un
 // pôle (repère surface), w = force SIGNÉE, le signe étant la polarité.
@@ -136,7 +145,7 @@ void main() {
     // de la DIRECTION, donc sans lui toutes les étoiles portent le même
     // motif de granulation, au pixel près.
     vec3 dec = vec3(graine, graine * 1.7, graine * 0.3);
-    float ech = mix(5.0, 2.2, ebullition);
+    float ech = mix(5.0, 2.2, ebullition) * ebul_reglage.x;
 
     // **Contour irrégulier** (essai, `ebul_style` 2) : le bord du disque se
     // soulève là où une grosse bulle passe sur le limbe. ⚠️ Calculé AVANT
@@ -235,7 +244,9 @@ void main() {
         bt = bt / max(btl, 1e-4) * step(1e-4, btl);
 
         // Convection fine et bouillonnante (domain warping animé, rapide).
-        vec3 w = d * 5.0 + dec + vec3(0.0, time * 0.22, time * 0.13);
+        // L'échelle du grain entraîne celle de son gauchissement : sans elle,
+        // un grain fin serait tordu par des tourbillons trop larges pour lui.
+        vec3 w = d * (5.0 * surface.x / 11.0) + dec + vec3(0.0, time * 0.22, time * 0.13);
         vec3 warp = vec3(fbm(w), fbm(w + 5.2), fbm(w + 9.1)) - 0.5;
         // ⚠️ La granulation s'ÉTIRE le long du champ : on comprime la
         // direction d'échantillonnage dans le sens de `bt`, ce qui allonge
@@ -245,7 +256,10 @@ void main() {
         // reste isotrope sur le reste de l'étoile.
         float etir = 0.6 * smoothstep(0.25, 1.1, bf);
         vec3 da = d - bt * (dot(d, bt) * etir);
-        float gran = fbm(da * 11.0 + dec + warp * 1.2 + vec3(0.0, time * 0.30, 0.0));
+        float gran = fbm(da * surface.x + dec + warp * 1.2 + vec3(0.0, time * 0.30, 0.0));
+        // Contraste : 0 ramène tout le grain à sa valeur moyenne — une étoile
+        // chaude n'a pas de convection en surface, donc pas de granulation.
+        gran = 0.5 + (gran - 0.5) * surface.y;
 
         // Palette dérivée de la couleur de l'étoile : sombre -> teinte -> chaud (vers blanc).
         vec3 cLow = teinte * 0.45;
@@ -256,7 +270,7 @@ void main() {
 
         // Petits points brillants (campfires).
         float camp = fbm(d * 16.0 + dec + 50.0);
-        col += smoothstep(0.66, 0.72, camp) * teinte * 0.5;
+        col += smoothstep(0.66, 0.72, camp) * teinte * 0.5 * surface.y;
 
         if (ebullition > 0.0) {
             // **Ébullition** (essai) : quelques cellules géantes sur une
@@ -267,7 +281,7 @@ void main() {
             float h0 = bouillon(pb);
             // Le grain fin reste, en sourdine : sans lui, du plastique.
             float h = h0 + (gran - 0.5) * 0.25;
-            vec3 cb = mix(teinte * 0.50, teinte * 0.95, smoothstep(0.15, 0.55, h));
+            vec3 cb = mix(teinte * ebul_reglage.y, teinte * 0.95, smoothstep(0.15, 0.55, h));
             cb = mix(cb, cHot, smoothstep(0.62, 0.95, h));
             col = mix(col, cb, clamp(ebullition * 2.0, 0.0, 1.0));
 
@@ -286,7 +300,9 @@ void main() {
                 vec3 pente = ((hx - h0) * t1 + (hy - h0) * t2) / e;
                 vec3 nb = normalize(d - pente * 0.06);
                 vec3 lum = tourner(normalize(-0.55 * cam_right + 0.65 * cam_up + 0.55 * to_cam));
-                col *= clamp(1.0 + 2.0 * (dot(nb, lum) - dot(d, lum)), 0.60, 1.6);
+                // L'ombre du relief suit la clarté minimale : à 0,5 (d'origine)
+                // elle descend à 0,60.
+                col *= clamp(1.0 + 2.0 * (dot(nb, lum) - dot(d, lum)), ebul_reglage.y + 0.10, 1.6);
             }
             // Un bord assombri : la boule a du volume au lieu d'un anneau clair.
             col *= mix(1.0, mix(0.65, 1.0, sqrt(z)), ebullition);
@@ -337,9 +353,16 @@ void main() {
         // au lieu d'assombrir. C'est l'exact inverse de la tache ci-dessus.
         col = mix(col, vec3(1.0, 0.95, 0.85) + teinte * 0.3, flare * 0.85);
 
-        // Bord renforcé (limb brightening) -> anneau lumineux.
-        float rim = smoothstep(0.45, 0.0, z);
-        col += rim * teinte * 0.55 * (1.0 - ebullition);
+        if (surface.z > 0.0) {
+            // **Assombrissement centre-bord** (lot 10) : au bord, on voit des
+            // couches plus hautes et plus froides de la photosphère. Loi
+            // linéaire `1 − u(1 − μ)`, μ = z le cosinus de la visée.
+            col *= 1.0 - surface.z * (1.0 - z);
+        } else {
+            // Bord renforcé (limb brightening) -> anneau lumineux.
+            float rim = smoothstep(0.45, 0.0, z);
+            col += rim * teinte * 0.55 * (1.0 - ebullition);
+        }
 
         gl_FragColor = vec4(col, 1.0);
     } else if (couronne_type > 0.5 && couronne_type < 1.5) {

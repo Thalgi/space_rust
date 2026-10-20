@@ -8,7 +8,7 @@ Journal du chantier décrit par
 n'est poussé. 70 commits d'avance sur `main` au 2026-10-03 — `main` n'en a
 aucun que la branche n'ait pas, la fusion sera une avance rapide.
 
-**État au 2026-10-20** : 920 tests verts (933 avec le binaire `mhd`), clippy à
+**État au 2026-10-20** : 921 tests verts (934 avec le binaire `mhd`), clippy à
 zéro. **Le lot 5 est clos** (ses sept presets de trou noir sont au tirage), **le
 6 est livré** (supergéante rouge, sous-naine sdB, étoile carbonée, naine brune)
 et **prolongé d'un 6.3** (l'ébullition des géantes rouges), **le 7 aussi** (la
@@ -22,9 +22,9 @@ d'accès (« Your organization has disabled Claude subscription access »). Son
 dernier message, *la courbe et la droite de la comète*, n'a été repris que le
 2026-10-19 — voir le lot 9.4.
 
-**Les lots 7 et 9 sont clos** (2026-10-20), validés à l'écran par
-l'utilisateur. **Tous les lots livrés sont désormais validés** ; restent 10 à
-12, à faire.
+**Les lots 7, 9 et 10 sont clos** (2026-10-20), validés à l'écran par
+l'utilisateur. **Tous les lots livrés sont validés** ; restent 11 et 12, puis
+les lots futurs 13 à 15 (conception §6 undecies).
 
 Deux dettes restent, petites et consignées plus bas : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de
@@ -73,7 +73,10 @@ silhouette « mince » n'a jamais été essayée.
 | **9.4** — queues reprises : vitre de profondeur, bouffées, chapelet de nuages, queue ÷ 4 | **fait, validé** (2026-10-20) | `da67058` + suite |
 | **9.5** — trajectoires de comète à part : teinte assombrie, bascule RING / COMET | **fait, validé** (2026-10-20) | |
 | **9 — clos** : validé à l'écran par l'utilisateur | **fait et tranché** (2026-10-20) | |
-| 10 à 12 | à faire | |
+| **10** — chaque type sa surface : grain par type, bord assombri pour toutes | **fait, validé** (2026-10-20) | |
+| **10 — clos** | **fait et tranché** (2026-10-20) | |
+| 11 et 12 | à faire | |
+| 13 à 15 — rémanents refaits, étoiles vertes, naine noire | **futurs**, après 11 et 12 (conception §6 undecies) | |
 
 Trois correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`), le
 `crash.log` sorti du dépôt, et la taille de texte non bornée qui tuait le jeu à
@@ -82,6 +85,75 @@ l'ouverture de la galerie des comètes (`ba66d72`).
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### Lot 10 clos : chaque type a sa surface (2026-10-20)
+
+**Le défaut** (conception §3 ter) : toutes les étoiles partageaient la même
+recette de surface — une naine M ressemblait à une supergéante, et le lot 1
+(la graine) ne tenait que la moitié de sa promesse. Et le shader **éclaircissait
+le bord**, l'inverse du réel (§8 bis, décision 3).
+
+**Mené en essai** comme le 6.3 : cases « - lot 10 » en fin de galerie des
+étoiles, à comparer avec leurs jumelles, puis adopté.
+
+**Deux règles physiques, un réglage** (`etoile::surface`, uniform `surface` :
+échelle du grain, contraste, assombrissement du bord) :
+
+- **pas de convection en surface au-dessus de ~7 000 K** : O, B, A, naines
+  blanches, sdB, rémanents sont **presque lisses** (contraste 8 à 25 %) ; F
+  est la transition (60 %) ;
+- **plus l'étoile est dense, plus le grain est fin** : naine M à 20 (contre 11
+  pour le Soleil), naine blanche et sdB à 30 ; géante carbonée plus grossière
+  (9) ;
+- **assombrissement centre-bord** `1 − u(1 − μ)`, plus marqué chez les froides
+  (u = 0,8 pour une M) que chez les chaudes (0,3 pour une O). **Le Soleil des
+  presets change d'aspect** (nom vide → réglage G) : décidé, c'est une
+  correction.
+
+| Type | Grain | Contraste | Bord (u) |
+|---|---|---|---|
+| O / B / A | 11 | 0,10 / 0,15 / 0,25 | 0,30 / 0,35 / 0,45 |
+| F | 13 | 0,60 | 0,55 |
+| G (et le Soleil des presets) | 11 | 1,00 | 0,60 |
+| K / T Tauri | 14 | 1,00 | 0,70 |
+| M | 20 | 0,85 | 0,80 |
+| Naine blanche / sdB | 30 | 0,08 | 0,50 / 0,40 |
+| Supergéante bleue | 9 | 0,10 | 0,35 |
+| Wolf-Rayet / pulsar / étoile à neutrons / magnétar | 11 | 0,10 | 0,30 |
+| Étoile carbonée | 9 | 1,00 | 0,80 |
+
+**Retour écran : supergéante bleue et Wolf-Rayet n'étaient pas lisses.**
+*« Il faudrait plus un mélange entre le nouveau shader et celui des géantes
+rouges, pour Wolf-Rayet avec relief. »* La physique le soutient : une étoile
+massive chaude a une **zone convective sous sa surface** (pic d'opacité du
+fer, ~150-200 kK) qui agite la photosphère par en dessous ; et on ne voit
+**pas** la surface d'une Wolf-Rayet, sa photosphère est dans son vent dense
+et **grumeleux**. D'où une ébullition partielle : bleue 0,25 à plat, WR 0,35
+en relief. Puis, second retour : cellules de la bleue **trop grosses** (*« sur
+une grande échelle il y a potentiellement un lissage visuel »* — ses
+structures sont minuscules devant son rayon), fonds de la WR **trop sombres**.
+D'où deux réglages neufs de l'ébullition (`etoile::reglage_ebullition`,
+uniform `ebul_reglage`) : **finesse des cellules** (bleue × 2,5) et **clarté
+minimale** (WR 0,7, ombre du relief comprise). Valeurs par défaut = rendu
+d'avant, pour tous les autres.
+
+⚠️ **Les surfaces déjà validées en ébullition gardent leur rendu** —
+géantes et supergéantes rouges, Mira, céphéide, ZZ Ceti : `(11, 1, 0)`,
+bord éclairci compris. **Incohérence assumée** avec la décision 3 (bord
+assombri pour toutes) : leur bord a été réglé avec leur ébullition et validé
+tel quel. Un chiffre par type suffira à la lever.
+
+**Jamais vus en essai**, la règle physique leur a été appliquée sans passer
+sous les yeux de l'utilisateur, qui a validé le lot sans les détailler :
+étoile carbonée (grossière, bord marqué), sdB et rémanents (lisses), T Tauri
+(comme une K).
+
+Appliqué **partout** par `Variante::appliquer` (`avec_surface_du_type`, gardé
+par `la_source_unique_construit_toutes_les_variantes`). Garde :
+`chaque_type_a_sa_surface_et_les_regles_tiennent` — bord assombri pour tout
+ce qui ne bout pas (Soleil des presets compris), chaudes lisses, naine M plus
+fine que le Soleil, surfaces validées intactes. **Red-check fait** (bord de la
+K remis à zéro).
 
 ### Lot 7 clos : la pulsation, revue à l'écran (2026-10-20)
 

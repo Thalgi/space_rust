@@ -115,6 +115,15 @@ pub struct Soleil {
     /// l'image** ? Dérivé du type par `etoile::eclat_visible` : la céphéide
     /// seule pour l'instant. Sinon, elles n'éclairent que les planètes.
     eclat_visible: bool,
+    /// **Surface propre au type** (lot 10) : `(échelle du grain, contraste du
+    /// grain, assombrissement du bord)`, dérivée du type par `etoile::surface`.
+    /// La valeur par défaut `(11, 1, 0)` est **exactement** le rendu d'avant
+    /// le lot — celui d'une étoile construite sans passer par son type.
+    surface: Vec3,
+    /// **Réglages de l'ébullition** (lot 10) : `(finesse des cellules, clarté
+    /// minimale)`, dérivés du type par `etoile::reglage_ebullition`. `(1, 0,5)`
+    /// est exactement le rendu d'avant.
+    ebul_reglage: Vec2,
     /// **Disque de matière autour de l'étoile** — accrétion d'un trou noir,
     /// disque protosolaire d'une jeune étoile.
     ///
@@ -297,6 +306,8 @@ impl Soleil {
             ebullition: 0.0,
             ebul_style: 0.0,
             eclat_visible: false,
+            surface: vec3(11.0, 1.0, 0.0),
+            ebul_reglage: vec2(1.0, 0.5),
             disques: Vec::new(),
             mats,
             mat_plasma,
@@ -361,6 +372,18 @@ impl Soleil {
         self
     }
 
+    /// Voir le champ `ebul_reglage`.
+    pub fn avec_reglage_ebullition(mut self, finesse: f32, clarte_min: f32) -> Self {
+        self.ebul_reglage = vec2(finesse.max(0.1), clarte_min.clamp(0.0, 0.9));
+        self
+    }
+
+    /// Voir le champ `surface`.
+    pub fn avec_surface(mut self, echelle: f32, contraste: f32, assombrissement: f32) -> Self {
+        self.surface = vec3(echelle, contraste.clamp(0.0, 1.0), assombrissement.clamp(0.0, 1.0));
+        self
+    }
+
     /// Voir le champ `eclat_visible`.
     pub fn avec_eclat_visible(mut self, oui: bool) -> Self {
         self.eclat_visible = oui;
@@ -370,7 +393,14 @@ impl Soleil {
     /// **L'ébullition propre au type**, stable ou instable selon la graine.
     pub fn avec_ebullition_du_type(self, nom: &str) -> Self {
         let (e, style) = crate::etoile::ebullition(nom, est_instable(self.graine));
-        self.avec_ebullition(e, style)
+        let (finesse, clarte) = crate::etoile::reglage_ebullition(nom);
+        self.avec_ebullition(e, style).avec_reglage_ebullition(finesse, clarte)
+    }
+
+    /// **La surface propre au type** (lot 10) : voir `etoile::surface`.
+    pub fn avec_surface_du_type(self, nom: &str) -> Self {
+        let (echelle, contraste, bord) = crate::etoile::surface(nom);
+        self.avec_surface(echelle, contraste, bord)
     }
 
     /// Marque l'étoile comme rémanent compact (pulsar/magnétar/étoile à neutrons) :
@@ -729,6 +759,41 @@ mod tests {
             .filter(|n| crate::etoile::eclat_visible(n))
             .collect();
         assert_eq!(visibles, ["Cepheide"], "types dont l'éclat atteint l'image : {visibles:?}");
+    }
+
+    /// **Le lot 10 : chaque type a sa surface, et les règles tiennent.**
+    ///
+    /// - chaque type du tirage qui ne bout pas a le **bord assombri** (§8 bis,
+    ///   décision 3), le Soleil des presets (nom vide) compris ;
+    /// - les **chaudes sont presque lisses** (pas de convection en surface) ;
+    /// - une **naine M a le grain plus fin** que le Soleil (plus dense) ;
+    /// - les surfaces **validées en ébullition** gardent le rendu d'avant.
+    #[test]
+    fn chaque_type_a_sa_surface_et_les_regles_tiennent() {
+        use crate::etoile::{ebullition, surface};
+        for nom in crate::etoile::types_du_tirage() {
+            let (_, contraste, bord) = surface(nom);
+            if ebullition(nom, false).0 == 0.0 && nom != "Trou noir" {
+                assert!(bord > 0.0, "« {nom} » a encore le bord éclairci");
+            }
+            assert!((0.0..=1.0).contains(&contraste), "« {nom} » : contraste {contraste}");
+        }
+        assert!(surface("").2 > 0.0, "le Soleil des presets n'a pas le bord assombri");
+        for chaude in [
+            "O (bleue)",
+            "B (bleu-blanc)",
+            "A (blanche)",
+            "Naine blanche",
+            "Sous-naine (sdB)",
+            "Supergeante bleue",
+            "Wolf-Rayet",
+        ] {
+            assert!(surface(chaude).1 <= 0.3, "« {chaude} » : chaude mais granuleuse");
+        }
+        assert!(surface("M (naine rouge)").0 > surface("G (jaune)").0, "la naine M n'a pas le grain plus fin");
+        for validee in ["Geante rouge", "Supergeante rouge", "Mira", "Cepheide", "Naine blanche pulsante (ZZ Ceti)"] {
+            assert_eq!(surface(validee), (11.0, 1.0, 0.0), "« {validee} » : surface validée modifiée");
+        }
     }
 
     /// **Les deux aspects existent, et le tirage atteint les deux.**
