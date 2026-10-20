@@ -24,7 +24,7 @@ pas : la fusion sera une avance rapide. ⚠️ Depuis le dossier principal, la
 branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
 worktree) : on travaille **dans le worktree**.
 
-**Vérifié (2026-10-20)** : **915 tests verts** (928 avec le binaire `mhd`),
+**Vérifié (2026-10-20)** : **920 tests verts** (933 avec le binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
 **Le lot 9 (comètes) est clos** (2026-10-20), validé à l'écran. Le retour du
@@ -105,7 +105,13 @@ sdB, étoile carbonée et **naine brune** au tirage.
 n'est **pas** la quasi-étoile du lot 11 (enveloppe de milliers de masses
 solaires chauffée par accrétion, large comme une UA). Le lot 11 reste entier.
 
-**Le lot 7 est livré**, **à juger à l'écran** : la **pulsation**, donc céphéide,
+**Le lot 7 est clos** (2026-10-20), validé à l'écran. Revu ce jour-là : ZZ Ceti
+et la céphéide ont une surface mi-granulation, mi-ébullition ; l'éclat de la
+céphéide atteint enfin l'image (il n'éclairait que les planètes), à la
+puissance 4 du rayon — **la céphéide seule**, les autres clignotaient
+(chantier ultérieur, conception §6 decies). Et le défilement des galeries,
+qui sautait de 5 760 px par cran sous Windows, est corrigé. Historique du
+lot : la **pulsation**, donc céphéide,
 Mira et naine blanche pulsante (ZZ Ceti) d'un coup.
 
 - `etoile::pulsation(nom) -> (amplitude, période)`. La luminosité n'a **pas** de
@@ -184,8 +190,8 @@ grossir l'atlas de glyphes jusqu'à 32768², et miniquad tuait le jeu à
 l'ouverture de la galerie des comètes. Le bornage vit désormais dans
 `police::preparer`, là où il ne peut plus être oublié.
 
-**Le prochain pas** : valider à l'écran le lot 7 (pulsation), puis
-lot 10 (distinction des types : granulation paramétrée — **déjà faite pour les
+**Le prochain pas** : **tous les lots livrés sont validés.** Restent à
+construire : lot 10 (distinction des types : granulation paramétrée — **déjà faite pour les
 géantes rouges** par le 6.3 —, assombrissement centre-bord pour toutes),
 11 (quasi-étoile), 12 (disques proto au tirage).
 

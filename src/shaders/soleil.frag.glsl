@@ -13,7 +13,11 @@ uniform vec4 spots[8]; // xyz = direction (repère surface), w = rayon effectif
 uniform float zone;    // 0 = disque de l'étoile (opaque), 1 = couronne (translucide)
 uniform float graine;  // graine de surface, propre à chaque étoile
 uniform float ebullition; // 0 = granulation fine ; > 0 = cellules qui bouillonnent (essai)
-uniform float ebul_style; // essai : 0 = peint à plat, 1 = relief par l'éclairage, 2 = contour irrégulier
+uniform float ebul_style; // 0 = peint à plat, 1 = relief par l'éclairage, 2 = contour irrégulier
+// Éclat de surface : flare et pulsation, déjà compensés de la taille dessinée
+// (`soleil::eclat_surfacique`). 1 au repos. Sans lui, ni le sursaut ni la
+// pulsation n'atteignaient l'image : ils n'éclairaient que les planètes.
+uniform float eclat;
 
 // **Le champ magnétique de l'étoile** (sous-lot 3.4) : xyz = direction d'un
 // pôle (repère surface), w = force SIGNÉE, le signe étant la polarité.
@@ -399,5 +403,12 @@ void main() {
         float panache = fbm(vec3(cos(ang) * 2.2, sin(ang) * 2.2, time * 0.18) + 30.0);
         g *= mix(1.0, 0.35 + 1.5 * panache, ebullition);
         gl_FragColor = vec4(teinte, clamp(g, 0.0, 1.0) * 0.6);
+    }
+    // L'éclat, en dernier et pour toutes les formes : le disque s'éclaire,
+    // la couronne s'épaissit. Le trou noir est déjà sorti plus haut.
+    if (zone > 0.5) {
+        gl_FragColor.a = clamp(gl_FragColor.a * eclat, 0.0, 1.0);
+    } else {
+        gl_FragColor.rgb *= eclat;
     }
 }

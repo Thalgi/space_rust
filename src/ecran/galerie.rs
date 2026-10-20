@@ -161,7 +161,9 @@ impl Galerie {
         let max_scroll = (rows as f32 * ch - h_vue).max(0.0);
         // Défilement doux : la molette déplace une CIBLE, le scroll réel y
         // converge exponentiellement (indépendant du framerate).
-        self.scroll_cible = (self.scroll_cible - mouse_wheel().1 * 84.0).clamp(0.0, max_scroll);
+        // Molette normalisée : ±120 par cran sous Windows (`defilement`).
+        self.scroll_cible =
+            (self.scroll_cible - super::defilement::crans() * super::defilement::PAS).clamp(0.0, max_scroll);
         let lisse = 1.0 - (-get_frame_time() * 10.0).exp();
         self.scroll += (self.scroll_cible - self.scroll) * lisse;
         if (self.scroll_cible - self.scroll).abs() < 0.3 {

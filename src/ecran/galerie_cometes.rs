@@ -136,7 +136,8 @@ fn libelle(p: &comete::Preset) -> String {
 pub struct GalerieCometes {
     cellules: Vec<Cellule>,
     etoile: Soleil,
-    scroll: f32,
+    /// Défilement doux, molette normalisée (`super::defilement`).
+    scroll: super::defilement::Defilement,
 }
 
 impl GalerieCometes {
@@ -161,7 +162,7 @@ impl GalerieCometes {
         Self {
             etoile: Soleil::new(Vec3::ZERO, RAYON_ETOILE, vec3(1.0, 0.95, 0.85), 1.0),
             cellules,
-            scroll: 0.0,
+            scroll: Default::default(),
         }
     }
 
@@ -187,7 +188,7 @@ impl GalerieCometes {
         let rows = n.div_ceil(cols);
         let h_vue = screen_height() - top;
         let max_scroll = (rows as f32 * ch - h_vue).max(0.0);
-        self.scroll = (self.scroll - mouse_wheel().1 * 48.0).clamp(0.0, max_scroll);
+        let scroll = self.scroll.maj(max_scroll, get_frame_time());
 
         let (cible_x, hauteur, _) = cadrage();
         let cible = vec3(cible_x, 0.0, 0.0);
@@ -197,7 +198,7 @@ impl GalerieCometes {
         for (i, c) in self.cellules.iter_mut().enumerate() {
             c.comete.update(dt);
             let cell_x = (i % cols) as f32 * cw;
-            let cell_y = top + (i / cols) as f32 * ch - self.scroll;
+            let cell_y = top + (i / cols) as f32 * ch - scroll;
             if cell_y + render_h < top || cell_y > screen_height() {
                 continue;
             }

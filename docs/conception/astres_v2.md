@@ -883,6 +883,32 @@ naines brunes globalement. L'outil qui a permis de juger chaque type en
 contexte réel — un système construit autour d'un type choisi, menu « choisir
 astre » de la Skymap V2 — est consigné au journal.
 
+## 6 decies. Chantier ultérieur : les étoiles dont l'éclat varie à l'œil (noté le 2026-10-20)
+
+**Demandé par l'utilisateur**, à noter et non à faire dans ce chantier :
+*« on a des cas d'étoiles qui augmentent en éclat, mais il faut des types
+précis pour moi, c'est un chantier ultérieur »*.
+
+**D'où ça vient.** En validant le lot 7, la céphéide ne variait pas d'éclat
+de loin : l'éclat pulsé n'atteignait que la lumière jetée sur les planètes,
+jamais l'image de l'étoile, et le plancher en pixels effaçait sa variation
+de taille. Le canal a été branché sur le shader (uniform `eclat`, flux
+conservé par `soleil::eclat_surfacique`) — et **toutes les étoiles se sont
+mises à clignoter** : chaque flare éclairait le disque entier (+60 %), chaque
+surface en ébullition battait au plancher. *« Un peu trop pétant sur les cas
+normaux. »*
+
+**Tranché** : le canal reste, mais il est **fermé par type**
+(`etoile::eclat_visible`). **La céphéide seule** l'a pour l'instant. Toutes
+les autres retrouvent leur rendu d'avant à l'écran.
+
+**Le chantier ultérieur** : ouvrir ce canal **type par type, nommément**,
+pour les étoiles dont l'éclat varie réellement à l'œil — variables pulsantes
+(Mira, ZZ Ceti), étoiles éruptives (l'étoile à flares, où le sursaut
+lumineux est justement le signe distinctif que la §3 lui promettait), et
+peut-être des variables à éclipses. Chacune avec son amplitude et son rythme,
+jugés à l'écran un par un. La mécanique est faite ; manquent les décisions.
+
 ## 7. Hors périmètre
 
 **Rendre les arches visibles au cadrage par défaut** : tranché et chiffré par

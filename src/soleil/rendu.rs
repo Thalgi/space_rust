@@ -16,6 +16,10 @@ impl Soleil {
         // `base.rayon` pour l'un d'eux détacherait les protubérances de la
         // surface et les ferait masquer par une sphère de la mauvaise taille.
         let r = self.rayon_dessine(cam.pos);
+        // Éclat de surface : flare et pulsation, compensés de la taille (voir
+        // `eclat_surfacique`). Sans lui, ni l'un ni l'autre n'atteignait
+        // l'image — ils n'éclairaient que les planètes.
+        let eclat = self.eclat_dessin(cam.pos);
         let rot = self.temps * 0.12;
 
         // **Le disque, moitié arrière d'abord** : l'horizon la masquera.
@@ -78,6 +82,7 @@ impl Soleil {
             mat.set_uniform("graine", self.graine);
             mat.set_uniform("ebullition", self.ebullition);
             mat.set_uniform("ebul_style", self.ebul_style);
+            mat.set_uniform("eclat", eclat);
             mat.set_uniform_array("spots", &spots[..]);
             mat.set_uniform_array("poles", &champ_uniforme[..]);
 

@@ -154,7 +154,8 @@ fn aspects(nom: &str) -> Vec<Option<bool>> {
 /// que l'usage.
 pub struct GalerieEtoiles {
     cellules: Vec<(String, Box<dyn Astre>)>,
-    scroll: f32,
+    /// Défilement doux, molette normalisée (`super::defilement`).
+    scroll: super::defilement::Defilement,
     /// Cible basse résolution du filtre pixel (recréée si la fenêtre change).
     cible: Option<RenderTarget>,
     rt_dims: (u32, u32),
@@ -189,7 +190,7 @@ impl GalerieEtoiles {
             .chain(trous_noirs())
             .chain(naines_brunes())
             .collect();
-        Self { cellules, scroll: 0.0, cible: None, rt_dims: (0, 0) }
+        Self { cellules, scroll: Default::default(), cible: None, rt_dims: (0, 0) }
     }
 
     /// Une frame. Renvoie `true` pour revenir à l'accueil (Échap).
@@ -239,14 +240,14 @@ impl GalerieEtoiles {
         let rows = n.div_ceil(cols);
         let h_vue = screen_height() - top;
         let max_scroll = (rows as f32 * ch - h_vue).max(0.0);
-        self.scroll = (self.scroll - mouse_wheel().1 * 48.0).clamp(0.0, max_scroll);
+        let scroll = self.scroll.maj(max_scroll, get_frame_time());
 
         // --- Phase 3D : dessiner chaque étoile dans son viewport. ---
         let mut labels: Vec<(String, f32, f32)> = Vec::new();
         for (i, (nom, corps)) in self.cellules.iter_mut().enumerate() {
             corps.update(dt); // animation (granulation, taches, éruptions, bandes)
             let cell_x = (i % cols) as f32 * cw;
-            let cell_y = top + (i / cols) as f32 * ch - self.scroll;
+            let cell_y = top + (i / cols) as f32 * ch - scroll;
             if cell_y + render_h < top || cell_y > screen_height() {
                 continue;
             }

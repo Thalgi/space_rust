@@ -316,6 +316,20 @@ pub fn pulsation(nom: &str) -> (f32, f32) {
     }
 }
 
+/// **Ce type montre-t-il ses variations d'éclat à l'image ?**
+///
+/// ⚠️ **La céphéide seule, pour l'instant** (2026-10-20). Brancher l'éclat sur
+/// le shader a fait **clignoter toutes les étoiles** : chaque flare éclairait le
+/// disque entier, et chaque surface en ébullition battait au plancher en
+/// pixels — *« un peu trop pétant sur les cas normaux »*. Les étoiles dont
+/// l'éclat varie vraiment à l'œil sont des **types précis** (variables
+/// pulsantes, éruptives, à éclipses) : chantier ultérieur, à type nommé.
+/// D'ici là, l'éclat des autres n'atteint que la lumière qu'elles jettent sur
+/// leurs planètes, comme avant.
+pub fn eclat_visible(nom: &str) -> bool {
+    nom == "Cepheide"
+}
+
 /// **Ébullition de surface d'un type** : `(échelle, style)`, ce que reçoit
 /// `Soleil::avec_ebullition`. `(0, plat)` : la granulation fine ordinaire.
 ///
@@ -324,6 +338,15 @@ pub fn pulsation(nom: &str) -> (f32, f32) {
 /// **instable** — le contour qui se déforme pour la géante, le relief pour la
 /// supergéante. Qui est instable se dérive de la graine (`soleil::est_instable`).
 /// Mira l'est toujours : géante de la branche asymptotique, elle pulse en plus.
+///
+/// **ZZ Ceti** (2026-10-20) : un **mélange**, demandé tel quel — moitié
+/// granulation d'origine, moitié bouillonnement. Le shader fond les deux selon
+/// `ebullition × 2` : 0,25 donne la moitié, avec des cellules plus petites et
+/// plus nombreuses que sur une géante, ce qui sied à une naine. Toujours à
+/// plat, ni relief ni contour. Elle seule parmi les naines blanches : c'est
+/// sa pulsation qui l'agite, la naine blanche ordinaire reste lisse.
+///
+/// **La céphéide** reçoit le même mélange (2026-10-20, « le même shader »).
 pub fn ebullition(nom: &str, instable: bool) -> (f32, f32) {
     use crate::soleil::{EBUL_CONTOUR, EBUL_PLAT, EBUL_RELIEF};
     match (nom, instable) {
@@ -331,6 +354,7 @@ pub fn ebullition(nom: &str, instable: bool) -> (f32, f32) {
         ("Geante rouge", true) | ("Mira", _) => (1.0, EBUL_CONTOUR),
         ("Supergeante rouge", false) => (1.0, EBUL_PLAT),
         ("Supergeante rouge", true) => (1.0, EBUL_RELIEF),
+        ("Naine blanche pulsante (ZZ Ceti)", _) | ("Cepheide", _) => (0.25, EBUL_PLAT),
         _ => (0.0, EBUL_PLAT),
     }
 }

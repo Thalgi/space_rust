@@ -8,7 +8,7 @@ Journal du chantier décrit par
 n'est poussé. 70 commits d'avance sur `main` au 2026-10-03 — `main` n'en a
 aucun que la branche n'ait pas, la fusion sera une avance rapide.
 
-**État au 2026-10-20** : 915 tests verts (928 avec le binaire `mhd`), clippy à
+**État au 2026-10-20** : 920 tests verts (933 avec le binaire `mhd`), clippy à
 zéro. **Le lot 5 est clos** (ses sept presets de trou noir sont au tirage), **le
 6 est livré** (supergéante rouge, sous-naine sdB, étoile carbonée, naine brune)
 et **prolongé d'un 6.3** (l'ébullition des géantes rouges), **le 7 aussi** (la
@@ -22,9 +22,9 @@ d'accès (« Your organization has disabled Claude subscription access »). Son
 dernier message, *la courbe et la droite de la comète*, n'a été repris que le
 2026-10-19 — voir le lot 9.4.
 
-**Le lot 9 est clos** (2026-10-20), validé à l'écran par l'utilisateur :
-*« on peut valider le chantier comète »*. Restent les lots 7 (à juger à
-l'écran) et 10 à 12 (à faire).
+**Les lots 7 et 9 sont clos** (2026-10-20), validés à l'écran par
+l'utilisateur. **Tous les lots livrés sont désormais validés** ; restent 10 à
+12, à faire.
 
 Deux dettes restent, petites et consignées plus bas : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de
@@ -61,7 +61,10 @@ silhouette « mince » n'a jamais été essayée.
 | **6.3** — géantes et supergéantes rouges en ébullition, stables et instables | **fait et validé à l'écran** (2026-10-19) | |
 | **6.3 bis** — filtre pixel (touche P) dans la galerie des étoiles | fait | |
 | **6 — clos** : validé à l'écran par l'utilisateur | **fait et tranché** (2026-10-19) | |
-| **7** — pulsation : céphéide, Mira, ZZ Ceti | **fait**, à juger à l'écran | |
+| **7** — pulsation : céphéide, Mira, ZZ Ceti | **fait, validé** (2026-10-20) | |
+| **7.1** — ZZ Ceti et céphéide : surface mi-granulation, mi-ébullition | **fait, validé** (2026-10-20) | |
+| **7.2** — l'éclat atteint l'image (flux conservé, ∝ R⁴), céphéide seule | **fait, validé** (2026-10-20) | |
+| **7 — clos** | **fait et tranché** (2026-10-20) | |
 | **8.1** — le ciel en cubemap | **abandonné**, code retiré | `7f6e1aa` |
 | **8.2** — la déviation dans le shader | **abandonné**, code retiré | `dd55404`, `5e66b10` |
 | **9.1** — les comètes au tirage, et leur planche | **fait, validé** | |
@@ -79,6 +82,58 @@ l'ouverture de la galerie des comètes (`ba66d72`).
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### Lot 7 clos : la pulsation, revue à l'écran (2026-10-20)
+
+**Le défilement des galeries, d'abord** — *« plus on rajoute d'étoiles, plus
+le scroll est agressif »*. miniquad transmet la molette **brute** : sous
+Windows, ±120 par cran (`WHEEL_DELTA`). Les galeries des étoiles et des comètes
+multipliaient ce 120 par 48 px — **5 760 px par cran**, bornés seulement par
+le bout de la liste : chaque étoile ajoutée allongeait le saut. La galerie
+tellurique avait le même défaut (×84, soit 10 080 px), masqué par son
+glissement. Module commun `ecran::defilement` : molette normalisée en crans,
+84 px par cran partout, glissement indépendant du framerate. La caméra de la
+Skymap y échappait, ne lisant que le signe. Trois gardes, **red-check fait**
+(division par 120 retirée).
+
+**7.1 — ZZ Ceti et la céphéide : une surface mélangée.** *« Un mélange entre
+le shader actuel et celui des géantes rouges, sans relief ni contour »*, puis
+*« le même shader »* pour la céphéide. `etoile::ebullition` leur donne
+**0,25, à plat** : le shader fond les deux surfaces selon `ebullition × 2`,
+donc moitié granulation, moitié bouillonnement, avec des cellules plus
+petites et plus nombreuses. La naine blanche ordinaire reste lisse. Garde dans
+`les_geantes_rouges_ont_un_aspect_stable_et_un_instable`, **red-checks
+faits**.
+
+**7.2 — l'éclat n'atteignait pas l'image.** *« Céphéide : j'ai pas la
+variation d'éclat de loin »*. Pas un réglage trop léger : l'éclat pulsé
+(`pulse_lumiere`) ne nourrissait que `lumiere()` — la lumière jetée sur les
+planètes —, le shader peignait une teinte fixe, et sous le plancher de 4 px
+`rayon_plancher` effaçait aussi la variation de taille. **La promesse du lot 7,
+« visible à toute distance », n'avait jamais été tenue.** Même défaut pour le
+sursaut des flares du lot 3.
+
+- **Uniform `eclat`**, flux **conservé** (`eclat_surfacique`) : de près, la
+  taille porte sa part de la variation et l'éclat de surface le reste ; au
+  plancher, l'éclat porte tout.
+- **L'éclat suit le rayon à la puissance 4** (`EXPOSANT_ECLAT_PULSATION`), et
+  non au carré : une étoile pulsante chauffe en se comprimant (`L ∝ R²T⁴`).
+  Céphéide : facteur 2,2 entre extrêmes, celui de δ Cephei, au lieu de ±20 %.
+  Le gonflement d'ébullition reste au carré, pour ne pas toucher aux géantes
+  validées.
+- ⚠️ **Ouvert à toutes, il les a fait clignoter** (flares, ébullition) : *« un
+  peu trop pétant sur les cas normaux »*. Fermé par type
+  (`etoile::eclat_visible`) : **la céphéide seule**. Les autres, chantier
+  ultérieur noté en conception §6 decies.
+
+Gardes : `la_pulsation_se_voit_de_loin_comme_de_pres` (red-checks : exposant
+2, compensation retirée) et `seule_la_cepheide_montre_son_eclat_a_l_image`
+(red-check : Mira ajoutée).
+
+**Validé à l'écran** : *« on valide le lot 7 »*. La dette « trop sinusoïdal »
+de la céphéide (plus bas) est de fait adoucie — surface qui bouillonne,
+gonflement aléatoire par-dessus, éclat qui varie — sans être soldée : la
+courbe reste une sinusoïde.
 
 ### Lot 9.4 : les queues de comète reprises sur retour écran (2026-10-19)
 
@@ -1360,6 +1415,11 @@ pas choisir.
 
 ### Ce qui reste ouvert, et que personne ne garde
 
+- **Chantier ultérieur noté par l'utilisateur** (2026-10-20) : les étoiles
+  dont l'éclat varie à l'œil, **type par type**. Le canal d'éclat à l'image
+  existe (lot 7, uniform `eclat`) mais n'est ouvert qu'à la **céphéide** —
+  ouvert à toutes, elles clignotaient. Voir `conception/astres_v2.md`
+  §6 decies.
 - ⚠️ **Le crash de la texture 32768² est revenu** (2026-10-20), une fois, puis
   pas au relancement. `miniquad gl.rs:181`, `assert_eq!(0, 4294967296)` : le
   **même** que le 3 octobre. Le correctif de l'époque (`ba66d72`, tailles de

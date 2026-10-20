@@ -6,6 +6,7 @@ mod accueil;
 mod assembleur;
 pub(crate) mod bandeau;
 mod catalogue;
+mod defilement;
 mod clic;
 mod designation;
 mod enveloppes;

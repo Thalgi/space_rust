@@ -111,6 +111,10 @@ pub struct Soleil {
     ebullition: f32,
     /// [`EBUL_PLAT`], [`EBUL_RELIEF`] ou [`EBUL_CONTOUR`].
     ebul_style: f32,
+    /// Ses variations d'éclat (flares, pulsation) se voient-elles **à
+    /// l'image** ? Dérivé du type par `etoile::eclat_visible` : la céphéide
+    /// seule pour l'instant. Sinon, elles n'éclairent que les planètes.
+    eclat_visible: bool,
     /// **Disque de matière autour de l'étoile** — accrétion d'un trou noir,
     /// disque protosolaire d'une jeune étoile.
     ///
@@ -208,6 +212,44 @@ fn est_instable(graine: f32) -> bool {
 /// leur somme ne repasse jamais par le même motif, et c'est ce qui la sépare de
 /// la respiration régulière d'une céphéide. La graine décale l'horloge : deux
 /// étoiles ne gonflent pas ensemble.
+/// **Exposant de l'éclat d'une pulsation** : l'éclat suit le rayon à la
+/// puissance 4, et non au carré.
+///
+/// ⚠️ `L = 4πR²σT⁴` ne donne `L ∝ R²` qu'à température **constante**. Or une
+/// étoile pulsante chauffe en se comprimant et se refroidit en se dilatant :
+/// δ Cephei varie d'environ ±9 % en température, et son éclat d'un facteur
+/// **~2,3** — quand le carré du rayon (±10 %) n'en donnait que 1,5. La
+/// température est le plus gros des deux termes. Au carré seul, la céphéide
+/// ne variait que de ±20 %, phase brillante saturée au blanc : *« j'ai pas la
+/// variation d'éclat de loin »* (2026-10-20). À la puissance 4, `(1,1/0,9)⁴`
+/// rend 2,2 : le facteur réel.
+const EXPOSANT_ECLAT_PULSATION: f32 = 4.0;
+
+/// **Éclat relatif d'une étoile qui pulse et bouillonne** : la pulsation à la
+/// puissance [`EXPOSANT_ECLAT_PULSATION`] (rayon et température), le
+/// gonflement d'ébullition au **carré** seulement — il n'a pas de cycle de
+/// température, et le relever changerait les géantes rouges validées.
+fn lumiere_pulsee(f_pulsation: f32, f_ebullition: f32) -> f32 {
+    f_pulsation.powf(EXPOSANT_ECLAT_PULSATION) * f_ebullition * f_ebullition
+}
+
+/// **Éclat par unité de surface dessinée**, ce que reçoit le shader.
+///
+/// ⚠️ **La conservation du flux.** Ce qu'on voit d'une étoile, c'est son éclat
+/// **total** : surface dessinée × éclat de surface. Quand elle est assez grande
+/// à l'écran, son rayon dessiné suit déjà la pulsation, et la surface porte une
+/// part de la variation. Sous le plancher en pixels (`PX_MIN`), le rayon
+/// dessiné est **figé** : sans compensation, la pulsation disparaissait
+/// entièrement de l'image vue de loin — exactement là où elle devait se voir.
+///
+/// `lumiere` : éclat total relatif ; `r_repos` : rayon dessiné **sans**
+/// pulsation ; `r_dessine` : rayon dessiné avec. Le rapport des surfaces dit
+/// quelle part la taille porte déjà, le reste revient à l'éclat de surface.
+fn eclat_surfacique(lumiere: f32, r_repos: f32, r_dessine: f32) -> f32 {
+    let k = r_repos / r_dessine.max(1e-6);
+    lumiere * k * k
+}
+
 fn facteur_ebullition(graine: f32, temps: f32) -> f32 {
     let t = temps + graine;
     let s = (t * 0.53).sin() + 0.6 * (t * 0.97 + 1.3).sin() + 0.3 * (t * 1.71 + 2.1).sin();
@@ -254,6 +296,7 @@ impl Soleil {
             pulse: (0.0, 1.0),
             ebullition: 0.0,
             ebul_style: 0.0,
+            eclat_visible: false,
             disques: Vec::new(),
             mats,
             mat_plasma,
@@ -315,6 +358,12 @@ impl Soleil {
     pub fn avec_ebullition(mut self, e: f32, style: f32) -> Self {
         self.ebullition = e.clamp(0.0, 1.0);
         self.ebul_style = style;
+        self
+    }
+
+    /// Voir le champ `eclat_visible`.
+    pub fn avec_eclat_visible(mut self, oui: bool) -> Self {
+        self.eclat_visible = oui;
         self
     }
 
@@ -456,8 +505,23 @@ impl Soleil {
     /// gouverne donc les deux — et c'est la raison pour laquelle
     /// `etoile::pulsation` n'a pas d'amplitude de luminosité à part.
     fn pulse_lumiere(&self) -> f32 {
-        let f = self.facteur_pulse();
-        f * f
+        let ebul = if self.ebullition > 0.0 { facteur_ebullition(self.graine, self.temps) } else { 1.0 };
+        lumiere_pulsee(facteur_pulsation(self.pulse.0, self.pulse.1, self.temps), ebul)
+    }
+
+    /// **Éclat de surface à envoyer au shader** : flare et pulsation, compensés
+    /// de ce que la taille dessinée porte déjà (voir [`eclat_surfacique`]).
+    pub(super) fn eclat_dessin(&self, cam_pos: Vec3) -> f32 {
+        if !self.eclat_visible {
+            return 1.0;
+        }
+        let r_repos = crate::impostor::rayon_plancher(
+            self.base.rayon,
+            (cam_pos - self.base.position).length(),
+            crate::impostor::viewport_h(),
+            PX_MIN,
+        );
+        eclat_surfacique(self.eclat() * self.pulse_lumiere(), r_repos, self.rayon_dessine(cam_pos))
     }
 }
 
@@ -632,6 +696,41 @@ mod tests {
         assert!(bas < 0.99 && haut > 1.02, "trop sage : {bas} à {haut}");
     }
 
+    /// **La pulsation se voit de loin** : sous le plancher en pixels, où la
+    /// taille dessinée est figée, l'éclat de surface porte **toute** la
+    /// variation ; de près, où la taille suit, il n'en porte que le reste.
+    /// Et l'éclat total d'une céphéide varie du facteur réel (~2), pas des
+    /// ±20 % du seul carré du rayon.
+    #[test]
+    fn la_pulsation_se_voit_de_loin_comme_de_pres() {
+        use super::{eclat_surfacique, lumiere_pulsee};
+        let f = 1.1_f32;
+        let l = lumiere_pulsee(f, 1.0);
+        // De loin : rayon figé au plancher, l'éclat de surface fait tout.
+        assert!((eclat_surfacique(l, 4.0, 4.0) - l).abs() < 1e-5, "la pulsation s'efface sous le plancher");
+        // De près : le rayon dessiné suit, l'éclat de surface ne porte que le
+        // reste — et le flux total (surface × éclat) reste l'éclat voulu.
+        let e = eclat_surfacique(l, 50.0, 50.0 * f);
+        assert!((e * f * f - l).abs() < 1e-4, "le flux total n'est pas conservé : {} au lieu de {l}", e * f * f);
+        // L'amplitude : une céphéide (±10 %) varie d'un facteur réel, ~2.
+        let rapport = lumiere_pulsee(1.1, 1.0) / lumiere_pulsee(0.9, 1.0);
+        assert!(rapport > 1.9, "céphéide : rapport d'éclat {rapport}, trop sage pour se voir de loin");
+        // Et sans pulsation ni ébullition : rien ne bouge.
+        assert_eq!(lumiere_pulsee(1.0, 1.0), 1.0);
+    }
+
+    /// **Seule la céphéide montre son éclat à l'image**, pour l'instant :
+    /// branché sur toutes, il les faisait clignoter (flares, ébullition). Les
+    /// autres types variables viendront un par un, nommément.
+    #[test]
+    fn seule_la_cepheide_montre_son_eclat_a_l_image() {
+        let visibles: Vec<&str> = crate::etoile::types_du_tirage()
+            .into_iter()
+            .filter(|n| crate::etoile::eclat_visible(n))
+            .collect();
+        assert_eq!(visibles, ["Cepheide"], "types dont l'éclat atteint l'image : {visibles:?}");
+    }
+
     /// **Les deux aspects existent, et le tirage atteint les deux.**
     ///
     /// Stable et instable se distinguent pour chaque type qui bouillonne (sans
@@ -648,6 +747,16 @@ mod tests {
         assert_eq!(ebullition("Mira", false), ebullition("Mira", true), "Mira doit rester instable");
         assert_eq!(ebullition("Mira", false), ebullition("Geante rouge", true));
         assert_eq!(ebullition("G (jaune)", true).0, 0.0, "une étoile ordinaire s'est mise à bouillir");
+        // ZZ Ceti : un mélange (moitié granulation, moitié bouillonnement), à
+        // plat, d'un seul aspect — et sa jumelle sans pulsation reste lisse.
+        let zz = ebullition("Naine blanche pulsante (ZZ Ceti)", false);
+        assert!(zz.0 > 0.0 && zz.0 * 2.0 < 1.0, "ZZ Ceti doit mêler les deux surfaces : {zz:?}");
+        assert_eq!(zz.1, super::EBUL_PLAT, "ni relief ni contour pour ZZ Ceti");
+        assert_eq!(zz, ebullition("Naine blanche pulsante (ZZ Ceti)", true));
+        // La céphéide : exactement le même mélange (« le même shader »).
+        assert_eq!(ebullition("Cepheide", false), zz, "la céphéide n'a pas le mélange de ZZ Ceti");
+        assert_eq!(ebullition("Cepheide", true), zz);
+        assert_eq!(ebullition("Naine blanche", false).0, 0.0, "la naine blanche ordinaire s'est mise à bouillir");
 
         let n = 5000;
         let instables = (0..n).filter(|k| est_instable(*k as f32 * 0.2)).count() as f32 / n as f32;
