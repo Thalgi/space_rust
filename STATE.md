@@ -18,9 +18,10 @@
 ## Reprendre ici (état au 2026-10-19)
 
 **Chantier en cours : Astres V2.** Branche `chantier-astres`, worktree
-`.claude/worktrees/astres-v2`. **Plus de 70 commits d'avance sur `main`, rien
-de fusionné, rien de poussé.** `main` n'a aucun commit que la branche n'ait
-pas : la fusion sera une avance rapide. ⚠️ Depuis le dossier principal, la
+`.claude/worktrees/astres-v2`. **Fusionnée dans `main` le 2026-10-21** (avance
+rapide, lots 0 à 11), **rien de poussé** : `main` a 79 commits d'avance sur
+`origin/main`. Le chantier continue sur la branche (lot 12) ; refusionner
+quand il sera clos. ⚠️ Depuis le dossier principal, la
 branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
 worktree) : on travaille **dans le worktree**.
 

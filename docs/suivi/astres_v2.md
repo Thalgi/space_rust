@@ -4,9 +4,12 @@ Journal du chantier décrit par
 [`conception/astres_v2.md`](../conception/astres_v2.md), lot par lot.
 
 **Où se trouve le travail** : branche `chantier-astres`, dans le worktree
-`.claude/worktrees/astres-v2`. **Rien n'est fusionné dans `main`**, rien
-n'est poussé. 70 commits d'avance sur `main` au 2026-10-03 — `main` n'en a
-aucun que la branche n'ait pas, la fusion sera une avance rapide.
+`.claude/worktrees/astres-v2`. **Fusionnée dans `main` le 2026-10-21**, en
+avance rapide (lots 0 à 11) ; **rien n'est poussé**. Le travail non commité du
+dossier principal — le découpage de `vaisseau/generateur.rs` (chantier de
+dette, `docs/suivi/dette_vaisseau.md`) — a été préservé : deux fichiers de
+docs qu'il modifiait aussi ont été mis de côté en patch puis réappliqués, et
+l'ensemble compile, 923 tests verts. Le lot 12 continue sur la branche.
 
 **État au 2026-10-21** : 923 tests verts (936 avec le binaire `mhd`), clippy à
 zéro. **Le lot 5 est clos** (ses sept presets de trou noir sont au tirage), **le
