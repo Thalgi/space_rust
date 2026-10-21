@@ -52,6 +52,9 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
 - [x] **Étoile à neutrons** : jets de matière bipolaires **fixes** (`couronne_type 1`).
 - [x] **Pulsar** : faisceau bipolaire qui **tourne** (effet phare) + flash périodique (`couronne_type 3`).
 - [x] **Wolf-Rayet** : **vent stellaire** turbulent en expansion, bleu-violet (`couronne_type 2`).
+- [x] **Quasi-étoile** (lot 11, 2026-10-21) : enveloppe d'une UA chauffée par un trou noir
+  central — pourpre, bouillonnante à contour, couronne serrée, **lueur du cœur** au centre
+  (uniform `coeur`). ~1 système sur 1 000, jamais en compagne, pas de planète interne.
 - [x] **Étoile carbonée (C)** : preset galerie (rouge sombre profond).
 - [x] **Variable céphéide / Mira** : **pulsation** (rayon + luminosité qui oscillent), lot 7
   (2026-09-30). Céphéide 10 %, Mira **15 %** (20 % jusqu'au 2026-10-19). **Mira bouillonne**

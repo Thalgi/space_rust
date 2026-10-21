@@ -921,6 +921,30 @@ dans l'ordre, après les lots 10 à 12.** Aucun lot existant ne les couvre.
 | 14 | **Étoiles vertes** | ⚠️ **Il n'en existe pas** : une étoile dont le pic tombe dans le vert émet aussi du rouge et du bleu, l'œil la voit blanche (le vert des comètes « Lulin » est une **raie**, le C₂, pas un corps noir). Le chantier a suivi le réel jusqu'ici : ce serait un **choix de fantaisie assumé**, à trancher par l'utilisateur en ouvrant le lot. |
 | 15 | **Naine noire** | ⚠️ **Écartée le 2026-09-24** (§3 bis : « par définition invisible ») — et l'univers est trop jeune pour en contenir une. **Rouverte par l'utilisateur**, qui a posé la règle. Il lui faut une représentation distincte : silhouette qui masque le fond, faible lueur infrarouge, ou centre froid d'un système comme la naine brune. |
 
+### Chantier futur : la refonte de la genèse (noté le 2026-10-21)
+
+*« À la fin de nos travaux, genèse va devoir avoir une refonte complète pour
+gérer tous nos nouveaux cas correctement, et possiblement être refaite
+entièrement. »* Chaque lot du chantier astres y a ajouté son cas particulier
+— naine brune au centre, trou noir et quasi-étoile à masse propre, comètes,
+rémanents à échelle propre, exclusions des systèmes multiples, plancher de
+la première orbite — par branches successives. **Valeurs provisoires à y
+reprendre**, posées faute de mieux et acceptées telles quelles par
+l'utilisateur : la **masse bornée** de la quasi-étoile
+(`MASSE_QUASI_ETOILE` = 20 masses stellaires du jeu, contre des milliers dans
+les modèles) et sa **rareté** (~1 système sur 1 000).
+
+## 6 terdecies. Le lot 11, livré et clos (2026-10-21)
+
+La quasi-étoile est au tirage (~1 système sur 1 000), **à l'échelle vraie**
+retenue : un rayon d'**une UA** (décision 2 du §8 bis tenue — elle dépasse les
+orbites internes, son système n'a pas de planète interne). Sa signature, ce
+qui la distingue d'une supergéante rouge démesurée : une **lueur chaude qui
+transparaît au centre**, la chaleur du trou noir qui l'alimente. Son
+enveloppe est pourpre (choix d'image, dans le registre de la carbonée) et
+bouillonne à contour ; sa couronne est serrée. Masse propre et bornée, rareté
+provisoire : à reprendre avec la refonte de la genèse. Détail au journal.
+
 ## 6 duodecies. Le lot 10, livré et clos (2026-10-20)
 
 La §3 ter est soldée pour l'essentiel. **Chaque type a sa surface**

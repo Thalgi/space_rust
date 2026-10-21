@@ -27,6 +27,9 @@ uniform vec3 surface;
 // (0,5 = d'origine ; plus haut, le fond des cellules et l'ombre du relief
 // s'éclaircissent).
 uniform vec2 ebul_reglage;
+// Lueur du cœur (lot 11, essai) : la quasi-étoile est chauffée par un trou noir
+// en son centre, pas par la fusion. 0 pour toutes les autres étoiles.
+uniform float coeur;
 
 // **Le champ magnétique de l'étoile** (sous-lot 3.4) : xyz = direction d'un
 // pôle (repère surface), w = force SIGNÉE, le signe étant la polarité.
@@ -306,6 +309,17 @@ void main() {
             }
             // Un bord assombri : la boule a du volume au lieu d'un anneau clair.
             col *= mix(1.0, mix(0.65, 1.0, sqrt(z)), ebullition);
+        }
+
+        if (coeur > 0.0) {
+            // **Le cœur qui transparaît** (lot 11, essai) : la chaleur du trou
+            // noir central traverse l'enveloppe là où on la voit de face, et
+            // s'y perd vers le bord, où la visée traverse plus de matière. Une
+            // respiration lente : l'accrétion n'est pas un robinet régulier.
+            float face = pow(z, 6.0);
+            float souffle = 0.8 + 0.2 * sin(time * 0.6 + graine);
+            vec3 chaud = vec3(1.0, 0.82, 0.55);
+            col = mix(col, chaud, clamp(coeur * face * souffle, 0.0, 1.0));
         }
 
         // Un champ fort bloque la convection bien AVANT de creuser une tache :

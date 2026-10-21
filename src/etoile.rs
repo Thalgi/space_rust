@@ -41,8 +41,16 @@ pub(crate) fn particuliere(p: f32) -> Gabarit {
         (38000.0, 45000.0, 1.1, 5.0, "Wolf-Rayet", 2.0)
     } else if p < 0.92 {
         (18000.0, 24000.0, 1.4, 6.0, "Supergeante bleue", 2.0)
-    } else {
+    } else if p < 0.98 {
         (4000.0, 4600.0, 0.9, 1.2, "T Tauri (jeune)", 6.0)
+    } else {
+        // **Quasi-étoile** (lot 11) : 2 % des particulières, soit ~1 système
+        // sur 1 000 — rareté choisie par l'utilisateur. Une enveloppe chauffée
+        // par l'accrétion sur un trou noir central, pas par la fusion : froide
+        // (~3 600 K), et **large d'une UA** (§8 bis, décision 2 : échelle
+        // vraie — elle dépasse les orbites internes). Prise sur la part de
+        // T Tauri, qui passe de 8 à 6 %.
+        (3400.0, 3800.0, UA, 12.0, "Quasi-etoile", 0.0)
     }
 }
 
@@ -231,6 +239,11 @@ impl ProfilEtoile {
         self.nom == "Trou noir"
     }
 
+    /// **Quasi-étoile** (lot 11) : voir [`est_quasi_etoile`].
+    pub fn est_quasi_etoile(&self) -> bool {
+        est_quasi_etoile(self.nom)
+    }
+
     /// **Naine brune** : le seul type du tirage qui ne produit pas un `Soleil`.
     ///
     /// Elle ne fusionne pas l'hydrogène, n'a pas de photosphère stellaire, et le
@@ -362,6 +375,9 @@ pub fn ebullition(nom: &str, instable: bool) -> (f32, f32) {
         // fins dans [`reglage_ebullition`].
         ("Supergeante bleue", _) => (0.25, EBUL_PLAT),
         ("Wolf-Rayet", _) => (0.35, EBUL_RELIEF),
+        // Lot 11 : une enveloppe géante, plus démesurée qu'une supergéante,
+        // au contour qui se déforme. Cellules et sillons : `reglage_ebullition`.
+        ("Quasi-etoile", _) => (1.0, EBUL_CONTOUR),
         _ => (0.0, EBUL_PLAT),
     }
 }
@@ -378,6 +394,8 @@ pub fn reglage_ebullition(nom: &str) -> (f32, f32) {
     match nom {
         "Supergeante bleue" => (2.5, 0.5),
         "Wolf-Rayet" => (1.0, 0.7),
+        // Quasi-étoile : cellules plus grosses encore, sillons plus profonds.
+        "Quasi-etoile" => (0.7, 0.35),
         _ => (1.0, 0.5),
     }
 }
@@ -418,10 +436,34 @@ pub fn surface(nom: &str) -> (f32, f32, f32) {
         "Pulsar" | "Etoile a neutrons" | "Magnetar" => (11.0, 0.10, 0.30),
         // Surfaces validées avec leur ébullition : inchangées.
         "Geante rouge" | "Supergeante rouge" | "Mira" | "Cepheide"
-        | "Naine blanche pulsante (ZZ Ceti)" => (11.0, 1.00, 0.0),
+        | "Naine blanche pulsante (ZZ Ceti)" | "Quasi-etoile" => (11.0, 1.00, 0.0),
         // G, le Soleil des presets (nom vide), et tout le reste.
         _ => (11.0, 1.00, 0.60),
     }
+}
+
+/// **Quasi-étoile ?**, d'après le seul nom du type. Elle a sa masse propre
+/// (`genese::MASSE_QUASI_ETOILE`) et ne peut pas être la compagne d'un système
+/// multiple : une enveloppe large d'une UA n'a pas de place dans un couple.
+pub fn est_quasi_etoile(nom: &str) -> bool {
+    nom == "Quasi-etoile"
+}
+
+/// **Étendue de couronne propre au type**, quand elle ne se déduit pas de
+/// l'éclat. La quasi-étoile (lot 11) est très lumineuse mais veut une couronne
+/// **serrée** (1,6 rayon au lieu de 2,1), jugé à l'écran.
+pub fn couronne_du_type(nom: &str) -> Option<f32> {
+    match nom {
+        "Quasi-etoile" => Some(1.6),
+        _ => None,
+    }
+}
+
+/// **Lueur du cœur** (lot 11) : la quasi-étoile est chauffée par un trou noir
+/// central, et sa chaleur transparaît au centre du disque — sa signature,
+/// ce qui la distingue d'une supergéante rouge démesurée. 0 pour tout le reste.
+pub fn coeur(nom: &str) -> f32 {
+    if est_quasi_etoile(nom) { 0.5 } else { 0.0 }
 }
 
 /// **Naine brune ?**, d'après le seul nom du type.
@@ -452,6 +494,11 @@ pub fn est_naine_brune(nom: &str) -> bool {
 pub fn filtre_teinte(nom: &str) -> Vec3 {
     match nom {
         "Etoile carbonee (C)" => vec3(1.0, 0.55, 0.20),
+        // **Quasi-étoile** (lot 11) : un **pourpre**, demandé « dans le style de
+        // la carbonée » — son rouge profond, auquel on rend du bleu. Choix
+        // d'image assumé, comme `PX_MIN` : rien n'a jamais été observé. À
+        // 3 600 K, donne ≈ (0,85 / 0,32 / 0,42).
+        "Quasi-etoile" => vec3(0.85, 0.42, 0.73),
         _ => Vec3::ONE,
     }
 }
@@ -499,7 +546,7 @@ mod tests_particulieres {
     use super::*;
 
     /// Les noms que le tirage des particulières doit savoir produire.
-    const ATTENDUS: [&str; 7] = [
+    const ATTENDUS: [&str; 8] = [
         "Trou noir",
         "Pulsar",
         "Etoile a neutrons",
@@ -507,6 +554,7 @@ mod tests_particulieres {
         "Wolf-Rayet",
         "Supergeante bleue",
         "T Tauri (jeune)",
+        "Quasi-etoile",
     ];
 
     fn balayage() -> Vec<&'static str> {
@@ -898,10 +946,11 @@ mod tests_types {
                 assert_eq!(g.4, *nom);
             }
         }
-        // Les deux tables au complet : 7 particulières, 16 ordinaires. Si ce
+        // Les deux tables au complet : 8 particulières (la quasi-étoile du lot 11
+        // comprise), 16 ordinaires. Si ce
         // compte bouge, un type est arrivé ou parti — le menu suit tout seul,
         // ce test dit seulement qu'on l'a remarqué.
-        assert_eq!(types.len(), 23, "{types:?}");
+        assert_eq!(types.len(), 24, "{types:?}");
         for attendu in ["Trou noir", "T Tauri (jeune)", "Naine brune", "O (bleue)", "Mira"] {
             assert!(types.contains(&attendu), "« {attendu} » absent : {types:?}");
         }

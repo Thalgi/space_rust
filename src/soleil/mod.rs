@@ -124,6 +124,10 @@ pub struct Soleil {
     /// minimale)`, dérivés du type par `etoile::reglage_ebullition`. `(1, 0,5)`
     /// est exactement le rendu d'avant.
     ebul_reglage: Vec2,
+    /// **Lueur du cœur** (lot 11) : la quasi-étoile est chauffée par un trou
+    /// noir central ; sa chaleur transparaît au centre du disque. Dérivée du
+    /// type par `etoile::coeur` ; 0 pour toutes les autres.
+    coeur: f32,
     /// **Disque de matière autour de l'étoile** — accrétion d'un trou noir,
     /// disque protosolaire d'une jeune étoile.
     ///
@@ -308,6 +312,7 @@ impl Soleil {
             eclat_visible: false,
             surface: vec3(11.0, 1.0, 0.0),
             ebul_reglage: vec2(1.0, 0.5),
+            coeur: 0.0,
             disques: Vec::new(),
             mats,
             mat_plasma,
@@ -369,6 +374,20 @@ impl Soleil {
     pub fn avec_ebullition(mut self, e: f32, style: f32) -> Self {
         self.ebullition = e.clamp(0.0, 1.0);
         self.ebul_style = style;
+        self
+    }
+
+    /// **Étendue de la couronne**, en rayons. Elle se déduit d'ordinaire de la
+    /// luminosité ; la quasi-étoile (lot 11) est très lumineuse mais veut une
+    /// couronne serrée — d'où ce réglage à part, qui ne touche pas à l'éclat.
+    pub fn avec_couronne(mut self, etendue: f32) -> Self {
+        self.couronne = etendue.max(1.05);
+        self
+    }
+
+    /// Voir le champ `coeur`.
+    pub fn avec_coeur(mut self, intensite: f32) -> Self {
+        self.coeur = intensite.clamp(0.0, 1.0);
         self
     }
 

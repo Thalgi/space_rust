@@ -95,7 +95,14 @@ impl Variante {
             .avec_pulsation(amp, periode)
             .avec_ebullition_du_type(nom)
             .avec_surface_du_type(nom)
+            .avec_coeur(crate::etoile::coeur(nom))
             .avec_eclat_visible(crate::etoile::eclat_visible(nom));
+        // Couronne propre au type, quand elle ne suit pas l'éclat. Posée AVANT
+        // la variante : celles qui ont leur couronne (jets, vent…) la réécrivent.
+        let s = match crate::etoile::couronne_du_type(nom) {
+            Some(c) => s.avec_couronne(c),
+            None => s,
+        };
         match self {
             Variante::Normale => s,
             Variante::Jets => s.avec_jets(),
@@ -327,6 +334,8 @@ mod tests_variante {
             "avec_ebullition_du_type(",
             "avec_eclat_visible(",
             "avec_surface_du_type(",
+            "avec_coeur(",
+            "avec_couronne(",
         ] {
             assert!(ici.contains(builder), "`Variante::appliquer` ne sait pas faire `{builder}`");
         }

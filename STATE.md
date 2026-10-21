@@ -24,7 +24,7 @@ pas : la fusion sera une avance rapide. ⚠️ Depuis le dossier principal, la
 branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
 worktree) : on travaille **dans le worktree**.
 
-**Vérifié (2026-10-20)** : **921 tests verts** (934 avec le binaire `mhd`),
+**Vérifié (2026-10-21)** : **923 tests verts** (936 avec le binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
 **Le lot 9 (comètes) est clos** (2026-10-20), validé à l'écran. Le retour du
@@ -194,7 +194,9 @@ l'ouverture de la galerie des comètes. Le bornage vit désormais dans
 pulsar, étoile à neutrons et magnétar (peints dans le plan de l'écran, le
 défaut du trou noir d'avant le lot 5) ; 14 — étoiles vertes (n'existent pas :
 fantaisie à trancher) ; 15 — naine noire (écartée le 24 septembre, rouverte).
-Détail en conception §6 undecies.
+Détail en conception §6 undecies. **Et, à la fin de tout : la refonte
+complète de la genèse**, qui a accumulé un cas particulier par lot (même
+section) — la masse bornée et la rareté de la quasi-étoile y seront revues.
 
 **Le lot 10 est clos** (2026-10-20), validé à l'écran : chaque type a sa
 surface (`etoile::surface`) — chaudes presque lisses, grain plus fin pour les
@@ -203,9 +205,16 @@ supergéante bleue et Wolf-Rayet mêlent surface lisse et ébullition (WR en
 relief). Les surfaces validées en ébullition gardent leur bord d'origine,
 incohérence assumée.
 
-**Le prochain pas** : **tous les lots livrés sont validés.** Restent à
-construire, **dans l'ordre** : 11 (quasi-étoile), 12 (disques proto au
-tirage, hypergéante, Be, Herbig Ae/Be), puis les lots futurs 13 à 15.
+**Le lot 11 est clos** (2026-10-21), validé à l'écran : la **quasi-étoile**
+est au tirage (~1 système sur 1 000), rayon d'une UA, enveloppe pourpre qui
+bouillonne, couronne serrée, et sa signature — une lueur chaude qui
+transparaît au centre (uniform `coeur`). Masse propre bornée et rareté
+provisoires, à reprendre avec la refonte de la genèse. Exclue des systèmes
+multiples ; pas de planète interne, c'est voulu.
+
+**Le prochain pas** : **tous les lots livrés sont validés.** Reste à
+construire, **dans l'ordre** : 12 (disques proto au tirage, hypergéante, Be,
+Herbig Ae/Be), puis les lots futurs 13 à 15, puis la refonte de la genèse.
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de

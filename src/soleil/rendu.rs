@@ -85,6 +85,7 @@ impl Soleil {
             mat.set_uniform("eclat", eclat);
             mat.set_uniform("surface", (self.surface.x, self.surface.y, self.surface.z));
             mat.set_uniform("ebul_reglage", (self.ebul_reglage.x, self.ebul_reglage.y));
+            mat.set_uniform("coeur", self.coeur);
             mat.set_uniform_array("spots", &spots[..]);
             mat.set_uniform_array("poles", &champ_uniforme[..]);
 

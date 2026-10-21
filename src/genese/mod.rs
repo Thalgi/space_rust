@@ -75,6 +75,16 @@ pub(crate) const MASSE_TROU_NOIR: f32 = 8.0 * MASSE_ETOILE;
 /// encore, et s'y verrait quadruplée. Le trou noir, lui, dépasse le plafond.
 pub(crate) const MASSE_NAINE_BRUNE: f32 = 0.07 * MASSE_ETOILE;
 
+/// **Masse d'une quasi-étoile** (lot 11).
+///
+/// Comme le trou noir, elle ne se déduit pas de l'éclat : c'est l'accrétion
+/// qui la fait briller, pas la fusion. Les modèles parlent de **milliers** de
+/// masses solaires ; à ce poids, ses planètes boucleraient leur orbite en
+/// quelques secondes. **Bornée** donc, du même ordre que le trou noir —
+/// choix de l'utilisateur pour l'instant, à reprendre avec le futur chantier
+/// de refonte de la genèse.
+pub(crate) const MASSE_QUASI_ETOILE: f32 = 20.0 * MASSE_ETOILE;
+
 /// **Le preset de naine brune, d'après sa température.**
 ///
 /// Les quatre entrées du catalogue gazeux forment une **séquence spectrale** :
@@ -254,6 +264,13 @@ mod tests_orbite_interne {
                     [("ordinaire", etoile::ordinaire(p, q)), ("particuliere", etoile::particuliere(p))]
                 {
                     let (_, _, rayon, lumi, type_nom, couronne) = gab;
+                    // La quasi-étoile est **le** type pour qui le plancher a
+                    // été posé : il mord sur elle par construction (sa
+                    // première planète tombe à 1,5 UA). Gardée à part, plus
+                    // bas.
+                    if etoile::est_quasi_etoile(type_nom) {
+                        continue;
+                    }
                     // ⚠️ L'échelle vient d'`echelle_systeme`, **la vraie**, et
                     // non d'une copie de sa règle : cette garde la recopiait, et
                     // comparer une copie à une copie ne prouve rien
@@ -396,6 +413,14 @@ mod tests_orbite_interne {
             for q in [0.0_f32, 1.0] {
                 for gab in [etoile::ordinaire(p, q), etoile::particuliere(p)] {
                     let (_, _, rayon, lumi, nom, couronne) = gab;
+                    // La quasi-étoile pose sa première planète **sur** le
+                    // plancher, à 1,5 rayon, par construction : sa marge est
+                    // fixée, et gardée par
+                    // `la_quasi_etoile_ne_pose_aucun_monde_dans_son_enveloppe`.
+                    // Elle ne pulse pas. Ce test mesure les AUTRES.
+                    if etoile::est_quasi_etoile(nom) {
+                        continue;
+                    }
                     let (amp, _) = etoile::pulsation(nom);
                     let profil = etoile::ProfilEtoile {
                         temperature: 5000.0,
@@ -475,6 +500,8 @@ fn construire_simple(profil: ProfilEtoile) -> (Systeme, String) {
     // Même règle que `feuille_alea` -- c'est le MÊME fait.
     let masse_etoile = if profil.est_trou_noir() {
         MASSE_TROU_NOIR
+    } else if profil.est_quasi_etoile() {
+        MASSE_QUASI_ETOILE
     } else if profil.est_naine_brune() {
         // Sous la limite de fusion : elle passe **sous** le plancher de
         // `masse_luminosite`, là où le trou noir dépasse son plafond.
@@ -626,9 +653,12 @@ fn feuille_alea() -> (Feuille, f32, f32) {
     // c'est à chaque bâtisseur de dire ce qu'il sait construire. Bornée à huit
     // essais — une boucle non bornée sur un `gen_range` est un risque qu'on ne
     // prend pas pour un cas qui sort une fois sur trente-cinq.
+    //
+    // ⚠️ **Ni de quasi-étoile** (lot 11) : une enveloppe large d'une UA n'a pas
+    // de place dans un couple, elle avalerait sa compagne.
     let mut p = ProfilEtoile::aleatoire();
     for _ in 0..8 {
-        if !p.est_naine_brune() {
+        if !p.est_naine_brune() && !p.est_quasi_etoile() {
             break;
         }
         p = ProfilEtoile::aleatoire();
@@ -2470,6 +2500,40 @@ mod tests_masse_luminosite {
     /// photosphère : passé à `masse_luminosite`, il se coucherait au
     /// **plancher**, soit l'objet le plus lourd du système pesant un quart de
     /// masse stellaire — et des barycentres qui tournent à l'envers.
+    /// **La quasi-étoile n'a pas de planète interne** — c'est la conséquence
+    /// de son échelle vraie (§8 bis, décision 2), pas un défaut — **et aucune
+    /// planète dans son enveloppe**. Gardé sur **son vrai gabarit**, celui du
+    /// tirage, et sur la vraie règle d'écartement.
+    #[test]
+    fn la_quasi_etoile_ne_pose_aucun_monde_dans_son_enveloppe() {
+        let g = (0..1000)
+            .map(|k| etoile::particuliere(k as f32 / 1000.0))
+            .find(|g| etoile::est_quasi_etoile(g.4))
+            .expect("la quasi-étoile n'est pas au tirage");
+        let (_, _, rayon, lumi, nom, couronne) = g;
+        let profil =
+            etoile::ProfilEtoile { temperature: 3600.0, couleur: Vec3::ONE, rayon, luminosite: lumi, nom, couronne };
+        // Le pire cas : le bas de la plage d'écartement.
+        let a = premiere_orbite(0.4 * echelle_systeme(&profil, 0.0), rayon) * etoile::UA;
+        assert!(a >= rayon * 1.5 - 1e-3, "première planète à {a}, dans l'enveloppe de rayon {rayon}");
+        // Pas de planète interne : au-delà de l'orbite de Vénus (0,72 UA).
+        assert!(a > 0.72 * etoile::UA, "une planète interne tourne autour d'une quasi-étoile");
+        // Et son système tient dans le cadre de la caméra : Titius-Bode monte
+        // à ~30 fois la première orbite au plus loin, échelle comprise.
+        let loin = 30.0 * echelle_systeme(&profil, 1.0) * etoile::UA;
+        assert!(loin < crate::camera::DIST_MAX, "système hors cadre : {loin}");
+    }
+
+    /// **La masse de la quasi-étoile est propre, et bornée.** Elle ne vient pas
+    /// de son éclat (l'accrétion la fait briller) ; et à des milliers de masses
+    /// solaires, ses planètes boucleraient leur orbite en quelques secondes.
+    #[test]
+    fn la_quasi_etoile_a_une_masse_propre_et_bornee() {
+        const { assert!(MASSE_QUASI_ETOILE > MASSE_TROU_NOIR) };
+        const { assert!(MASSE_QUASI_ETOILE < 100.0 * MASSE_ETOILE) };
+        assert!(MASSE_QUASI_ETOILE != masse_luminosite(12.0), "masse tirée de l'éclat");
+    }
+
     #[test]
     fn un_trou_noir_pese_plus_que_ce_qu_il_rayonne() {
         // La luminosité du gabarit tiré (`etoile::particuliere`).

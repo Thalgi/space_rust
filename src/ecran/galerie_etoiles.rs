@@ -48,6 +48,10 @@ fn catalogue() -> Vec<(&'static str, f32, f32, f32, f32)> {
         ("Etoile a neutrons", 0.42, 40000.0, 0.2, 1.0), // jets fixes
         ("Pulsar", 0.42, 40000.0, 0.25, 3.0),           // jets qui tournent (phare)
         ("Magnetar", 0.45, 40000.0, 0.3, 4.0), // arcs magnétiques
+        // Lot 11. Rayon de **vitrine** : plus grosse que la supergéante rouge
+        // (1,2) ; sa vraie taille, une UA, ne tiendrait pas dans une case.
+        // Teinte pourpre, ébullition, couronne serrée et cœur : par son nom.
+        ("Quasi-etoile", 1.35, 3600.0, 6.0, 0.0),
     ]
 }
 

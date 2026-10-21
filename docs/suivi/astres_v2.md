@@ -8,7 +8,7 @@ Journal du chantier décrit par
 n'est poussé. 70 commits d'avance sur `main` au 2026-10-03 — `main` n'en a
 aucun que la branche n'ait pas, la fusion sera une avance rapide.
 
-**État au 2026-10-20** : 921 tests verts (934 avec le binaire `mhd`), clippy à
+**État au 2026-10-21** : 923 tests verts (936 avec le binaire `mhd`), clippy à
 zéro. **Le lot 5 est clos** (ses sept presets de trou noir sont au tirage), **le
 6 est livré** (supergéante rouge, sous-naine sdB, étoile carbonée, naine brune)
 et **prolongé d'un 6.3** (l'ébullition des géantes rouges), **le 7 aussi** (la
@@ -22,9 +22,9 @@ d'accès (« Your organization has disabled Claude subscription access »). Son
 dernier message, *la courbe et la droite de la comète*, n'a été repris que le
 2026-10-19 — voir le lot 9.4.
 
-**Les lots 7, 9 et 10 sont clos** (2026-10-20), validés à l'écran par
-l'utilisateur. **Tous les lots livrés sont validés** ; restent 11 et 12, puis
-les lots futurs 13 à 15 (conception §6 undecies).
+**Les lots 7, 9, 10 et 11 sont clos** (2026-10-20 et 21), validés à l'écran
+par l'utilisateur. **Tous les lots livrés sont validés** ; reste le 12, puis
+les lots futurs 13 à 15 et la refonte de la genèse (conception §6 undecies).
 
 Deux dettes restent, petites et consignées plus bas : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de
@@ -75,7 +75,9 @@ silhouette « mince » n'a jamais été essayée.
 | **9 — clos** : validé à l'écran par l'utilisateur | **fait et tranché** (2026-10-20) | |
 | **10** — chaque type sa surface : grain par type, bord assombri pour toutes | **fait, validé** (2026-10-20) | |
 | **10 — clos** | **fait et tranché** (2026-10-20) | |
-| 11 et 12 | à faire | |
+| **11** — la quasi-étoile : enveloppe pourpre d'une UA, cœur qui transparaît | **fait, validé** (2026-10-21) | |
+| **11 — clos** | **fait et tranché** (2026-10-21) | |
+| 12 | à faire | |
 | 13 à 15 — rémanents refaits, étoiles vertes, naine noire | **futurs**, après 11 et 12 (conception §6 undecies) | |
 
 Trois correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`), le
@@ -85,6 +87,59 @@ l'ouverture de la galerie des comètes (`ba66d72`).
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### Lot 11 clos : la quasi-étoile (2026-10-21)
+
+**L'objet** : hypothétique, jamais observé — une enveloppe de milliers de
+masses solaires chauffée par l'**accrétion** sur un trou noir central, pas par
+la fusion. Surface froide, rayon colossal. *« Le même objet que le trou noir,
+vu du dehors »* (conception §3 bis).
+
+**Mené comme le 6.3** : une case d'essai en fin de galerie, ajustée, puis
+intégrée. *« Il faut qu'elle se distingue des autres astres. »*
+
+- **L'enveloppe** : l'ébullition des supergéantes, à **contour**, cellules
+  plus grosses encore (finesse 0,7) et sillons plus profonds (clarté 0,35).
+- **Le cœur** : une **lueur chaude qui transparaît au centre** du disque et
+  s'éteint vers le bord, là où la visée traverse plus d'enveloppe ; elle
+  respire lentement. Uniform neuf, `coeur` (0 pour toutes les autres), source
+  `etoile::coeur`. C'est sa signature.
+- **Retour écran** : *« un aspect plus pourpre, dans le style de couleur de
+  l'étoile carbonée, et une couronne un peu moins grande »*. Teinte : un
+  filtre comme celui de la carbonée (`filtre_teinte`), qui rend du bleu à son
+  rouge profond — ≈ (0,85 / 0,32 / 0,42) à 3 600 K, **choix d'image assumé**
+  (rien n'a été observé). Couronne : **1,6 rayon** au lieu des 2,1 qu'imposait
+  son éclat, d'où un réglage à part (`Soleil::avec_couronne`,
+  `etoile::couronne_du_type`) qui ne touche pas à l'éclat.
+
+**Au tirage** (choisi par l'utilisateur) : parmi les particulières, **2 %**,
+soit ~**1 système sur 1 000**, pris sur T Tauri (8 → 6 %). Gabarit : **rayon
+1 UA** (48 unités, quatre fois la supergéante rouge — *« 1 UA c'est déjà
+bien »*), 3 400-3 800 K, éclat 12. Masse **propre et bornée**
+(`MASSE_QUASI_ETOILE` = 20 masses stellaires du jeu, au-dessus du trou noir) :
+à des milliers de masses solaires, ses planètes boucleraient leur orbite en
+quelques secondes. Rareté et masse sont **provisoires**, à reprendre avec la
+refonte de la genèse.
+
+**Son système** : la première planète se pose **sur** le plancher de
+`premiere_orbite` (1,5 rayon, soit 1,5 UA) — le plancher a été posé pour elle
+au lot 6 —, donc **pas de planète interne** (§8 bis, décision 2 : ce n'est pas
+un défaut, c'est la conséquence). **Exclue des systèmes multiples** (elle
+avalerait sa compagne), comme la naine brune. Zone habitable gardée : elle
+rayonne vraiment.
+
+**Deux gardes adaptées, à dessein** : `aucun_type_du_tirage_n_a_besoin_du_plancher`
+et `il_reste_de_la_marge_entre_l_etoile_gonflee_et_sa_planete_interne`
+mesurent la marge des **autres** types ; la quasi-étoile y tombe pile sur
+1,5 par construction, elles l'écartent donc nommément. **Gardes neuves** :
+`la_quasi_etoile_ne_pose_aucun_monde_dans_son_enveloppe` (sur son vrai
+gabarit : première planète hors de l'enveloppe et au-delà de Vénus, système
+dans le cadre de la caméra) et `la_quasi_etoile_a_une_masse_propre_et_bornee`.
+**Red-checks** : la retirer du tirage fait rougir **trois** tests ; affaiblir
+le plancher fait rougir sa garde.
+
+**Validé à l'écran**, en Skymap V2 par CHOISIR ASTRE, à sa vraie taille :
+*« ça rend correctement »*.
 
 ### Lot 10 clos : chaque type a sa surface (2026-10-20)
 
