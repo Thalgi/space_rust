@@ -365,6 +365,9 @@ impl Objet {
         if let Some(y) = std::env::var("YAW").ok().and_then(|y| y.parse::<f32>().ok()) {
             o.cam.yaw = y.to_radians();
         }
+        if let Some(d) = std::env::var("DIST").ok().and_then(|d| d.parse::<f32>().ok()) {
+            o.cam.set_dist(d);
+        }
         o
     }
 

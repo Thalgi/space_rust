@@ -26,6 +26,7 @@ use macroquad::models::{draw_mesh, Mesh, Vertex};
 use macroquad::prelude::*;
 use macroquad::rand::gen_range;
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 
 // La hauteur du viewport vit dans `impostor` (partagée avec corps et étoiles).
 // Elle sert ici au clamp de taille MINIMALE des particules : une particule
@@ -385,6 +386,9 @@ impl Disque {
             gl_use_material(&crate::soleil::materiau_ruban_lumineux());
             let grappe = self.cfg.grappe.max(1);
             let n = self.cfg.nuages_3d.min(40_000 / grappe);
+            // Toutes les boules, des deux côtés du plan : l'empilement à
+            // l'écran se compte sur l'ensemble (voir `amorti_superposition`).
+            let mut boules = Vec::new();
             for k in 0..n {
                 let (loc, taille, eclat, t) = nuage_3d(k, &self.cfg, self.temps);
                 let rel = self.axe_u * loc.x + self.axe_n * loc.y + self.axe_v * loc.z;
@@ -397,16 +401,37 @@ impl Disque {
                 for j in 0..grappe {
                     let (d, t_j, poids) = boule_de_grappe(k, j, grappe, taille);
                     let dw = self.axe_u * d.x + self.axe_n * d.y + self.axe_v * d.z;
-                    if du_cote_camera(rel + dw, self.axe_n, cote_cam) != cote_camera {
-                        continue;
-                    }
+                    let cote = du_cote_camera(rel + dw, self.axe_n, cote_cam);
                     let lum = eclairement_boule(dw, vers_etoile);
-                    let a = eclat * 0.35 * poids;
-                    let col = Color::new(c.x * lum * a, c.y * lum * a, c.z * lum * a, a);
-                    crate::impostor::push_quad(&mut v, &mut i, cam, p + rel + dw, t_j, col);
-                    if v.len() >= crate::impostor::QUADS_PAR_DESSIN * 4 {
-                        crate::impostor::dessiner_par_lots(&mut v, &mut i, Some(crate::impostor::halo_partage()));
-                    }
+                    boules.push((p + rel + dw, t_j, c * lum, eclat * 0.35 * poids, cote));
+                }
+            }
+            // **L'empilement, case par case de l'écran** : des cases de la
+            // taille moyenne d'une boule (en angle vu de la caméra), chaque
+            // boule versant son éclat dans celle de son centre.
+            let ecran = |q: Vec3| {
+                let d = q - cam.pos;
+                let z = d.dot(cam.forward).max(1e-3);
+                (vec2(d.dot(cam.right), d.dot(cam.up)) / z, z)
+            };
+            let somme: f32 = boules.iter().map(|b| b.1 / ecran(b.0).1).sum();
+            let cellule = (2.0 * somme / boules.len().max(1) as f32).max(1e-6);
+            let case = |q: Vec3| {
+                let e = ecran(q).0 / cellule;
+                (e.x.floor() as i32, e.y.floor() as i32)
+            };
+            let mut pile: HashMap<(i32, i32), f32> = HashMap::new();
+            for b in &boules {
+                *pile.entry(case(b.0)).or_default() += b.3;
+            }
+            for (q, t_j, c, a, cote) in boules {
+                if cote != cote_camera {
+                    continue;
+                }
+                let a = a * amorti_superposition(pile[&case(q)]);
+                crate::impostor::push_quad(&mut v, &mut i, cam, q, t_j, Color::new(c.x * a, c.y * a, c.z * a, a));
+                if v.len() >= crate::impostor::QUADS_PAR_DESSIN * 4 {
+                    crate::impostor::dessiner_par_lots(&mut v, &mut i, Some(crate::impostor::halo_partage()));
                 }
             }
             crate::impostor::dessiner_par_lots(&mut v, &mut i, Some(crate::impostor::halo_partage()));
@@ -414,6 +439,27 @@ impl Disque {
             gl_use_default_material();
         }
     }
+}
+
+/// **Seuil d'empilement** au-delà duquel les nuages superposés cessent de
+/// s'additionner : en éclat cumulé d'une case d'écran (une boule seule en
+/// verse ~0,3).
+const SATURATION_NUAGES: f32 = 6.0;
+
+/// **Amorti d'une boule selon l'empilement de sa case d'écran.**
+///
+/// Les nuages sont additifs (le pipeline plasma, partagé : pas de matériau
+/// de plus sous le plafond) : vus par la tranche, des dizaines s'empilaient
+/// et brûlaient l'image — *« le cumul de nuages finit par donner des zones
+/// très brillantes quand on regarde à travers G3 sur le plan horizontal du
+/// disque »* (2026-10-22). L'éclat cumulé d'une case passe donc par une
+/// saturation douce (`tanh`) : intact sous le seuil, plafonné au-delà, et
+/// chaque boule de la case porte sa part de l'amorti.
+pub(crate) fn amorti_superposition(pile: f32) -> f32 {
+    if pile <= 1e-6 {
+        return 1.0;
+    }
+    SATURATION_NUAGES * (pile / SATURATION_NUAGES).tanh() / pile
 }
 
 /// **Une boule est-elle du côté de la caméra par rapport au plan du disque ?**
@@ -504,16 +550,23 @@ pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32,
         let ang = ha(2.0) * TAU + (h(2.0) - 0.5) * 0.45 + kepler(rayon(tc)) * temps;
         (t, ang, (h(3.0) * 2.0 - 1.0) * 0.5)
     } else if c.nuages_bras > 0 {
-        // **I — un ouragan** : les nuages suivent des bras en spirale
-        // logarithmique autour d'un œil dégagé (t ≥ 0,1), et le motif tourne
-        // d'un bloc — à la vitesse du milieu de l'anneau — au lieu d'être
-        // cisaillé par Kepler.
-        let bras = (k % c.nuages_bras) as f32;
-        let t = 0.1 + 0.9 * h(1.0).sqrt();
-        let r = rayon(t);
-        let spirale = bras * TAU / c.nuages_bras as f32 + 2.2 * (r / c.interne.max(1e-3)).ln();
-        let ang = spirale + (h(2.0) - 0.5) * 0.55 + kepler(rayon(0.5)) * temps;
-        (t, ang, (h(3.0) * 2.0 - 1.0) * 0.8)
+        // **I — un ouragan dont l'œil est l'étoile** : un quart des nuages
+        // fait le **mur de l'œil**, un anneau serré tout autour d'elle ; les
+        // autres suivent des bras en spirale logarithmique qui en partent, et
+        // le motif tourne d'un bloc — à la vitesse du milieu de l'anneau — au
+        // lieu d'être cisaillé par Kepler.
+        // ⚠️ Les bras partaient d'abord de t = 0,1, tirés vers l'extérieur
+        // (√) : le centre restait vide, et l'on voyait *« le truc à trois
+        // bras »*, pas un cyclone autour du soleil (2026-10-22).
+        let tourne = kepler(rayon(0.5)) * temps;
+        if h(6.0) < 0.2 {
+            (0.04 + 0.08 * h(1.0), h(2.0) * TAU + tourne, (h(3.0) * 2.0 - 1.0) * 0.6)
+        } else {
+            let bras = (k % c.nuages_bras) as f32;
+            let t = 0.03 + 0.97 * h(1.0);
+            let spirale = bras * TAU / c.nuages_bras as f32 + 2.2 * (rayon(t) / c.interne.max(1e-3)).ln();
+            (t, spirale + (h(2.0) - 0.5) * 0.55 + tourne, (h(3.0) * 2.0 - 1.0) * 0.8)
+        }
     } else {
         // **C — des nuages épars** sur l'anneau, chacun à sa vitesse de Kepler.
         let t = h(1.0);
@@ -524,7 +577,10 @@ pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32,
     let z = z_rel * c.h_r * r;
     // Constant, mais inégal d'un nuage à l'autre.
     let eclat = 0.6 + 0.4 * h(4.0);
-    let taille = r * (0.03 + 0.05 * h(5.0)) * c.taille_nuages;
+    // L'ouragan garde des nuages visibles jusqu'au mur de l'œil : leur
+    // taille ne fond pas avec le rayon sous le quart de l'anneau.
+    let r_taille = if c.nuages_bras > 0 { r.max(rayon(0.25)) } else { r };
+    let taille = r_taille * (0.03 + 0.05 * h(5.0)) * c.taille_nuages;
     (vec3(ang.cos() * r, z, ang.sin() * r), taille, eclat, t)
 }
 
@@ -601,15 +657,21 @@ mod tests_prototypes {
         assert!(ecart(0.0) < 0.3 * (c.externe - c.interne), "amas trop étalé : {}", ecart(0.0));
     }
 
-    /// **I : les nuages suivent leurs bras, et le motif tourne d'un bloc.**
-    /// L'œil reste dégagé, et le motif ne se cisaille pas : deux instants
-    /// donnent la même spirale, tournée.
+    /// **I : l'étoile est l'œil, et le motif tourne d'un bloc.** Rien au
+    /// ras de l'étoile, mais un mur de nuages tout autour d'elle ; et le
+    /// motif ne se cisaille pas : deux instants donnent la même spirale,
+    /// tournée.
     #[test]
     fn l_ouragan_garde_sa_spirale() {
         let c = DisqueConfig::protoplanetaire(0, 10.0, 100.0, 1000.0).avec_nuages_3d(300, 0.05).avec_bras(3);
+        let mut quadrants = [0; 4];
         for k in 0..300 {
             let (p, _, _, t) = nuage_3d(k, &c, 0.0);
-            assert!(t >= 0.1, "nuage {k} dans l'œil");
+            assert!(t >= 0.01, "nuage {k} dans l'œil");
+            if t < 0.1 {
+                let q = (p.z.atan2(p.x).rem_euclid(std::f32::consts::TAU) / std::f32::consts::FRAC_PI_2) as usize;
+                quadrants[q.min(3)] += 1;
+            }
             let (q, _, _, _) = nuage_3d(k, &c, 40.0);
             let rot = |p: Vec3| p.z.atan2(p.x);
             let tour = (rot(q) - rot(p)).rem_euclid(std::f32::consts::TAU);
@@ -618,6 +680,7 @@ mod tests_prototypes {
             let tour0 = (rot(r1) - rot(r0)).rem_euclid(std::f32::consts::TAU);
             assert!((tour - tour0).abs() < 1e-3, "nuage {k} : le motif se cisaille");
         }
+        assert!(quadrants.iter().all(|&n| n >= 10), "pas de mur autour de l'œil : {quadrants:?}");
     }
 
     /// **H : la teinte varie d'un nuage à l'autre, sans jamais s'éteindre** ;
@@ -644,6 +707,23 @@ mod tests_prototypes {
         }
         // Caméra au-dessous : tout s'inverse.
         assert!(du_cote_camera(vec3(0.0, -0.2, 2.0), n, -cam));
+    }
+
+    /// **Les nuages superposés saturent au lieu de s'additionner** : une
+    /// case peu chargée garde son éclat, une case chargée ne dépasse jamais
+    /// le seuil, et en ajouter n'assombrit pas.
+    #[test]
+    fn les_nuages_superposes_saturent() {
+        assert!(amorti_superposition(0.1) > 0.99, "une boule seule est amortie");
+        assert_eq!(amorti_superposition(0.0), 1.0);
+        let mut avant = 0.0;
+        for k in 1..200 {
+            let pile = k as f32 * 0.1;
+            let total = pile * amorti_superposition(pile);
+            assert!(total <= SATURATION_NUAGES + 1e-4, "pile {pile} : {total} dépasse le seuil");
+            assert!(total >= avant - 1e-5, "pile {pile} : plus de nuages, moins d'éclat");
+            avant = total;
+        }
     }
 
     /// **Une grappe a un côté éclairé et un côté dans l'ombre** : c'est ce qui
