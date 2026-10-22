@@ -337,6 +337,30 @@ l'habiller. Captures : les cinq s'affichent ; T4 reste pâle en Palette (le
 voile en couches, sans nuages, y est écrasé), la planète de T3 se lit dans
 son sillon.
 
+**Second tour T Tauri** (2026-10-23) : *« le proto T1 est le mieux, même si
+ça manque de largeur et d'un côté cotonneux. T1 devient T0, fais-moi
+d'autres protos à partir du nouveau T0 pour trouver graduellement un résultat
+convenable »*. Les anciens T0 (celle du jeu), T2 (ouragan), T3 (PDS 70) et T4
+(HL Tau) quittent la touche 4. La nouvelle série, du petit disque en couches
+(7, h/r 0,08) :
+
+| Proto | Rayon externe | Coton |
+|---|---|---|
+| T0 | 16 rayons (celui du jeu) | 500 grappes de 6 (l'habillage F) |
+| T1 | 24 | idem |
+| T2 | 32 | idem |
+| T3 | 16 | plus : 800 grappes de 8, nuages ×1,4 |
+| T4 | 24 | plus |
+| T5 | 32 | très : 1 200 grappes de 8, ×1,7, h/r 0,3 |
+
+Les grappes suivent la largeur (×1,5, ×2), pour que le disque élargi ne
+s'éclaircisse pas (garde `un_disque_elargi_garde_ses_nuages`, red-check :
+nombre figé). Captures : T2 large et aéré, T5 une masse cotonneuse dense.
+
+**Le temps se règle dans la vue isolée** (demandé le même jour) : Haut/Bas
+doublent ou divisent la vitesse, de ×0,125 à ×64, comme dans la galerie des
+disques ; elle s'affiche dans la barre du bas. Les deux horloges suivent.
+
 **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?

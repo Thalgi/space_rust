@@ -312,6 +312,9 @@ pub struct Objet {
     prototype: usize,
     /// Le message « aucun prototype en cours » est ouvert.
     sans_prototype: bool,
+    /// **Multiplicateur du temps** (Haut/Bas), comme dans la galerie des
+    /// disques : de quoi voir tourner un disque, ou le figer pour le juger.
+    vitesse: f32,
     sys: Systeme,
     fond: Fond,
     cam: Camera,
@@ -328,6 +331,7 @@ impl Objet {
             particulier: 0,
             prototype: 0,
             sans_prototype: false,
+            vitesse: 1.0,
             sys,
             fond: Fond::new(700),
             cam,
@@ -449,8 +453,17 @@ impl Objet {
             self.fond.recharger_material();
         }
 
+        if is_key_pressed(KeyCode::Up) {
+            self.vitesse = (self.vitesse * 2.0).min(64.0);
+        }
+        if is_key_pressed(KeyCode::Down) {
+            self.vitesse = (self.vitesse * 0.5).max(0.125);
+        }
+
         self.cam.input_orbite(false);
-        // Vue objet : pas de multiplicateur, les deux horloges coïncident.
+        // Les deux horloges suivent le même multiplicateur : celle des
+        // orbites et celle du spectacle (disques, éruptions).
+        let dt = dt * self.vitesse;
         self.sys.update(dt, crate::systeme::DtAnimation(dt));
 
         let aspect = screen_width() / screen_height();
@@ -481,9 +494,10 @@ impl Objet {
         }
         crate::police::texte(
             &format!(
-                "{} FPS   rendu: {:?}   G: aleatoire   1: soleil   2: planete   3: exotiques   4: prototypes   P: pixel   R: shaders   Echap: menu",
+                "{} FPS   rendu: {:?}   G: aleatoire   1: soleil   2: planete   3: exotiques   4: prototypes   P: pixel   R: shaders   Haut/Bas: temps x{}   Echap: menu",
                 get_fps(),
-                crate::reglages::mode_rendu()
+                crate::reglages::mode_rendu(),
+                self.vitesse
             ),
             12.0,
             ecran.y - 16.0,
