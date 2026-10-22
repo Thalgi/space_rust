@@ -105,6 +105,47 @@ principal : le retirer avant la prochaine fusion, sinon Git refuse.
 
 ## Ce qu'il faut savoir pour reprendre
 
+### Outil : la section prototypes, touche 4 de la vue isolée (2026-10-22)
+
+**Règle posée par l'utilisateur, à partir de maintenant** : les essais
+visuels vivent dans **une section à eux**, la **touche 4** de la vue isolée
+(liste unique `ecran/prototypes.rs`), et **plus dans les galeries** — celles-ci
+montrent ce que le jeu produit. Un prototype **validé en est retiré**, dans le
+commit qui l'adopte. Liste vide : un message Minitel « aucun prototype en
+cours », dont le OK fait ce que fait la touche 1. Les quatre essais de disque
+protoplanétaire (12.2) y sont passés depuis la galerie des disques ; le cas
+« Disque protoplanétaire » d'origine y reste. Gardes : la touche boucle sur
+la liste et ne rend rien quand elle est vide (red-check fait), chaque
+prototype a un nom à lui et un cadre dans la portée de la caméra.
+
+### Lot 12.2, en cours : quatre prototypes de disque protoplanétaire (2026-10-22)
+
+*« Je ne suis pas contre créer des disques de débris plus en 3D, types
+nuages de poussières, s'il évolue de manière dynamique en rotation avec
+l'astre — pourquoi pas utiliser la même technique que pour le shader de la
+géante rouge — créé-moi plusieurs protos. »* Le même disque (0,3-8 UA, deux
+sillons), la même jeune étoile ; touche 4 :
+
+- **A — voile bouillonnant** : des amas qui se forment, gonflent et se
+  dissipent dans le voile, la recette des cellules de l'ébullition en 2D
+  (`cellules2`, `amas`), entraînés et cisaillés par la rotation
+  différentielle. Uniform `nuages`.
+- **B — disque épais** : le voile en 7 couches le long de la normale,
+  s'évasant (h/r constant, plus épais au large), chacune sa graine ; alphas
+  répartis en gaussienne pour que la somme vue de face reste celle du voile à
+  plat. Uniform `couche` (vertex). Coût : ×7 sur le voile.
+- **C — nuages de poussière 3D** : 500 disques flous face caméra (le pinceau
+  des comètes et des jets), en **orbite de Kepler** (`ω = √(gm/r³)`), dans
+  ±1,5 h/r du plan, qui naissent et s'effacent ; additifs, donc ils brillent
+  (poussière éclairée) mais n'assombrissent rien. `disque::nuage_3d`, pur.
+- **D — les trois**.
+
+Gardes : `les_nuages_tournent_comme_un_disque` (rayon tenu, épaisseur tenue,
+l'intérieur file plus vite — red-check : vitesse uniforme), et
+`les_couches_s_empilent_autour_du_plan`. **Question encore ouverte** : le
+grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
+T Tauri, ou le remplace-t-il ?
+
 ### Lot 12.1 : les jeunes étoiles, refaites (2026-10-22)
 
 **Le défaut trouvé en ouvrant le lot** : les jets de T Tauri étaient **peints

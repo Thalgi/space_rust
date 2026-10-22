@@ -74,6 +74,18 @@ pub struct DisqueConfig {
     /// du vocabulaire d'accrétion est exactement la dérive que la recherche
     /// lui reprochait (`astres_v2_disque_accretion_2.md` §2).
     pub accretion: Option<super::accretion::Accretion>,
+    // — Prototypes du lot 12 (2026-10-22, essais de la galerie des disques) —
+    /// **A** : amas de poussière qui gonflent et se dissipent dans le voile,
+    /// la recette de l'ébullition des géantes rouges en 2D. 0 = aucun.
+    pub nuages: f32,
+    /// **B** : couches empilées du voile, qui lui donnent une épaisseur.
+    /// 1 = plat (le rendu de toujours).
+    pub couches: u32,
+    /// **B et C** : demi-épaisseur relative `h/r` — un disque protoplanétaire
+    /// s'**évase**, plus épais au large qu'au bord interne.
+    pub h_r: f32,
+    /// **C** : nuages de poussière en volume, en orbite de Kepler. 0 = aucun.
+    pub nuages_3d: u32,
 }
 
 impl DisqueConfig {
@@ -110,7 +122,32 @@ impl DisqueConfig {
             emissif: 0.0,
             rotation_voile: 0.02,
             accretion: None,
+            nuages: 0.0,
+            couches: 1,
+            h_r: 0.0,
+            nuages_3d: 0,
         }
+    }
+
+    /// Prototype **A** : voir le champ `nuages`.
+    pub fn avec_nuages(mut self, force: f32) -> Self {
+        self.nuages = force.clamp(0.0, 1.0);
+        self
+    }
+
+    /// Prototype **B** : voir les champs `couches` et `h_r`.
+    pub fn avec_couches(mut self, n: u32, h_r: f32) -> Self {
+        self.couches = n.max(1);
+        self.h_r = h_r.max(0.0);
+        self
+    }
+
+    /// Prototype **C** : voir les champs `nuages_3d` et `h_r`. Borné : le
+    /// chapelet tient dans un seul maillage (`u16`).
+    pub fn avec_nuages_3d(mut self, n: u32, h_r: f32) -> Self {
+        self.nuages_3d = n.min(4000);
+        self.h_r = h_r.max(0.0);
+        self
     }
 
     /// **Disque d'accrétion** d'un trou noir stellaire.

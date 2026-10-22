@@ -213,6 +213,12 @@ transparaît au centre (uniform `coeur`). Masse propre bornée et rareté
 provisoires, à reprendre avec la refonte de la genèse. Exclue des systèmes
 multiples ; pas de planète interne, c'est voulu.
 
+**Section prototypes** (2026-10-22) : les essais visuels vivent à la
+**touche 4 de la vue isolée** (`ecran/prototypes.rs`), plus dans les
+galeries ; un prototype validé en est retiré. **En cours : quatre disques
+protoplanétaires** (lot 12.2 — voile bouillonnant, épais, nuages 3D, les
+trois). Lot 12.1 (jets 3D des jeunes étoiles) fait et validé.
+
 **Le prochain pas** : **tous les lots livrés sont validés.** Reste à
 construire, **dans l'ordre** : 12 (disques proto au tirage, hypergéante, Be,
 Herbig Ae/Be), puis les lots futurs 13 à 15, puis la refonte de la genèse.

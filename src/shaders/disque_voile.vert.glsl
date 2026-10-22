@@ -20,10 +20,14 @@ uniform vec3 axe_u;
 uniform vec3 axe_n;
 uniform vec3 axe_v;
 uniform vec3 tocam;
+// Prototype B (lot 12) : décalage de cette couche le long de la normale, en
+// part du rayon local — le disque s'évase, plus épais au large. 0 = à plat.
+uniform float couche;
 
 void main() {
     vtc = texcoord;
     vec3 rel = axe_u * position.x + axe_n * position.y + axe_v * position.z;
+    rel += axe_n * (couche * length(position.xz));
     vdot = dot(rel, tocam);
     vpos = rel;
     gl_Position = Projection * Model * vec4(centre + rel, 1.0);

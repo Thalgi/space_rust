@@ -112,6 +112,9 @@ pub(super) fn uniforms_voile(
     mat.set_uniform("gran_freq", (c.gran_freq.x, c.gran_freq.y));
     mat.set_uniform("arcs", c.arcs);
     mat.set_uniform("emissif", c.emissif);
+    mat.set_uniform("nuages", c.nuages);
+    // À plat par défaut : le dessin en couches (prototype B) le réécrit.
+    mat.set_uniform("couche", 0.0f32);
     mat.set_uniform("rotation", c.rotation_voile);
     mat.set_uniform("r_ratio", (c.externe / c.interne.max(1e-3)).max(1.001));
     mat.set_uniform(
@@ -152,6 +155,8 @@ fn uniforms_voile_decl() -> Vec<UniformDesc> {
             UniformDesc::new("gran_freq", UniformType::Float2),
             UniformDesc::new("arcs", UniformType::Float1),
             UniformDesc::new("emissif", UniformType::Float1),
+            UniformDesc::new("nuages", UniformType::Float1),
+            UniformDesc::new("couche", UniformType::Float1),
             UniformDesc::new("rotation", UniformType::Float1),
             UniformDesc::new("r_ratio", UniformType::Float1),
             UniformDesc::new("lacune_phase", UniformType::Float4),

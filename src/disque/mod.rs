@@ -325,13 +325,131 @@ impl Disque {
                     dir_lum, face_lum, self.ombre_rayon, cam.light_color,
                 );
             }
-            gl_use_material(mat);
-            for lot in &self.voile_lots {
-                draw_mesh(lot);
+            // **Prototype B** (lot 12) : le voile en couches empilées le long
+            // de la normale, chacune sa graine — une épaisseur, lisible par la
+            // tranche. Une seule couche : le rendu de toujours.
+            let n = self.cfg.couches.max(1);
+            for k in 0..n {
+                if n > 1 {
+                    let (alpha, couche, graine) = couche_voile(&self.cfg, k);
+                    mat.set_uniform("alpha", alpha);
+                    mat.set_uniform("couche", couche);
+                    mat.set_uniform("seed", graine);
+                }
+                gl_use_material(mat);
+                for lot in &self.voile_lots {
+                    draw_mesh(lot);
+                }
+                vider_lot();
             }
+            gl_use_default_material();
+        }
+
+        // **Prototype C** (lot 12) : des nuages de poussière en volume, au-dessus
+        // et au-dessous du plan, en orbite de Kepler — le pinceau des queues de
+        // comète et des jets (disques flous face caméra, additifs).
+        if self.cfg.nuages_3d > 0 {
+            let tocam = (cam.pos - p).normalize_or_zero();
+            let (mut v, mut i) = (Vec::new(), Vec::new());
+            for k in 0..self.cfg.nuages_3d {
+                let (loc, taille, eclat, t) = nuage_3d(k, &self.cfg, self.temps);
+                let rel = self.axe_u * loc.x + self.axe_n * loc.y + self.axe_v * loc.z;
+                let devant = rel.dot(tocam) >= 0.0;
+                if (moitie > 0.5 && !devant) || (moitie < -0.5 && devant) {
+                    continue;
+                }
+                let c = self.cfg.voile_couleur2.lerp(self.cfg.voile_couleur, t) * cam.light_color.min(Vec3::ONE);
+                let a = eclat * 0.35;
+                crate::impostor::push_quad(&mut v, &mut i, cam, p + rel, taille, Color::new(c.x * a, c.y * a, c.z * a, a));
+            }
+            gl_use_material(&crate::soleil::materiau_ruban_lumineux());
+            draw_mesh(&Mesh { vertices: v, indices: i, texture: Some(crate::impostor::halo_partage()) });
             vider_lot();
             gl_use_default_material();
         }
+    }
+}
+
+/// **Une couche du voile** (prototype B) : `(alpha, décalage le long de la
+/// normale en part du rayon, graine)`. Les couches vont de −h/r à +h/r ; les
+/// plus proches du plan pèsent le plus (profil gaussien vertical d'un vrai
+/// disque), et leurs alphas sont répartis pour que la somme vue de face
+/// reste celle du voile à plat.
+fn couche_voile(c: &DisqueConfig, k: u32) -> (f32, f32, f32) {
+    let n = c.couches.max(2);
+    let x = k as f32 / (n - 1) as f32 * 2.0 - 1.0;
+    let poids = (-2.0 * x * x).exp();
+    let total: f32 = (0..n).map(|j| (-2.0 * (j as f32 / (n - 1) as f32 * 2.0 - 1.0).powi(2)).exp()).sum();
+    (c.voile_alpha * poids / total * 1.6, c.h_r * x, c.graine + k as f32 * 7.3)
+}
+
+/// **Un nuage de poussière en volume** (prototype C), à l'instant `temps` :
+/// `(position LOCALE (u, n, v), rayon du nuage, éclat 0..1, t radial 0..1)`.
+///
+/// Pur et sans état : tout se dérive de son rang et de la graine du disque —
+/// le même nuage revient au même endroit à graine égale. Orbite de **Kepler**
+/// (`ω = √(gm/r³)`, la vitesse des particules) : l'intérieur file, le large
+/// traîne. Hauteur dans ±1,5 h/r du plan ; il **naît, enfle et s'efface**
+/// sur un cycle propre, sans à-coup.
+pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32, f32) {
+    let h = |s: f32| ((k as f32 * 12.9898 + c.graine * 78.233 + s * 37.719).sin() * 43_758.547).fract().abs();
+    let t = h(1.0);
+    let r = c.interne + t * (c.externe - c.interne);
+    let omega = (c.gm / (r * r * r).max(1e-6)).sqrt();
+    let ang = h(2.0) * std::f32::consts::TAU + omega * temps;
+    let z = (h(3.0) * 2.0 - 1.0) * c.h_r * r * 1.5;
+    let vie = (temps * 0.04 + h(4.0)).fract();
+    let eclat = (std::f32::consts::PI * vie).sin().powi(2);
+    let taille = r * (0.03 + 0.05 * h(5.0)) * (0.7 + 0.6 * vie);
+    (vec3(ang.cos() * r, z, ang.sin() * r), taille, eclat, t)
+}
+
+#[cfg(test)]
+mod tests_prototypes {
+    use super::*;
+
+    fn proto() -> DisqueConfig {
+        DisqueConfig::protoplanetaire(0, 10.0, 100.0, 1000.0).avec_nuages_3d(300, 0.08)
+    }
+
+    /// **Les nuages 3D tournent comme un disque** : chacun garde son rayon
+    /// dans l'anneau, reste dans l'épaisseur annoncée, et l'intérieur file
+    /// plus vite que le large (Kepler). Leur éclat reste dans `[0 ; 1]`.
+    #[test]
+    fn les_nuages_tournent_comme_un_disque() {
+        let c = proto();
+        for k in 0..300 {
+            let (p0, taille, eclat, _) = nuage_3d(k, &c, 0.0);
+            let (p1, _, _, _) = nuage_3d(k, &c, 50.0);
+            let r0 = vec2(p0.x, p0.z).length();
+            assert!((r0 - vec2(p1.x, p1.z).length()).abs() < 1e-2, "nuage {k} : change de rayon");
+            assert!(r0 >= c.interne - 1e-3 && r0 <= c.externe + 1e-3, "nuage {k} hors de l'anneau ({r0})");
+            assert!(p0.y.abs() <= c.h_r * r0 * 1.5 + 1e-3, "nuage {k} hors de l'épaisseur");
+            assert!((0.0..=1.0).contains(&eclat) && taille > 0.0);
+        }
+        // Kepler : l'angle parcouru décroît avec le rayon.
+        let tour = |k: u32| {
+            let (a, _, _, _) = nuage_3d(k, &c, 0.0);
+            let (b, _, _, _) = nuage_3d(k, &c, 1.0);
+            let r = vec2(a.x, a.z).length();
+            (r, vec2(a.x, a.z).angle_between(vec2(b.x, b.z)).abs())
+        };
+        let mut v: Vec<(f32, f32)> = (0..300).map(tour).collect();
+        v.sort_by(|x, y| x.0.total_cmp(&y.0));
+        assert!(v[0].1 > v[v.len() - 1].1 * 2.0, "l'intérieur ne file pas plus vite que le large");
+    }
+
+    /// **Les couches donnent une épaisseur sans assombrir ni éclaircir** :
+    /// symétriques autour du plan, la plus forte au milieu, et la somme de
+    /// leurs alphas proche du voile à plat.
+    #[test]
+    fn les_couches_s_empilent_autour_du_plan() {
+        let c = DisqueConfig::protoplanetaire(0, 10.0, 100.0, 1000.0).avec_couches(7, 0.08);
+        let couches: Vec<_> = (0..7).map(|k| couche_voile(&c, k)).collect();
+        assert!((couches[0].1 + couches[6].1).abs() < 1e-6, "couches non symétriques");
+        assert!(couches[3].1.abs() < 1e-6 && couches[3].0 > couches[0].0, "le plan ne pèse pas le plus");
+        let somme: f32 = couches.iter().map(|x| x.0).sum();
+        assert!((somme / c.voile_alpha - 1.6).abs() < 1e-3, "somme des alphas : {somme}");
     }
 }
 

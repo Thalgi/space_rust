@@ -31,6 +31,7 @@ uniform vec3 dir_lumiere;    // direction de propagation de la lumière au centr
 uniform float face_lum;      // 1 = face éclairée du plan, 0.55 = face nuit
 uniform float ombre_rayon;   // rayon du corps central (0 = pas d'ombre)
 uniform vec3 lum_couleur;    // couleur * intensité de l'étoile primaire
+uniform float nuages;        // prototype A (lot 12) : amas bouillonnants, 0 = aucun
 
 float hash(float x) {
     return fract(sin(x * 12.9898) * 43758.5453);
@@ -51,6 +52,45 @@ float vnoise(vec2 p) {
     float c = hash21(i + vec2(0.0, 1.0));
     float d = hash21(i + vec2(1.0, 1.0));
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// **Cellules 2D** (prototype A, lot 12) : la recette de l'ébullition des
+// géantes rouges (`soleil.frag.glsl`), ramenée au plan du disque. Distance au
+// centre le plus proche (x), au second (y), identité du plus proche (z).
+vec3 cellules2(vec2 p, float t) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    float f1 = 8.0;
+    float f2 = 8.0;
+    float id = 0.0;
+    for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+            vec2 g = vec2(float(x), float(y));
+            vec2 h = vec2(hash21(i + g), hash21(i + g + 17.13));
+            vec2 r = g + 0.5 + 0.38 * sin(t + 6.2831 * h) - f;
+            float dd = dot(r, r);
+            if (dd < f1) {
+                f2 = f1;
+                f1 = dd;
+                id = h.x;
+            } else if (dd < f2) {
+                f2 = dd;
+            }
+        }
+    }
+    return vec3(sqrt(f1), sqrt(f2), id);
+}
+
+// **Un amas de poussière qui vit** : il se forme, gonfle, se dissipe, et
+// recommence — chacun à son rythme. Cycle refermé (comme les bulles des
+// géantes) : pas de saut au recommencement.
+float amas(vec2 p, float t) {
+    vec3 c = cellules2(p, t * 0.2);
+    float vie = fract(t * 0.04 + c.z * 13.7);
+    float gonfle = smoothstep(0.0, 0.55, vie) * (1.0 - smoothstep(0.65, 1.0, vie));
+    float coeur = 1.0 - smoothstep(0.0, mix(0.15, 0.6, gonfle), c.x);
+    float interieur = smoothstep(0.0, 0.25, c.y - c.x);
+    return coeur * gonfle * interieur;
 }
 
 float gauss(float x, float c, float w) {
@@ -122,6 +162,16 @@ void main() {
         nse = mix(nse, vnoise(pn * 2.7 + 13.1), gran_freq.y * 0.5);
         float m = smoothstep(gran_seuil - 0.18, gran_seuil + 0.22, nse) * 1.3;
         dens *= mix(1.0, m, granulation);
+    }
+
+    // **Prototype A** (lot 12) : des amas de poussière qui se forment et se
+    // dissipent. Échantillonnés sur l'angle animé, comme la granulation : ils
+    // tournent ET se cisaillent avec la rotation différentielle.
+    if (nuages > 0.001) {
+        float angn = ang * 6.2831853;
+        vec2 pa = vec2(cos(angn), sin(angn)) * (rr / r_ratio) * 6.0 + seed;
+        float h = amas(pa, time) + 0.5 * amas(pa * 2.3 + 7.7, time * 1.3);
+        dens *= mix(1.0, 0.3 + 1.6 * h, nuages);
     }
 
     // Stries radiales fines (texture d'anneau).

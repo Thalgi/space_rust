@@ -28,6 +28,9 @@ enum Specimen {
         regime: Option<crate::disque::Accretion>,
     },
     Planete { rayon: f32, app: Box<Apparence> },
+    /// Un **prototype en cours** (touche 4), par son rang dans
+    /// `prototypes::prototypes()`.
+    Prototype(usize),
 }
 
 impl Specimen {
@@ -57,6 +60,9 @@ impl Specimen {
         match self {
             Specimen::Soleil { rayon, .. } => *rayon,
             Specimen::Planete { rayon, .. } => *rayon,
+            // Le rayon de l'étoile qui le porte : c'est lui que mesure la
+            // taille écran du bloc de debug.
+            Specimen::Prototype(_) => 1.6,
         }
     }
 
@@ -123,6 +129,10 @@ impl Specimen {
         match self {
             Specimen::Soleil { nom, .. } => format!("ETOILE - {}", nom),
             Specimen::Planete { .. } => "PLANETE".to_string(),
+            Specimen::Prototype(i) => match super::prototypes::prototypes().get(*i) {
+                Some(p) => format!("PROTOTYPE - {}", p.nom),
+                None => "PROTOTYPE - (retire)".to_string(),
+            },
         }
     }
 }
@@ -224,6 +234,9 @@ fn lignes_debug(
         Specimen::Planete { rayon, .. } => {
             l.push(format!("  rayon {rayon:.3}"));
         }
+        Specimen::Prototype(i) => {
+            l.push(format!("  prototype {} / {}", i + 1, super::prototypes::prototypes().len()));
+        }
     }
     l.push(format!(
         "CAM  yaw {:.0}°  pitch {:.0}°  dist {:.2}  zoom x{:.2}",
@@ -265,13 +278,29 @@ fn batir(spec: &Specimen) -> Systeme {
             // Pas d'étoile : lumière latérale de secours pour modeler le relief.
             sys.set_lumiere(vec3(6.0, 3.0, 6.0), Vec3::ONE);
         }
+        Specimen::Prototype(i) => {
+            if let Some(p) = super::prototypes::prototypes().get(*i) {
+                return (p.construire)();
+            }
+        }
     }
     sys
 }
 
 /// Distance caméra adaptée à la taille du corps (couronne du soleil incluse).
 fn dist_pour(spec: &Specimen) -> f32 {
+    if let Specimen::Prototype(i) = spec {
+        if let Some(p) = super::prototypes::prototypes().get(*i) {
+            return p.distance;
+        }
+    }
     (spec.rayon() * 5.0 + 5.0).max(6.0)
+}
+
+/// **Ce que fait la touche 4** : le prototype suivant, ou — s'il n'y en a
+/// aucun en cours — le message qui le dit. Pur : la décision se teste.
+fn touche_4(rang: usize, nb_prototypes: usize) -> Option<Specimen> {
+    (nb_prototypes > 0).then(|| Specimen::Prototype(rang % nb_prototypes))
 }
 
 /// Vue d'un astre isolé : pratique pour travailler le rendu d'un seul corps.
@@ -279,6 +308,10 @@ pub struct Objet {
     spec: Specimen,
     /// Rang du type particulier affiché, pour les faire défiler à la touche 3.
     particulier: usize,
+    /// Rang du prototype affiché (touche 4).
+    prototype: usize,
+    /// Le message « aucun prototype en cours » est ouvert.
+    sans_prototype: bool,
     sys: Systeme,
     fond: Fond,
     cam: Camera,
@@ -293,11 +326,25 @@ impl Objet {
         Self {
             spec,
             particulier: 0,
+            prototype: 0,
+            sans_prototype: false,
             sys,
             fond: Fond::new(700),
             cam,
             rendu: RenduStandard::new(),
         }
+    }
+
+    /// **Le message « aucun prototype en cours »**, en console Minitel.
+    /// Rend `true` quand on clique OK (ou qu'on valide à Entrée).
+    fn message_sans_prototype(&self, ecran: Vec2) -> bool {
+        let r = Rect::new(ecran.x * 0.5 - 200.0, ecran.y * 0.5 - 70.0, 400.0, 140.0);
+        crate::ui::minitel_panel(r, "* MINITEL * PROTOTYPES");
+        crate::police::texte("Aucun prototype en cours.", r.x + 20.0, r.y + 62.0, 20.0, Color::new(0.55, 1.0, 0.75, 1.0));
+        let ok = Rect::new(r.x + r.w * 0.5 - 50.0, r.y + r.h - 46.0, 100.0, 32.0);
+        let m = vec2(mouse_position().0, mouse_position().1);
+        crate::ui::minitel_ligne(ok, "   OK", m);
+        (is_mouse_button_pressed(MouseButton::Left) && ok.contains(m)) || is_key_pressed(KeyCode::Enter)
     }
 
     fn charger(&mut self, forcer: Option<bool>) {
@@ -331,6 +378,19 @@ impl Objet {
             self.particulier += 1;
             self.sys = batir(&self.spec);
             self.cam.set_dist(dist_pour(&self.spec));
+        }
+        // **Les prototypes en cours** (`prototypes.rs`) : un par appui. Aucun
+        // en cours : un message le dit, et son OK fait ce que fait la touche 1.
+        if is_key_pressed(KeyCode::Key4) {
+            match touche_4(self.prototype, super::prototypes::prototypes().len()) {
+                Some(spec) => {
+                    self.prototype += 1;
+                    self.spec = spec;
+                    self.sys = batir(&self.spec);
+                    self.cam.set_dist(dist_pour(&self.spec));
+                }
+                None => self.sans_prototype = true,
+            }
         }
         if is_key_pressed(KeyCode::P) {
             self.rendu.toggle_pixel();
@@ -369,9 +429,13 @@ impl Objet {
         for (i, ligne) in debug.iter().enumerate() {
             crate::police::texte(ligne, 12.0, 24.0 + i as f32 * 20.0, 18.0, WHITE);
         }
+        if self.sans_prototype && self.message_sans_prototype(ecran) {
+            self.sans_prototype = false;
+            self.charger(Some(true)); // ce que fait la touche 1
+        }
         crate::police::texte(
             &format!(
-                "{} FPS   rendu: {:?}   G: aleatoire   1: soleil   2: planete   3: exotiques   P: pixel   R: shaders   Echap: menu",
+                "{} FPS   rendu: {:?}   G: aleatoire   1: soleil   2: planete   3: exotiques   4: prototypes   P: pixel   R: shaders   Echap: menu",
                 get_fps(),
                 crate::reglages::mode_rendu()
             ),
@@ -387,6 +451,21 @@ impl Objet {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **La touche 4 parcourt les prototypes, et dit quand il n'y en a pas.**
+    /// Elle boucle comme le défilé ; sans prototype, elle ne rend rien — c'est
+    /// le message qui s'ouvre, pas un spécimen vide.
+    #[test]
+    fn la_touche_4_parcourt_les_prototypes_ou_le_dit() {
+        assert!(touche_4(0, 0).is_none(), "aucun prototype : la touche doit ouvrir le message");
+        assert!(touche_4(7, 0).is_none());
+        for (rang, n, attendu) in [(0, 4, 0), (3, 4, 3), (4, 4, 0), (9, 4, 1), (5, 1, 0)] {
+            match touche_4(rang, n) {
+                Some(Specimen::Prototype(i)) => assert_eq!(i, attendu, "rang {rang} sur {n}"),
+                _ => panic!("rang {rang} sur {n} : pas de prototype rendu"),
+            }
+        }
+    }
 
     /// **Le défilé couvre tous les types particuliers, une fois chacun.**
     ///
@@ -424,7 +503,9 @@ mod tests {
         let n = types_au_defile().len() + EN_TETE.len();
         let nom_de = |i: usize| match Specimen::du_defile(i) {
             Specimen::Soleil { nom, .. } => nom,
-            Specimen::Planete { .. } => panic!("rang {i} : ce n'est pas une étoile"),
+            Specimen::Planete { .. } | Specimen::Prototype(_) => {
+                panic!("rang {i} : ce n'est pas une étoile")
+            }
         };
         // ⚠️ **Il BOUCLE**, il ne s'arrête pas au dernier. Vérifier seulement
         // que rien ne panique laissait passer un `min` à la place du modulo :
@@ -518,7 +599,9 @@ mod tests {
                     // montreraient la même chose au hasard.
                     assert!(regime.is_some(), "rang {rang} : régime laissé au hasard");
                 }
-                Specimen::Planete { .. } => panic!("rang {rang} : ce n'est pas une étoile"),
+                Specimen::Planete { .. } | Specimen::Prototype(_) => {
+                    panic!("rang {rang} : ce n'est pas une étoile")
+                }
             }
         }
     }

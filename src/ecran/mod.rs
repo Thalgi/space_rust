@@ -20,6 +20,7 @@ mod galerie_disques;
 mod galerie_cometes;
 mod galerie_etoiles;
 mod objet;
+mod prototypes;
 mod palette;
 mod panache;
 mod parametres;
