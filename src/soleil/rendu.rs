@@ -21,6 +21,7 @@ impl Soleil {
         // l'image — ils n'éclairaient que les planètes.
         let eclat = self.eclat_dessin(cam.pos);
         let rot = self.temps * 0.12;
+        let axe_rot = self.axe_rot;
 
         // **Le disque, moitié arrière d'abord** : l'horizon la masquera.
         // Même encadrement qu'un anneau planétaire (`planete/mod.rs`), et
@@ -86,6 +87,9 @@ impl Soleil {
             mat.set_uniform("surface", (self.surface.x, self.surface.y, self.surface.z));
             mat.set_uniform("ebul_reglage", (self.ebul_reglage.x, self.ebul_reglage.y));
             mat.set_uniform("coeur", self.coeur);
+            let q = self.axe_rot;
+            mat.set_uniform("axe_rot", (q.x, q.y, q.z, q.w));
+            mat.set_uniform("accretion_pol", self.accretion_pol);
             mat.set_uniform_array("spots", &spots[..]);
             mat.set_uniform_array("poles", &champ_uniforme[..]);
 
@@ -130,8 +134,8 @@ impl Soleil {
         let dist = (cam.pos - c).length();
         let vh = crate::impostor::viewport_h();
         for b in &self.boucles {
-            let a_w = vers_monde(b.sa, rot);
-            let b_w = vers_monde(b.sb, rot);
+            let a_w = vers_monde(b.sa, rot, axe_rot);
+            let b_w = vers_monde(b.sb, rot, axe_rot);
             // Le calibre propre à cette boucle-ci : un fil ou un ruban, et
             // **proportionné à sa propre étendue** (voir [`RAPPORT_TUBE`]).
             let (calibre, n) = tube(
@@ -207,8 +211,8 @@ impl Soleil {
         // Cœur dense brillant au sommet des éjections (matière de proéminence).
         for b in &self.boucles {
             if b.etat == EtatBoucle::Rupture {
-                let a_w = vers_monde(b.sa, rot);
-                let b_w = vers_monde(b.sb, rot);
+                let a_w = vers_monde(b.sa, rot, axe_rot);
+                let b_w = vers_monde(b.sb, rot, axe_rot);
                 // Le milieu du **trajet**, pas le milieu du paramètre : sur
                 // une arche étirée les deux sont très loin l'un de l'autre.
                 let courbe = le_long(a_w, b_w, profil(b), r, 8);
@@ -227,6 +231,33 @@ impl Soleil {
                 }
             }
         }
+        // ---- 3) Jets en 3D (lot 12) : même pinceau que la queue des
+        // comètes — un chapelet de nuages face caméra, qui n'a pas
+        // d'orientation propre et se lit sous tous les angles — avec ses
+        // bouffées, qui sont ici les **nœuds Herbig-Haro** des vrais jets.
+        if self.jets_3d > 0.0 {
+            let axe = self.axe_jets();
+            let jetcol = self.couleur.lerp(vec3(0.6, 0.8, 1.0), 0.55);
+            for (k, sens) in [1.0_f32, -1.0].into_iter().enumerate() {
+                let brut = jet(c, axe * sens, r, self.jets_3d, jetcol);
+                let mut nuages = crate::comete::nuage(&brut);
+                // Graine décalée par côté : les deux jets ne crachent pas leurs
+                // nœuds en même temps.
+                crate::comete::fluctuer(&mut nuages, &FLUCT_JETS, self.temps, self.graine + k as f32 * 3.7);
+                for (pos, demi, col) in nuages {
+                    let (taille, fondu) = plancher_plasma(demi, dist, vh);
+                    // Prémultiplié comme le reste du plasma (additif).
+                    let a = col.a * fondu;
+                    let col = Color::new(col.r * a, col.g * a, col.b * a, a);
+                    push_quad(&mut self.verts, &mut self.inds, cam, pos, taille, col);
+                    quads += 1;
+                    if quads >= QUADS_PAR_LOT {
+                        flush(&mut self.verts, &mut self.inds, &self.halo);
+                        quads = 0;
+                    }
+                }
+            }
+        }
         flush(&mut self.verts, &mut self.inds, &self.halo);
         gl_use_default_material();
 
@@ -235,6 +266,35 @@ impl Soleil {
             d.draw_moitie(cam, 1.0);
         }
     }
+}
+
+/// **Les nœuds des jets** : rapides et serrés — la matière y file bien plus
+/// vite que la poussière d'une comète, et un vrai jet de jeune étoile est un
+/// chapelet de condensations (objets Herbig-Haro), pas un trait continu.
+const FLUCT_JETS: crate::comete::Fluctuation = crate::comete::Fluctuation {
+    cadence: 1.2,
+    traversee: 1.8,
+    eclat: 0.9,
+    largeur: 0.35,
+    taille: 0.04,
+    creux: 0.45,
+};
+
+/// **Un jet**, de la surface vers le large le long de `axe` (unitaire) :
+/// `longueur` en rayons, cône qui s'évase, éclat qui s'éteint vers le bout.
+/// Pur : la géométrie se teste, le dessin non.
+fn jet(c: Vec3, axe: Vec3, r: f32, longueur: f32, couleur: Vec3) -> Vec<crate::impostor::PointRuban> {
+    const N: usize = 24;
+    (0..=N)
+        .map(|k| {
+            let s = k as f32 / N as f32;
+            let pos = c + axe * (r * 1.02 + r * longueur * s);
+            // Étroit au pied — la matière sort collimatée — puis s'ouvre.
+            let demi = r * (0.10 + 0.28 * s);
+            let alpha = 0.9 * (1.0 - s).powf(0.8);
+            (pos, demi, Color::new(couleur.x, couleur.y, couleur.z, alpha))
+        })
+        .collect()
 }
 
 /// **Demi-taille écran minimale d'un billboard de plasma.**
@@ -274,9 +334,13 @@ fn plancher_plasma(taille: f32, dist: f32, vh: f32) -> (f32, f32) {
 
 /// Passe une direction du repère "surface" (où vivent taches/boucles) au repère monde,
 /// en inversant la rotation appliquée par le shader.
-fn vers_monde(s: Vec3, a: f32) -> Vec3 {
+/// Du repère de la surface (qui tourne autour de +Y) au repère monde : la
+/// rotation propre, puis l'**inclinaison de l'axe** (`axe_rot`, identité pour
+/// la plupart des étoiles). ⚠️ Inverse exact de `tourner` dans
+/// `soleil.frag.glsl` : c'est ce qui fait naître une arche sur sa tache.
+fn vers_monde(s: Vec3, a: f32, axe_rot: Quat) -> Vec3 {
     let (sa, ca) = a.sin_cos();
-    vec3(s.x * ca + s.z * sa, s.y, -s.x * sa + s.z * ca)
+    axe_rot * vec3(s.x * ca + s.z * sa, s.y, -s.x * sa + s.z * ca)
 }
 
 /// Point sur l'arche (Bézier quadratique a -> sommet -> b), relatif au centre.
@@ -761,5 +825,50 @@ mod tests_plancher_plasma {
         // lisible que rien du tout.
         let (_, tres_loin) = plancher_plasma(TAILLE, 30000.0, VH);
         assert!(tres_loin >= 0.12, "le plasma s'est éteint : {tres_loin}");
+    }
+}
+
+#[cfg(test)]
+mod tests_jets {
+    use super::*;
+
+    /// **Les jets sortent par les pôles.** L'axe de rotation incliné sur celui
+    /// du disque amène le pôle nord de la surface **exactement** sur l'axe des
+    /// jets, à tout instant de la rotation : sinon les jets partiraient des
+    /// flancs de l'étoile, comme signalé à l'écran.
+    #[test]
+    fn les_jets_sortent_par_les_poles() {
+        for graine in [0.0_f32, 3.3, 517.2] {
+            let axe = super::super::normale_disque(graine);
+            let q = super::super::quat_axe(axe);
+            for a in [0.0_f32, 1.0, 4.4] {
+                let pole = vers_monde(Vec3::Y, a, q);
+                assert!((pole - axe).length() < 1e-4, "graine {graine}, rotation {a} : pôle {pole} hors de l'axe {axe}");
+            }
+        }
+        // Et sans inclinaison, rien ne change : le pôle reste en haut.
+        assert!((vers_monde(Vec3::Y, 2.0, Quat::IDENTITY) - Vec3::Y).length() < 1e-5);
+    }
+
+
+    /// **Les jets suivent l'axe du disque** — c'est tout l'objet du lot : peints
+    /// sur l'écran, ils partaient de travers dès que le disque s'inclinait. Et
+    /// ils partent **de la surface**, vers le large, en s'évasant.
+    #[test]
+    fn les_jets_suivent_l_axe_du_disque() {
+        for graine in [0.0_f32, 3.3, 517.2] {
+            let axe = super::super::normale_disque(graine);
+            let c = vec3(5.0, -2.0, 1.0);
+            let (r, longueur) = (0.9, 3.0);
+            let pts = jet(c, axe, r, longueur, Vec3::ONE);
+            for p in &pts {
+                let rel = p.0 - c;
+                let le_long = rel.dot(axe);
+                assert!(le_long > r, "graine {graine} : un point du jet est dans l'étoile");
+                assert!((rel - axe * le_long).length() < 1e-3, "graine {graine} : le jet quitte l'axe du disque");
+            }
+            assert!(pts.last().unwrap().1 > pts[0].1 * 2.0, "le jet ne s'évase pas");
+            assert!(((pts.last().unwrap().0 - c).length() - r * (1.02 + longueur)).abs() < 1e-3);
+        }
     }
 }

@@ -110,7 +110,15 @@ impl Variante {
             Variante::Pulsar => s.avec_pulsar(),
             Variante::Magnetar => s.avec_magnetar(),
             Variante::TrouNoir => s.avec_trou_noir(),
-            Variante::Proto => s.avec_jets().avec_disque_protosolaire(),
+            // **Jeune étoile** (lot 12) : jets en 3D le long de l'axe de son
+            // disque, rotation autour de ce même axe, taches d'accrétion à ses
+            // pôles. Les jets peints dans le plan de l'écran (`avec_jets`)
+            // partaient de travers dès que le disque s'inclinait ; ils restent
+            // à l'étoile à neutrons jusqu'au lot 13.
+            Variante::Proto => s
+                .avec_jets_3d(crate::soleil::JETS_PROTO)
+                .avec_accretion_polaire(crate::soleil::ACCRETION_PROTO)
+                .avec_disque_protosolaire(),
         }
     }
 }
@@ -336,6 +344,8 @@ mod tests_variante {
             "avec_surface_du_type(",
             "avec_coeur(",
             "avec_couronne(",
+            "avec_jets_3d(",
+            "avec_accretion_polaire(",
         ] {
             assert!(ici.contains(builder), "`Variante::appliquer` ne sait pas faire `{builder}`");
         }

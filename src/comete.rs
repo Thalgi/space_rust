@@ -458,20 +458,20 @@ pub fn rubans_animes(
 pub struct Fluctuation {
     /// Bouffées lâchées par seconde (en moyenne : leur départ est décalé au
     /// hasard, sinon elles tomberaient au métronome).
-    cadence: f32,
+    pub(crate) cadence: f32,
     /// Secondes qu'une bouffée met à descendre toute la queue.
-    traversee: f32,
+    pub(crate) traversee: f32,
     /// Surcroît d'éclat au cœur d'une bouffée, en part.
-    eclat: f32,
+    pub(crate) eclat: f32,
     /// Gonflement de la largeur au cœur d'une bouffée, en part.
-    largeur: f32,
+    pub(crate) largeur: f32,
     /// Étendue d'une bouffée à sa naissance, en part de la queue. Elle
     /// **double** en descendant : un nuage se dilate.
-    taille: f32,
+    pub(crate) taille: f32,
     /// Creux entre les bouffées vers le bout de la queue, en part de l'éclat :
     /// sans lui, les nuages se posent sur un trait continu au lieu de le
     /// former.
-    creux: f32,
+    pub(crate) creux: f32,
 }
 
 /// **La poussière** : de gros nuages lents et rares — des grains lourds.

@@ -83,7 +83,14 @@ impl Specimen {
     /// vue de travail doit redonner deux fois la même image.
     fn du_defile(i: usize) -> Self {
         let types = types_au_defile();
-        let (g, regime) = types[i % types.len()];
+        // **En tête du défilé : les types du chantier en cours** (`EN_TETE`),
+        // au premier appui, puis tout le catalogue — où ils reviennent à leur
+        // place. Demandé pour aller droit à ce qu'on travaille.
+        let rang = i % (types.len() + EN_TETE.len());
+        let (g, regime) = match EN_TETE.get(rang) {
+            Some(nom) => *types.iter().find(|(g, _)| g.4 == *nom).expect("type en tête absent du défilé"),
+            None => types[rang - EN_TETE.len()],
+        };
         let (tmin, tmax, rayon, lumi, nom, couronne) = g;
         // Les types qui ne sont pas des photosphères se rendent autrement.
         if let Some(s) = Self::enveloppe_gazeuse(nom, (tmin + tmax) * 0.5, rayon) {
@@ -150,6 +157,12 @@ fn types_particuliers() -> Vec<(crate::etoile::Gabarit, Option<crate::disque::Ac
     }
     out
 }
+
+/// **Types mis en tête du défilé** pendant le chantier qui les travaille :
+/// aujourd'hui les jeunes étoiles du lot 12. Ils restent aussi à leur place
+/// dans le catalogue. Le défilé et ses gardes en tiennent compte ; vide, il
+/// redevient le catalogue seul.
+const EN_TETE: &[&str] = &["T Tauri (jeune)"];
 
 /// **Tout le catalogue d'étoiles au défilé** : les particulières d'abord —
 /// c'est pour elles que la touche existe — puis les **ordinaires**.
@@ -408,7 +421,7 @@ mod tests {
     /// indéfiniment sur la touche.
     #[test]
     fn le_defile_boucle_sans_sortir_de_la_liste() {
-        let n = types_au_defile().len();
+        let n = types_au_defile().len() + EN_TETE.len();
         let nom_de = |i: usize| match Specimen::du_defile(i) {
             Specimen::Soleil { nom, .. } => nom,
             Specimen::Planete { .. } => panic!("rang {i} : ce n'est pas une étoile"),
@@ -454,7 +467,7 @@ mod tests {
     /// doivent être là et être justes.
     #[test]
     fn le_debug_dit_ce_qu_on_regarde() {
-        let spec = Specimen::du_defile(0); // le trou noir
+        let spec = Specimen::du_defile(EN_TETE.len()); // le trou noir, premier type
         let l = lignes_debug(&spec, (0.8, 0.5), 8.0, 1.0, vec2(1920.0, 1080.0), 142.0);
         let tout = l.join("\n");
         assert!(tout.contains("Trou noir"), "le type manque : {tout}");
@@ -485,14 +498,15 @@ mod tests {
         assert!(tout.contains("90"), "pitch pas en degrés : {tout}");
     }
 
-    /// **Le trou noir est le premier du défilé**, puisque c'est lui qu'on
+    /// **Le trou noir est le premier type du défilé**, puisque c'est lui qu'on
     /// vient chercher : le trouver en régénérant la skymap est laborieux, il
-    /// ne sort que dans ~1 % des tirages.
+    /// ne sort que dans ~1 % des tirages. Seuls les types du chantier en
+    /// cours (`EN_TETE`) passent avant lui.
     #[test]
     fn le_trou_noir_vient_en_premier() {
         // Les trois régimes ouvrent le défilé, dans l'ordre.
         for (rang, attendu) in [(0, "endormi"), (1, "actif"), (2, "vorace")] {
-            match Specimen::du_defile(rang) {
+            match Specimen::du_defile(EN_TETE.len() + rang) {
                 Specimen::Soleil { nom, couronne, regime, .. } => {
                     assert!(nom.starts_with("Trou noir"), "rang {rang} : {nom}");
                     assert!(nom.contains(attendu), "rang {rang} : attendu {attendu}, eu {nom}");

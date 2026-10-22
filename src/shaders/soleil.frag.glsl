@@ -30,6 +30,13 @@ uniform vec2 ebul_reglage;
 // Lueur du cœur (lot 11, essai) : la quasi-étoile est chauffée par un trou noir
 // en son centre, pas par la fusion. 0 pour toutes les autres étoiles.
 uniform float coeur;
+// Inclinaison de l'axe de rotation (lot 12) : quaternion qui amène le
+// pôle nord de la surface (+Y) sur l'axe réel de l'étoile — celui de son
+// disque et de ses jets. Identité (0,0,0,1) pour toutes les autres.
+uniform vec4 axe_rot;
+// Taches d'accrétion polaires (lot 12) : le gaz du disque tombe sur
+// l'étoile le long de son champ magnétique, près des pôles. 0 = aucune.
+uniform float accretion_pol;
 
 // **Le champ magnétique de l'étoile** (sous-lot 3.4) : xyz = direction d'un
 // pôle (repère surface), w = force SIGNÉE, le signe étant la polarité.
@@ -133,8 +140,18 @@ float bouillon(vec3 pb) {
     return mix(bulles(pb, time, 0.05), bulles(pb * 2.7 + 11.0, time * 1.6, 0.09), 0.30);
 }
 
+// Rotation d'un vecteur par un quaternion unitaire.
+vec3 qrot(vec4 q, vec3 v) {
+    return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
+}
+
 // Rotation propre : du repère monde au repère de la surface, qui tourne.
+// ⚠️ D'abord **redresser** l'axe (le conjugué de `axe_rot`), puis la rotation
+// propre autour de +Y. C'est l'inverse exact de `vers_monde` côté CPU, qui
+// place taches et arches : les deux doivent rester accordés, sinon une arche
+// se dessinerait ailleurs que sa tache.
 vec3 tourner(vec3 n) {
+    n = qrot(vec4(-axe_rot.xyz, axe_rot.w), n);
     float a = time * 0.12;
     float ca = cos(a); float sa = sin(a);
     return vec3(n.x * ca - n.z * sa, n.y, n.x * sa + n.z * ca);
@@ -309,6 +326,19 @@ void main() {
             }
             // Un bord assombri : la boule a du volume au lieu d'un anneau clair.
             col *= mix(1.0, mix(0.65, 1.0, sqrt(z)), ebullition);
+        }
+
+        if (accretion_pol > 0.0) {
+            // **Les taches d'accrétion** (lot 12) : une jeune étoile
+            // avale son disque. Le gaz remonte le long des lignes de son champ
+            // et s'écrase près des pôles — de l'axe de rotation, ici, celui
+            // d'où partent les jets —, y creusant des taches chaudes,
+            // grumeleuses et changeantes. Une couronne autour de chaque pôle.
+            float lat = abs(d.y);
+            float calotte = smoothstep(0.76, 0.86, lat) * (1.0 - 0.5 * smoothstep(0.95, 1.0, lat));
+            float grumeaux = fbm(d * 7.0 + dec + vec3(time * 0.4, 0.0, time * 0.3));
+            float choc = calotte * smoothstep(0.42, 0.68, grumeaux);
+            col = mix(col, vec3(1.0, 0.96, 0.92), clamp(accretion_pol * choc, 0.0, 1.0));
         }
 
         if (coeur > 0.0) {

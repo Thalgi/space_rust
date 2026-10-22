@@ -128,6 +128,18 @@ pub struct Soleil {
     /// noir central ; sa chaleur transparaît au centre du disque. Dérivée du
     /// type par `etoile::coeur` ; 0 pour toutes les autres.
     coeur: f32,
+    /// **Jets en 3D** (lot 12) : longueur en rayons, 0 = aucun. Ils suivent
+    /// l'**axe du disque** (`normale_disque`, la même source) au lieu d'être
+    /// peints le long de l'axe vertical de l'écran — ce qui les faisait partir
+    /// de travers dès que le disque s'inclinait. Posés par la variante `Proto`.
+    jets_3d: f32,
+    /// **Inclinaison de l'axe de rotation** (lot 12) : amène le pôle
+    /// nord de la surface sur l'axe réel de l'étoile. Identité pour presque
+    /// toutes ; pour une étoile à jets, l'axe de son disque — une étoile tourne
+    /// autour de l'axe de son disque, et ses jets sortent par ses pôles.
+    axe_rot: Quat,
+    /// **Taches d'accrétion polaires** (lot 12) : 0 = aucune.
+    accretion_pol: f32,
     /// **Disque de matière autour de l'étoile** — accrétion d'un trou noir,
     /// disque protosolaire d'une jeune étoile.
     ///
@@ -159,6 +171,17 @@ const RAYON_PROTOSOLAIRE: (f32, f32) = (3.0, 16.0);
 /// ⚠️ Dérivée, jamais tirée : un `gen_range` de plus décalerait tout ce qui
 /// est tiré ensuite et changerait le système entier à graine égale — le même
 /// piège que les pôles magnétiques (`champ::poles`) et `temps_initial`.
+/// **Longueur des jets d'une jeune étoile**, en rayons (lot 12, jugé à
+/// l'écran).
+pub const JETS_PROTO: f32 = 3.0;
+/// **Force des taches d'accrétion polaires** d'une jeune étoile (lot 12).
+pub const ACCRETION_PROTO: f32 = 0.8;
+
+/// **Le quaternion qui amène le pôle nord de la surface (+Y) sur `axe`.**
+pub(super) fn quat_axe(axe: Vec3) -> Quat {
+    Quat::from_rotation_arc(Vec3::Y, axe.normalize_or(Vec3::Y))
+}
+
 fn normale_disque(graine: f32) -> Vec3 {
     // Deux angles sans rapport l'un avec l'autre, pris dans la graine.
     let incl = 0.25 + (graine * 0.37).fract() * 0.9; // ~14° à ~66° de la verticale
@@ -313,6 +336,9 @@ impl Soleil {
             surface: vec3(11.0, 1.0, 0.0),
             ebul_reglage: vec2(1.0, 0.5),
             coeur: 0.0,
+            jets_3d: 0.0,
+            axe_rot: Quat::IDENTITY,
+            accretion_pol: 0.0,
             disques: Vec::new(),
             mats,
             mat_plasma,
@@ -383,6 +409,31 @@ impl Soleil {
     pub fn avec_couronne(mut self, etendue: f32) -> Self {
         self.couronne = etendue.max(1.05);
         self
+    }
+
+    /// **Jets en 3D** (lot 12) : remplace les jets peints dans le plan
+    /// de l'écran (`avec_jets`) par des jets le long de l'axe du disque.
+    /// Couronne remise au halo ordinaire : les jets ne sont plus dans le quad.
+    pub fn avec_jets_3d(mut self, longueur: f32) -> Self {
+        self.jets_3d = longueur.max(0.0);
+        // Les jets sortent par les pôles : l'étoile tourne autour de l'axe de
+        // son disque, pas autour de la verticale du monde.
+        self.axe_rot = quat_axe(normale_disque(self.graine));
+        self.couronne_type = 0.0;
+        self.couronne = 1.4;
+        self.couronne_irreg = 0.0;
+        self
+    }
+
+    /// **Taches d'accrétion polaires** (lot 12) : voir le champ.
+    pub fn avec_accretion_polaire(mut self, force: f32) -> Self {
+        self.accretion_pol = force.clamp(0.0, 1.0);
+        self
+    }
+
+    /// L'axe des jets : celui du disque, que l'étoile en porte un ou non.
+    pub(super) fn axe_jets(&self) -> Vec3 {
+        normale_disque(self.graine)
     }
 
     /// Voir le champ `coeur`.

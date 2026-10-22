@@ -80,7 +80,8 @@ silhouette « mince » n'a jamais été essayée.
 | **10 — clos** | **fait et tranché** (2026-10-20) | |
 | **11** — la quasi-étoile : enveloppe pourpre d'une UA, cœur qui transparaît | **fait, validé** (2026-10-21) | |
 | **11 — clos** | **fait et tranché** (2026-10-21) | |
-| 12 | à faire | |
+| **12.1** — jeunes étoiles : jets 3D sur l'axe du disque, rotation sur cet axe, taches d'accrétion | **fait, validé** (2026-10-22) | |
+| 12 (suite) — Herbig Ae/Be, disques protoplanétaires, Be, hypergéante | à faire | |
 | 13 à 15 — rémanents refaits, étoiles vertes, naine noire | **futurs**, après 11 et 12 (conception §6 undecies) | |
 
 Trois correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`), le
@@ -103,6 +104,42 @@ principal : le retirer avant la prochaine fusion, sinon Git refuse.
 ---
 
 ## Ce qu'il faut savoir pour reprendre
+
+### Lot 12.1 : les jeunes étoiles, refaites (2026-10-22)
+
+**Le défaut trouvé en ouvrant le lot** : les jets de T Tauri étaient **peints
+dans le plan de l'écran** (`couronne_type 1`, le long de `v_q.y`), alors que
+son disque protosolaire a un vrai plan dans le monde depuis le lot 5. Dès que
+le disque s'inclinait ou qu'on tournait autour, les jets partaient de travers.
+Le même défaut attend le pulsar et l'étoile à neutrons (lot 13).
+
+**Mené en essai** (case de galerie, et **tête du défilé de la vue isolée** à
+la demande — on y tourne autour à la souris), puis adopté pour la variante
+`Proto`, donc partout :
+
+- **Jets en 3D** le long de l'axe du disque (`normale_disque`, la même
+  source) : **le pinceau des queues de comète** — un chapelet de nuages face
+  caméra, sans orientation propre — et leurs **bouffées**, qui sont ici les
+  **nœuds Herbig-Haro** des vrais jets. Étroits au pied, ils s'évasent ; 3
+  rayons (`JETS_PROTO`). *« Plus réaliste. »*
+- **L'étoile tourne autour de l'axe de son disque** — retour écran : *« il
+  faudrait ajuster la rotation de l'astre pour qu'ils sortent des pôles et pas
+  sur les côtés »*. Uniform `axe_rot` (quaternion) : `tourner` dans le shader
+  redresse l'axe avant la rotation propre, `vers_monde` côté CPU fait
+  l'inverse, si bien que taches et arches restent accordées à la surface.
+  Identité pour toutes les autres étoiles.
+- **L'aspect proto-soleil** : des **taches d'accrétion** chaudes et
+  grumeleuses autour des pôles — une jeune étoile **avale son disque**, le gaz
+  tombe le long de son champ magnétique, au pied des jets (uniform
+  `accretion_pol`, `ACCRETION_PROTO` = 0,8).
+
+Les jets peints à l'écran (`avec_jets`) ne servent plus qu'à l'étoile à
+neutrons. Gardes : `les_jets_suivent_l_axe_du_disque` (red-check : jets
+remis à la verticale), `les_jets_sortent_par_les_poles` (red-check :
+inclinaison ignorée), et `la_source_unique_construit_toutes_les_variantes`
+pour `avec_jets_3d` et `avec_accretion_polaire` (red-check : anciens jets
+remis). La vue isolée garde **T Tauri en tête du défilé** pendant le lot
+(`EN_TETE`), en version du jeu.
 
 ### Lot 11 clos : la quasi-étoile (2026-10-21)
 
