@@ -27,7 +27,6 @@ use macroquad::models::{draw_mesh, Mesh, Vertex};
 use macroquad::prelude::*;
 use macroquad::rand::gen_range;
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 
 // La hauteur du viewport vit dans `impostor` (partagée avec corps et étoiles).
 // Elle sert ici au clamp de taille MINIMALE des particules : une particule
@@ -416,29 +415,25 @@ impl Disque {
                     boules.push((p + rel + dw, t_j, c * lum, eclat * 0.35 * poids, cote));
                 }
             }
-            // **L'empilement, case par case de l'écran** : des cases de la
-            // taille moyenne d'une boule (en angle vu de la caméra), chaque
-            // boule versant son éclat dans celle de son centre.
+            // **L'empilement, vu de la caméra** : en tangentes d'angle (le
+            // plan de l'écran à distance 1), cases de la taille moyenne d'une
+            // boule (voir `Empilement`).
             let ecran = |q: Vec3| {
                 let d = q - cam.pos;
                 let z = d.dot(cam.forward).max(1e-3);
                 (vec2(d.dot(cam.right), d.dot(cam.up)) / z, z)
             };
             let somme: f32 = boules.iter().map(|b| b.1 / ecran(b.0).1).sum();
-            let cellule = (2.0 * somme / boules.len().max(1) as f32).max(1e-6);
-            let case = |q: Vec3| {
-                let e = ecran(q).0 / cellule;
-                (e.x.floor() as i32, e.y.floor() as i32)
-            };
-            let mut pile: HashMap<(i32, i32), f32> = HashMap::new();
+            let mut pile = Empilement::new(2.0 * somme / boules.len().max(1) as f32);
             for b in &boules {
-                *pile.entry(case(b.0)).or_default() += b.3;
+                let (e, z) = ecran(b.0);
+                pile.verser(e, b.1 / z, b.3);
             }
             for (q, t_j, c, a, cote) in boules {
                 if cote != cote_camera {
                     continue;
                 }
-                let a = a * amorti_superposition(pile[&case(q)]);
+                let a = a * amorti_superposition(pile.lire(ecran(q).0));
                 crate::impostor::push_quad(&mut v, &mut i, cam, q, t_j, Color::new(c.x * a, c.y * a, c.z * a, a));
                 if v.len() >= crate::impostor::QUADS_PAR_DESSIN * 4 {
                     crate::impostor::dessiner_par_lots(&mut v, &mut i, Some(crate::impostor::halo_partage()));
@@ -467,10 +462,81 @@ pub(crate) fn hors_lacunes(t: f32, c: &DisqueConfig) -> f32 {
         .product()
 }
 
+/// **L'empilement des nuages à l'écran** : une grille de cases, chacune
+/// cumulant l'éclat des boules qui la **couvrent**, en tangentes d'angle vues
+/// de la caméra (±1 : au-delà, hors champ).
+///
+/// ⚠️ **Chaque boule verse dans toutes les cases qu'elle couvre**, dégressif
+/// vers son bord. Elle ne versait d'abord que dans la case de son centre : au
+/// cœur d'un disque vu par la tranche s'y tassaient des centaines de petites
+/// boules, et les grosses dont le centre tombait là s'éteignaient avec elles,
+/// alors qu'elles couvraient dix fois plus large — le centre, le plus
+/// chargé, ressortait **noir** (T Tauri par la tranche, 2026-10-23). Une
+/// boule plus petite qu'une case n'y verse que la part qu'elle en couvre.
+struct Empilement {
+    cote: usize,
+    case: f32,
+    pile: Vec<f32>,
+}
+
+impl Empilement {
+    /// Demi-champ couvert par la grille, en tangente d'angle.
+    const BORD: f32 = 1.0;
+
+    /// Une grille de cases d'environ `case` (tangente d'angle), 512 de côté
+    /// au plus.
+    fn new(case: f32) -> Self {
+        let cote = ((2.0 * Self::BORD / case.max(1e-6)).ceil() as usize).clamp(1, 512);
+        Self { cote, case: 2.0 * Self::BORD / cote as f32, pile: vec![0.0; cote * cote] }
+    }
+
+    fn indice(&self, x: i32, y: i32) -> Option<usize> {
+        let n = self.cote as i32;
+        (x >= 0 && y >= 0 && x < n && y < n).then(|| y as usize * self.cote + x as usize)
+    }
+
+    /// Le centre d'une boule, en cases (réelles).
+    fn en_cases(&self, e: Vec2) -> Vec2 {
+        (e + Vec2::splat(Self::BORD)) / self.case
+    }
+
+    /// Verse l'éclat `a` d'une boule de centre `e` et de rayon `r`.
+    fn verser(&mut self, e: Vec2, r: f32, a: f32) {
+        let c = self.en_cases(e);
+        let rc = r / self.case;
+        let couverture = (2.0 * rc).min(1.0).powi(2);
+        let portee = rc + 0.5;
+        let n = portee.ceil().min(12.0) as i32;
+        let (cx, cy) = (c.x.floor() as i32, c.y.floor() as i32);
+        for dy in -n..=n {
+            for dx in -n..=n {
+                let d2 = (dx * dx + dy * dy) as f32;
+                if d2 >= portee * portee {
+                    continue;
+                }
+                if let Some(i) = self.indice(cx + dx, cy + dy) {
+                    self.pile[i] += a * couverture * (1.0 - d2 / (portee * portee));
+                }
+            }
+        }
+    }
+
+    /// L'éclat cumulé là où tombe le centre `e` ; 0 hors champ.
+    fn lire(&self, e: Vec2) -> f32 {
+        let c = self.en_cases(e);
+        self.indice(c.x.floor() as i32, c.y.floor() as i32).map_or(0.0, |i| self.pile[i])
+    }
+}
+
 /// **Seuil d'empilement** au-delà duquel les nuages superposés cessent de
 /// s'additionner : en éclat cumulé d'une case d'écran (une boule seule en
-/// verse ~0,3).
-const SATURATION_NUAGES: f32 = 6.0;
+/// verse ~0,3 à son centre).
+///
+/// Mesuré sur la T Tauri T0 (19 200 boules) : empilement médian ~9 de face,
+/// ~28 par la tranche, 43 au plus. À 6 — réglé quand chaque boule ne versait
+/// que dans sa case —, tout s'étouffait, de face compris ; à 16, la face est
+/// intacte et la tranche pleine, sans brûler (2026-10-23).
+const SATURATION_NUAGES: f32 = 16.0;
 
 /// **Amorti d'une boule selon l'empilement de sa case d'écran.**
 ///
@@ -627,7 +693,7 @@ pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32,
         (t, ang, (h(3.0) * 2.0 - 1.0) * 1.5, 1.0)
     };
     let r = rayon(t);
-    let z = z_rel * c.h_r * r;
+    let z = z_rel * c.h_r * r * (r / c.externe.max(1e-6)).powf(c.evasement);
     // Constant, mais inégal d'un nuage à l'autre.
     let eclat = 0.6 + 0.4 * h(4.0);
     // L'ouragan garde des nuages visibles jusqu'au mur de l'œil : leur
@@ -779,6 +845,31 @@ mod tests_prototypes {
         assert!(bord > 0.1 && bord < 1.0, "pas de fondu au bord : {bord}");
     }
 
+    /// **Une grosse boule n'est pas éteinte par les petites qui tombent
+    /// près de son centre** : seule, elle ne s'amortit pas ; cent petites
+    /// boules au même endroit pèsent ce qu'elles couvrent, pas leur nombre.
+    #[test]
+    fn une_grosse_boule_ne_s_eteint_pas_sous_les_petites() {
+        let mut seule = Empilement::new(0.05);
+        seule.verser(Vec2::ZERO, 0.2, 0.3);
+        assert!(seule.lire(Vec2::ZERO) <= 0.3 + 1e-4, "une boule seule s'amortit elle-même");
+
+        let mut tas = Empilement::new(0.05);
+        tas.verser(Vec2::ZERO, 0.2, 0.3);
+        for k in 0..100 {
+            tas.verser(vec2(k as f32 * 1e-4, 0.0), 0.002, 0.3);
+        }
+        let p = tas.lire(Vec2::ZERO);
+        assert!(p < 1.0, "cent poussières pèsent comme {p}");
+        // Et ce qui s'empile vraiment pèse davantage.
+        let mut dense = Empilement::new(0.05);
+        for _ in 0..20 {
+            dense.verser(Vec2::ZERO, 0.2, 0.3);
+        }
+        assert!(dense.lire(Vec2::ZERO) > 5.0);
+        assert_eq!(dense.lire(vec2(5.0, 0.0)), 0.0, "hors champ");
+    }
+
     /// **Les nuages superposés saturent au lieu de s'additionner** : une
     /// case peu chargée garde son éclat, une case chargée ne dépasse jamais
     /// le seuil, et en ajouter n'assombrit pas.
@@ -825,6 +916,29 @@ mod tests_prototypes {
                 assert!(poids > 0.0 && poids < 2.0);
             }
         }
+    }
+
+    /// **Un disque évasé est mince près de l'étoile, et garde son épaisseur
+    /// au bord** ; sans évasement, rien ne change.
+    #[test]
+    fn un_disque_evase_s_amincit_vers_l_etoile() {
+        let c = DisqueConfig::protoplanetaire(0, 10.0, 100.0, 1000.0).avec_nuages_3d(400, 0.3);
+        let e = c.avec_evasement(0.8);
+        let (mut dedans, mut bord) = (0, 0);
+        for k in 0..400 {
+            let (p, _, _, t) = nuage_3d(k, &c, 0.0);
+            let (q, _, _, _) = nuage_3d(k, &e, 0.0);
+            let (hp, hq) = (p.y.abs(), q.y.abs());
+            assert!(hq <= hp + 1e-4, "nuage {k} : l'évasement l'épaissit");
+            if t < 0.2 && hp > 1e-3 && hq < hp * 0.5 {
+                dedans += 1;
+            }
+            if t > 0.95 && (hq - hp).abs() <= hp * 0.1 + 1e-4 {
+                bord += 1;
+            }
+        }
+        assert!(dedans > 20, "pas plus mince près de l'étoile : {dedans}");
+        assert!(bord > 5, "le bord a perdu son épaisseur : {bord}");
     }
 
     /// **Par la tranche, seule la couche du plan reste** : les autres, des

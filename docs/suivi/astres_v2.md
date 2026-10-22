@@ -374,6 +374,37 @@ cache les nuages d'au-delà — la bande de poussière des disques vus par la
 tranche (HH 30), mais très vide ici ; à juger. Garde
 `par_la_tranche_seule_la_couche_du_plan_reste` (red-check : fondu débranché).
 
+**Troisième tour T Tauri** (2026-10-23) : *« T5 est toujours le meilleur, il
+devient le nouveau T0 ; pour T1, le disque plus large et un peu plus plat ;
+pour les autres, teste des idées »*.
+
+| Proto | Ce qu'on y voit |
+|---|---|
+| T0 | l'ex-T5 : 32 rayons, 1 200 grappes de 8 par largeur, ×1,7, ±45 % du rayon |
+| T1 | 48 rayons, plus plat : nuages à ±27 %, couches resserrées (h/r 0,05) |
+| T2 | T0, voile à 45 % |
+| T3 | T0, teintes variées d'un nuage à l'autre (l'écart de H) |
+| T4 | T0 en grumeaux : amas de trente qui tournent d'un bloc (G) |
+| T5 | T0 évasé : hauteur des nuages en `(r / externe)^0,6` — mince près de l'étoile, épais au bord |
+
+L'évasement est un nouveau réglage du disque (`avec_evasement`, garde
+`un_disque_evase_s_amincit_vers_l_etoile`, red-check : évasement ignoré).
+
+⚠️ **La « bande sombre » vue par la tranche n'était pas le voile** — ce que
+j'avais écrit plus haut. Voile allégé (T2), elle restait ; amorti débranché,
+elle disparaissait : c'était `amorti_superposition`. Chaque boule ne versait
+son éclat que dans la case de son centre ; au cœur du disque vu par la
+tranche s'y tassaient des centaines de petites boules, et les grosses dont le
+centre tombait là s'éteignaient avec elles, alors qu'elles couvraient dix
+fois plus large — le plus chargé ressortait noir. `Empilement` : chaque boule
+verse dans **toutes** les cases qu'elle couvre, dégressif vers son bord, et
+une boule plus petite qu'une case n'y verse que sa part (garde
+`une_grosse_boule_ne_s_eteint_pas_sous_les_petites`, red-check : poussières
+comptées pleines, 30,3). Mesuré : empilement médian ~9 de face, ~28 par la
+tranche, 43 au plus ; le seuil passe de 6 à **16** (à 6, tout s'étouffait).
+Captures T0 : la face comme avant, la tranche pleine, sans brûler — un peu
+terne, le seuil se règle.
+
 **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?

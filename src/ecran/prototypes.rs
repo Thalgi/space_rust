@@ -38,12 +38,11 @@ type Coton = fn(DisqueConfig, f32) -> DisqueConfig;
 
 /// **Les prototypes en cours.** Vide = aucun prototype : la touche 4 le dit.
 ///
-/// Lot 12, la T Tauri. Premier tour (2026-10-23) : T0 la T Tauri du jeu, T1
-/// son petit disque en couches + nuages cotonneux, T2 en ouragan, T3 avec le
-/// grand disque (PDS 70), T4 avec trois anneaux (HL Tau). Jugé : *« le proto
-/// T1 est le mieux, même si ça manque de largeur et d'un côté cotonneux. T1
-/// devient T0 »*. Les autres partent de lui, pour avancer pas à pas : plus
-/// large, plus cotonneux, puis les deux.
+/// Lot 12, la T Tauri. Premier tour (2026-10-23) : T1, petit disque en couches
+/// et nuages cotonneux, retenu. Second tour : élargi (×1,5, ×2) et plus
+/// cotonneux ; T5, deux fois plus large et très cotonneux, retenu — *« il
+/// devient le nouveau T0. Pour T1 j'aimerais que le disque soit plus large et
+/// un peu plus plat, pour les autres protos teste des idées »*.
 pub fn prototypes() -> Vec<Prototype> {
     let r = gabarit().2;
     let t = |nom: &str, externe: f32, coton: Coton| Prototype {
@@ -53,35 +52,54 @@ pub fn prototypes() -> Vec<Prototype> {
         distance: r * externe * 2.2,
     };
     vec![
-        t("T0 : couches + nuages cotonneux (retenu)", 16.0, cotonneux),
-        t("T1 : T0 1,5 fois plus large", 24.0, cotonneux),
-        t("T2 : T0 2 fois plus large", 32.0, cotonneux),
-        t("T3 : T0 plus cotonneux", 16.0, plus_cotonneux),
-        t("T4 : 1,5 fois plus large, plus cotonneux", 24.0, plus_cotonneux),
-        t("T5 : 2 fois plus large, tres cotonneux", 32.0, tres_cotonneux),
+        t("T0 : large et tres cotonneux (retenu)", 32.0, t0),
+        t("T1 : T0 plus large et plus plat", 48.0, plus_plat),
+        t("T2 : T0, voile allege", 32.0, voile_allege),
+        t("T3 : T0, teintes variees", 32.0, teintes),
+        t("T4 : T0 en grumeaux", 32.0, grumeaux),
+        t("T5 : T0 evase", 32.0, evase),
     ]
 }
 
-/// **T0** : l'habillage F de la galerie — 500 grappes de six boules,
-/// ±37 % du rayon, voile adouci.
-fn cotonneux(c: DisqueConfig, largeur: f32) -> DisqueConfig {
-    DisqueConfig { granulation: 0.15, ..c }.avec_nuages_3d((500.0 * largeur) as u32, 0.25).avec_grappe(6)
-}
-
-/// Plus cotonneux : plus de grappes, de huit boules, et des nuages ×1,4.
-fn plus_cotonneux(c: DisqueConfig, largeur: f32) -> DisqueConfig {
-    DisqueConfig { granulation: 0.15, ..c }
-        .avec_nuages_3d((800.0 * largeur) as u32, 0.25)
-        .avec_grappe(8)
-        .avec_aspect_nuages(1.4, 0.0)
-}
-
-/// Très cotonneux : encore plus de grappes, plus grosses et plus épaisses.
-fn tres_cotonneux(c: DisqueConfig, largeur: f32) -> DisqueConfig {
+/// **T0** (l'ex-T5) : voile en sept couches, 1 200 grappes de huit boules
+/// par largeur de 16 rayons, nuages ×1,7, ±45 % du rayon, voile adouci.
+fn t0(c: DisqueConfig, largeur: f32) -> DisqueConfig {
     DisqueConfig { granulation: 0.1, ..c }
+        .avec_couches(7, 0.08)
         .avec_nuages_3d((1200.0 * largeur) as u32, 0.3)
         .avec_grappe(8)
         .avec_aspect_nuages(1.7, 0.0)
+}
+
+/// **T1** : plus plat — nuages ramenés à ±27 % du rayon, couches resserrées.
+fn plus_plat(c: DisqueConfig, largeur: f32) -> DisqueConfig {
+    let c = t0(c, largeur);
+    DisqueConfig { h_r: 0.18, ..c }.avec_couches(7, 0.05)
+}
+
+/// **T2** : le voile à 45 % — par la tranche, la bande sombre qu'il fait
+/// laisse voir les nuages d'au-delà.
+fn voile_allege(c: DisqueConfig, largeur: f32) -> DisqueConfig {
+    t0(DisqueConfig { voile_alpha: c.voile_alpha * 0.45, ..c }, largeur)
+}
+
+/// **T3** : chaque nuage poussé vers le chaud ou le froid (l'écart de H).
+fn teintes(c: DisqueConfig, largeur: f32) -> DisqueConfig {
+    t0(c, largeur).avec_aspect_nuages(1.7, 0.5)
+}
+
+/// **T4** : la matière en grumeaux — les nuages groupés en amas de trente,
+/// qui tournent d'un bloc (G), comme des planètes en formation.
+fn grumeaux(c: DisqueConfig, largeur: f32) -> DisqueConfig {
+    let c = t0(c, largeur);
+    let amas = (c.nuages_3d / 30).max(1);
+    c.avec_amas(amas)
+}
+
+/// **T5** : évasé — mince près de l'étoile, épais au bord, la forme d'un
+/// vrai disque jeune vu par la tranche.
+fn evase(c: DisqueConfig, largeur: f32) -> DisqueConfig {
+    t0(c, largeur).avec_evasement(0.6)
 }
 
 /// `(tmin, tmax, rayon, luminosité, nom, mode)` de la T Tauri, pris au
@@ -100,7 +118,7 @@ fn jeune(externe: f32, coton: Coton) -> Systeme {
     let mut c = s.config_protosolaire();
     let largeur = externe * rayon / c.externe;
     c.externe = externe * rayon;
-    let c = coton(c.avec_couches(7, 0.08), largeur);
+    let c = coton(c, largeur);
     let mut sys = Systeme::new();
     sys.ajouter(Box::new(s.avec_disque(c)));
     sys
@@ -124,13 +142,13 @@ mod tests {
     }
 
     /// **Plus large, mêmes nuages au mètre carré près** : un disque élargi
-    /// porte plus de grappes, à proportion — sinon il s'éclaircirait.
+    /// porte plus de grappes, à proportion — sinon il s'éclaircirait. Et T1
+    /// est bien plus plat que T0.
     #[test]
     fn un_disque_elargi_garde_ses_nuages() {
         let c = DisqueConfig::protosolaire(0, 3.0, 16.0, 1000.0);
-        assert_eq!(cotonneux(c, 1.0).nuages_3d, 500);
-        assert_eq!(cotonneux(c, 2.0).nuages_3d, 1000);
-        assert!(tres_cotonneux(c, 1.0).nuages_3d > plus_cotonneux(c, 1.0).nuages_3d);
-        assert!(plus_cotonneux(c, 1.0).nuages_3d > cotonneux(c, 1.0).nuages_3d);
+        assert_eq!(t0(c, 1.0).nuages_3d, 1200);
+        assert_eq!(t0(c, 2.0).nuages_3d, 2400);
+        assert!(plus_plat(c, 1.0).h_r < t0(c, 1.0).h_r, "T1 n'est pas plus plat");
     }
 }

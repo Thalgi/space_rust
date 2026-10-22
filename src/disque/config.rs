@@ -100,6 +100,11 @@ pub struct DisqueConfig {
     /// **H** : écart de teinte d'un nuage à l'autre, 0 = tous de la teinte du
     /// voile à leur rayon.
     pub teintes_nuages: f32,
+    /// **Évasement** des nuages 3D : leur hauteur suit `(r / externe)^e`.
+    /// 0 = épaisseur proportionnelle au rayon (le cône) ; au-delà, le disque
+    /// est mince près de l'étoile et s'évase au bord, comme un vrai disque
+    /// jeune (prototype T Tauri, 2026-10-23).
+    pub evasement: f32,
 }
 
 impl DisqueConfig {
@@ -145,6 +150,7 @@ impl DisqueConfig {
             nuages_bras: 0,
             taille_nuages: 1.0,
             teintes_nuages: 0.0,
+            evasement: 0.0,
         }
     }
 
@@ -185,6 +191,12 @@ impl DisqueConfig {
     pub fn avec_aspect_nuages(mut self, taille: f32, teintes: f32) -> Self {
         self.taille_nuages = taille.max(0.1);
         self.teintes_nuages = teintes.clamp(0.0, 1.0);
+        self
+    }
+
+    /// Voir le champ `evasement`.
+    pub fn avec_evasement(mut self, e: f32) -> Self {
+        self.evasement = e.max(0.0);
         self
     }
 
