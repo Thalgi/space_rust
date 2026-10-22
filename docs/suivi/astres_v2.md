@@ -361,6 +361,19 @@ nombre figé). Captures : T2 large et aéré, T5 une masse cotonneuse dense.
 doublent ou divisent la vitesse, de ×0,125 à ×64, comme dans la galerie des
 disques ; elle s'affiche dans la barre du bas. Les deux horloges suivent.
 
+**T5 en tête** (2026-10-23) : *« pour le moment T5 a l'air d'être le mieux,
+mais il y a un problème quand tu regardes avec le disque à l'horizontale, ça
+fait des rayons bizarres »*. Chaque couche hors du plan (prototype B) est un
+**cône** — son décalage croît avec le rayon — et vu par la tranche, un cône se
+réduit à deux droites issues de l'étoile, granulation étirée dessus.
+`fondu_couche` efface les couches hors du plan sous ~20° de la tranche (à 0
+sous ~3°) ; la couche du plan reste. Reproduit en capture (PITCH −61, le
+disque des prototypes a une inclinaison stable d'un lancement à l'autre),
+puis disparu. Reste, par la tranche, une **bande sombre** : le voile du plan
+cache les nuages d'au-delà — la bande de poussière des disques vus par la
+tranche (HH 30), mais très vide ici ; à juger. Garde
+`par_la_tranche_seule_la_couche_du_plan_reste` (red-check : fondu débranché).
+
 **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?

@@ -345,7 +345,7 @@ impl Disque {
             for k in 0..n {
                 if n > 1 {
                     let (alpha, couche, graine) = couche_voile(&self.cfg, k);
-                    mat.set_uniform("alpha", alpha);
+                    mat.set_uniform("alpha", alpha * fondu_couche(couche, cote_cam));
                     mat.set_uniform("couche", couche);
                     mat.set_uniform("seed", graine);
                 }
@@ -506,6 +506,23 @@ fn couche_voile(c: &DisqueConfig, k: u32) -> (f32, f32, f32) {
     let poids = (-2.0 * x * x).exp();
     let total: f32 = (0..n).map(|j| (-2.0 * (j as f32 / (n - 1) as f32 * 2.0 - 1.0).powi(2)).exp()).sum();
     (c.voile_alpha * poids / total * 1.6, c.h_r * x, c.graine + k as f32 * 7.3)
+}
+
+/// **Ce qui reste d'une couche du voile selon l'angle de vue** : 1 pour la
+/// couche du plan, toujours ; pour les autres, 1 dès qu'on voit le disque à
+/// plus de ~20° de sa tranche, 0 en dessous de ~3°.
+///
+/// ⚠️ Chaque couche hors du plan est un **cône** (son décalage croît avec le
+/// rayon). Vus par la tranche, les cônes se réduisent à des droites issues de
+/// l'étoile, granulation étirée dessus : *« quand tu regardes avec le disque
+/// à l'horizontale ça fait des rayons bizarres »* (2026-10-23, T Tauri T5).
+/// Par la tranche, l'épaisseur est portée par les nuages 3D.
+pub(crate) fn fondu_couche(couche: f32, cote_cam: f32) -> f32 {
+    if couche == 0.0 {
+        return 1.0;
+    }
+    let s = ((cote_cam.abs() - 0.05) / 0.3).clamp(0.0, 1.0);
+    s * s * (3.0 - 2.0 * s)
 }
 
 /// **Une boule d'une grappe** (prototype F) : `(décalage LOCAL depuis le
@@ -807,6 +824,30 @@ mod tests_prototypes {
                 assert!(t < t0 && t > 0.0, "boule {j} plus grosse que le cœur");
                 assert!(poids > 0.0 && poids < 2.0);
             }
+        }
+    }
+
+    /// **Par la tranche, seule la couche du plan reste** : les autres, des
+    /// cônes, y feraient des rayons ; de face, toutes sont là.
+    #[test]
+    fn par_la_tranche_seule_la_couche_du_plan_reste() {
+        let c = DisqueConfig::protoplanetaire(0, 10.0, 100.0, 1000.0).avec_couches(7, 0.08);
+        for k in 0..7 {
+            let (_, couche, _) = couche_voile(&c, k);
+            assert_eq!(fondu_couche(couche, 0.8), 1.0, "couche {k} effacée de face");
+            assert_eq!(fondu_couche(couche, -0.8), 1.0, "couche {k} effacée de face, par-dessous");
+            let tranche = fondu_couche(couche, 0.02);
+            if k == 3 {
+                assert_eq!(tranche, 1.0, "la couche du plan s'efface");
+            } else {
+                assert_eq!(tranche, 0.0, "couche {k} encore là par la tranche");
+            }
+        }
+        let mut avant = 0.0;
+        for i in 0..=20 {
+            let f = fondu_couche(0.08, i as f32 * 0.05);
+            assert!(f >= avant, "le fondu n'est pas monotone");
+            avant = f;
         }
     }
 
