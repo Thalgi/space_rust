@@ -357,18 +357,35 @@ impl Objet {
             o.sys = batir(&o.spec);
             o.cam.set_dist(dist_pour(&o.spec));
         }
-        // `PITCH=<degrés>` : l'inclinaison de la caméra pour la capture — un
-        // disque ne se juge pas seulement en plongée.
-        if let Some(p) = std::env::var("PITCH").ok().and_then(|p| p.parse::<f32>().ok()) {
-            o.cam.pitch = p.to_radians();
-        }
-        if let Some(y) = std::env::var("YAW").ok().and_then(|y| y.parse::<f32>().ok()) {
-            o.cam.yaw = y.to_radians();
-        }
-        if let Some(d) = std::env::var("DIST").ok().and_then(|d| d.parse::<f32>().ok()) {
-            o.cam.set_dist(d);
-        }
+        o.cadrer_depuis_env();
         o
+    }
+
+    /// La vue isolée sur le `rang`-ième astre du défilé (touche 3), pour les
+    /// captures (`DEFILE=<rang>`) : le rang 0 est la tête du défilé.
+    pub fn sur_defile(rang: usize) -> Self {
+        let mut o = Self::new();
+        o.spec = Specimen::du_defile(rang);
+        o.particulier = rang + 1;
+        o.sys = batir(&o.spec);
+        o.cam.set_dist(dist_pour(&o.spec));
+        o.cadrer_depuis_env();
+        o
+    }
+
+    /// `PITCH=<degrés>`, `YAW=<degrés>`, `DIST=<monde>` : le cadrage d'une
+    /// capture — un disque ne se juge pas seulement en plongée.
+    fn cadrer_depuis_env(&mut self) {
+        let lire = |n: &str| std::env::var(n).ok().and_then(|v| v.parse::<f32>().ok());
+        if let Some(p) = lire("PITCH") {
+            self.cam.pitch = p.to_radians();
+        }
+        if let Some(y) = lire("YAW") {
+            self.cam.yaw = y.to_radians();
+        }
+        if let Some(d) = lire("DIST") {
+            self.cam.set_dist(d);
+        }
     }
 
     fn charger(&mut self, forcer: Option<bool>) {

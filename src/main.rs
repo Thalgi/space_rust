@@ -110,6 +110,10 @@ async fn main() {
     if let Some(rang) = std::env::var("PROTO").ok().and_then(|r| r.parse().ok()) {
         etat = Etat::Objet(Box::new(Objet::sur_prototype(rang)));
     }
+    // `DEFILE=<rang>` : de même, sur un astre du défilé (touche 3).
+    if let Some(rang) = std::env::var("DEFILE").ok().and_then(|r| r.parse().ok()) {
+        etat = Etat::Objet(Box::new(Objet::sur_defile(rang)));
+    }
     let mut frames_capture = 0u32;
 
     loop {

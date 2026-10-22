@@ -302,6 +302,11 @@ Gardes : `un_sillon_se_vide_de_ses_nuages` (red-check : profondeur ignorée),
 `les_planetes_d_un_annele_passent_entre_les_anneaux` (red-check : anneau
 élargi sur une planète), et quatre entrées par habillage.
 
+**Jugés à l'écran le 2026-10-23** : *« c'est bien comme rendu sur les
+anneaux de débris, on garde tout »* — les quarante restent à la touche 4, le
+temps de les reporter sur la T Tauri. `DEFILE=<rang>` ouvre la vue isolée sur
+un astre du défilé (0 = la T Tauri), comme `PROTO` pour la touche 4.
+
 **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?
