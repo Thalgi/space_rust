@@ -87,6 +87,19 @@ Trois correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`), le
 `crash.log` sorti du dépôt, et la taille de texte non bornée qui tuait le jeu à
 l'ouverture de la galerie des comètes (`ba66d72`).
 
+**Hors lot, 2026-10-22 — l'identité du jeu.** L'icône de la fenêtre vient de
+`assets/logo/model.ico` (`src/fenetre.rs` : BMP 32 bits décodé à la main,
+réduit en 64/32/16 px, embarqué) ; le **logo « Starvester »** remplace le
+titre écrit de l'accueil, à **échelle entière** jamais étirée (×1 dans la
+fenêtre par défaut, ×2 dès ~830 px de haut), cerné de bleu Minitel. En
+chemin : **QUITTER sortait déjà de la fenêtre par défaut** depuis que la
+galerie des comètes avait porté le bloc ASTRES à 9 boutons (bas à 742 px pour
+700) ; boutons de l'accueil ramenés à 34 px (écart 8), et une garde recalcule
+désormais toute la mise en page de 1000 × 700 à 2560 × 1440. Non fait, à la
+demande : l'icône du fichier `.exe` et le titre de la fenêtre (« Systeme
+solaire »). ⚠️ `assets/logo/` existe aussi, non suivi, dans le dossier
+principal : le retirer avant la prochaine fusion, sinon Git refuse.
+
 ---
 
 ## Ce qu'il faut savoir pour reprendre

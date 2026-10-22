@@ -1,5 +1,6 @@
 mod astre;
 mod camera;
+mod fenetre;
 mod comete;
 mod disque;
 mod ecran;
@@ -43,6 +44,8 @@ fn window_conf() -> Conf {
         window_title: "Systeme solaire".to_owned(),
         window_width: if capture { 2000 } else { 1000 },
         window_height: if capture { 1400 } else { 700 },
+        // `assets/logo/model.ico`, embarquée ; l'icône par défaut si illisible.
+        icon: fenetre::icone(),
         ..Default::default()
     }
 }
