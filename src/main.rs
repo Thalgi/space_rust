@@ -110,6 +110,10 @@ async fn main() {
     if let Some(rang) = std::env::var("PROTO").ok().and_then(|r| r.parse().ok()) {
         etat = Etat::Objet(Box::new(Objet::sur_prototype(rang)));
     }
+    // `DISQUES=<case>` : la galerie « Ceintures & disques », sur cette case.
+    if let Some(case) = std::env::var("DISQUES").ok().and_then(|r| r.parse().ok()) {
+        etat = Etat::GalerieDisques(Box::new(GalerieDisques::sur_case(case)));
+    }
     // `DEFILE=<rang>` : de même, sur un astre du défilé (touche 3).
     if let Some(rang) = std::env::var("DEFILE").ok().and_then(|r| r.parse().ok()) {
         etat = Etat::Objet(Box::new(Objet::sur_defile(rang)));

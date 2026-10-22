@@ -1,5 +1,5 @@
 use crate::astre::{Astre, CameraInfo};
-use crate::disque::{Disque, DisqueConfig};
+use crate::disque::{habillage, Disque, DisqueConfig};
 use crate::etoile::UA;
 use crate::genese::{masse_luminosite, preset_gazeuse, preset_tellurique};
 use crate::planete::Planete;
@@ -96,6 +96,19 @@ enum Contenu {
     Planete(Planete),
     /// Plusieurs disques superposables (anneaux multiples, plans différents).
     PlaneteEtDisques(Planete, Vec<Disque>),
+    /// **Les habillages du disque protoplanétaire** (lot 12.2) : une étoile,
+    /// ses anneaux, et des planètes qui tournent dans le plan et le sens du
+    /// premier, à sa vitesse de Kepler.
+    EtoileEtAnneaux(Soleil, Vec<Disque>, Vec<PlaneteEnOrbite>),
+}
+
+/// Une planète d'une case `EtoileEtAnneaux` : son rayon d'orbite, sa vitesse
+/// angulaire et sa phase courante.
+struct PlaneteEnOrbite {
+    rayon: f32,
+    omega: f32,
+    phase: f32,
+    corps: Planete,
 }
 
 struct Cellule {
@@ -117,6 +130,13 @@ impl GalerieDisques {
             liste_repliee: false,
         };
         g.construire();
+        g
+    }
+
+    /// La galerie ouverte sur la case `i` (captures) : le défilement y glisse.
+    pub fn sur_case(i: usize) -> Self {
+        let mut g = Self::new();
+        g.index = i.min(g.cellules.len().saturating_sub(1));
         g
     }
 
@@ -398,6 +418,44 @@ impl GalerieDisques {
             });
         }
 
+        // --- Les habillages du disque protoplanétaire (lot 12.2), chacun en
+        // quatre : base, -F, -R, -M. Source unique : `disque::habillage`. ---
+        let orange = vec3(1.0, 0.62, 0.3);
+        for (rang, (code, nom, habiller)) in habillage::habillages().into_iter().enumerate() {
+            for d in habillage::declinaisons(rang, nom, habiller) {
+                let gm = d.disques[0].gm;
+                let planetes = d
+                    .planetes
+                    .iter()
+                    .enumerate()
+                    .map(|(k, &(a_ua, geante))| {
+                        // Grossies comme les corps des sillons, plus haut : à
+                        // l'échelle, une planète ne se lit pas à côté d'un
+                        // disque de 8 UA.
+                        let (app, taille) =
+                            if geante { (preset_gazeuse("Jupiter"), 4.0) } else { (preset_tellurique("Lave"), 2.4) };
+                        let rayon = a_ua * UA;
+                        PlaneteEnOrbite {
+                            rayon,
+                            omega: (gm / rayon.powi(3)).sqrt(),
+                            phase: k as f32 * 2.4,
+                            corps: Planete::new(Vec3::ZERO, Vec3::ZERO, taille, 1.0, app, Vec::new()),
+                        }
+                    })
+                    .collect();
+                let ext = d.externe_ua * UA;
+                self.cellules.push(Cellule {
+                    nom: format!("Proto {code}{} : {}", d.suffixe, d.libelle),
+                    contenu: Contenu::EtoileEtAnneaux(
+                        Soleil::new(Vec3::ZERO, 1.6, orange, 0.6),
+                        d.disques.into_iter().map(Disque::new).collect(),
+                        planetes,
+                    ),
+                    cam_pos: vec3(0.0, ext * 0.95, ext * 2.15),
+                });
+            }
+        }
+
         self.index = self.index.min(self.cellules.len().saturating_sub(1));
     }
 
@@ -606,6 +664,21 @@ impl GalerieDisques {
                 Contenu::Planete(pl) => {
                     pl.update(dt); // anime le voile de l'anneau
                     pl.draw(&cam);
+                }
+                Contenu::EtoileEtAnneaux(so, disques, planetes) => {
+                    so.update(dt);
+                    // Même ordre qu'`EtoileEtDisque` : ce qui écrit la
+                    // profondeur d'abord, puis les disques en une passe.
+                    so.draw(&cam);
+                    for p in planetes.iter_mut() {
+                        p.phase += p.omega * dt;
+                        p.corps.corps_mut().position = disques[0].point_du_plan(p.rayon, p.phase);
+                        p.corps.draw(&cam);
+                    }
+                    for dq in disques.iter_mut() {
+                        dq.update(dt);
+                        dq.draw_moitie(&cam, 0.0);
+                    }
                 }
                 Contenu::PlaneteEtDisques(pl, disques) => {
                     pl.update(dt);

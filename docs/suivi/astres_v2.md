@@ -307,6 +307,36 @@ anneaux de débris, on garde tout »* — les quarante restent à la touche 4, l
 temps de les reporter sur la T Tauri. `DEFILE=<rang>` ouvre la vue isolée sur
 un astre du défilé (0 = la T Tauri), comme `PROTO` pour la touche 4.
 
+**Versés dans la galerie le 2026-10-23** (*« enregistre tous les
+prototypes dans ceintures et disques »*) : les habillages ont leur source
+unique, `disque::habillage` ; la galerie « Ceintures & disques » en montre les
+quarante déclinaisons (cases « Proto B » à « Proto I-M », 65 cases en tout),
+et ils **quittent la touche 4** — la règle. La galerie gagne pour eux un
+contenu `EtoileEtAnneaux` : plusieurs disques, et des planètes qui tournent
+dans le plan **et le sens** du premier (`Disque::point_du_plan`), à sa vitesse
+de Kepler. ⚠️ **Défaut relevé en route** : `ajouter_planete_autour` fait
+tourner ses planètes à contre-sens d'un disque de normale Y (`a1 × q = −Y`) —
+les -F/-R/-M de la touche 4 avaient leurs planètes à rebours. `DISQUES=<case>`
+ouvre la galerie sur une case, pour les captures.
+
+**La série T Tauri, à la touche 4** (même jour) :
+
+| Proto | Ce qu'on y voit |
+|---|---|
+| T0 | la T Tauri du jeu (`Variante::Proto`), pour comparer |
+| T1 | son petit disque (3–16 rayons) en couches + nuages cotonneux (B + F) |
+| T2 | son petit disque en ouragan (I) |
+| T3 | + le grand disque cotonneux (0,3–8 UA), un sillon et sa proto-planète (PDS 70) |
+| T4 | + trois anneaux en couches, planètes entre eux et une géante (HL Tau) |
+
+Les planètes y tournent dans le plan des disques de l'étoile — incliné selon
+sa graine, comme ses jets — et dans leur sens (`plan_orbital`, garde
+`une_planete_tourne_dans_le_sens_du_disque`, red-check : sens inversé).
+`Soleil::config_protosolaire` donne le petit disque avant de le poser, pour
+l'habiller. Captures : les cinq s'affichent ; T4 reste pâle en Palette (le
+voile en couches, sans nuages, y est écrasé), la planète de T3 se lit dans
+son sillon.
+
 **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?

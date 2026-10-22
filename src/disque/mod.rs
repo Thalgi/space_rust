@@ -15,6 +15,7 @@
 
 pub mod accretion;
 mod config;
+pub mod habillage;
 mod voile;
 
 pub use accretion::Accretion;
@@ -231,8 +232,13 @@ impl Disque {
             return None;
         }
         let r = self.cfg.interne + l.x * (self.cfg.externe - self.cfg.interne);
-        let a = self.phase_lacune(i);
-        Some(self.base.position + (self.axe_u * a.cos() + self.axe_v * a.sin()) * r)
+        Some(self.point_du_plan(r, self.phase_lacune(i)))
+    }
+
+    /// **Un point du plan du disque**, à `r` du centre et à l'angle `a` —
+    /// dans le sens où le disque tourne (angles croissants).
+    pub fn point_du_plan(&self, r: f32, a: f32) -> Vec3 {
+        self.base.position + (self.axe_u * a.cos() + self.axe_v * a.sin()) * r
     }
 
     /// Dessine une moitié du disque : `moitie` = -1 (arrière, avant le corps),

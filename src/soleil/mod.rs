@@ -438,7 +438,7 @@ impl Soleil {
     }
 
     /// L'axe des jets : celui du disque, que l'étoile en porte un ou non.
-    pub(super) fn axe_jets(&self) -> Vec3 {
+    pub fn axe_jets(&self) -> Vec3 {
         normale_disque(self.graine)
     }
 
@@ -545,14 +545,15 @@ impl Soleil {
     /// tout le système et masquerait ses planètes. Même exagération à
     /// l'envers que `ECHELLE_CORPS`.
     pub fn avec_disque_protosolaire(self) -> Self {
-        let (r, masse) = (self.base.rayon, self.base.masse);
-        let cfg = DisqueConfig::protosolaire(
-            0,
-            r * RAYON_PROTOSOLAIRE.0,
-            r * RAYON_PROTOSOLAIRE.1,
-            masse,
-        );
+        let cfg = self.config_protosolaire();
         self.avec_disque(cfg)
+    }
+
+    /// Le disque protosolaire de cette étoile, avant d'être posé : de quoi
+    /// l'habiller (prototypes T Tauri, lot 12.2).
+    pub fn config_protosolaire(&self) -> DisqueConfig {
+        let (r, masse) = (self.base.rayon, self.base.masse);
+        DisqueConfig::protosolaire(0, r * RAYON_PROTOSOLAIRE.0, r * RAYON_PROTOSOLAIRE.1, masse)
     }
 
     /// **Retire le disque que l'astre porte de lui-même.**
@@ -572,16 +573,6 @@ impl Soleil {
     pub fn avec_disque(mut self, cfg: DisqueConfig) -> Self {
         let cfg = cfg.avec_normale(normale_disque(self.graine));
         let mut d = Disque::new(cfg);
-        d.corps_mut().position = self.base.position;
-        self.disques.push(d);
-        self
-    }
-
-    /// Pose un disque dans le **plan de l'écliptique** (normale Y) : celui
-    /// où `ajouter_planete_autour` pose les planètes d'inclinaison nulle.
-    /// Pour les prototypes où une planète creuse son sillon dans le disque.
-    pub fn avec_disque_ecliptique(mut self, cfg: DisqueConfig) -> Self {
-        let mut d = Disque::new(cfg.avec_normale(Vec3::Y));
         d.corps_mut().position = self.base.position;
         self.disques.push(d);
         self
