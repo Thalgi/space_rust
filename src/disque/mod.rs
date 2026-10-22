@@ -275,6 +275,12 @@ impl Disque {
             }
         }
 
+        // Les nuages 3D au-delà du plan, vus de la caméra : avant le voile,
+        // qui les couvre (voir `dessiner_nuages_3d`).
+        if moitie < 0.5 {
+            self.dessiner_nuages_3d(cam, false);
+        }
+
         if let Some(mat) = self.mat_voile.as_ref().filter(|_| voiles_actifs()) {
             let tocam = (cam.pos - p).normalize_or_zero();
             let phases = vec4(
@@ -345,25 +351,43 @@ impl Disque {
             gl_use_default_material();
         }
 
-        // **Prototype C** (lot 12) : des nuages de poussière en volume, au-dessus
-        // et au-dessous du plan, en orbite de Kepler — le pinceau des queues de
-        // comète et des jets (disques flous face caméra, additifs).
+        // Les nuages 3D du côté de la caméra : après le voile, par-dessus.
+        if moitie > -0.5 {
+            self.dessiner_nuages_3d(cam, true);
+        }
+    }
+
+    /// **Prototype C** (lot 12) : des nuages de poussière en volume, au-dessus
+    /// et au-dessous du plan, en orbite de Kepler — le pinceau des queues de
+    /// comète et des jets (disques flous face caméra, additifs). Ne dessine
+    /// que les boules du côté demandé du plan (`cote_camera`).
+    ///
+    /// ⚠️ **Rangées par côté du PLAN, boule par boule — pas par moitié
+    /// avant/arrière.** Elles suivaient d'abord le partage du voile (`moitie`,
+    /// selon le CENTRE du nuage) : un amas à cheval sur la frontière, qui à
+    /// l'écran est une horizontale passant par l'étoile, passait en entier
+    /// sous la moitié avant du voile ou au-dessus — *« une ligne horizontale
+    /// […] ça change complètement le rendu entre la partie basse et haute de
+    /// la fenêtre »* (2026-10-22, dès le prototype G et ses gros amas). Or le
+    /// voile est un plan : ce qui est au-delà, vu de la caméra, est sous lui
+    /// partout, et ce qui est en deçà par-dessus. L'étoile, elle, cache ce qui
+    /// passe derrière elle par la profondeur.
+    fn dessiner_nuages_3d(&self, cam: &CameraInfo, cote_camera: bool) {
+        let p = self.base.position;
         if self.cfg.nuages_3d > 0 {
-            let tocam = (cam.pos - p).normalize_or_zero();
+            let cote_cam = self.axe_n.dot(cam.pos - p);
             let (mut v, mut i) = (Vec::new(), Vec::new());
-            // Dessiné en lots de `QUADS_PAR_DESSIN` (`dessiner_par_lots`).
-            // ⚠️ Plafond à 16 000 boules : `push_quad` numérote ses sommets en
-            // `u16`, 65 535 au plus — à 4 par boule, au-delà la numérotation
-            // repartirait de zéro en silence.
+            // ⚠️ **Envoyé au fil de l'eau, un lot dès qu'il est plein**
+            // (`QUADS_PAR_DESSIN`) : la numérotation `u16` de `push_quad`
+            // repart de zéro à chaque lot, donc rien ne déborde, et aucun
+            // appel ne passe la limite de macroquad. Le plafond n'est plus
+            // qu'une affaire de coût.
+            gl_use_material(&crate::soleil::materiau_ruban_lumineux());
             let grappe = self.cfg.grappe.max(1);
-            let n = self.cfg.nuages_3d.min(16_000 / grappe);
+            let n = self.cfg.nuages_3d.min(40_000 / grappe);
             for k in 0..n {
                 let (loc, taille, eclat, t) = nuage_3d(k, &self.cfg, self.temps);
                 let rel = self.axe_u * loc.x + self.axe_n * loc.y + self.axe_v * loc.z;
-                let devant = rel.dot(tocam) >= 0.0;
-                if (moitie > 0.5 && !devant) || (moitie < -0.5 && devant) {
-                    continue;
-                }
                 // ⚠️ **Pas teinté par la lumière de l'étoile** : elle monte à
                 // chaque flare, et le disque entier battait avec — « un effet
                 // de battement de cœur » (2026-10-22).
@@ -373,18 +397,30 @@ impl Disque {
                 for j in 0..grappe {
                     let (d, t_j, poids) = boule_de_grappe(k, j, grappe, taille);
                     let dw = self.axe_u * d.x + self.axe_n * d.y + self.axe_v * d.z;
+                    if du_cote_camera(rel + dw, self.axe_n, cote_cam) != cote_camera {
+                        continue;
+                    }
                     let lum = eclairement_boule(dw, vers_etoile);
                     let a = eclat * 0.35 * poids;
                     let col = Color::new(c.x * lum * a, c.y * lum * a, c.z * lum * a, a);
                     crate::impostor::push_quad(&mut v, &mut i, cam, p + rel + dw, t_j, col);
+                    if v.len() >= crate::impostor::QUADS_PAR_DESSIN * 4 {
+                        crate::impostor::dessiner_par_lots(&mut v, &mut i, Some(crate::impostor::halo_partage()));
+                    }
                 }
             }
-            gl_use_material(&crate::soleil::materiau_ruban_lumineux());
             crate::impostor::dessiner_par_lots(&mut v, &mut i, Some(crate::impostor::halo_partage()));
             vider_lot();
             gl_use_default_material();
         }
     }
+}
+
+/// **Une boule est-elle du côté de la caméra par rapport au plan du disque ?**
+/// `rel` : depuis le centre ; `cote_cam` : hauteur de la caméra le long de la
+/// normale. Seul compte le côté du plan — pas l'avant ou l'arrière du disque.
+pub(crate) fn du_cote_camera(rel: Vec3, axe_n: Vec3, cote_cam: f32) -> bool {
+    rel.dot(axe_n) * cote_cam >= 0.0
 }
 
 /// **Une couche du voile** (prototype B) : `(alpha, décalage le long de la
@@ -594,6 +630,20 @@ mod tests_prototypes {
         let teintes: Vec<Vec3> = (0..50).map(|k| teinte_nuage(k, &c)).collect();
         assert!(teintes.iter().all(|t| t.min_element() >= 0.2), "un nuage s'éteint");
         assert!(teintes.iter().any(|t| t.x > t.z * 1.3) && teintes.iter().any(|t| t.z > t.x * 1.3), "pas de variété");
+    }
+
+    /// **Une boule se range selon le côté du plan, jamais selon l'avant ou
+    /// l'arrière du disque** : sinon la frontière avant/arrière, horizontale à
+    /// l'écran, coupait les amas qui la chevauchent.
+    #[test]
+    fn une_boule_se_range_par_cote_du_plan() {
+        let (n, cam) = (Vec3::Y, 5.0); // caméra au-dessus du plan
+        for avant in [-3.0, 0.0, 3.0] {
+            assert!(du_cote_camera(vec3(1.0, 0.2, avant), n, cam), "au-dessus, avant = {avant}");
+            assert!(!du_cote_camera(vec3(1.0, -0.2, avant), n, cam), "au-dessous, avant = {avant}");
+        }
+        // Caméra au-dessous : tout s'inverse.
+        assert!(du_cote_camera(vec3(0.0, -0.2, 2.0), n, -cam));
     }
 
     /// **Une grappe a un côté éclairé et un côté dans l'ombre** : c'est ce qui

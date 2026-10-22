@@ -208,7 +208,9 @@ bons »*), renommés d'après ce qu'ils montrent, et trois de plus :
 | D | voile bouillonnant + couches + nuages | l'ex-A, B et C ensemble |
 | E | nuages épars denses | 1 500 nuages |
 | F | nuages cotonneux | 500 grappes de 6 boules éclairées, ±37 %, voile adouci |
-| **G** | amas massés (gravité) | 14 **amas** près du plan qui tournent **d'un bloc**, grappes de 8, nuages ×1,4 — *« moins en orbites, plus massé, l'aspect de gravité »* |
+| **G1** | 14 amas massés | 14 **amas** près du plan qui tournent **d'un bloc**, grappes de 8, nuages ×1,4 — *« moins en orbites, plus massé, l'aspect de gravité »* |
+| **G2** | 28 amas massés | G1, deux fois plus d'amas (30 nuages par amas, même taille) |
+| **G3** | 84 amas massés | G1, six fois plus d'amas — 20 160 boules, le plus lourd |
 | **H** | nébuleuse de débris | 1 600 grappes de 5, ×1,5, ±30 %, **teintes variées** d'un nuage à l'autre — *« un aspect artistique »* |
 | **I** | ouragan | 3 **bras spiraux** logarithmiques autour d'un **œil**, motif qui tourne d'un bloc — *« un aspect un peu ouragan »* |
 
@@ -221,10 +223,25 @@ boucle.** macroquad borne un appel de dessin à 10 000 sommets et **5 000
 indices** ; au-delà il tronque et l'écrit **à chaque image**. Les nuages
 partaient en un seul maillage (E : 1 500 quads = 9 000 indices). Désormais
 `impostor::dessiner_par_lots`, par **800 quads** (`QUADS_PAR_DESSIN`, garde
-de compilation sur les deux limites). Plafond des boules à 16 000 par disque :
-`push_quad` numérote ses sommets en `u16`. **Vérifié en capture** : 0
+de compilation sur les deux limites). Les lots partent **au fil de l'eau**, dès
+qu'ils sont pleins : la numérotation `u16` de `push_quad` repart de zéro à
+chaque lot, le plafond (40 000 boules) n'est plus qu'une affaire de coût. **Vérifié en capture** : 0
 message sur les huit prototypes ; lots remis à 5 000 pour la preuve, **606**
-messages en quelques secondes. **Question encore ouverte** : le
+messages en quelques secondes.
+
+**Corrigé ensuite — « une ligne horizontale […] ça change complètement le
+rendu entre la partie basse et haute de la fenêtre »** (dès G). Les nuages
+suivaient le partage avant/arrière du voile, **selon leur centre** : un amas à
+cheval sur la frontière — une horizontale passant par l'étoile, à l'écran —
+passait en entier sous la moitié avant du voile, ou par-dessus. Désormais
+chaque **boule** se range selon le **côté du plan** où elle est, vu de la
+caméra (`du_cote_camera`) : au-delà, dessinée avant le voile ; en deçà, après.
+Le voile est un plan, c'est l'ordre juste partout ; l'étoile cache ce qui passe
+derrière elle par la profondeur. Garde `une_boule_se_range_par_cote_du_plan`
+(red-check fait). ⚠️ **Pas reproduit en capture** avant la correction : à
+confirmer à l'écran, sous l'angle où la ligne apparaissait.
+
+**Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?
 

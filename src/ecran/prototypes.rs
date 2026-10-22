@@ -69,19 +69,11 @@ pub fn prototypes() -> Vec<Prototype> {
         // « Encore plus cotonneux, moins en orbites mais plus massé sur le
         // disque pour donner l'aspect de gravité » : 14 amas près du plan, qui
         // tournent d'un bloc, grappes de 8, nuages plus gros.
-        Prototype {
-            nom: "Disque proto G : amas masses (gravite)",
-            construire: || {
-                disque(
-                    DisqueConfig { granulation: 0.15, ..proto() }
-                        .avec_nuages_3d(420, 0.12)
-                        .avec_grappe(8)
-                        .avec_amas(14)
-                        .avec_aspect_nuages(1.4, 0.0),
-                )
-            },
-            distance: d,
-        },
+        // Décliné le 2026-10-22 : G1 tel quel, G2 deux fois plus de gros amas,
+        // G3 six fois plus — trente nuages par amas, et la même taille.
+        Prototype { nom: "Disque proto G1 : 14 amas masses", construire: || amas_masses(14), distance: d },
+        Prototype { nom: "Disque proto G2 : 28 amas masses", construire: || amas_masses(28), distance: d },
+        Prototype { nom: "Disque proto G3 : 84 amas masses", construire: || amas_masses(84), distance: d },
         // « Encore plus fourni, un aspect artistique de nuages de débris » :
         // 1 600 grappes de 5, grosses, épaisses, aux teintes variées.
         Prototype {
@@ -120,6 +112,18 @@ fn proto() -> DisqueConfig {
     DisqueConfig::protoplanetaire(5000, 0.3 * UA, 8.0 * UA, masse_luminosite(0.6))
         .avec_lacune_ondulee(0.38, 0.05, 0.92, 0.35)
         .avec_lacune_ondulee(0.66, 0.06, 0.92, 0.35)
+}
+
+/// **Prototype G** : `n` amas massés près du plan, qui tournent d'un bloc —
+/// trente nuages par amas, grappes de 8, nuages ×1,4, voile adouci.
+fn amas_masses(n: u32) -> Systeme {
+    disque(
+        DisqueConfig { granulation: 0.15, ..proto() }
+            .avec_nuages_3d(n * 30, 0.12)
+            .avec_grappe(8)
+            .avec_amas(n)
+            .avec_aspect_nuages(1.4, 0.0),
+    )
 }
 
 /// Une jeune étoile (T Tauri, L = 0,6) portant ce disque.

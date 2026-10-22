@@ -362,6 +362,9 @@ impl Objet {
         if let Some(p) = std::env::var("PITCH").ok().and_then(|p| p.parse::<f32>().ok()) {
             o.cam.pitch = p.to_radians();
         }
+        if let Some(y) = std::env::var("YAW").ok().and_then(|y| y.parse::<f32>().ok()) {
+            o.cam.yaw = y.to_radians();
+        }
         o
     }
 
