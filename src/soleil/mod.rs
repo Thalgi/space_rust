@@ -177,6 +177,12 @@ pub const JETS_PROTO: f32 = 3.0;
 /// **Force des taches d'accrétion polaires** d'une jeune étoile (lot 12).
 pub const ACCRETION_PROTO: f32 = 0.8;
 
+/// **La règle des variations d'éclat** : elles ne passent que pour un type
+/// dont l'éclat varie à l'œil. Libre pour être gardée sans contexte graphique.
+fn variation_si_visible(visible: bool, variation: f32) -> f32 {
+    if visible { variation } else { 1.0 }
+}
+
 /// **Le quaternion qui amène le pôle nord de la surface (+Y) sur `axe`.**
 pub(super) fn quat_axe(axe: Vec3) -> Quat {
     Quat::from_rotation_arc(Vec3::Y, axe.normalize_or(Vec3::Y))
@@ -609,6 +615,14 @@ impl Soleil {
         lumiere_pulsee(facteur_pulsation(self.pulse.0, self.pulse.1, self.temps), ebul)
     }
 
+    /// **Ce qui fait varier l'éclat** (flares, pulsation, ébullition) — 1 pour
+    /// un type dont l'éclat ne varie pas à l'œil. Source unique de la lumière
+    /// projetée (`lumiere`) ; l'image, elle, passe par `eclat_dessin`, fermé
+    /// par la même règle.
+    fn variation_eclat(&self) -> f32 {
+        variation_si_visible(self.eclat_visible, self.eclat() * self.pulse_lumiere())
+    }
+
     /// **Éclat de surface à envoyer au shader** : flare et pulsation, compensés
     /// de ce que la taille dessinée porte déjà (voir [`eclat_surfacique`]).
     pub(super) fn eclat_dessin(&self, cam_pos: Vec3) -> f32 {
@@ -694,16 +708,22 @@ impl Astre for Soleil {
         self.puissance = moduler(puissance, self.activite);
         self.alea = alea;
     }
-    /// ⚠️ **La pulsation y passe au carré.** À température constante
-    /// `L ∝ R²` : c'est la physique qui lie les deux, et c'est ce qui évite un
-    /// second réglage pour un seul fait. Conséquence heureuse — la variation
-    /// d'éclat se voit **à n'importe quelle échelle**, là où le gonflement du
-    /// disque ne se lit que de près.
+    /// ⚠️ **La pulsation y passe** (à la puissance 4 du rayon, voir
+    /// `lumiere_pulsee`) — **mais seulement pour un type dont l'éclat varie à
+    /// l'œil** (`eclat_visible` : la céphéide, aujourd'hui).
+    ///
+    /// Jusqu'au 2026-10-22, toute étoile faisait varier la lumière qu'elle
+    /// jette : chaque flare (+60 %) et chaque souffle d'ébullition éclairaient
+    /// et assombrissaient d'un coup tout ce qui l'entoure — mesuré sur le
+    /// disque d'un prototype, −14 % d'une image à l'autre, *« un effet de
+    /// battement de cœur »*. La décision du lot 7 (l'éclat ne varie à l'image
+    /// que pour les types qui le font vraiment) vaut donc aussi pour la lumière
+    /// projetée : une seule règle, les deux canaux.
     fn lumiere(&self) -> Option<Vec3> {
-        Some(self.couleur * self.luminosite * self.eclat() * self.pulse_lumiere())
+        Some(self.couleur * self.luminosite * self.variation_eclat())
     }
     fn luminosite(&self) -> Option<f32> {
-        Some(self.luminosite * self.eclat() * self.pulse_lumiere())
+        Some(self.luminosite * self.variation_eclat())
     }
     /// Une étoile se résume à sa couleur de corps noir : c'est déjà ce qui la
     /// distingue à l'œil (une naine rouge d'une géante bleue).
@@ -817,6 +837,19 @@ mod tests {
         assert!(rapport > 1.9, "céphéide : rapport d'éclat {rapport}, trop sage pour se voir de loin");
         // Et sans pulsation ni ébullition : rien ne bouge.
         assert_eq!(lumiere_pulsee(1.0, 1.0), 1.0);
+    }
+
+    /// **Une étoile ordinaire ne fait pas battre ce qu'elle éclaire.** Ses
+    /// flares (+60 %) et son ébullition faisaient pulser d'un coup toute la
+    /// lumière qu'elle jette — mesuré sur un disque, −14 % d'une image à
+    /// l'autre (2026-10-22). Seul un type à l'éclat visible la fait varier.
+    #[test]
+    fn une_etoile_ordinaire_ne_fait_pas_battre_ce_qu_elle_eclaire() {
+        use super::variation_si_visible;
+        for flare in [1.0_f32, 1.3, 1.6] {
+            assert_eq!(variation_si_visible(false, flare), 1.0, "un flare éclaire le disque d'une étoile ordinaire");
+            assert_eq!(variation_si_visible(true, flare), flare, "la céphéide ne fait plus varier sa lumière");
+        }
     }
 
     /// **Seule la céphéide montre son éclat à l'image**, pour l'instant :

@@ -362,12 +362,19 @@ impl Disque {
                 if (moitie > 0.5 && !devant) || (moitie < -0.5 && devant) {
                     continue;
                 }
-                let c = self.cfg.voile_couleur2.lerp(self.cfg.voile_couleur, t) * cam.light_color.min(Vec3::ONE);
+                // ⚠️ **Pas teinté par la lumière de l'étoile** : elle monte à
+                // chaque flare, et le disque entier battait avec — « un effet
+                // de battement de cœur » (2026-10-22).
+                let c = self.cfg.voile_couleur2.lerp(self.cfg.voile_couleur, t);
+                // Vers l'étoile, depuis le nuage : c'est d'où vient la lumière.
+                let vers_etoile = (-rel).normalize_or_zero();
                 for j in 0..grappe {
                     let (d, t_j, poids) = boule_de_grappe(k, j, grappe, taille);
-                    let pos = p + rel + self.axe_u * d.x + self.axe_n * d.y + self.axe_v * d.z;
+                    let dw = self.axe_u * d.x + self.axe_n * d.y + self.axe_v * d.z;
+                    let lum = eclairement_boule(dw, vers_etoile);
                     let a = eclat * 0.35 * poids;
-                    crate::impostor::push_quad(&mut v, &mut i, cam, pos, t_j, Color::new(c.x * a, c.y * a, c.z * a, a));
+                    let col = Color::new(c.x * lum * a, c.y * lum * a, c.z * lum * a, a);
+                    crate::impostor::push_quad(&mut v, &mut i, cam, p + rel + dw, t_j, col);
                 }
             }
             gl_use_material(&crate::soleil::materiau_ruban_lumineux());
@@ -398,14 +405,19 @@ fn couche_voile(c: &DisqueConfig, k: u32) -> (f32, f32, f32) {
 /// inégales, groupées autour du centre et décalées dans les trois
 /// directions : c'est le contour bosselé d'un cumulus, là où un disque flou
 /// seul se lit comme une tache lisse. La première boule est au centre et la
-/// plus grosse. L'éclat est réparti pour que la grappe ne brille pas plus
-/// qu'un nuage seul. Une seule boule : le nuage d'origine, inchangé.
+/// plus grosse. Une seule boule : le nuage d'origine, inchangé.
+///
+/// ⚠️ **Le poids, mesuré à l'écran.** Réparti d'abord pour que la grappe ne
+/// brille pas plus qu'un nuage seul (1,8 / boules), il la rendait invisible :
+/// chaque boule ne pesait plus que 0,3 sur un halo déjà concentré au centre.
+/// Les « taches » qu'on prenait pour les nuages étaient la granulation du
+/// voile. Sondé à ×11 (trop), réglé à ~×4 (2026-10-22).
 pub(crate) fn boule_de_grappe(k: u32, j: u32, grappe: u32, taille: f32) -> (Vec3, f32, f32) {
     if grappe <= 1 {
         return (Vec3::ZERO, taille, 1.0);
     }
     let h = |s: f32| ((k as f32 * 4.1414 + j as f32 * 31.337 + s * 17.17).sin() * 43_758.547).fract().abs();
-    let poids = 1.8 / grappe as f32;
+    let poids = 8.0 / grappe as f32;
     if j == 0 {
         return (Vec3::ZERO, taille * 0.85, poids);
     }
@@ -414,19 +426,30 @@ pub(crate) fn boule_de_grappe(k: u32, j: u32, grappe: u32, taille: f32) -> (Vec3
     (d, taille * (0.45 + 0.35 * h(5.0)), poids)
 }
 
+/// **Éclairement d'une boule de grappe** selon sa place dans le nuage :
+/// claire du côté de l'étoile, sombre du côté opposé, mi-teinte au cœur.
+///
+/// C'est ce qui donne du **volume** à un nuage additif, qui ne peut ni
+/// masquer ni assombrir ce qu'il y a derrière lui : sans ce dégradé, la
+/// grappe se lisait comme un autocollant posé sur le disque (2026-10-22).
+pub(crate) fn eclairement_boule(decalage: Vec3, vers_etoile: Vec3) -> f32 {
+    let cote = decalage.normalize_or_zero().dot(vers_etoile); // -1 ombre … +1 éclairé
+    0.35 + 0.65 * (0.5 + 0.5 * cote)
+}
+
 /// **Un nuage de poussière en volume** (prototype C), à l'instant `temps` :
 /// `(position LOCALE (u, n, v), rayon du nuage, éclat 0..1, t radial 0..1)`.
 ///
 /// Pur et sans état : tout se dérive de son rang et de la graine du disque —
 /// le même nuage revient au même endroit à graine égale. Orbite de **Kepler**
 /// (`ω = √(gm/r³)`, la vitesse des particules) : l'intérieur file, le large
-/// traîne. Hauteur dans ±1,5 h/r du plan ; il **apparaît et s'efface** sur
-/// un cycle propre, sans à-coup.
+/// traîne. Hauteur dans ±1,5 h/r du plan.
 ///
-/// ⚠️ **Sa taille est fixe.** Elle suivait d'abord son cycle de vie — le
-/// nuage enflait en naissant puis se dégonflait —, et ça se lisait comme une
-/// respiration : *« les nuages de fumée gonflent et dégonflent, il faudrait
-/// enlever ce mouvement »* (2026-10-22). Seul l'éclat vit.
+/// ⚠️ **Sa taille et son éclat sont fixes.** La taille suivait d'abord un
+/// cycle de vie — *« les nuages de fumée gonflent et dégonflent »* —, puis
+/// l'éclat, que la grappe du prototype F faisait s'allumer et s'éteindre d'un
+/// bloc — *« un effet de battement de cœur »* (2026-10-22). Un nuage ne
+/// respire plus : il tourne, c'est tout.
 pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32, f32) {
     let h = |s: f32| ((k as f32 * 12.9898 + c.graine * 78.233 + s * 37.719).sin() * 43_758.547).fract().abs();
     let t = h(1.0);
@@ -434,8 +457,8 @@ pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32,
     let omega = (c.gm / (r * r * r).max(1e-6)).sqrt();
     let ang = h(2.0) * std::f32::consts::TAU + omega * temps;
     let z = (h(3.0) * 2.0 - 1.0) * c.h_r * r * 1.5;
-    let vie = (temps * 0.04 + h(4.0)).fract();
-    let eclat = (std::f32::consts::PI * vie).sin().powi(2);
+    // Constant, mais inégal d'un nuage à l'autre.
+    let eclat = 0.6 + 0.4 * h(4.0);
     let taille = r * (0.03 + 0.05 * h(5.0));
     (vec3(ang.cos() * r, z, ang.sin() * r), taille, eclat, t)
 }
@@ -462,6 +485,8 @@ mod tests_prototypes {
             assert!(r0 >= c.interne - 1e-3 && r0 <= c.externe + 1e-3, "nuage {k} hors de l'anneau ({r0})");
             assert!(p0.y.abs() <= c.h_r * r0 * 1.5 + 1e-3, "nuage {k} hors de l'épaisseur");
             assert!((0.0..=1.0).contains(&eclat) && taille > 0.0);
+            // Ni taille ni éclat ne respirent (gonflement, puis battement).
+            assert_eq!(nuage_3d(k, &c, 23.0).2, eclat, "nuage {k} : son éclat bat");
             // Taille fixe : un nuage qui enfle et dégonfle se lit comme une
             // respiration, refusé à l'écran.
             for instant in [3.0_f32, 11.0, 40.0] {
@@ -480,6 +505,19 @@ mod tests_prototypes {
         assert!(v[0].1 > v[v.len() - 1].1 * 2.0, "l'intérieur ne file pas plus vite que le large");
     }
 
+    /// **Une grappe a un côté éclairé et un côté dans l'ombre** : c'est ce qui
+    /// lui donne du volume. Le cœur est entre les deux.
+    #[test]
+    fn une_grappe_s_eclaire_du_cote_de_l_etoile() {
+        let etoile = Vec3::X;
+        let face = eclairement_boule(Vec3::X, etoile);
+        let dos = eclairement_boule(-Vec3::X, etoile);
+        let coeur = eclairement_boule(Vec3::ZERO, etoile);
+        assert!(face > coeur && coeur > dos, "{face} / {coeur} / {dos}");
+        assert!(dos > 0.0, "le côté ombre disparaît");
+        assert!(face - dos > 0.5, "contraste trop faible pour lire un volume : {face} / {dos}");
+    }
+
     /// **Une grappe reste un nuage** : ses boules restent près du centre, la
     /// première au centre et la plus grosse, et une seule boule redonne le
     /// nuage d'origine.
@@ -493,7 +531,7 @@ mod tests_prototypes {
                 let (d, t, poids) = boule_de_grappe(k, j, 6, 2.0);
                 assert!(d.length() <= 2.0 * 0.85 + 1e-4, "boule {j} du nuage {k} trop loin : {}", d.length());
                 assert!(t < t0 && t > 0.0, "boule {j} plus grosse que le cœur");
-                assert!(poids > 0.0 && poids < 1.0);
+                assert!(poids > 0.0 && poids < 2.0);
             }
         }
     }

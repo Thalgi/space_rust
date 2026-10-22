@@ -168,7 +168,35 @@ l'intérieur file plus vite — red-check : vitesse uniforme), et
   protoplanétaire d'origine. Piste pour le scintillement : un voile sombre et
   translucide à la limite de deux couleurs bascule de l'une à l'autre au
   tramage dès que l'image bouge. L'utilisateur teste en baissant la
-  saturation. **Question encore ouverte** : le
+  saturation.
+
+**Second retour écran sur F** : *« les nuages ne sont pas en 3D mais un
+autocollant sur le disque, et il y a un effet de battement de cœur qui fait
+monter la couleur d'un des composants du disque »*.
+
+- ⚠️ **Le battement venait de l'étoile, pas du disque — mesuré.** L'outil de
+  capture a gagné `CAPTURE_PAS=<frames>` (images espacées) : la luminosité
+  moyenne du disque passait de **22,5 à 19,4** d'une image à l'autre. La
+  lumière qu'une étoile projette suivait ses **flares** (+60 %) et son
+  ébullition, et tout ce qu'elle éclaire battait avec. Corrigé **pour tout le
+  jeu** : la décision du lot 7 (l'éclat ne varie à l'image que pour un type
+  qui le fait vraiment, `eclat_visible`) vaut désormais aussi pour la
+  **lumière projetée** (`variation_si_visible`, gardé). Trois mesures après :
+  19,38 constant. ⚠️ Conséquence : les flares n'éclairent plus les planètes
+  d'une étoile ordinaire — seule la céphéide fait varier ce qu'elle éclaire.
+- **Le cycle d'éclat des nuages est débranché** (*« sans compromettre le
+  reste »*) : éclat constant par nuage, inégal d'un nuage à l'autre ; position,
+  rotation, taille intactes. Et leur teinte ne suit plus la lumière de
+  l'étoile.
+- **L'autocollant** : les nuages de F étaient **presque invisibles** — chaque
+  boule pesait 0,3 sur un halo concentré au centre. Les taches qu'on voyait
+  étaient la **granulation du voile**, peinte à plat. Sondé en poussant les
+  nuages à ×11 (ils sont bien là : amas bosselés, cœur clair, certains hors du
+  plan), réglé à ~×4. Pour F : granulation du voile atténuée (0,15), épaisseur
+  triplée (h/r 0,25 — jusqu'à ±37 % du rayon), et chaque boule **éclairée du
+  côté de l'étoile**, sombre de l'autre (`eclairement_boule`, gardé) : sans
+  pouvoir masquer ce qu'il y a derrière (additif, et la garde des pipelines
+  interdit un matériau de plus), c'est la lumière qui donne le volume. **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?
 

@@ -237,10 +237,13 @@ async fn main() {
             frames_capture += 1;
             // Quelques frames de chauffe : le premier rendu d'une icône
             // (cache vide) prend une frame de plus que les suivantes.
-            // **Quatre images consécutives** (`_0` à `_3`) : un clignotement
-            // d'une frame à l'autre ne se voit pas sur une image seule.
-            if (300..304).contains(&frames_capture) {
-                let n = frames_capture - 300;
+            // **Quatre images** (`_0` à `_3`), consécutives par défaut : un
+            // clignotement d'une frame à l'autre ne se voit pas sur une image
+            // seule. `CAPTURE_PAS=<frames>` les espace, pour suivre ce qui
+            // varie sur plusieurs secondes (un battement, une pulsation).
+            let pas = std::env::var("CAPTURE_PAS").ok().and_then(|p| p.parse::<u32>().ok()).unwrap_or(1).max(1);
+            if frames_capture >= 300 && (frames_capture - 300).is_multiple_of(pas) && (frames_capture - 300) / pas < 4 {
+                let n = (frames_capture - 300) / pas;
                 let fichier = chemin.replace(".png", &format!("_{n}.png"));
                 get_screen_data().export_png(&fichier);
                 println!("CAPTURE {fichier}");

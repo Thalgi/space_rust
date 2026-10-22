@@ -46,10 +46,16 @@ pub fn prototypes() -> Vec<Prototype> {
         // Demandé le 2026-10-22 : « des nuages plus denses ».
         Prototype { nom: "Disque proto E : nuages 3D denses", construire: || disque(proto().avec_nuages_3d(1500, 0.08)), distance: d },
         // Demandé le 2026-10-22 : « des nuages plus cotonneux » — chaque nuage
-        // devient une grappe de six boules.
+        // devient une grappe de six boules, éclairée d'un côté. Second retour :
+        // « un autocollant sur le disque » — d'où une épaisseur triplée
+        // (h/r 0,25 : jusqu'à ±37 % du rayon), pour qu'ils sortent du plan.
         Prototype {
             nom: "Disque proto F : nuages 3D cotonneux",
-            construire: || disque(proto().avec_nuages_3d(500, 0.08).avec_grappe(6)),
+            // Granulation du voile atténuée : ses taches, peintes à plat, se
+            // lisaient comme les nuages eux-mêmes — « un autocollant ».
+            construire: || {
+                disque(DisqueConfig { granulation: 0.15, ..proto() }.avec_nuages_3d(500, 0.25).avec_grappe(6))
+            },
             distance: d,
         },
     ]
