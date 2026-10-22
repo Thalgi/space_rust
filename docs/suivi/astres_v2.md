@@ -196,7 +196,35 @@ monter la couleur d'un des composants du disque »*.
   triplée (h/r 0,25 — jusqu'à ±37 % du rayon), et chaque boule **éclairée du
   côté de l'étoile**, sombre de l'autre (`eclairement_boule`, gardé) : sans
   pouvoir masquer ce qu'il y a derrière (additif, et la garde des pipelines
-  interdit un matériau de plus), c'est la lumière qui donne le volume. **Question encore ouverte** : le
+  interdit un matériau de plus), c'est la lumière qui donne le volume.
+
+**Les cinq premiers jugés bons** (*« pour le moment les cinq protos sont
+bons »*), renommés d'après ce qu'ils montrent, et trois de plus :
+
+| Proto | Nom à l'écran | Caractéristiques |
+|---|---|---|
+| B | voile en couches | voile en 7 couches, s'évasant (h/r 0,08) |
+| C | nuages épars | 500 nuages, Kepler, ±12 % du rayon |
+| D | voile bouillonnant + couches + nuages | l'ex-A, B et C ensemble |
+| E | nuages épars denses | 1 500 nuages |
+| F | nuages cotonneux | 500 grappes de 6 boules éclairées, ±37 %, voile adouci |
+| **G** | amas massés (gravité) | 14 **amas** près du plan qui tournent **d'un bloc**, grappes de 8, nuages ×1,4 — *« moins en orbites, plus massé, l'aspect de gravité »* |
+| **H** | nébuleuse de débris | 1 600 grappes de 5, ×1,5, ±30 %, **teintes variées** d'un nuage à l'autre — *« un aspect artistique »* |
+| **I** | ouragan | 3 **bras spiraux** logarithmiques autour d'un **œil**, motif qui tourne d'un bloc — *« un aspect un peu ouragan »* |
+
+Gardes : un amas garde son écart au fil du temps (tourne d'un bloc), la
+spirale ne se cisaille pas et l'œil reste vide (red-check : Kepler remis),
+les teintes varient sans s'éteindre.
+
+**Corrigé en chemin — « geometry() exceeded max drawcall size, clamping », en
+boucle.** macroquad borne un appel de dessin à 10 000 sommets et **5 000
+indices** ; au-delà il tronque et l'écrit **à chaque image**. Les nuages
+partaient en un seul maillage (E : 1 500 quads = 9 000 indices). Désormais
+`impostor::dessiner_par_lots`, par **800 quads** (`QUADS_PAR_DESSIN`, garde
+de compilation sur les deux limites). Plafond des boules à 16 000 par disque :
+`push_quad` numérote ses sommets en `u16`. **Vérifié en capture** : 0
+message sur les huit prototypes ; lots remis à 5 000 pour la preuve, **606**
+messages en quelques secondes. **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?
 

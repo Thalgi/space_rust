@@ -34,27 +34,80 @@ pub fn prototypes() -> Vec<Prototype> {
     // ⚠️ **A (voile bouillonnant) refusé seul** à l'écran le 2026-10-22, et
     // retiré de la liste — mais **gardé dans D**, à la demande : son code
     // reste, pour D seulement.
+    //
+    // Validés à l'écran le 2026-10-22 (« pour le moment les cinq protos sont
+    // bons »), et renommés d'après ce qu'ils montrent :
+    //   B  voile en 7 couches, qui s'évase (h/r 0,08) ;
+    //   C  500 nuages épars, Kepler, ±12 % du rayon ;
+    //   D  voile bouillonnant (l'ex-A) + 7 couches + 500 nuages ;
+    //   E  1 500 nuages épars ;
+    //   F  500 grappes de 6 boules éclairées, ±37 % du rayon, voile adouci.
+    // Puis trois de plus, demandés le même jour : G, H, I.
     let d = 8.0 * UA * 2.2;
     vec![
-        Prototype { nom: "Disque proto B : disque epais (couches)", construire: || disque(proto().avec_couches(7, 0.08)), distance: d },
-        Prototype { nom: "Disque proto C : nuages de poussiere 3D", construire: || disque(proto().avec_nuages_3d(500, 0.08)), distance: d },
+        Prototype { nom: "Disque proto B : voile en couches", construire: || disque(proto().avec_couches(7, 0.08)), distance: d },
+        Prototype { nom: "Disque proto C : nuages epars", construire: || disque(proto().avec_nuages_3d(500, 0.08)), distance: d },
         Prototype {
-            nom: "Disque proto D : les trois",
+            nom: "Disque proto D : voile bouillonnant + couches + nuages",
             construire: || disque(proto().avec_nuages(0.8).avec_couches(7, 0.08).avec_nuages_3d(500, 0.08)),
             distance: d,
         },
-        // Demandé le 2026-10-22 : « des nuages plus denses ».
-        Prototype { nom: "Disque proto E : nuages 3D denses", construire: || disque(proto().avec_nuages_3d(1500, 0.08)), distance: d },
+        Prototype { nom: "Disque proto E : nuages epars denses", construire: || disque(proto().avec_nuages_3d(1500, 0.08)), distance: d },
         // Demandé le 2026-10-22 : « des nuages plus cotonneux » — chaque nuage
         // devient une grappe de six boules, éclairée d'un côté. Second retour :
         // « un autocollant sur le disque » — d'où une épaisseur triplée
         // (h/r 0,25 : jusqu'à ±37 % du rayon), pour qu'ils sortent du plan.
         Prototype {
-            nom: "Disque proto F : nuages 3D cotonneux",
+            nom: "Disque proto F : nuages cotonneux",
             // Granulation du voile atténuée : ses taches, peintes à plat, se
             // lisaient comme les nuages eux-mêmes — « un autocollant ».
             construire: || {
                 disque(DisqueConfig { granulation: 0.15, ..proto() }.avec_nuages_3d(500, 0.25).avec_grappe(6))
+            },
+            distance: d,
+        },
+        // « Encore plus cotonneux, moins en orbites mais plus massé sur le
+        // disque pour donner l'aspect de gravité » : 14 amas près du plan, qui
+        // tournent d'un bloc, grappes de 8, nuages plus gros.
+        Prototype {
+            nom: "Disque proto G : amas masses (gravite)",
+            construire: || {
+                disque(
+                    DisqueConfig { granulation: 0.15, ..proto() }
+                        .avec_nuages_3d(420, 0.12)
+                        .avec_grappe(8)
+                        .avec_amas(14)
+                        .avec_aspect_nuages(1.4, 0.0),
+                )
+            },
+            distance: d,
+        },
+        // « Encore plus fourni, un aspect artistique de nuages de débris » :
+        // 1 600 grappes de 5, grosses, épaisses, aux teintes variées.
+        Prototype {
+            nom: "Disque proto H : nebuleuse de debris",
+            construire: || {
+                disque(
+                    DisqueConfig { granulation: 0.1, ..proto() }
+                        .avec_nuages_3d(1600, 0.2)
+                        .avec_grappe(5)
+                        .avec_aspect_nuages(1.5, 0.8),
+                )
+            },
+            distance: d,
+        },
+        // « Un aspect un peu ouragan » : trois bras spiraux autour d'un œil,
+        // un motif qui tourne d'un bloc.
+        Prototype {
+            nom: "Disque proto I : ouragan",
+            construire: || {
+                disque(
+                    DisqueConfig { granulation: 0.15, ..proto() }
+                        .avec_nuages_3d(900, 0.1)
+                        .avec_grappe(5)
+                        .avec_bras(3)
+                        .avec_aspect_nuages(1.2, 0.0),
+                )
             },
             distance: d,
         },

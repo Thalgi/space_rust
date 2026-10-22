@@ -89,6 +89,17 @@ pub struct DisqueConfig {
     /// **F** : boules par nuage — à 1, un disque flou lisse ; au-delà, une
     /// grappe de boules qui se chevauchent, au contour bosselé : cotonneux.
     pub grappe: u32,
+    /// **G** : les nuages se rassemblent en ce nombre d'**amas**, près du plan,
+    /// qui tournent chacun **d'un bloc**. 0 = nuages épars.
+    pub nuages_amas: u32,
+    /// **I** : les nuages s'alignent sur ce nombre de **bras spiraux**, autour
+    /// d'un œil, et le motif tourne d'un bloc. 0 = pas de spirale.
+    pub nuages_bras: u32,
+    /// Taille des nuages (multiplicateur, 1 = d'origine).
+    pub taille_nuages: f32,
+    /// **H** : écart de teinte d'un nuage à l'autre, 0 = tous de la teinte du
+    /// voile à leur rayon.
+    pub teintes_nuages: f32,
 }
 
 impl DisqueConfig {
@@ -130,6 +141,10 @@ impl DisqueConfig {
             h_r: 0.0,
             nuages_3d: 0,
             grappe: 1,
+            nuages_amas: 0,
+            nuages_bras: 0,
+            taille_nuages: 1.0,
+            teintes_nuages: 0.0,
         }
     }
 
@@ -151,6 +166,25 @@ impl DisqueConfig {
     pub fn avec_nuages_3d(mut self, n: u32, h_r: f32) -> Self {
         self.nuages_3d = n.min(4000);
         self.h_r = h_r.max(0.0);
+        self
+    }
+
+    /// Prototype **G** : voir le champ `nuages_amas`.
+    pub fn avec_amas(mut self, n: u32) -> Self {
+        self.nuages_amas = n;
+        self
+    }
+
+    /// Prototype **I** : voir le champ `nuages_bras`.
+    pub fn avec_bras(mut self, n: u32) -> Self {
+        self.nuages_bras = n;
+        self
+    }
+
+    /// Taille et écart de teinte des nuages (prototypes G, H).
+    pub fn avec_aspect_nuages(mut self, taille: f32, teintes: f32) -> Self {
+        self.taille_nuages = taille.max(0.1);
+        self.teintes_nuages = teintes.clamp(0.0, 1.0);
         self
     }
 

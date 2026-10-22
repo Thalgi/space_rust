@@ -49,6 +49,30 @@ pub fn push_quad(
     inds.extend_from_slice(&[i0, i0 + 1, i0 + 2, i0, i0 + 2, i0 + 3]);
 }
 
+/// **Quads au plus par appel de dessin.** macroquad borne un appel à 10 000
+/// sommets et **5 000 indices** (`draw_call_index_capacity`) ; au-delà il
+/// tronque, et l'écrit **à chaque image** (« geometry() exceeded max drawcall
+/// size, clamping »). Un quad coûte 4 sommets et 6 indices : 833 au plus.
+/// Les nuages des disques (2026-10-22) en envoyaient des milliers d'un coup.
+pub const QUADS_PAR_DESSIN: usize = 800;
+
+/// **Dessine un maillage de quads, en lots** sous [`QUADS_PAR_DESSIN`].
+/// `verts`/`inds` sont ceux de [`push_quad`] ; ils sont vidés.
+pub fn dessiner_par_lots(verts: &mut Vec<Vertex>, inds: &mut Vec<u16>, texture: Option<Texture2D>) {
+    for (k, lot) in verts.chunks(QUADS_PAR_DESSIN * 4).enumerate() {
+        let decalage = (k * QUADS_PAR_DESSIN * 4) as u16;
+        let indices: Vec<u16> = inds
+            .iter()
+            .skip(k * QUADS_PAR_DESSIN * 6)
+            .take(lot.len() / 4 * 6)
+            .map(|i| i - decalage)
+            .collect();
+        draw_mesh(&Mesh { vertices: lot.to_vec(), indices, texture: texture.clone() });
+    }
+    verts.clear();
+    inds.clear();
+}
+
 /// Un point d'un ruban : sa position **monde**, sa demi-largeur et sa couleur.
 pub type PointRuban = (Vec3, f32, Color);
 
@@ -165,6 +189,16 @@ pub fn push_ruban(
     for k in 0..points.len() as u16 - 1 {
         let (a, b) = (i0 + k * 2, i0 + k * 2 + 2);
         inds.extend_from_slice(&[a, a + 1, b + 1, a, b + 1, b]);
+    }
+}
+
+#[cfg(test)]
+mod tests_lots {
+    /// **Un lot tient dans un appel de dessin**, sommets comme indices.
+    #[test]
+    fn un_lot_tient_dans_un_appel_de_dessin() {
+        const { assert!(super::QUADS_PAR_DESSIN * 6 <= 5000) };
+        const { assert!(super::QUADS_PAR_DESSIN * 4 <= 10000) };
     }
 }
 

@@ -351,10 +351,12 @@ impl Disque {
         if self.cfg.nuages_3d > 0 {
             let tocam = (cam.pos - p).normalize_or_zero();
             let (mut v, mut i) = (Vec::new(), Vec::new());
-            // Tout le chapelet tient dans un maillage (`u16`) : 4 sommets par
-            // boule, plafond à 8 000 boules.
+            // Dessiné en lots de `QUADS_PAR_DESSIN` (`dessiner_par_lots`).
+            // ⚠️ Plafond à 16 000 boules : `push_quad` numérote ses sommets en
+            // `u16`, 65 535 au plus — à 4 par boule, au-delà la numérotation
+            // repartirait de zéro en silence.
             let grappe = self.cfg.grappe.max(1);
-            let n = self.cfg.nuages_3d.min(8000 / grappe);
+            let n = self.cfg.nuages_3d.min(16_000 / grappe);
             for k in 0..n {
                 let (loc, taille, eclat, t) = nuage_3d(k, &self.cfg, self.temps);
                 let rel = self.axe_u * loc.x + self.axe_n * loc.y + self.axe_v * loc.z;
@@ -365,7 +367,7 @@ impl Disque {
                 // ⚠️ **Pas teinté par la lumière de l'étoile** : elle monte à
                 // chaque flare, et le disque entier battait avec — « un effet
                 // de battement de cœur » (2026-10-22).
-                let c = self.cfg.voile_couleur2.lerp(self.cfg.voile_couleur, t);
+                let c = self.cfg.voile_couleur2.lerp(self.cfg.voile_couleur, t) * teinte_nuage(k, &self.cfg);
                 // Vers l'étoile, depuis le nuage : c'est d'où vient la lumière.
                 let vers_etoile = (-rel).normalize_or_zero();
                 for j in 0..grappe {
@@ -378,7 +380,7 @@ impl Disque {
                 }
             }
             gl_use_material(&crate::soleil::materiau_ruban_lumineux());
-            draw_mesh(&Mesh { vertices: v, indices: i, texture: Some(crate::impostor::halo_partage()) });
+            crate::impostor::dessiner_par_lots(&mut v, &mut i, Some(crate::impostor::halo_partage()));
             vider_lot();
             gl_use_default_material();
         }
@@ -451,16 +453,61 @@ pub(crate) fn eclairement_boule(decalage: Vec3, vers_etoile: Vec3) -> f32 {
 /// bloc — *« un effet de battement de cœur »* (2026-10-22). Un nuage ne
 /// respire plus : il tourne, c'est tout.
 pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32, f32) {
-    let h = |s: f32| ((k as f32 * 12.9898 + c.graine * 78.233 + s * 37.719).sin() * 43_758.547).fract().abs();
-    let t = h(1.0);
-    let r = c.interne + t * (c.externe - c.interne);
-    let omega = (c.gm / (r * r * r).max(1e-6)).sqrt();
-    let ang = h(2.0) * std::f32::consts::TAU + omega * temps;
-    let z = (h(3.0) * 2.0 - 1.0) * c.h_r * r * 1.5;
+    use std::f32::consts::TAU;
+    let h = |s: f32| hache(k as f32, c.graine, s);
+    let rayon = |t: f32| c.interne + t * (c.externe - c.interne);
+    let kepler = |r: f32| (c.gm / (r * r * r).max(1e-6)).sqrt();
+    let (t, ang, z_rel) = if c.nuages_amas > 0 {
+        // **G — des amas massés** : chaque nuage appartient à un amas, posé
+        // près du plan ; l'amas tourne d'un bloc à la vitesse de son centre,
+        // sans se disperser le long de l'orbite — la gravité les rassemble.
+        let a = (k % c.nuages_amas) as f32;
+        let ha = |s: f32| hache(a + 9_000.0, c.graine, s);
+        let tc = 0.08 + 0.84 * ha(1.0);
+        let t = (tc + (h(1.0) - 0.5) * 0.09).clamp(0.0, 1.0);
+        let ang = ha(2.0) * TAU + (h(2.0) - 0.5) * 0.45 + kepler(rayon(tc)) * temps;
+        (t, ang, (h(3.0) * 2.0 - 1.0) * 0.5)
+    } else if c.nuages_bras > 0 {
+        // **I — un ouragan** : les nuages suivent des bras en spirale
+        // logarithmique autour d'un œil dégagé (t ≥ 0,1), et le motif tourne
+        // d'un bloc — à la vitesse du milieu de l'anneau — au lieu d'être
+        // cisaillé par Kepler.
+        let bras = (k % c.nuages_bras) as f32;
+        let t = 0.1 + 0.9 * h(1.0).sqrt();
+        let r = rayon(t);
+        let spirale = bras * TAU / c.nuages_bras as f32 + 2.2 * (r / c.interne.max(1e-3)).ln();
+        let ang = spirale + (h(2.0) - 0.5) * 0.55 + kepler(rayon(0.5)) * temps;
+        (t, ang, (h(3.0) * 2.0 - 1.0) * 0.8)
+    } else {
+        // **C — des nuages épars** sur l'anneau, chacun à sa vitesse de Kepler.
+        let t = h(1.0);
+        let ang = h(2.0) * TAU + kepler(rayon(t)) * temps;
+        (t, ang, (h(3.0) * 2.0 - 1.0) * 1.5)
+    };
+    let r = rayon(t);
+    let z = z_rel * c.h_r * r;
     // Constant, mais inégal d'un nuage à l'autre.
     let eclat = 0.6 + 0.4 * h(4.0);
-    let taille = r * (0.03 + 0.05 * h(5.0));
+    let taille = r * (0.03 + 0.05 * h(5.0)) * c.taille_nuages;
     (vec3(ang.cos() * r, z, ang.sin() * r), taille, eclat, t)
+}
+
+/// Pseudo-hasard déterministe dans `[0 ; 1[`, propre à un rang et une graine.
+fn hache(i: f32, graine: f32, s: f32) -> f32 {
+    ((i * 12.9898 + graine * 78.233 + s * 37.719).sin() * 43_758.547).fract().abs()
+}
+
+/// **Teinte propre à un nuage** (prototype H) : un multiplicateur autour de 1,
+/// qui pousse chaque nuage vers le chaud ou le froid. Neutre si
+/// `teintes_nuages` est nul.
+fn teinte_nuage(k: u32, c: &DisqueConfig) -> Vec3 {
+    let e = c.teintes_nuages;
+    if e <= 0.0 {
+        return Vec3::ONE;
+    }
+    let chaud = hache(k as f32, c.graine, 6.0) * 2.0 - 1.0; // −1 froid … +1 chaud
+    let eclat = hache(k as f32, c.graine, 7.0) * 2.0 - 1.0;
+    vec3(1.0 + 0.45 * e * chaud, 1.0 + 0.15 * e * eclat, 1.0 - 0.45 * e * chaud).max(Vec3::splat(0.2))
 }
 
 #[cfg(test)]
@@ -503,6 +550,50 @@ mod tests_prototypes {
         let mut v: Vec<(f32, f32)> = (0..300).map(tour).collect();
         v.sort_by(|x, y| x.0.total_cmp(&y.0));
         assert!(v[0].1 > v[v.len() - 1].1 * 2.0, "l'intérieur ne file pas plus vite que le large");
+    }
+
+    /// **G : un amas tourne d'un bloc.** Deux nuages du même amas gardent leur
+    /// écart au fil du temps — c'est ce qui les distingue des nuages épars,
+    /// que Kepler disperse le long de l'orbite.
+    #[test]
+    fn un_amas_tourne_d_un_bloc() {
+        let c = DisqueConfig::protoplanetaire(0, 10.0, 100.0, 1000.0).avec_nuages_3d(300, 0.05).avec_amas(6);
+        // Les nuages 0 et 6 sont dans le même amas (rang modulo 6).
+        let ecart = |t: f32| (nuage_3d(0, &c, t).0 - nuage_3d(6, &c, t).0).length();
+        assert!((ecart(0.0) - ecart(80.0)).abs() < ecart(0.0) * 0.05 + 1e-3, "l'amas se disperse");
+        // Et l'amas reste un amas : ses nuages sont proches les uns des autres.
+        assert!(ecart(0.0) < 0.3 * (c.externe - c.interne), "amas trop étalé : {}", ecart(0.0));
+    }
+
+    /// **I : les nuages suivent leurs bras, et le motif tourne d'un bloc.**
+    /// L'œil reste dégagé, et le motif ne se cisaille pas : deux instants
+    /// donnent la même spirale, tournée.
+    #[test]
+    fn l_ouragan_garde_sa_spirale() {
+        let c = DisqueConfig::protoplanetaire(0, 10.0, 100.0, 1000.0).avec_nuages_3d(300, 0.05).avec_bras(3);
+        for k in 0..300 {
+            let (p, _, _, t) = nuage_3d(k, &c, 0.0);
+            assert!(t >= 0.1, "nuage {k} dans l'œil");
+            let (q, _, _, _) = nuage_3d(k, &c, 40.0);
+            let rot = |p: Vec3| p.z.atan2(p.x);
+            let tour = (rot(q) - rot(p)).rem_euclid(std::f32::consts::TAU);
+            let (r0, _, _, _) = nuage_3d(0, &c, 0.0);
+            let (r1, _, _, _) = nuage_3d(0, &c, 40.0);
+            let tour0 = (rot(r1) - rot(r0)).rem_euclid(std::f32::consts::TAU);
+            assert!((tour - tour0).abs() < 1e-3, "nuage {k} : le motif se cisaille");
+        }
+    }
+
+    /// **H : la teinte varie d'un nuage à l'autre, sans jamais s'éteindre** ;
+    /// neutre quand l'écart est nul.
+    #[test]
+    fn les_teintes_varient_sans_s_eteindre() {
+        let neutre = DisqueConfig::protoplanetaire(0, 10.0, 100.0, 1000.0);
+        assert_eq!(teinte_nuage(5, &neutre), Vec3::ONE);
+        let c = neutre.avec_aspect_nuages(1.0, 1.0);
+        let teintes: Vec<Vec3> = (0..50).map(|k| teinte_nuage(k, &c)).collect();
+        assert!(teintes.iter().all(|t| t.min_element() >= 0.2), "un nuage s'éteint");
+        assert!(teintes.iter().any(|t| t.x > t.z * 1.3) && teintes.iter().any(|t| t.z > t.x * 1.3), "pas de variété");
     }
 
     /// **Une grappe a un côté éclairé et un côté dans l'ombre** : c'est ce qui
