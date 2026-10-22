@@ -212,7 +212,7 @@ bons »*), renommés d'après ce qu'ils montrent, et trois de plus :
 | **G2** | 28 amas massés | G1, deux fois plus d'amas (30 nuages par amas, même taille) |
 | **G3** | 84 amas massés | G1, six fois plus d'amas — 20 160 boules, le plus lourd |
 | **H** | nébuleuse de débris | 1 600 grappes de 5, ×1,5, ±30 %, **teintes variées** d'un nuage à l'autre — *« un aspect artistique »* |
-| **I** | ouragan | **l'étoile est l'œil** : un **mur** de nuages tout autour d'elle (20 %), et 3 bras spiraux logarithmiques qui en partent, motif qui tourne d'un bloc — *« un aspect un peu ouragan »* |
+| **I** | ouragan | **l'étoile est l'œil** : un **mur** de nuages tout autour d'elle (20 %), et **7 bras inégaux** qui en partent, 1 800 nuages **tassés vers le centre** ; motif qui tourne d'un bloc — *« un aspect un peu ouragan »* |
 
 Gardes : un amas garde son écart au fil du temps (tourne d'un bloc), la
 spirale ne se cisaille pas et l'œil reste vide (red-check : Kepler remis),
@@ -248,6 +248,15 @@ rayon, y fondaient — le centre restait vide. Désormais un **mur de l'œil**
 (t 0,04 à 0,12) entoure l'étoile, les bras partent de lui, et la taille des
 nuages d'ouragan ne descend pas sous celle du quart de l'anneau. Garde : le
 mur occupe les quatre quadrants (red-check : mur retiré, `[6, 2, 4, 5]`).
+
+Troisième retour : *« la zone où la majorité des débris est cumulée doit être
+plus au centre, ce n'est ni assez dense ni représentatif d'un cyclone ; plus
+de bras, randomiser leur taille / aspect »*. Les nuages se tassent vers l'œil
+(t en h^1,8), deux fois plus nombreux (1 800), sur **7 bras** dont chacun tire
+sa longueur (35 à 100 % de l'anneau), sa largeur, son enroulement, son départ
+et la taille de ses nuages. Garde : plus de la moitié des nuages dans le tiers
+intérieur (red-check : répartition uniforme, 119 / 300). Le test du motif
+rigide a aussi attrapé un oubli en route : les bras ne tournaient plus.
 
 *« Le cumul de nuages finit par donner des zones très brillantes quand on
 regarde à travers G3 sur le plan horizontal du disque »* : les nuages sont

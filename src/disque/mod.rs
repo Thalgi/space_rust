@@ -539,7 +539,7 @@ pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32,
     let h = |s: f32| hache(k as f32, c.graine, s);
     let rayon = |t: f32| c.interne + t * (c.externe - c.interne);
     let kepler = |r: f32| (c.gm / (r * r * r).max(1e-6)).sqrt();
-    let (t, ang, z_rel) = if c.nuages_amas > 0 {
+    let (t, ang, z_rel, gros) = if c.nuages_amas > 0 {
         // **G — des amas massés** : chaque nuage appartient à un amas, posé
         // près du plan ; l'amas tourne d'un bloc à la vitesse de son centre,
         // sans se disperser le long de l'orbite — la gravité les rassemble.
@@ -548,7 +548,7 @@ pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32,
         let tc = 0.08 + 0.84 * ha(1.0);
         let t = (tc + (h(1.0) - 0.5) * 0.09).clamp(0.0, 1.0);
         let ang = ha(2.0) * TAU + (h(2.0) - 0.5) * 0.45 + kepler(rayon(tc)) * temps;
-        (t, ang, (h(3.0) * 2.0 - 1.0) * 0.5)
+        (t, ang, (h(3.0) * 2.0 - 1.0) * 0.5, 1.0)
     } else if c.nuages_bras > 0 {
         // **I — un ouragan dont l'œil est l'étoile** : un quart des nuages
         // fait le **mur de l'œil**, un anneau serré tout autour d'elle ; les
@@ -558,20 +558,30 @@ pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32,
         // ⚠️ Les bras partaient d'abord de t = 0,1, tirés vers l'extérieur
         // (√) : le centre restait vide, et l'on voyait *« le truc à trois
         // bras »*, pas un cyclone autour du soleil (2026-10-22).
+        // Second retour : *« la zone où la majorité des débris est cumulée
+        // doit être plus au centre […] plus de bras, randomiser leur taille /
+        // aspect »* — d'où des nuages tassés vers l'œil (h^1,8), et des bras
+        // inégaux : longueur, largeur, enroulement, taille de leurs nuages et
+        // départ propres à chacun.
         let tourne = kepler(rayon(0.5)) * temps;
         if h(6.0) < 0.2 {
-            (0.04 + 0.08 * h(1.0), h(2.0) * TAU + tourne, (h(3.0) * 2.0 - 1.0) * 0.6)
+            (0.04 + 0.08 * h(1.0), h(2.0) * TAU + tourne, (h(3.0) * 2.0 - 1.0) * 0.6, 1.0)
         } else {
-            let bras = (k % c.nuages_bras) as f32;
-            let t = 0.03 + 0.97 * h(1.0);
-            let spirale = bras * TAU / c.nuages_bras as f32 + 2.2 * (rayon(t) / c.interne.max(1e-3)).ln();
-            (t, spirale + (h(2.0) - 0.5) * 0.55 + tourne, (h(3.0) * 2.0 - 1.0) * 0.8)
+            let bras = k % c.nuages_bras;
+            let hb = |s: f32| hache(bras as f32 + 7_000.0, c.graine, s);
+            let longueur = 0.35 + 0.65 * hb(1.0);
+            let largeur = 0.25 + 0.6 * hb(2.0);
+            let enroulement = 1.9 + 0.6 * hb(3.0);
+            let depart = (bras as f32 + (hb(4.0) - 0.5) * 0.6) * TAU / c.nuages_bras as f32;
+            let t = 0.04 + (longueur - 0.04) * h(1.0).powf(1.8);
+            let spirale = depart + enroulement * (rayon(t) / c.interne.max(1e-3)).ln();
+            (t, spirale + (h(2.0) - 0.5) * largeur + tourne, (h(3.0) * 2.0 - 1.0) * 0.8, 0.7 + 0.7 * hb(5.0))
         }
     } else {
         // **C — des nuages épars** sur l'anneau, chacun à sa vitesse de Kepler.
         let t = h(1.0);
         let ang = h(2.0) * TAU + kepler(rayon(t)) * temps;
-        (t, ang, (h(3.0) * 2.0 - 1.0) * 1.5)
+        (t, ang, (h(3.0) * 2.0 - 1.0) * 1.5, 1.0)
     };
     let r = rayon(t);
     let z = z_rel * c.h_r * r;
@@ -580,7 +590,7 @@ pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32,
     // L'ouragan garde des nuages visibles jusqu'au mur de l'œil : leur
     // taille ne fond pas avec le rayon sous le quart de l'anneau.
     let r_taille = if c.nuages_bras > 0 { r.max(rayon(0.25)) } else { r };
-    let taille = r_taille * (0.03 + 0.05 * h(5.0)) * c.taille_nuages;
+    let taille = r_taille * (0.03 + 0.05 * h(5.0)) * c.taille_nuages * gros;
     (vec3(ang.cos() * r, z, ang.sin() * r), taille, eclat, t)
 }
 
@@ -681,6 +691,10 @@ mod tests_prototypes {
             assert!((tour - tour0).abs() < 1e-3, "nuage {k} : le motif se cisaille");
         }
         assert!(quadrants.iter().all(|&n| n >= 10), "pas de mur autour de l'œil : {quadrants:?}");
+        // Les débris se tassent vers l'œil : plus de la moitié dans le tiers
+        // intérieur de l'anneau.
+        let dedans = (0..300).filter(|&k| nuage_3d(k, &c, 0.0).3 < 0.33).count();
+        assert!(dedans > 150, "débris pas assez au centre : {dedans} / 300");
     }
 
     /// **H : la teinte varie d'un nuage à l'autre, sans jamais s'éteindre** ;

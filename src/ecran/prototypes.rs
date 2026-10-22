@@ -88,16 +88,17 @@ pub fn prototypes() -> Vec<Prototype> {
             },
             distance: d,
         },
-        // « Un aspect un peu ouragan » : trois bras spiraux autour d'un œil,
-        // un motif qui tourne d'un bloc.
+        // « Un aspect un peu ouragan » : des bras spiraux autour de l'étoile,
+        // qui est l'œil, un motif qui tourne d'un bloc. Second retour : plus
+        // de bras (7), inégaux, et deux fois plus de nuages, tassés au centre.
         Prototype {
             nom: "Disque proto I : ouragan",
             construire: || {
                 disque(
                     DisqueConfig { granulation: 0.15, ..proto() }
-                        .avec_nuages_3d(900, 0.1)
+                        .avec_nuages_3d(1800, 0.1)
                         .avec_grappe(5)
-                        .avec_bras(3)
+                        .avec_bras(7)
                         .avec_aspect_nuages(1.2, 0.0),
                 )
             },
