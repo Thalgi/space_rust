@@ -347,6 +347,24 @@ impl Objet {
         (is_mouse_button_pressed(MouseButton::Left) && ok.contains(m)) || is_key_pressed(KeyCode::Enter)
     }
 
+    /// La vue isolée ouverte directement sur un prototype (`PROTO=<rang>`,
+    /// avec `CAPTURE` : juger un essai sans main sur la souris).
+    pub fn sur_prototype(rang: usize) -> Self {
+        let mut o = Self::new();
+        if let Some(spec) = touche_4(rang, super::prototypes::prototypes().len()) {
+            o.prototype = rang + 1;
+            o.spec = spec;
+            o.sys = batir(&o.spec);
+            o.cam.set_dist(dist_pour(&o.spec));
+        }
+        // `PITCH=<degrés>` : l'inclinaison de la caméra pour la capture — un
+        // disque ne se juge pas seulement en plongée.
+        if let Some(p) = std::env::var("PITCH").ok().and_then(|p| p.parse::<f32>().ok()) {
+            o.cam.pitch = p.to_radians();
+        }
+        o
+    }
+
     fn charger(&mut self, forcer: Option<bool>) {
         self.spec = Specimen::aleatoire(forcer);
         self.sys = batir(&self.spec);

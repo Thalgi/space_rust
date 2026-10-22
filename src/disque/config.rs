@@ -86,6 +86,9 @@ pub struct DisqueConfig {
     pub h_r: f32,
     /// **C** : nuages de poussière en volume, en orbite de Kepler. 0 = aucun.
     pub nuages_3d: u32,
+    /// **F** : boules par nuage — à 1, un disque flou lisse ; au-delà, une
+    /// grappe de boules qui se chevauchent, au contour bosselé : cotonneux.
+    pub grappe: u32,
 }
 
 impl DisqueConfig {
@@ -126,6 +129,7 @@ impl DisqueConfig {
             couches: 1,
             h_r: 0.0,
             nuages_3d: 0,
+            grappe: 1,
         }
     }
 
@@ -147,6 +151,12 @@ impl DisqueConfig {
     pub fn avec_nuages_3d(mut self, n: u32, h_r: f32) -> Self {
         self.nuages_3d = n.min(4000);
         self.h_r = h_r.max(0.0);
+        self
+    }
+
+    /// Prototype **F** : voir le champ `grappe`.
+    pub fn avec_grappe(mut self, boules: u32) -> Self {
+        self.grappe = boules.clamp(1, 8);
         self
     }
 

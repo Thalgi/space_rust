@@ -29,16 +29,27 @@ pub struct Prototype {
 
 /// **Les prototypes en cours.** Vide = aucun prototype : la touche 4 le dit.
 pub fn prototypes() -> Vec<Prototype> {
-    // Lot 12.2 : le disque protoplanétaire, quatre façons de lui donner du
+    // Lot 12.2 : le disque protoplanétaire, plusieurs façons de lui donner du
     // volume et de la vie. Le cadre : 2,2 fois son rayon externe.
+    // ⚠️ **A (voile bouillonnant) refusé seul** à l'écran le 2026-10-22, et
+    // retiré de la liste — mais **gardé dans D**, à la demande : son code
+    // reste, pour D seulement.
     let d = 8.0 * UA * 2.2;
     vec![
-        Prototype { nom: "Disque proto A : voile bouillonnant", construire: || disque(proto().avec_nuages(0.8)), distance: d },
         Prototype { nom: "Disque proto B : disque epais (couches)", construire: || disque(proto().avec_couches(7, 0.08)), distance: d },
         Prototype { nom: "Disque proto C : nuages de poussiere 3D", construire: || disque(proto().avec_nuages_3d(500, 0.08)), distance: d },
         Prototype {
             nom: "Disque proto D : les trois",
             construire: || disque(proto().avec_nuages(0.8).avec_couches(7, 0.08).avec_nuages_3d(500, 0.08)),
+            distance: d,
+        },
+        // Demandé le 2026-10-22 : « des nuages plus denses ».
+        Prototype { nom: "Disque proto E : nuages 3D denses", construire: || disque(proto().avec_nuages_3d(1500, 0.08)), distance: d },
+        // Demandé le 2026-10-22 : « des nuages plus cotonneux » — chaque nuage
+        // devient une grappe de six boules.
+        Prototype {
+            nom: "Disque proto F : nuages 3D cotonneux",
+            construire: || disque(proto().avec_nuages_3d(500, 0.08).avec_grappe(6)),
             distance: d,
         },
     ]

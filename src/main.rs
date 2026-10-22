@@ -105,6 +105,11 @@ async fn main() {
     if capture.is_some() {
         etat = Etat::Skymap(Box::new(Skymap::new()));
     }
+    // `PROTO=<rang>` : la vue isolée, directement sur ce prototype (touche 4).
+    // Combiné à `CAPTURE`, de quoi juger un essai sans main sur la souris.
+    if let Some(rang) = std::env::var("PROTO").ok().and_then(|r| r.parse().ok()) {
+        etat = Etat::Objet(Box::new(Objet::sur_prototype(rang)));
+    }
     let mut frames_capture = 0u32;
 
     loop {
@@ -232,10 +237,16 @@ async fn main() {
             frames_capture += 1;
             // Quelques frames de chauffe : le premier rendu d'une icône
             // (cache vide) prend une frame de plus que les suivantes.
-            if frames_capture == 300 {
-                get_screen_data().export_png(chemin);
-                println!("CAPTURE {chemin}");
-                return;
+            // **Quatre images consécutives** (`_0` à `_3`) : un clignotement
+            // d'une frame à l'autre ne se voit pas sur une image seule.
+            if (300..304).contains(&frames_capture) {
+                let n = frames_capture - 300;
+                let fichier = chemin.replace(".png", &format!("_{n}.png"));
+                get_screen_data().export_png(&fichier);
+                println!("CAPTURE {fichier}");
+                if n == 3 {
+                    return;
+                }
             }
         }
 

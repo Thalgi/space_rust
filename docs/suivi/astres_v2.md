@@ -142,7 +142,33 @@ sillons), la même jeune étoile ; touche 4 :
 
 Gardes : `les_nuages_tournent_comme_un_disque` (rayon tenu, épaisseur tenue,
 l'intérieur file plus vite — red-check : vitesse uniforme), et
-`les_couches_s_empilent_autour_du_plan`. **Question encore ouverte** : le
+`les_couches_s_empilent_autour_du_plan`.
+
+**Premier retour écran** (même jour) :
+- **A refusé seul** et retiré de la liste — mais **gardé dans D** à la demande
+  (« si le A avait un effet sur le D, je veux que ça soit gardé juste pour
+  le D »). Son code reste, pour D seulement.
+- **Les nuages 3D gonflaient et dégonflaient** : leur taille suivait leur
+  cycle de vie. Taille **fixe** désormais, seul l'éclat apparaît et s'efface ;
+  une garde l'exige (red-check : taille variable remise).
+- **E — nuages 3D denses** : 1 500 au lieu de 500.
+- **F — nuages 3D cotonneux** : chaque nuage devient une **grappe** de six
+  boules qui se chevauchent, de tailles inégales, décalées en 3D — le contour
+  bosselé d'un cumulus (`boule_de_grappe`, garde : les boules restent près du
+  centre, la première au centre et la plus grosse ; red-check fait).
+- **B « clignote »** : **non reproduit**. Outil de capture étendu pour
+  l'occasion — `PROTO=<rang>` ouvre la vue isolée sur un prototype, `PITCH`
+  incline la caméra, et `CAPTURE` enregistre désormais **quatre images
+  consécutives** (`_0` à `_3`). Mesuré, caméra immobile : B ne change pas plus
+  d'une image à l'autre que les autres (~1 % en Palette, ~0,35 % en Net, les
+  particules). En attente : dans quelle situation, quel mode.
+- ⚠️ **Trouvé en mesurant** : en mode **Palette**, la quantification écrase
+  presque tout le voile en noir — ses bruns sombres tombent sous la couleur
+  la plus sombre de la palette. Vrai des quatre prototypes **et** du disque
+  protoplanétaire d'origine. Piste pour le scintillement : un voile sombre et
+  translucide à la limite de deux couleurs bascule de l'une à l'autre au
+  tramage dès que l'image bouge. L'utilisateur teste en baissant la
+  saturation. **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?
 
