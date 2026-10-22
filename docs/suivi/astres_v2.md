@@ -271,6 +271,37 @@ visible au travers. Un premier seuil à 1,2 éteignait tout, même de face.
 Garde `les_nuages_superposes_saturent` (red-check : amorti à 1). `DIST`
 s'ajoute à `PITCH`/`YAW` pour les captures d'un prototype.
 
+**Chaque prototype décliné en quatre** (2026-10-22) : *« une version Full
+pour avoir l'anneau complet sauf les sillons générés par une planète, une
+version Ringed avec deux à trois anneaux du même type et des planètes
+dispersées, une version Mixed avec plusieurs types d'anneau, dont au moins un
+ou deux du proto »*. Les prototypes deviennent des **habillages** posés sur
+n'importe quel anneau (`Habillage`), d'où quatre entrées chacun — 40 en tout,
+Maj+4 pour revenir en arrière :
+
+| Suffixe | Ce qu'on y voit |
+|---|---|
+| (base) | l'anneau de la galerie, 0,3–8 UA, deux sillons ondulés |
+| **-F** | l'anneau complet, **un sillon** à 4,15 UA où tourne une proto-planète en fusion |
+| **-R** | 3 anneaux (B, D, F, G2, H) ou 2 (C, E, G1, G3, I), planètes dans les écarts, une géante au-delà |
+| **-M** | 2 anneaux du proto, une ceinture d'astéroïdes entre eux, Kuiper au-delà ; une planète, une géante |
+
+Disques et planètes y partagent le plan de l'écliptique
+(`Soleil::avec_disque_ecliptique`) : une planète creuse son sillon dans le
+disque, pas à côté. Les nuages d'un -R ou -M sont **partagés** entre ses
+anneaux (amas compris, trente nuages chacun), sans quoi un G3-R porterait
+trois fois ses 20 000 boules. Planètes grossies comme en galerie (2,4 ; 4,0).
+Sillons de -F **sans festons** : ils suivent l'horloge du disque, la planète
+celle du système, et ne resteraient pas accordés.
+
+**Corrigé en route — les nuages comblaient les sillons** : seul le voile se
+creusait. `hors_lacunes` éteint un nuage selon la profondeur du sillon où il
+tombe, fondu sur le dernier tiers du bord ; une bande brillante n'y touche
+pas. Vérifié en capture (G1-F, I-F : le sillon net, la planète dedans).
+Gardes : `un_sillon_se_vide_de_ses_nuages` (red-check : profondeur ignorée),
+`les_planetes_d_un_annele_passent_entre_les_anneaux` (red-check : anneau
+élargi sur une planète), et quatre entrées par habillage.
+
 **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?

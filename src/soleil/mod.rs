@@ -577,6 +577,16 @@ impl Soleil {
         self
     }
 
+    /// Pose un disque dans le **plan de l'écliptique** (normale Y) : celui
+    /// où `ajouter_planete_autour` pose les planètes d'inclinaison nulle.
+    /// Pour les prototypes où une planète creuse son sillon dans le disque.
+    pub fn avec_disque_ecliptique(mut self, cfg: DisqueConfig) -> Self {
+        let mut d = Disque::new(cfg.avec_normale(Vec3::Y));
+        d.corps_mut().position = self.base.position;
+        self.disques.push(d);
+        self
+    }
+
     /// **Facteur d'éclat courant** : `1,0` hors sursaut, brièvement au-delà
     /// pendant un flare. C'est la seule trace du lot 3 qui se voit à
     /// **n'importe quelle échelle** (§1) — le ruban, lui, ne se lit qu'à

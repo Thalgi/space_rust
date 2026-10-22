@@ -406,6 +406,11 @@ impl Objet {
         // **Les prototypes en cours** (`prototypes.rs`) : un par appui. Aucun
         // en cours : un message le dit, et son OK fait ce que fait la touche 1.
         if is_key_pressed(KeyCode::Key4) {
+            // Maj+4 : le précédent — ils sont quarante (2026-10-22).
+            let n = super::prototypes::prototypes().len().max(1);
+            if is_key_down(KeyCode::LeftShift) || is_key_down(KeyCode::RightShift) {
+                self.prototype = (self.prototype + 2 * n - 2) % n;
+            }
             match touche_4(self.prototype, super::prototypes::prototypes().len()) {
                 Some(spec) => {
                     self.prototype += 1;

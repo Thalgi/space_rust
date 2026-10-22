@@ -391,6 +391,10 @@ impl Disque {
             let mut boules = Vec::new();
             for k in 0..n {
                 let (loc, taille, eclat, t) = nuage_3d(k, &self.cfg, self.temps);
+                let eclat = eclat * hors_lacunes(t, &self.cfg);
+                if eclat <= 0.0 {
+                    continue;
+                }
                 let rel = self.axe_u * loc.x + self.axe_n * loc.y + self.axe_v * loc.z;
                 // ⚠️ **Pas teinté par la lumière de l'étoile** : elle monte à
                 // chaque flare, et le disque entier battait avec — « un effet
@@ -439,6 +443,22 @@ impl Disque {
             gl_use_default_material();
         }
     }
+}
+
+/// **Ce que les sillons laissent d'un nuage** posé en `t` : 1 hors sillon,
+/// `1 − profondeur` en son cœur, un fondu sur le dernier tiers du bord.
+///
+/// Sans ça, seul le voile se creusait : les nuages 3D comblaient le sillon
+/// qu'une planète vient d'ouvrir (prototypes -F, 2026-10-22).
+pub(crate) fn hors_lacunes(t: f32, c: &DisqueConfig) -> f32 {
+    c.lacunes
+        .iter()
+        .filter(|l| l.y > 0.0 && l.z > 0.0 && (t - l.x).abs() < l.y)
+        .map(|l| {
+            let bord = 1.0 - ((t - l.x).abs() / l.y - 0.66).clamp(0.0, 0.34) / 0.34;
+            1.0 - l.z.min(1.0) * bord
+        })
+        .product()
 }
 
 /// **Seuil d'empilement** au-delà duquel les nuages superposés cessent de
@@ -721,6 +741,19 @@ mod tests_prototypes {
         }
         // Caméra au-dessous : tout s'inverse.
         assert!(du_cote_camera(vec3(0.0, -0.2, 2.0), n, -cam));
+    }
+
+    /// **Un sillon se vide aussi de ses nuages**, et seulement lui : intact
+    /// au loin, vidé selon sa profondeur en son cœur ; une bande brillante
+    /// (profondeur négative) n'y touche pas.
+    #[test]
+    fn un_sillon_se_vide_de_ses_nuages() {
+        let c = DisqueConfig::protoplanetaire(0, 10.0, 100.0, 1000.0).avec_lacune(0.5, 0.05, 0.9).avec_bande(0.2, 0.05, 0.5);
+        assert!((hors_lacunes(0.5, &c) - 0.1).abs() < 1e-4, "cœur du sillon : {}", hors_lacunes(0.5, &c));
+        assert_eq!(hors_lacunes(0.8, &c), 1.0);
+        assert_eq!(hors_lacunes(0.2, &c), 1.0, "la bande brillante vide les nuages");
+        let bord = hors_lacunes(0.547, &c);
+        assert!(bord > 0.1 && bord < 1.0, "pas de fondu au bord : {bord}");
     }
 
     /// **Les nuages superposés saturent au lieu de s'additionner** : une
