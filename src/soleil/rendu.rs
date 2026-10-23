@@ -90,6 +90,9 @@ impl Soleil {
             let q = self.axe_rot;
             mat.set_uniform("axe_rot", (q.x, q.y, q.z, q.w));
             mat.set_uniform("accretion_pol", self.accretion_pol);
+            // Les taches suivent le dipôle de son disque, s'il est incliné.
+            let mag = self.disques.iter().find_map(|d| d.axe_magnetique()).unwrap_or(Vec3::ZERO);
+            mat.set_uniform("axe_magnetique", (mag.x, mag.y, mag.z));
             mat.set_uniform_array("spots", &spots[..]);
             mat.set_uniform_array("poles", &champ_uniforme[..]);
 

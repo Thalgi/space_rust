@@ -15,7 +15,8 @@
 //! fonction de construction, appelée à l'affichage (un `Soleil` exige le
 //! contexte graphique, la liste elle-même se teste sans lui).
 
-use crate::disque::DisqueConfig;
+use crate::disque::{habillage, DisqueConfig};
+use crate::etoile::UA;
 use crate::soleil::{Soleil, ACCRETION_PROTO, JETS_PROTO};
 use crate::systeme::Systeme;
 use macroquad::prelude::*;
@@ -70,7 +71,79 @@ pub fn prototypes() -> Vec<Prototype> {
         b("T1B2 : dipole aligne, rideaux tout autour", t1b2),
         b("T1B3 : bras spiraux jusqu'a l'etoile", t1b3),
         b("T1B4 : bras spiraux puis flots magnetiques", t1b4),
+        // **Les exemples à ajuster au cas par cas** (2026-10-23) : T1B4 retenu
+        // pour la T Tauri — *« le reste a sa pertinence, on pourrait
+        // l'utiliser pour d'autres systèmes »*. Ses taches suivent désormais
+        // les pôles magnétiques (dipôle incliné).
+        b("T1B4-A : + bord interne brulant", t1b4_bord),
+        Prototype {
+            nom: "T Tauri T1B4-G : + grand disque cotonneux (0,9 - 8 UA)".into(),
+            construire: Box::new(avec_grand_disque),
+            distance: 8.0 * UA * 2.2,
+        },
+        b("T1B4 tirage 1", |c, l| tirage(c, l, 0.17)),
+        b("T1B4 tirage 2", |c, l| tirage(c, l, 0.53)),
+        b("T1B4 tirage 3", |c, l| tirage(c, l, 0.88)),
+        Prototype {
+            nom: "Herbig Ae/Be : bras spiraux et bord brulant, sans entonnoirs".into(),
+            construire: Box::new(herbig),
+            distance: HERBIG.1 * 24.0 * 2.2,
+        },
     ]
+}
+
+/// **T1B4-A** : T1B4, et le bord interne brûlant — l'anneau incandescent au
+/// ras de la cavité de l'image d'artiste.
+fn t1b4_bord(c: DisqueConfig, largeur: f32) -> DisqueConfig {
+    t1b4(c, largeur).avec_bord_brulant(1.0)
+}
+
+/// **Un tirage de T1B4 d'après une graine** `g` (0..1) : ce que le jeu en
+/// ferait d'une étoile à l'autre — dérivé, jamais tiré, comme le reste.
+/// Cavité de 4 à 7 rayons, dipôle incliné de 0 à 34° (rideaux s'il est
+/// presque droit, deux flots sinon), deux à quatre bras, bord brûlant une
+/// fois sur deux.
+fn tirage(c: DisqueConfig, largeur: f32, g: f32) -> DisqueConfig {
+    let f = |k: f32| (g * k).fract();
+    let r = gabarit().2;
+    let incl = 0.6 * f(7.13);
+    let flots = if incl > 0.15 { 2 } else { 4 + (f(2.9) * 3.0) as u32 };
+    let c = DisqueConfig { interne: (4.0 + 3.0 * f(11.1)) * r, ..plus_plat(c, largeur) }
+        .avec_spirales_accretion(2 + (f(3.7) * 3.0) as u32, r)
+        .avec_entonnoirs(flots, r, incl);
+    if f(5.3) > 0.5 { c.avec_bord_brulant(1.0) } else { c }
+}
+
+/// **T1B4-G** : T1B4, et autour de lui le grand disque protoplanétaire
+/// cotonneux, de sa lisière (0,9 UA) à 8 UA — l'échelle encore en question.
+fn avec_grand_disque() -> Systeme {
+    let s = etoile_jeune();
+    let petit = petit_disque(&s, 48.0, t1b4);
+    let grand = habillage::cotonneux(habillage::anneau(0.9, 8.0));
+    let mut sys = Systeme::new();
+    sys.ajouter(Box::new(s.avec_disque(petit).avec_disque(grand)));
+    sys
+}
+
+/// Une Herbig Ae/Be : `(température, rayon, luminosité)`, sur le gabarit de
+/// l'étoile A du catalogue.
+const HERBIG: (f32, f32, f32) = (9000.0, 2.6, 2.0);
+
+/// **Herbig Ae/Be**, la grande sœur de la T Tauri : plus massive, plus chaude.
+/// Son champ est faible — pas de cavité magnétosphérique, pas d'entonnoirs :
+/// le disque descend presque jusqu'à elle (1,5 rayon) et la matière y entre
+/// par les bras (T1B3). Son bord interne, gonflé et brûlant, est célèbre.
+fn herbig() -> Systeme {
+    let (temp, rayon, lumi) = HERBIG;
+    let s = Soleil::new(Vec3::ZERO, rayon, crate::etoile::couleur_etoile("A (blanche)", temp), lumi).avec_jets_3d(JETS_PROTO);
+    let mut c = s.config_protosolaire();
+    let largeur = 48.0 * rayon / c.externe;
+    c.interne = 1.5 * rayon;
+    c.externe = 48.0 * rayon;
+    let c = plus_plat(c, largeur).avec_spirales_accretion(4, rayon).avec_bord_brulant(1.2);
+    let mut sys = Systeme::new();
+    sys.ajouter(Box::new(s.avec_disque(c)));
+    sys
 }
 
 /// **T1B1** : dipôle incliné de 20°, deux flots — un par hémisphère, face à
@@ -153,17 +226,27 @@ fn gabarit() -> crate::etoile::Gabarit {
 /// **La T Tauri**, ses jets, ses taches d'accrétion, et son petit disque en
 /// couches, porté à `externe` rayons stellaires et rhabillé de `coton`.
 fn jeune(externe: f32, coton: Coton) -> Systeme {
-    let (tmin, tmax, rayon, lumi, _, _) = gabarit();
-    let s = Soleil::new(Vec3::ZERO, rayon, crate::etoile::couleur_etoile(NOM, (tmin + tmax) * 0.5), lumi)
-        .avec_jets_3d(JETS_PROTO)
-        .avec_accretion_polaire(ACCRETION_PROTO);
-    let mut c = s.config_protosolaire();
-    let largeur = externe * rayon / c.externe;
-    c.externe = externe * rayon;
-    let c = coton(c, largeur);
+    let s = etoile_jeune();
+    let c = petit_disque(&s, externe, coton);
     let mut sys = Systeme::new();
     sys.ajouter(Box::new(s.avec_disque(c)));
     sys
+}
+
+/// La T Tauri, ses jets et ses taches d'accrétion, sans disque.
+fn etoile_jeune() -> Soleil {
+    let (tmin, tmax, rayon, lumi, _, _) = gabarit();
+    Soleil::new(Vec3::ZERO, rayon, crate::etoile::couleur_etoile(NOM, (tmin + tmax) * 0.5), lumi)
+        .avec_jets_3d(JETS_PROTO)
+        .avec_accretion_polaire(ACCRETION_PROTO)
+}
+
+/// Son petit disque, porté à `externe` rayons et rhabillé de `coton`.
+fn petit_disque(s: &Soleil, externe: f32, coton: Coton) -> DisqueConfig {
+    let mut c = s.config_protosolaire();
+    let largeur = externe * s.base.rayon / c.externe;
+    c.externe = externe * s.base.rayon;
+    coton(c, largeur)
 }
 
 #[cfg(test)]

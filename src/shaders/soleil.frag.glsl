@@ -37,6 +37,8 @@ uniform vec4 axe_rot;
 // Taches d'accrétion polaires (lot 12) : le gaz du disque tombe sur
 // l'étoile le long de son champ magnétique, près des pôles. 0 = aucune.
 uniform float accretion_pol;
+// Axe magnétique en coordonnées du monde (lot 12) : nul = les pôles de rotation.
+uniform vec3 axe_magnetique;
 
 // **Le champ magnétique de l'étoile** (sous-lot 3.4) : xyz = direction d'un
 // pôle (repère surface), w = force SIGNÉE, le signe étant la polarité.
@@ -334,7 +336,9 @@ void main() {
             // et s'écrase près des pôles — de l'axe de rotation, ici, celui
             // d'où partent les jets —, y creusant des taches chaudes,
             // grumeleuses et changeantes. Une couronne autour de chaque pôle.
-            float lat = abs(d.y);
+            // Dipôle incliné : les taches suivent ses pôles, là où les
+            // entonnoirs s'écrasent (`Disque::axe_magnetique`).
+            float lat = dot(axe_magnetique, axe_magnetique) > 0.5 ? abs(dot(n, axe_magnetique)) : abs(d.y);
             float calotte = smoothstep(0.76, 0.86, lat) * (1.0 - 0.5 * smoothstep(0.95, 1.0, lat));
             float grumeaux = fbm(d * 7.0 + dec + vec3(time * 0.4, 0.0, time * 0.3));
             float choc = calotte * smoothstep(0.42, 0.68, grumeaux);

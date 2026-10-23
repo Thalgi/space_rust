@@ -115,6 +115,8 @@ pub struct DisqueConfig {
     pub inclinaison_dipole: f32,
     /// Bras spiraux d'accrétion dans le plan, 0 = aucun.
     pub spirales_accretion: u32,
+    /// **Bord interne brûlant** (`bras::bord_brulant`) : intensité, 0 = aucun.
+    pub bord_brulant: f32,
 }
 
 impl DisqueConfig {
@@ -165,6 +167,7 @@ impl DisqueConfig {
             entonnoirs: 0,
             inclinaison_dipole: 0.0,
             spirales_accretion: 0,
+            bord_brulant: 0.0,
         }
     }
 
@@ -222,6 +225,12 @@ impl DisqueConfig {
     pub fn avec_spirales_accretion(mut self, n: u32, rayon_astre: f32) -> Self {
         self.spirales_accretion = n.min(8);
         self.rayon_astre = rayon_astre.max(0.0);
+        self
+    }
+
+    /// Voir le champ `bord_brulant`.
+    pub fn avec_bord_brulant(mut self, intensite: f32) -> Self {
+        self.bord_brulant = intensite.max(0.0);
         self
     }
 

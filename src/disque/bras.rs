@@ -22,7 +22,7 @@ pub type Boule = (Vec3, f32, Vec3, f32);
 
 /// **Les bras sont-ils allumés ?**
 pub fn actifs(c: &DisqueConfig) -> bool {
-    c.rayon_astre > 0.0 && (c.entonnoirs > 0 || c.spirales_accretion > 0)
+    c.bord_brulant > 0.0 || (c.rayon_astre > 0.0 && (c.entonnoirs > 0 || c.spirales_accretion > 0))
 }
 
 /// **Un point d'une ligne de champ dipolaire**, de son pied `pied` (dans le
@@ -77,7 +77,7 @@ fn chaleur(s: f32) -> Vec3 {
 
 /// Vitesse angulaire de l'étoile : la corotation au bord interne du disque
 /// (là où elle le tronque).
-fn rotation(c: &DisqueConfig) -> f32 {
+pub(crate) fn rotation(c: &DisqueConfig) -> f32 {
     (c.gm / c.interne.max(1e-6).powi(3)).sqrt()
 }
 
@@ -117,6 +117,28 @@ pub fn entonnoirs(c: &DisqueConfig, temps: f32) -> Vec<Boule> {
         }
     }
     v
+}
+
+/// **Le bord interne brûlant** : la poussière du bord de la cavité, chauffée
+/// à blanc par l'étoile toute proche (elle s'y sublime vers 1 500 K), et
+/// gonflée — le *puffed-up inner rim* des disques jeunes. Un anneau vif au ras
+/// de la cavité, qui tourne à la vitesse de Kepler du bord.
+pub fn bord_brulant(c: &DisqueConfig, temps: f32) -> Vec<Boule> {
+    const BOULES: u32 = 600;
+    if c.bord_brulant <= 0.0 {
+        return Vec::new();
+    }
+    let omega = rotation(c);
+    (0..BOULES)
+        .map(|j| {
+            let i = j as f32 + 20_000.0;
+            let r = c.interne * (1.0 + 0.12 * h(i, 1.0));
+            let ang = h(i, 2.0) * TAU + omega * temps;
+            let z = (h(i, 3.0) - 0.5) * 0.35 * c.interne;
+            let p = vec3(ang.cos() * r, z, ang.sin() * r);
+            (p, c.interne * (0.06 + 0.06 * h(i, 4.0)), chaleur(0.55 + 0.35 * h(i, 5.0)), c.bord_brulant * (0.2 + 0.2 * h(i, 6.0)))
+        })
+        .collect()
 }
 
 /// **Les boules des bras spiraux** au temps `temps` : du tiers interne du
@@ -185,6 +207,20 @@ mod tests {
         assert!(haut > 30 && bas > 30, "flots : {haut} en haut, {bas} en bas");
         // Entre l'astre et le bord interne, à l'épaisseur du flot près.
         assert!(b.iter().all(|x| x.0.length() <= 3.0 * 1.15 + 0.55 && x.0.length() >= 1.0 - 0.05));
+    }
+
+    /// **Le bord brûlant colle au bord de la cavité** — ni dedans, ni loin —,
+    /// et s'éteint à intensité nulle.
+    #[test]
+    fn le_bord_brulant_colle_a_la_cavite() {
+        let c = DisqueConfig::protosolaire(0, 3.0, 16.0, 1000.0).avec_bord_brulant(1.0);
+        let b = bord_brulant(&c, 1.0);
+        assert!(!b.is_empty());
+        for x in &b {
+            let r = vec2(x.0.x, x.0.z).length();
+            assert!((3.0..=3.0 * 1.12 + 1e-3).contains(&r), "boule à r = {r}");
+        }
+        assert!(bord_brulant(&DisqueConfig::protosolaire(0, 3.0, 16.0, 1000.0), 1.0).is_empty());
     }
 
     /// **Les spirales vont du disque à l'étoile**, et chauffent en chemin.

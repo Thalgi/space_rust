@@ -235,6 +235,18 @@ impl Disque {
         Some(self.point_du_plan(r, self.phase_lacune(i)))
     }
 
+    /// **L'axe magnétique** de l'astre qui porte ce disque, en coordonnées du
+    /// monde, quand ses entonnoirs suivent un dipôle **incliné** — c'est là
+    /// que la matière s'écrase. `None` sinon : les pôles magnétiques sont
+    /// alors ceux de rotation.
+    pub fn axe_magnetique(&self) -> Option<Vec3> {
+        if self.cfg.entonnoirs == 0 || self.cfg.inclinaison_dipole.abs() < 1e-3 {
+            return None;
+        }
+        let m = bras::axe_dipole(self.cfg.inclinaison_dipole, bras::rotation(&self.cfg) * self.temps);
+        Some((self.axe_u * m.x + self.axe_n * m.y + self.axe_v * m.z).normalize_or(self.axe_n))
+    }
+
     /// **Un point du plan du disque**, à `r` du centre et à l'angle `a` —
     /// dans le sens où le disque tourne (angles croissants).
     pub fn point_du_plan(&self, r: f32, a: f32) -> Vec3 {
@@ -444,7 +456,10 @@ impl Disque {
             }
             // **Les bras de matière** (`bras`) : de la lumière propre, hors
             // de l'amorti — c'est le gaz qui chauffe en tombant.
-            let flots = bras::entonnoirs(&self.cfg, self.temps).into_iter().chain(bras::spirales(&self.cfg, self.temps));
+            let flots = bras::entonnoirs(&self.cfg, self.temps)
+                .into_iter()
+                .chain(bras::spirales(&self.cfg, self.temps))
+                .chain(bras::bord_brulant(&self.cfg, self.temps));
             for (loc, t_b, c, a) in flots {
                 let rel = self.axe_u * loc.x + self.axe_n * loc.y + self.axe_v * loc.z;
                 if du_cote_camera(rel, self.axe_n, cote_cam) != cote_camera {

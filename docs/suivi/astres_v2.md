@@ -460,6 +460,24 @@ pâles (pointillés effacés par la Palette) — retenu entre les deux. Gardes :
 taches d'accrétion de l'étoile restent à ses pôles de **rotation** ; avec un
 dipôle incliné, elles devraient suivre les pôles **magnétiques**.
 
+**T1B4 retenu pour la T Tauri** (2026-10-23) — *« le reste a sa pertinence,
+on pourrait l'utiliser pour faire d'autres systèmes random »* —, et les
+exemples évoqués, mis en prototypes pour être ajustés au cas par cas :
+
+| Proto | Ce qu'on y voit |
+|---|---|
+| T1B4-A | + le **bord interne brûlant** (`bras::bord_brulant`) : la poussière du bord de la cavité chauffée à blanc, gonflée (*puffed-up inner rim*) |
+| T1B4-G | + le **grand disque** cotonneux, de la lisière du petit (0,9 UA) à 8 UA — l'échelle encore en question |
+| T1B4 tirages 1-3 | ce que le jeu en tirerait d'une étoile à l'autre, **dérivé** d'une graine : cavité 4-7 rayons, dipôle 0-34° (rideaux s'il est presque droit), 2-4 bras, bord brûlant une fois sur deux |
+| Herbig Ae/Be | la grande sœur (gabarit de l'étoile A : 9 000 K, rayon 2,6) : champ faible, pas de cavité ni d'entonnoirs, le disque descend à 1,5 rayon, la matière entre par quatre bras ; bord brûlant |
+
+**Les taches d'accrétion suivent les pôles magnétiques** : `Disque::axe_magnetique`
+(dipôle incliné, en coordonnées du monde, tournant avec ses entonnoirs) passe
+au shader de l'étoile (uniform `axe_magnetique`) ; nul, elles restent aux
+pôles de rotation. Garde `le_bord_brulant_colle_a_la_cavite` (red-check :
+anneau élargi, boule à 3,57). Captures : les six s'affichent ; le bord brûlant
+reste discret en Palette — à régler à l'écran.
+
 **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?
