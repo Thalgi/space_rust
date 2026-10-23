@@ -405,6 +405,22 @@ tranche, 43 au plus ; le seuil passe de 6 à **16** (à 6, tout s'étouffait).
 Captures T0 : la face comme avant, la tranche pleine, sans brûler — un peu
 terne, le seuil se règle.
 
+**T1 noircissait encore par la tranche** (2026-10-23, *« T1 est bien, il a le
+même problème de disque qui noircit au milieu »*). L'amorti local, même
+corrigé, restait fragile : le plus chargé y perdait plus que ses voisins n'en
+gardaient. Il devient **global** (`attenuation_globale`) : un seul facteur
+pour tout le disque, d'après le **pic** de l'empilement (98ᵉ centile des
+cases), 1 sous `SEUIL_PIC` = 15, puis un coude doux qui plafonne le pic à
+15 + `MARGE_PIC` = 55. Les contrastes restent : le plus chargé reste le plus
+clair. L'empilement verse désormais selon le profil du halo dessiné,
+`(1 − d)²`. Mesures (pic) : de face T0 ~11, T1 ~14 ; par la tranche T0 ~24,
+T1 ~141. Captures : T0 et T1 de face inchangés, T0 par la tranche plein et
+lumineux, T1 par la tranche une bande chaude. ⚠️ **En mode Palette**, les
+halos faibles du bord de T1 deviennent une couronne noire et un liseré gris —
+absents en rendu net (vérifié) : la quantification de la palette, à reprendre
+à part. Garde `les_nuages_superposes_saturent` réécrite (red-check : coude
+débranché, pic 26 affiché 26).
+
 **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?

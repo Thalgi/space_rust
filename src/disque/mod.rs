@@ -392,7 +392,7 @@ impl Disque {
             let grappe = self.cfg.grappe.max(1);
             let n = self.cfg.nuages_3d.min(40_000 / grappe);
             // Toutes les boules, des deux côtés du plan : l'empilement à
-            // l'écran se compte sur l'ensemble (voir `amorti_superposition`).
+            // l'écran se compte sur l'ensemble (voir `attenuation_globale`).
             let mut boules = Vec::new();
             for k in 0..n {
                 let (loc, taille, eclat, t) = nuage_3d(k, &self.cfg, self.temps);
@@ -429,11 +429,13 @@ impl Disque {
                 let (e, z) = ecran(b.0);
                 pile.verser(e, b.1 / z, b.3);
             }
+            // Un seul facteur pour tout le disque (voir `attenuation_globale`).
+            let f = attenuation_globale(pile.pic());
             for (q, t_j, c, a, cote) in boules {
                 if cote != cote_camera {
                     continue;
                 }
-                let a = a * amorti_superposition(pile.lire(ecran(q).0));
+                let a = a * f;
                 crate::impostor::push_quad(&mut v, &mut i, cam, q, t_j, Color::new(c.x * a, c.y * a, c.z * a, a));
                 if v.len() >= crate::impostor::QUADS_PAR_DESSIN * 4 {
                     crate::impostor::dessiner_par_lots(&mut v, &mut i, Some(crate::impostor::halo_partage()));
@@ -472,7 +474,9 @@ pub(crate) fn hors_lacunes(t: f32, c: &DisqueConfig) -> f32 {
 /// boules, et les grosses dont le centre tombait là s'éteignaient avec elles,
 /// alors qu'elles couvraient dix fois plus large — le centre, le plus
 /// chargé, ressortait **noir** (T Tauri par la tranche, 2026-10-23). Une
-/// boule plus petite qu'une case n'y verse que la part qu'elle en couvre.
+/// boule plus petite qu'une case n'y verse que la part qu'elle en couvre, et
+/// le dégressif est celui du halo dessiné, `(1 − d)²` : la pile mesure ce
+/// qu'on voit.
 struct Empilement {
     cote: usize,
     case: f32,
@@ -515,43 +519,65 @@ impl Empilement {
                     continue;
                 }
                 if let Some(i) = self.indice(cx + dx, cy + dy) {
-                    self.pile[i] += a * couverture * (1.0 - d2 / (portee * portee));
+                    self.pile[i] += a * couverture * (1.0 - d2.sqrt() / portee).powi(2);
                 }
             }
         }
     }
 
     /// L'éclat cumulé là où tombe le centre `e` ; 0 hors champ.
+    #[cfg(test)]
     fn lire(&self, e: Vec2) -> f32 {
         let c = self.en_cases(e);
         self.indice(c.x.floor() as i32, c.y.floor() as i32).map_or(0.0, |i| self.pile[i])
     }
+
+    /// **Le pic de l'empilement** : le 98ᵉ centile des cases éclairées —
+    /// le plus chargé, sans qu'une case isolée ne décide pour tout le disque.
+    fn pic(&self) -> f32 {
+        let mut p: Vec<f32> = self.pile.iter().copied().filter(|x| *x > 0.0).collect();
+        if p.is_empty() {
+            return 0.0;
+        }
+        let k = (p.len() * 98 / 100).min(p.len() - 1);
+        *p.select_nth_unstable_by(k, f32::total_cmp).1
+    }
 }
 
-/// **Seuil d'empilement** au-delà duquel les nuages superposés cessent de
-/// s'additionner : en éclat cumulé d'une case d'écran (une boule seule en
-/// verse ~0,3 à son centre).
+/// **Pic d'empilement sous lequel rien ne bouge**, et **marge** au-delà :
+/// le pic affiché ne dépasse jamais `SEUIL_PIC + MARGE_PIC`.
 ///
-/// Mesuré sur la T Tauri T0 (19 200 boules) : empilement médian ~9 de face,
-/// ~28 par la tranche, 43 au plus. À 6 — réglé quand chaque boule ne versait
-/// que dans sa case —, tout s'étouffait, de face compris ; à 16, la face est
-/// intacte et la tranche pleine, sans brûler (2026-10-23).
-const SATURATION_NUAGES: f32 = 16.0;
+/// Mesuré le 2026-10-23 (98ᵉ centile, en éclat de halo) : de face, T Tauri
+/// T0 ~11, T1 ~14 — sans brûler ; par la tranche, T0 ~24, T1 ~141 — brûlé.
+/// À une marge de 10, T1 par la tranche tombait à ×0,18 et s'éteignait ; à
+/// 40, il garde ×0,39 : une bande chaude, sans brûler. En mode Palette, les
+/// halos faibles du bord y deviennent une couronne noire et un liseré gris
+/// — la quantification de la palette, absente en rendu net.
+const SEUIL_PIC: f32 = 15.0;
+const MARGE_PIC: f32 = 40.0;
 
-/// **Amorti d'une boule selon l'empilement de sa case d'écran.**
+/// **Un seul facteur pour tous les nuages d'un disque**, d'après le pic de
+/// leur empilement à l'écran : 1 sous le seuil, puis juste ce qu'il faut pour
+/// que le pic ne dépasse pas `SEUIL_PIC + MARGE_PIC` (coude doux, `tanh`).
 ///
 /// Les nuages sont additifs (le pipeline plasma, partagé : pas de matériau
 /// de plus sous le plafond) : vus par la tranche, des dizaines s'empilaient
 /// et brûlaient l'image — *« le cumul de nuages finit par donner des zones
 /// très brillantes quand on regarde à travers G3 sur le plan horizontal du
-/// disque »* (2026-10-22). L'éclat cumulé d'une case passe donc par une
-/// saturation douce (`tanh`) : intact sous le seuil, plafonné au-delà, et
-/// chaque boule de la case porte sa part de l'amorti.
-pub(crate) fn amorti_superposition(pile: f32) -> f32 {
-    if pile <= 1e-6 {
+/// disque »* (2026-10-22).
+///
+/// ⚠️ **Global, pas boule par boule.** L'amorti était d'abord local — chaque
+/// boule selon l'empilement de sa case. Le plus chargé y perdait plus que
+/// ses voisins n'en gardaient : deux fois de suite, le cœur d'un disque vu
+/// par la tranche est ressorti **noir** — *« il a le même problème de disque
+/// qui noircit au milieu quand on regarde l'horizontale »* (2026-10-23). Un
+/// facteur commun garde les contrastes tels quels : le plus chargé reste le
+/// plus clair.
+pub(crate) fn attenuation_globale(pic: f32) -> f32 {
+    if pic <= SEUIL_PIC {
         return 1.0;
     }
-    SATURATION_NUAGES * (pile / SATURATION_NUAGES).tanh() / pile
+    (SEUIL_PIC + MARGE_PIC * ((pic - SEUIL_PIC) / MARGE_PIC).tanh()) / pic
 }
 
 /// **Une boule est-elle du côté de la caméra par rapport au plan du disque ?**
@@ -870,21 +896,27 @@ mod tests_prototypes {
         assert_eq!(dense.lire(vec2(5.0, 0.0)), 0.0, "hors champ");
     }
 
-    /// **Les nuages superposés saturent au lieu de s'additionner** : une
-    /// case peu chargée garde son éclat, une case chargée ne dépasse jamais
-    /// le seuil, et en ajouter n'assombrit pas.
+    /// **Les nuages superposés saturent au lieu de s'additionner** : sous le
+    /// seuil rien ne bouge, au-delà le pic ne dépasse jamais seuil + marge,
+    /// et en ajouter n'assombrit pas.
     #[test]
     fn les_nuages_superposes_saturent() {
-        assert!(amorti_superposition(0.1) > 0.99, "une boule seule est amortie");
-        assert_eq!(amorti_superposition(0.0), 1.0);
+        assert_eq!(attenuation_globale(0.0), 1.0);
+        assert_eq!(attenuation_globale(SEUIL_PIC), 1.0, "une vue de face est amortie");
         let mut avant = 0.0;
-        for k in 1..200 {
-            let pile = k as f32 * 0.1;
-            let total = pile * amorti_superposition(pile);
-            assert!(total <= SATURATION_NUAGES + 1e-4, "pile {pile} : {total} dépasse le seuil");
-            assert!(total >= avant - 1e-5, "pile {pile} : plus de nuages, moins d'éclat");
-            avant = total;
+        for k in 1..400 {
+            let pic = k as f32;
+            let affiche = pic * attenuation_globale(pic);
+            assert!(affiche <= SEUIL_PIC + MARGE_PIC + 1e-3, "pic {pic} : {affiche} dépasse le plafond");
+            assert!(affiche >= avant - 1e-4, "pic {pic} : plus de nuages, moins d'éclat");
+            avant = affiche;
         }
+        let mut e = Empilement::new(0.05);
+        assert_eq!(e.pic(), 0.0);
+        for _ in 0..10 {
+            e.verser(Vec2::ZERO, 0.2, 0.3);
+        }
+        assert!(e.pic() > 1.0 && e.pic() <= 3.0 + 1e-4, "pic de dix boules : {}", e.pic());
     }
 
     /// **Une grappe a un côté éclairé et un côté dans l'ombre** : c'est ce qui
