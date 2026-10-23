@@ -51,6 +51,11 @@ pub fn prototypes() -> Vec<Prototype> {
         // Le disque se cadre à 2,2 fois son rayon externe.
         distance: r * externe * 2.2,
     };
+    let b = |nom: &str, coton: Coton| Prototype {
+        nom: format!("T Tauri {nom}"),
+        construire: Box::new(move || jeune(48.0, coton)),
+        distance: r * 24.0 * 2.2,
+    };
     vec![
         t("T0 : large et tres cotonneux (retenu)", 32.0, t0),
         t("T1 : T0 plus large et plus plat", 48.0, plus_plat),
@@ -58,7 +63,44 @@ pub fn prototypes() -> Vec<Prototype> {
         t("T3 : T0, teintes variees", 32.0, teintes),
         t("T4 : T0 en grumeaux", 32.0, grumeaux),
         t("T5 : T0 evase", 32.0, evase),
+        // **Les bras de matière** (2026-10-23, `disque::bras`) : sur T1 — *« T1
+        // est bien »* —, plusieurs solutions à comparer. Cadrées plus serré,
+        // sur 24 rayons : les bras vivent près de l'étoile.
+        b("T1B1 : dipole incline, deux flots", t1b1),
+        b("T1B2 : dipole aligne, rideaux tout autour", t1b2),
+        b("T1B3 : bras spiraux jusqu'a l'etoile", t1b3),
+        b("T1B4 : bras spiraux puis flots magnetiques", t1b4),
     ]
+}
+
+/// **T1B1** : dipôle incliné de 20°, deux flots — un par hémisphère, face à
+/// chaque pôle magnétique (simulations MHD de Romanova et al.).
+fn t1b1(c: DisqueConfig, largeur: f32) -> DisqueConfig {
+    cavite(plus_plat(c, largeur)).avec_entonnoirs(2, gabarit().2, 0.35)
+}
+
+/// **La cavité magnétosphérique** : le champ tronque le disque vers 5 rayons
+/// stellaires (3 à 8 chez les T Tauri), contre 3 au petit disque du jeu —
+/// les flots qui en partent y gagnent leur longueur.
+fn cavite(c: DisqueConfig) -> DisqueConfig {
+    DisqueConfig { interne: 5.0 * gabarit().2, ..c }
+}
+
+/// **T1B2** : dipôle aligné, six rideaux tout autour, vers les deux pôles.
+fn t1b2(c: DisqueConfig, largeur: f32) -> DisqueConfig {
+    cavite(plus_plat(c, largeur)).avec_entonnoirs(6, gabarit().2, 0.0)
+}
+
+/// **T1B3** : quatre bras spiraux, du tiers interne du disque jusqu'à
+/// l'étoile, la matière chauffant en tombant.
+fn t1b3(c: DisqueConfig, largeur: f32) -> DisqueConfig {
+    cavite(plus_plat(c, largeur)).avec_spirales_accretion(4, gabarit().2)
+}
+
+/// **T1B4** : le chemin complet — trois bras spiraux amènent la matière au
+/// bord interne, deux flots magnétiques la portent jusqu'aux pôles.
+fn t1b4(c: DisqueConfig, largeur: f32) -> DisqueConfig {
+    cavite(plus_plat(c, largeur)).avec_spirales_accretion(3, gabarit().2).avec_entonnoirs(2, gabarit().2, 0.35)
 }
 
 /// **T0** (l'ex-T5) : voile en sept couches, 1 200 grappes de huit boules

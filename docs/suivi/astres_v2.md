@@ -421,6 +421,45 @@ absents en rendu net (vérifié) : la quantification de la palette, à reprendre
 à part. Garde `les_nuages_superposes_saturent` réécrite (red-check : coude
 débranché, pic 26 affiché 26).
 
+**Les bras de matière avalés par l'étoile** (2026-10-23) : *« lançons le
+travail sur un nouvel effet qui va simuler les bras de matière qui absorbent
+les débris autour du soleil […] il va falloir faire un peu de recherche.
+Utilise T1 comme base pour créer T1B1 et teste plusieurs solutions »* — avec
+une image d'artiste : des arcs incandescents enroulés autour de l'étoile.
+
+*La physique* (accrétion magnétosphérique : Königl 1991 ; Bouvier et al.
+2007 ; Hartmann et al. 2016 ; simulations MHD de Romanova et al. 2003-2004).
+Le champ de la T Tauri, à peu près dipolaire, tronque le disque à 3-8 rayons
+stellaires (la corotation) ; le gaz remonte les lignes de champ en colonnes
+— les entonnoirs — jusqu'à des taches chaudes à haute latitude, en chute
+libre (~200-300 km/s). Dipôle incliné : deux flots, un par hémisphère, face
+aux pôles magnétiques, le motif tournant avec l'étoile. Plus loin, la matière
+gagne le bord interne par des bras spiraux.
+
+*Le code* : `disque::bras`, pur et testé — `ligne_dipole` (r = L·sin²θ, du
+pied dans le disque à la surface), `axe_dipole`, `entonnoirs`, `spirales` ;
+des boules lumineuses qui coulent le long des chemins (chute libre : τ²),
+de l'orangé au blanc-jaune en chauffant, dessinées avec les nuages mais hors
+de l'amorti (lumière propre). Réglages `avec_entonnoirs(n, rayon, inclinaison)`
+et `avec_spirales_accretion(n, rayon)`. La cavité magnétosphérique est portée
+à 5 rayons stellaires (contre 3 au petit disque du jeu) : les flots y gagnent
+leur longueur.
+
+| Proto | Ce qu'on y voit (captures, DIST 30) |
+|---|---|
+| T1B1 | dipôle incliné de 20° : deux flots orangés, du bord de la cavité aux pôles, blancs à l'arrivée |
+| T1B2 | dipôle aligné : six rideaux en couronne au bord de la cavité, gouttes blanches qui tombent |
+| T1B3 | quatre bras spiraux jusqu'à l'étoile, de plus en plus vifs — le plus proche de l'image d'artiste |
+| T1B4 | trois bras spiraux, puis deux flots magnétiques ; de biais, les arcs sortent du plan |
+
+Réglage à l'œil : trop gros et trop vifs d'abord (taches blanches), puis trop
+pâles (pointillés effacés par la Palette) — retenu entre les deux. Gardes :
+`une_ligne_de_champ_va_du_disque_a_l_astre` (red-check : arrêt à mi-chemin,
+« finit à 2,39 de l'astre »), `un_dipole_incline_donne_deux_flots_opposes`,
+`les_spirales_descendent_vers_l_etoile` (red-check : chaleur inversée). ⚠️ Les
+taches d'accrétion de l'étoile restent à ses pôles de **rotation** ; avec un
+dipôle incliné, elles devraient suivre les pôles **magnétiques**.
+
 **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?

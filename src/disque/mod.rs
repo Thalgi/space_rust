@@ -14,6 +14,7 @@
 //!   (uniform `moitie` + discard) autour du corps de la planète.
 
 pub mod accretion;
+pub mod bras;
 mod config;
 pub mod habillage;
 mod voile;
@@ -380,7 +381,7 @@ impl Disque {
     /// passe derrière elle par la profondeur.
     fn dessiner_nuages_3d(&self, cam: &CameraInfo, cote_camera: bool) {
         let p = self.base.position;
-        if self.cfg.nuages_3d > 0 {
+        if self.cfg.nuages_3d > 0 || bras::actifs(&self.cfg) {
             let cote_cam = self.axe_n.dot(cam.pos - p);
             let (mut v, mut i) = (Vec::new(), Vec::new());
             // ⚠️ **Envoyé au fil de l'eau, un lot dès qu'il est plein**
@@ -437,6 +438,19 @@ impl Disque {
                 }
                 let a = a * f;
                 crate::impostor::push_quad(&mut v, &mut i, cam, q, t_j, Color::new(c.x * a, c.y * a, c.z * a, a));
+                if v.len() >= crate::impostor::QUADS_PAR_DESSIN * 4 {
+                    crate::impostor::dessiner_par_lots(&mut v, &mut i, Some(crate::impostor::halo_partage()));
+                }
+            }
+            // **Les bras de matière** (`bras`) : de la lumière propre, hors
+            // de l'amorti — c'est le gaz qui chauffe en tombant.
+            let flots = bras::entonnoirs(&self.cfg, self.temps).into_iter().chain(bras::spirales(&self.cfg, self.temps));
+            for (loc, t_b, c, a) in flots {
+                let rel = self.axe_u * loc.x + self.axe_n * loc.y + self.axe_v * loc.z;
+                if du_cote_camera(rel, self.axe_n, cote_cam) != cote_camera {
+                    continue;
+                }
+                crate::impostor::push_quad(&mut v, &mut i, cam, p + rel, t_b, Color::new(c.x * a, c.y * a, c.z * a, a));
                 if v.len() >= crate::impostor::QUADS_PAR_DESSIN * 4 {
                     crate::impostor::dessiner_par_lots(&mut v, &mut i, Some(crate::impostor::halo_partage()));
                 }

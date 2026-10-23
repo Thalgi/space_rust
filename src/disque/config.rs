@@ -105,6 +105,16 @@ pub struct DisqueConfig {
     /// est mince près de l'étoile et s'évase au bord, comme un vrai disque
     /// jeune (prototype T Tauri, 2026-10-23).
     pub evasement: f32,
+    /// **Bras de matière** (T Tauri, `disque::bras`) : rayon de l'astre qui
+    /// avale, 0 = aucun bras.
+    pub rayon_astre: f32,
+    /// Flots d'accrétion magnétosphérique (entonnoirs), 0 = aucun.
+    pub entonnoirs: u32,
+    /// Inclinaison du dipôle sur la normale du disque (rad) : 0 = rideaux
+    /// tout autour, au-delà = deux flots, un par hémisphère.
+    pub inclinaison_dipole: f32,
+    /// Bras spiraux d'accrétion dans le plan, 0 = aucun.
+    pub spirales_accretion: u32,
 }
 
 impl DisqueConfig {
@@ -151,6 +161,10 @@ impl DisqueConfig {
             taille_nuages: 1.0,
             teintes_nuages: 0.0,
             evasement: 0.0,
+            rayon_astre: 0.0,
+            entonnoirs: 0,
+            inclinaison_dipole: 0.0,
+            spirales_accretion: 0,
         }
     }
 
@@ -191,6 +205,23 @@ impl DisqueConfig {
     pub fn avec_aspect_nuages(mut self, taille: f32, teintes: f32) -> Self {
         self.taille_nuages = taille.max(0.1);
         self.teintes_nuages = teintes.clamp(0.0, 1.0);
+        self
+    }
+
+    /// **Entonnoirs** : `n` flots d'accrétion vers un astre de rayon
+    /// `rayon_astre`, dipôle incliné de `inclinaison` (rad).
+    pub fn avec_entonnoirs(mut self, n: u32, rayon_astre: f32, inclinaison: f32) -> Self {
+        self.entonnoirs = n.min(8);
+        self.rayon_astre = rayon_astre.max(0.0);
+        self.inclinaison_dipole = inclinaison;
+        self
+    }
+
+    /// **Bras spiraux d'accrétion** : `n` bras jusqu'à un astre de rayon
+    /// `rayon_astre`.
+    pub fn avec_spirales_accretion(mut self, n: u32, rayon_astre: f32) -> Self {
+        self.spirales_accretion = n.min(8);
+        self.rayon_astre = rayon_astre.max(0.0);
         self
     }
 
