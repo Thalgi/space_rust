@@ -85,7 +85,7 @@ pub fn prototypes() -> Vec<Prototype> {
         b("T1B4 tirage 2", |c, l| tirage(c, l, 0.53)),
         b("T1B4 tirage 3", |c, l| tirage(c, l, 0.88)),
         Prototype {
-            nom: "Herbig Ae/Be : bras spiraux et bord brulant, sans entonnoirs".into(),
+            nom: "Herbig Ae/Be : dipole aligne, rideaux tout autour (T1B2)".into(),
             construire: Box::new(herbig),
             distance: HERBIG.1 * 24.0 * 2.2,
         },
@@ -130,17 +130,19 @@ fn avec_grand_disque() -> Systeme {
 const HERBIG: (f32, f32, f32) = (9000.0, 2.6, 2.0);
 
 /// **Herbig Ae/Be**, la grande sœur de la T Tauri : plus massive, plus chaude.
-/// Son champ est faible — pas de cavité magnétosphérique, pas d'entonnoirs :
-/// le disque descend presque jusqu'à elle (1,5 rayon) et la matière y entre
-/// par les bras (T1B3). Son bord interne, gonflé et brûlant, est célèbre.
+/// Habillée comme T1B2, à la demande (2026-10-24, *« pour le proto de Herbig
+/// il faudrait que ce soit T1B2 »*) : cavité de 5 rayons, dipôle aligné,
+/// six rideaux tout autour, vers les deux pôles. Elle avait d'abord les bras
+/// spiraux seuls (T1B3) et le bord brûlant — le champ d'une Herbig est
+/// réputé faible, mais l'image prime.
 fn herbig() -> Systeme {
     let (temp, rayon, lumi) = HERBIG;
     let s = Soleil::new(Vec3::ZERO, rayon, crate::etoile::couleur_etoile("A (blanche)", temp), lumi).avec_jets_3d(JETS_PROTO);
     let mut c = s.config_protosolaire();
     let largeur = 48.0 * rayon / c.externe;
-    c.interne = 1.5 * rayon;
+    c.interne = 5.0 * rayon;
     c.externe = 48.0 * rayon;
-    let c = plus_plat(c, largeur).avec_spirales_accretion(4, rayon).avec_bord_brulant(1.2);
+    let c = plus_plat(c, largeur).avec_entonnoirs(6, rayon, 0.0);
     let mut sys = Systeme::new();
     sys.ajouter(Box::new(s.avec_disque(c)));
     sys

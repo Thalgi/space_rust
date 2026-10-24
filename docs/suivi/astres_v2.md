@@ -469,7 +469,7 @@ exemples évoqués, mis en prototypes pour être ajustés au cas par cas :
 | T1B4-A | + le **bord interne brûlant** (`bras::bord_brulant`) : la poussière du bord de la cavité chauffée à blanc, gonflée (*puffed-up inner rim*) |
 | T1B4-G | + le **grand disque** cotonneux, de la lisière du petit (0,9 UA) à 8 UA — l'échelle encore en question |
 | T1B4 tirages 1-3 | ce que le jeu en tirerait d'une étoile à l'autre, **dérivé** d'une graine : cavité 4-7 rayons, dipôle 0-34° (rideaux s'il est presque droit), 2-4 bras, bord brûlant une fois sur deux |
-| Herbig Ae/Be | la grande sœur (gabarit de l'étoile A : 9 000 K, rayon 2,6) : champ faible, pas de cavité ni d'entonnoirs, le disque descend à 1,5 rayon, la matière entre par quatre bras ; bord brûlant |
+| Herbig Ae/Be | la grande sœur (gabarit de l'étoile A : 9 000 K, rayon 2,6), habillée comme **T1B2** à la demande (2026-10-24) : cavité de 5 rayons, dipôle aligné, six rideaux. D'abord bras spiraux seuls et bord brûlant (champ réputé faible) |
 
 **Les taches d'accrétion suivent les pôles magnétiques** : `Disque::axe_magnetique`
 (dipôle incliné, en coordonnées du monde, tournant avec ses entonnoirs) passe
