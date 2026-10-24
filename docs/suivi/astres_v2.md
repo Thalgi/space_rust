@@ -508,6 +508,42 @@ une partie de la poussière et laissent une traînée plus large […] ce qui
 rendra au niveau des jets polaires aura été mis au standard pour tous les cas
 de jets polaires de ce chantier »*.
 
+**Les jets polaires, premiers prototypes** (2026-10-24) — *« fais-moi les
+4 tests, plus un où les parois éclairées font un sablier très fin et pas
+éclairé partout »*. Le **flot bipolaire** d'une étoile qui accrète
+(`disque::flot`, pur et testé) : un jet fin et vif le long de l'axe du
+disque ; autour, la poussière entraînée remplit un **cône** qui s'élargit
+(la traînée) ; des **nœuds** de Herbig-Haro, étraves de choc rouges, filent
+le long du jet ; les **parois** des cavités, éclairées par l'étoile, font un
+**sablier** parabolique (HH 30). Longueur : 1,2 fois le rayon du disque.
+
+| Proto | Ce qu'on y voit |
+|---|---|
+| J1 | jet + traînée de poussière |
+| J2 | J1 + cinq nœuds par côté — des étraves roses, bien lisibles |
+| J3 | J1 + parois éclairées : un vrai sablier, pied éclatant, parois nuageuses |
+| J4 | tout ensemble |
+| J5 | J1 + sablier très fin, éclairé par plaques, d'un côté |
+
+Réglage à l'œil : tout était d'abord **trop faible** — ce que la Palette
+faisait passer pour une fumée grise n'était, en rendu net, presque rien ;
+éclairci d'environ ×3. J5 d'abord trop clairsemé (des points, pas des
+plaques) : deux fois plus de boules, un peu plus grosses. Gardes :
+`le_flot_sort_par_les_deux_poles_et_s_elargit`,
+`une_paroi_fine_s_eclaire_par_plaques` (red-check : paroi fine épaisse et
+éclairée partout, « pas plus fine »). ⚠️ En route, un sabotage est resté en
+place : `git checkout` ne restaure rien d'un fichier pas encore suivi —
+repéré, défait à la main, et le red-check refait sur une copie.
+
+*L'étoile à neutrons et les jets* (question de l'utilisateur, pour le
+lot 13) : isolée, sans matière à avaler, elle n'en a pas — le jet naît de
+l'accrétion ; accrétante, en binaire X (Sco X-1, Cir X-1), elle peut en
+avoir. Le **pulsar** n'a pas de jet au sens propre (ses faisceaux sont de
+la lumière), mais son vent peut dessiner tore et jets dans sa nébuleuse
+(Crabe, Vela) — *« le pulsar demandera un retravail important »*. Le
+magnétar n'a pas de jet permanent. Le standard des jets vaut donc pour les
+astres qui **accrètent**.
+
 **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?

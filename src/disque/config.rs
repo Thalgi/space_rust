@@ -117,6 +117,8 @@ pub struct DisqueConfig {
     pub spirales_accretion: u32,
     /// **Bord interne brûlant** (`bras::bord_brulant`) : intensité, 0 = aucun.
     pub bord_brulant: f32,
+    /// **Flot bipolaire** (`disque::flot`) : jet, traînée, nœuds, parois.
+    pub flot: super::flot::Flot,
 }
 
 impl DisqueConfig {
@@ -168,6 +170,7 @@ impl DisqueConfig {
             inclinaison_dipole: 0.0,
             spirales_accretion: 0,
             bord_brulant: 0.0,
+            flot: super::flot::Flot::default(),
         }
     }
 
@@ -225,6 +228,12 @@ impl DisqueConfig {
     pub fn avec_spirales_accretion(mut self, n: u32, rayon_astre: f32) -> Self {
         self.spirales_accretion = n.min(8);
         self.rayon_astre = rayon_astre.max(0.0);
+        self
+    }
+
+    /// Voir le champ `flot`.
+    pub fn avec_flot(mut self, f: super::flot::Flot) -> Self {
+        self.flot = f;
         self
     }
 

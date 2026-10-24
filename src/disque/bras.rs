@@ -22,7 +22,7 @@ pub type Boule = (Vec3, f32, Vec3, f32);
 
 /// **Les bras sont-ils allumés ?**
 pub fn actifs(c: &DisqueConfig) -> bool {
-    c.bord_brulant > 0.0 || (c.rayon_astre > 0.0 && (c.entonnoirs > 0 || c.spirales_accretion > 0))
+    c.bord_brulant > 0.0 || c.flot.longueur > 0.0 || (c.rayon_astre > 0.0 && (c.entonnoirs > 0 || c.spirales_accretion > 0))
 }
 
 /// **Un point d'une ligne de champ dipolaire**, de son pied `pied` (dans le

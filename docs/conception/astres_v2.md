@@ -320,6 +320,13 @@ large ; ce qui en sortira sera **le standard de tous les jets polaires du
 chantier** (jeunes étoiles ici, rémanents au lot 13). Restent l'étoile Be et
 l'hypergéante.
 
+Premiers prototypes du flot bipolaire (`disque::flot`) : jet, traînée de
+poussière en cône, nœuds de Herbig-Haro, parois éclairées en sablier. ⚠️ Pour
+le lot 13 : un jet naît de l'**accrétion** — une étoile à neutrons isolée
+n'en a pas, une accrétante en binaire X peut en avoir ; le pulsar n'a que le
+tore et les jets de son vent, dans sa nébuleuse (Crabe, Vela). Le standard
+s'appliquera aux astres qui accrètent.
+
 ## 6 bis. Le lot 3, redécoupé en sous-lots (2026-09-24)
 
 Le lot 3 a été livré (arches ancrées sur les taches, flare, activité par

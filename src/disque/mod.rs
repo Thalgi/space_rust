@@ -15,6 +15,7 @@
 
 pub mod accretion;
 pub mod bras;
+pub mod flot;
 mod config;
 pub mod habillage;
 mod voile;
@@ -462,7 +463,8 @@ impl Disque {
             let flots = bras::entonnoirs(&self.cfg, self.temps)
                 .into_iter()
                 .chain(bras::spirales(&self.cfg, self.temps))
-                .chain(bras::bord_brulant(&self.cfg, self.temps));
+                .chain(bras::bord_brulant(&self.cfg, self.temps))
+                .chain(flot::boules(&self.cfg.flot, self.temps));
             for (loc, t_b, c, a) in flots {
                 let rel = self.axe_u * loc.x + self.axe_n * loc.y + self.axe_v * loc.z;
                 if du_cote_camera(rel, self.axe_n, cote_cam) != cote_camera {

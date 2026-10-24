@@ -15,6 +15,7 @@
 //! fonction de construction, appelée à l'affichage (un `Soleil` exige le
 //! contexte graphique, la liste elle-même se teste sans lui).
 
+use crate::disque::flot::Flot;
 use crate::disque::{habillage, DisqueConfig};
 use crate::etoile::UA;
 use crate::soleil::{Soleil, ACCRETION_PROTO, JETS_PROTO};
@@ -35,7 +36,26 @@ const NOM: &str = "T Tauri (jeune)";
 /// **Les prototypes en cours.** Vide = aucun prototype : la touche 4 le dit.
 pub fn prototypes() -> Vec<Prototype> {
     let r = gabarit().2;
+    // **Le rework des jets polaires** (2026-10-24) : *« ceux-ci canalisent une
+    // partie de la poussière et laissent une traînée plus large »* — le
+    // standard de tous les jets du chantier. Sur la T Tauri en T1B4 ; cadrés
+    // large, le flot dépasse le disque.
+    let j = |nom: &str, regler: fn(Flot) -> Flot| Prototype {
+        nom: format!("Jets {nom}"),
+        construire: Box::new(move || {
+            let s = etoile_jeune();
+            let c = t1b4(&s);
+            let base = Flot { longueur: 1.2 * c.externe, rayon_astre: s.base.rayon, jet: 1.0, ..Flot::default() };
+            seule(s.avec_disque(c.avec_flot(regler(base))))
+        }),
+        distance: r * 70.0 * 2.2,
+    };
     vec![
+        j("J1 : jet + trainee de poussiere", |f| Flot { cone: 1.0, ..f }),
+        j("J2 : J1 + noeuds de Herbig-Haro", |f| Flot { cone: 1.0, noeuds: 5, ..f }),
+        j("J3 : J1 + parois eclairees en sablier", |f| Flot { cone: 1.0, parois: 1.0, ..f }),
+        j("J4 : tout ensemble", |f| Flot { cone: 1.0, noeuds: 5, parois: 1.0, ..f }),
+        j("J5 : J1 + sablier tres fin, eclaire par plaques", |f| Flot { cone: 1.0, parois: 1.0, finesse: 0.9, ..f }),
         // Le bord interne brûlant : l'anneau incandescent au ras de la cavité
         // de l'image d'artiste. Cadré serré : il vit près de l'étoile.
         Prototype {
