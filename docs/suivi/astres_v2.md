@@ -555,6 +555,10 @@ particules et le voile des disques, l'accrétion des trous noirs et les
 animations des étoiles gardent leur pas, validé aux lots précédents. L'axe
 magnétique suit la même horloge que ses entonnoirs.
 
+**Les protos T1 portent le jet J5** (même jour, à la demande) : T1B4-A
+(bord brûlant, recadré à 70 rayons pour voir le jet) et T1B4-G (grand
+disque, le jet part du petit). `flot_base` et `j5` partagés avec les J.
+
 *L'étoile à neutrons et les jets* (question de l'utilisateur, pour le
 lot 13) : isolée, sans matière à avaler, elle n'en a pas — le jet naît de
 l'accrétion ; accrétante, en binaire X (Sco X-1, Cir X-1), elle peut en

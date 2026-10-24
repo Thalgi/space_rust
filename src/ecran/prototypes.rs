@@ -45,8 +45,8 @@ pub fn prototypes() -> Vec<Prototype> {
         construire: Box::new(move || {
             let s = etoile_jeune();
             let c = t1b4(&s);
-            let base = Flot { longueur: 1.2 * c.externe, rayon_astre: s.base.rayon, jet: 1.0, ..Flot::default() };
-            seule(s.avec_disque(c.avec_flot(regler(base))))
+            let f = regler(flot_base(&s, &c));
+            seule(s.avec_disque(c.avec_flot(f)))
         }),
         distance: r * 70.0 * 2.2,
     };
@@ -57,36 +57,47 @@ pub fn prototypes() -> Vec<Prototype> {
         j("J4 : tout ensemble", |f| Flot { cone: 1.0, noeuds: 5, parois: 1.0, ..f }),
         // Second tour : les deux lobes ne se reflètent plus (*« ça se voit
         // que c'est une symétrie »*).
-        j("J5 : J1 + sablier tres fin, par plaques, lobes dissymetriques", |f| Flot {
-            cone: 1.0,
-            parois: 1.0,
-            finesse: 0.9,
-            asymetrie: 1.0,
-            ..f
-        }),
+        j("J5 : J1 + sablier tres fin, par plaques, lobes dissymetriques", j5),
+        // Les protos T1 portent le jet J5 (2026-10-24, à la demande).
+        //
         // Le bord interne brûlant : l'anneau incandescent au ras de la cavité
-        // de l'image d'artiste. Cadré serré : il vit près de l'étoile.
+        // de l'image d'artiste. Cadré pour voir aussi le jet.
         Prototype {
-            nom: "T Tauri T1B4-A : + bord interne brulant".into(),
+            nom: "T Tauri T1B4-A : + bord interne brulant, jet J5".into(),
             construire: Box::new(|| {
                 let s = etoile_jeune();
                 let c = t1b4(&s).avec_bord_brulant(1.0);
-                seule(s.avec_disque(c))
+                let f = j5(flot_base(&s, &c));
+                seule(s.avec_disque(c.avec_flot(f)))
             }),
-            distance: r * 24.0 * 2.2,
+            distance: r * 70.0 * 2.2,
         },
         // Le grand disque cotonneux, de la lisière du petit (0,9 UA) à 8 UA :
-        // l'échelle encore en question.
+        // l'échelle encore en question. Le jet part du petit disque.
         Prototype {
-            nom: "T Tauri T1B4-G : + grand disque cotonneux (0,9 - 8 UA)".into(),
+            nom: "T Tauri T1B4-G : + grand disque cotonneux (0,9 - 8 UA), jet J5".into(),
             construire: Box::new(|| {
                 let s = etoile_jeune();
                 let petit = t1b4(&s);
-                seule(s.avec_disque(petit).avec_disque(habillage::cotonneux(habillage::anneau(0.9, 8.0))))
+                let f = j5(flot_base(&s, &petit));
+                let grand = habillage::cotonneux(habillage::anneau(0.9, 8.0));
+                seule(s.avec_disque(petit.avec_flot(f)).avec_disque(grand))
             }),
             distance: 8.0 * UA * 2.2,
         },
     ]
+}
+
+/// **Le flot de départ** d'un prototype de jet : le jet seul, long de 1,2
+/// fois le rayon du disque `c`.
+fn flot_base(s: &Soleil, c: &DisqueConfig) -> Flot {
+    Flot { longueur: 1.2 * c.externe, rayon_astre: s.base.rayon, jet: 1.0, ..Flot::default() }
+}
+
+/// **J5** : traînée, sablier très fin éclairé par plaques, lobes
+/// dissymétriques (*« ça se voit que c'est une symétrie »*).
+fn j5(f: Flot) -> Flot {
+    Flot { cone: 1.0, parois: 1.0, finesse: 0.9, asymetrie: 1.0, ..f }
 }
 
 /// `(tmin, tmax, rayon, luminosité, nom, mode)` de la T Tauri, pris au
