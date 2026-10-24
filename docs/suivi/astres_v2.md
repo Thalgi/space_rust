@@ -568,6 +568,35 @@ J1 à J4 quittent la touche 4 ; T1B4-A et T1B4-G y restent, avec le jet
 venu de leur disque. Garde : le jet dans `la_jeune_etoile_varie_avec_sa_graine`
 (red-check : jet retiré). Captures : T Tauri et Herbig du défilé.
 
+**L'échelle tranchée, et la fin du lot 12 ouverte** (2026-10-24).
+
+- *« Le disque doit pouvoir être choisi pour travailler correctement avec le
+  module genèse […] retire le proto, c'est la genèse testée en boucle qui fera
+  l'affaire »* : `habillage::grand_disque(interne, externe, masse, orbites)`,
+  cotonneux, **un sillon à chaque orbite de planète** qui le traverse (quatre
+  au plus), normale −Y (le plan et le sens des planètes). Branché dans
+  `construire_simple` pour les jeunes étoiles : de la lisière du petit disque
+  à 0,9 fois le début de la ceinture d'astéroïdes, **sans tirage** (le système
+  reste le même à graine égale). Systèmes à une étoile seulement. ⚠️ Pas vu à
+  l'écran : à juger en régénérant. Garde `le_grand_disque_se_creuse_aux_orbites`
+  (red-check : toutes les orbites creusées, sillon à −0,125). T1B4-G retiré.
+- *« Un preset qui peut servir, mais sans pertinence dans la galerie »* : le
+  bord brûlant sort des prototypes, `avec_bord_brulant` reste (sans usage,
+  marqué).
+- **L'étoile Be**, en prototypes : `Soleil::avec_aplatissement` (uniform
+  `aplatissement` : le shader ramène l'ellipse au cercle le long de l'axe
+  projeté, pôles plus clairs — von Zeipel) et `habillage::decretion` (gaz
+  mince collé à l'étoile, émissif, blanc-bleu puis rose Hα). B1 aplatie à
+  20 %, B2 + nappes de gaz, B3 Achernar (35 %) et disque large. Captures :
+  l'étoile ovale de côté, ronde vue du pôle ; le voile du disque se raye de
+  cercles concentriques.
+- **Eta Carinae**, en prototypes : `Flot::forme` (0 parabole, 1 **bulbe**
+  fermé, pincé à l'étoile) pour les lobes du Homoncule, sur une jupe
+  équatoriale de débris ; hypergéante bleue avec vent. E1 lobes pleins, E2
+  coques fines par plaques. Captures : E1 un vrai Homoncule (lobes gris-beige,
+  le vrai est brun-rouge) ; E2 trop clairsemé. Garde `un_bulbe_se_referme_au_bout`
+  (red-check : parabole seule, « pas fermé »).
+
 *L'étoile à neutrons et les jets* (question de l'utilisateur, pour le
 lot 13) : isolée, sans matière à avaler, elle n'en a pas — le jet naît de
 l'accrétion ; accrétante, en binaire X (Sco X-1, Cir X-1), elle peut en

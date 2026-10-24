@@ -238,6 +238,12 @@ impl DisqueConfig {
     }
 
     /// Voir le champ `bord_brulant`.
+    ///
+    /// **Un preset en attente d'usage** (2026-10-24) : jugé *« sympa, un preset
+    /// qui peut servir, mais qui n'a pas de pertinence à exister dans la
+    /// galerie »* — sorti des prototypes, gardé ici pour la genèse ou un
+    /// preset d'étoile.
+    #[allow(dead_code)]
     pub fn avec_bord_brulant(mut self, intensite: f32) -> Self {
         self.bord_brulant = intensite.max(0.0);
         self

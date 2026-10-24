@@ -73,6 +73,7 @@ fn uniforms_soleil() -> Vec<UniformDesc> {
         UniformDesc::new("axe_rot", UniformType::Float4),
         UniformDesc::new("accretion_pol", UniformType::Float1),
         UniformDesc::new("axe_magnetique", UniformType::Float3),
+        UniformDesc::new("aplatissement", UniformType::Float1),
         UniformDesc::array(
             UniformDesc::new("poles", UniformType::Float4),
             super::champ::NB_POLES,

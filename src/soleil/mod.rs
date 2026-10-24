@@ -140,6 +140,9 @@ pub struct Soleil {
     axe_rot: Quat,
     /// **Taches d'accrétion polaires** (lot 12) : 0 = aucune.
     accretion_pol: f32,
+    /// **Aplatissement** (lot 12, l'étoile Be) : le rayon polaire vaut
+    /// `1 − aplatissement` fois l'équatorial. 0 = une sphère.
+    aplatissement: f32,
     /// **Disque de matière autour de l'étoile** — accrétion d'un trou noir,
     /// disque protosolaire d'une jeune étoile.
     ///
@@ -169,7 +172,7 @@ pub struct Soleil {
 /// magnétosphérique (le champ tronque le disque, 3 à 8 rayons chez une
 /// T Tauri) ; l'externe, la largeur retenue à l'écran (T1, *« plus large »*).
 /// `habillage::jeune_etoile` affine la cavité d'après la graine.
-const RAYON_PROTOSOLAIRE: (f32, f32) = (5.0, 48.0);
+pub(crate) const RAYON_PROTOSOLAIRE: (f32, f32) = (5.0, 48.0);
 
 /// **Normale du plan d'un disque stellaire, dérivée de la graine.**
 ///
@@ -347,6 +350,7 @@ impl Soleil {
             surface: vec3(11.0, 1.0, 0.0),
             ebul_reglage: vec2(1.0, 0.5),
             coeur: 0.0,
+            aplatissement: 0.0,
             jets_3d: 0.0,
             axe_rot: Quat::IDENTITY,
             accretion_pol: 0.0,
@@ -437,6 +441,17 @@ impl Soleil {
     }
 
     /// **Taches d'accrétion polaires** (lot 12) : voir le champ.
+    /// **Une étoile qui tourne si vite qu'elle s'aplatit** (l'étoile Be) :
+    /// rayon polaire de `1 − f` fois l'équatorial — Achernar, la plus aplatie
+    /// connue, est vers 0,35. Elle tourne autour de l'axe de son disque, comme
+    /// une étoile à jets ; ses pôles, plus chauds, sont plus clairs
+    /// (assombrissement gravitationnel, von Zeipel).
+    pub fn avec_aplatissement(mut self, f: f32) -> Self {
+        self.aplatissement = f.clamp(0.0, 0.6);
+        self.axe_rot = quat_axe(normale_disque(self.graine));
+        self
+    }
+
     pub fn avec_accretion_polaire(mut self, force: f32) -> Self {
         self.accretion_pol = force.clamp(0.0, 1.0);
         self

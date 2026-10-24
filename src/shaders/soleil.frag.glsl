@@ -39,6 +39,8 @@ uniform vec4 axe_rot;
 uniform float accretion_pol;
 // Axe magnétique en coordonnées du monde (lot 12) : nul = les pôles de rotation.
 uniform vec3 axe_magnetique;
+// Lot 12 (étoile Be) : rayon polaire = 1 − aplatissement fois l'équatorial.
+uniform float aplatissement;
 
 // **Le champ magnétique de l'étoile** (sous-lot 3.4) : xyz = direction d'un
 // pôle (repère surface), w = force SIGNÉE, le signe étant la polarité.
@@ -147,6 +149,23 @@ vec3 qrot(vec4 q, vec3 v) {
     return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
 }
 
+// **L'ellipse d'une étoile aplatie, ramenée au cercle.** L'axe de rotation
+// (`axe_rot` appliqué à +Y) se projette sur l'écran ; vu de côté, la
+// silhouette est écrasée le long de cette projection de `1 − aplatissement`,
+// vu par le pôle elle reste ronde. On étire donc d'autant le long de l'axe
+// projeté : un point du limbe aplati retombe sur le cercle unité.
+vec2 aplatir(vec2 q) {
+    if (aplatissement <= 0.0) return q;
+    vec3 ax = qrot(axe_rot, vec3(0.0, 1.0, 0.0));
+    vec2 pa = vec2(dot(ax, cam_right), dot(ax, cam_up));
+    float s = length(pa);
+    if (s < 1e-4) return q;
+    vec2 u = pa / s;
+    float p = 1.0 - aplatissement;
+    float k = sqrt(max(1.0 - s * s * (1.0 - p * p), 1e-4));
+    return q + u * dot(q, u) * (1.0 / k - 1.0);
+}
+
 // Rotation propre : du repère monde au repère de la surface, qui tourne.
 // ⚠️ D'abord **redresser** l'axe (le conjugué de `axe_rot`), puis la rotation
 // propre autour de +Y. C'est l'inverse exact de `vers_monde` côté CPU, qui
@@ -160,7 +179,10 @@ vec3 tourner(vec3 n) {
 }
 
 void main() {
-    float rr = length(v_q);
+    // **Aplatie** (l'étoile Be) : on ramène l'ellipse vue à un cercle, en
+    // étirant le long de l'axe projeté — tout ce qui suit voit une sphère.
+    vec2 vq = aplatir(v_q);
+    float rr = length(vq);
     if (rr > couronne) discard;
 
     // Décalage propre à cette étoile : le bruit ci-dessous ne dépend que
@@ -175,7 +197,7 @@ void main() {
     // couronne ne se rejoindraient plus et un liseré vide les séparerait.
     float limbe = 1.0;
     if (ebul_style > 1.5) {
-        vec3 dl = tourner(normalize(v_q.x * cam_right + v_q.y * cam_up + 1e-4 * to_cam));
+        vec3 dl = tourner(normalize(vq.x * cam_right + vq.y * cam_up + 1e-4 * to_cam));
         limbe = 1.0 + 0.10 * (bulles(dl * ech + dec, time, 0.05) - 0.45);
     }
 
@@ -233,7 +255,7 @@ void main() {
         // Sphère de rayon `limbe` dans cette direction (1 hors contour irrégulier).
         float rs = rr / limbe;
         float z = sqrt(max(0.0, 1.0 - rs * rs));
-        vec3 n = normalize((v_q.x * cam_right + v_q.y * cam_up) / limbe + z * to_cam);
+        vec3 n = normalize((vq.x * cam_right + vq.y * cam_up) / limbe + z * to_cam);
         vec3 d = tourner(n);
 
         // --- Le champ magnétique, ici ---
@@ -330,6 +352,12 @@ void main() {
             col *= mix(1.0, mix(0.65, 1.0, sqrt(z)), ebullition);
         }
 
+        if (aplatissement > 0.0) {
+            // Pôles plus chauds, donc plus clairs ; équateur plus sombre.
+            float pole = abs(dot(n, qrot(axe_rot, vec3(0.0, 1.0, 0.0))));
+            col *= 1.0 + aplatissement * 1.2 * (pole - 0.5);
+        }
+
         if (accretion_pol > 0.0) {
             // **Les taches d'accrétion** (lot 12) : une jeune étoile
             // avale son disque. Le gaz remonte le long des lignes de son champ
@@ -414,31 +442,31 @@ void main() {
 
         gl_FragColor = vec4(col, 1.0);
     } else if (couronne_type > 0.5 && couronne_type < 1.5) {
-        // JETS bipolaires (pulsar / protoétoile) le long de l'axe vertical (v_q.y).
-        float ax = abs(v_q.x);
-        float ay = abs(v_q.y);
+        // JETS bipolaires (pulsar / protoétoile) le long de l'axe vertical (vq.y).
+        float ax = abs(vq.x);
+        float ay = abs(vq.y);
         float width = 0.10 + 0.12 * (ay - 1.0);              // cône qui s'évase
         float core = 1.0 - smoothstep(0.0, width, ax);
         float along = smoothstep(couronne, 1.0, ay) * step(1.0, ay); // le long du jet
-        float flow = fbm(vec3(v_q.x * 9.0, v_q.y * 3.5 - sign(v_q.y) * time * 2.4, time * 0.2));
+        float flow = fbm(vec3(vq.x * 9.0, vq.y * 3.5 - sign(vq.y) * time * 2.4, time * 0.2));
         float jet = core * along * (0.45 + 0.9 * flow);
         vec3 jetcol = mix(teinte, vec3(0.6, 0.8, 1.0), 0.55); // jets bleutés énergétiques
         gl_FragColor = vec4(jetcol, clamp(jet, 0.0, 1.0) * 0.9);
     } else if (couronne_type > 3.5) {
         // MAGNETAR : arcs de champ magnétique DIPOLAIRE (boucles brillantes, violettes).
         float g = clamp(1.0 - (rr - 1.0) / (couronne - 1.0), 0.0, 1.0);
-        float sinth = abs(v_q.x) / max(rr, 0.001);            // colatitude (axe vertical)
+        float sinth = abs(vq.x) / max(rr, 0.001);            // colatitude (axe vertical)
         float L = rr / max(sinth * sinth, 0.05);              // paramètre de ligne de champ (r = L sin²θ)
         float lines = abs(fract(L * 0.55 + time * 0.08) - 0.5) * 2.0; // 0 au cœur d'une boucle
         float arc = smoothstep(0.16, 0.0, lines) * g;
-        arc *= 0.55 + 0.45 * fbm(vec3(v_q * 5.0, time * 0.5)); // scintillement
+        arc *= 0.55 + 0.45 * fbm(vec3(vq * 5.0, time * 0.5)); // scintillement
         vec3 mcol = mix(teinte, vec3(0.72, 0.5, 1.0), 0.6);   // violet magnétique
         gl_FragColor = vec4(mcol, clamp(arc, 0.0, 1.0) * 0.85);
     } else if (couronne_type > 2.5) {
         // PULSAR : faisceau bipolaire qui TOURNE sur lui-même (effet phare) + flash périodique.
         float spin = time * 1.1;
         float cs = cos(spin), sn = sin(spin);
-        vec2 q = vec2(v_q.x * cs - v_q.y * sn, v_q.x * sn + v_q.y * cs);
+        vec2 q = vec2(vq.x * cs - vq.y * sn, vq.x * sn + vq.y * cs);
         float ax = abs(q.x);
         float ay = abs(q.y);
         float width = 0.08 + 0.10 * (ay - 1.0);
@@ -453,10 +481,10 @@ void main() {
         // VENT stellaire (Wolf-Rayet / supergéante bleue) : enveloppe épaisse, en expansion,
         // grumeleuse (clumps qui s'éloignent radialement) -> très différent du halo lisse.
         float g = clamp(1.0 - (rr - 1.0) / (couronne - 1.0), 0.0, 1.0);
-        float ang = atan(v_q.y, v_q.x);
+        float ang = atan(vq.y, vq.x);
         // Turbulence advectée radialement (le vent souffle vers l'extérieur).
         float turb = fbm(vec3(cos(ang) * 3.2, sin(ang) * 3.2, rr * 1.6 - time * 0.5) + 20.0);
-        float clump = fbm(vec3(v_q * 3.2, time * 0.15) + 40.0);
+        float clump = fbm(vec3(vq * 3.2, time * 0.15) + 40.0);
         float w = pow(g, 0.85) * (0.3 + 1.2 * turb) * (0.4 + 0.9 * clump);
         // Coquilles concentriques (ondes de choc du vent).
         w *= 0.7 + 0.3 * sin(rr * 9.0 - time * 1.2);
@@ -466,7 +494,7 @@ void main() {
         // Couronne : décroît de r=1 à r=couronne ; forme modulée par couronne_irreg.
         float g = 1.0 - (rr - limbe) / (couronne - limbe);
         g = clamp(g, 0.0, 1.0);
-        float ang = atan(v_q.y, v_q.x);
+        float ang = atan(vq.y, vq.x);
         float ray = fbm(vec3(cos(ang) * 3.0, sin(ang) * 3.0, time * 0.05) + 10.0);
         float spik = mix(1.0, 0.35 + 1.3 * ray, couronne_irreg);
         g = pow(g, 1.7) * spik;

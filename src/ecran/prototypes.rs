@@ -7,19 +7,18 @@
 //! genèse…). Quand la liste est vide, la touche 4 affiche « aucun prototype en
 //! cours ». Les galeries montrent ce que le jeu produit ; les essais vivent ici.
 //!
-//! Adoptés le 2026-10-24, et donc retirés : la T Tauri en T1B4 (variée par la
-//! graine) et la Herbig Ae/Be en T1B2 — `disque::habillage::jeune_etoile` ;
-//! puis le jet polaire J5, devenu le standard (`habillage::jet_standard`),
-//! et avec lui ses rivaux J1 à J4.
-//! Restent les essais non validés.
+//! Sortis le 2026-10-24 : la T Tauri (T1B4), la Herbig Ae/Be (T1B2) et le jet
+//! standard (J5), adoptés ; le grand disque (T1B4-G), confié à la genèse ; le
+//! bord brûlant (T1B4-A), gardé en preset (`avec_bord_brulant`).
 //!
 //! La liste ne construit rien à la déclaration : chaque entrée porte une
 //! fonction de construction, appelée à l'affichage (un `Soleil` exige le
 //! contexte graphique, la liste elle-même se teste sans lui).
 
+use crate::disque::flot::Flot;
 use crate::disque::{habillage, DisqueConfig};
-use crate::etoile::UA;
-use crate::soleil::{Soleil, ACCRETION_PROTO, JETS_PROTO};
+use crate::genese::masse_luminosite;
+use crate::soleil::Soleil;
 use crate::systeme::Systeme;
 use macroquad::prelude::*;
 
@@ -31,63 +30,85 @@ pub struct Prototype {
     pub distance: f32,
 }
 
-/// Le type travaillé, tel que le catalogue le nomme.
-const NOM: &str = "T Tauri (jeune)";
+/// L'étoile Be : `(température, rayon, luminosité)` — une B chaude.
+const BE: (f32, f32, f32) = (18_000.0, 1.8, 4.0);
+/// L'hypergéante d'Eta Carinae, et la longueur de ses lobes, en rayons.
+const ETA: (f32, f32, f32) = (20_000.0, 3.0, 8.0);
+const LOBES_ETA: f32 = 28.0;
 
 /// **Les prototypes en cours.** Vide = aucun prototype : la touche 4 le dit.
+///
+/// Lot 12, fin (2026-10-24) : *« fais-moi ensuite l'étoile Be et l'exemple
+/// Eta Carinae »*.
 pub fn prototypes() -> Vec<Prototype> {
-    let r = gabarit().2;
+    let be = |nom: &str, aplati: f32, etendue: f32, nuages: u32| Prototype {
+        nom: format!("Etoile Be {nom}"),
+        construire: Box::new(move || {
+            let s = etoile(BE).avec_aplatissement(aplati);
+            let c = habillage::decretion(s.base.rayon, s.base.masse, etendue, nuages);
+            seule(s.avec_disque(c))
+        }),
+        distance: BE.1 * etendue * 2.2,
+    };
+    let eta = |nom: &str, finesse: f32| Prototype {
+        nom: format!("Eta Carinae {nom}"),
+        construire: Box::new(move || {
+            let s = etoile(ETA).avec_vent();
+            let c = jupe(&s).avec_flot(homoncule(s.base.rayon, finesse));
+            seule(s.avec_disque(c))
+        }),
+        distance: ETA.1 * LOBES_ETA * 2.6,
+    };
     vec![
-        // Les protos T1 portent le jet standard (J5, validé le 2026-10-24) —
-        // il vient avec le disque, `habillage::jeune_etoile`.
-        //
-        // Le bord interne brûlant : l'anneau incandescent au ras de la cavité
-        // de l'image d'artiste. Cadré pour voir aussi le jet.
-        Prototype {
-            nom: "T Tauri T1B4-A : + bord interne brulant, jet J5".into(),
-            construire: Box::new(|| {
-                let s = etoile_jeune();
-                let c = t1b4(&s).avec_bord_brulant(1.0);
-                seule(s.avec_disque(c))
-            }),
-            distance: r * 70.0 * 2.2,
-        },
-        // Le grand disque cotonneux, de la lisière du petit (0,9 UA) à 8 UA :
-        // l'échelle encore en question. Le jet part du petit disque.
-        Prototype {
-            nom: "T Tauri T1B4-G : + grand disque cotonneux (0,9 - 8 UA), jet J5".into(),
-            construire: Box::new(|| {
-                let s = etoile_jeune();
-                let petit = t1b4(&s);
-                let grand = habillage::cotonneux(habillage::anneau(0.9, 8.0));
-                seule(s.avec_disque(petit).avec_disque(grand))
-            }),
-            distance: 8.0 * UA * 2.2,
-        },
+        // Une B qui tourne vite, aplatie de 20 %, son disque de décrétion
+        // de gaz qui brille de lui-même.
+        be("B1 : aplatie, disque de decretion", 0.2, 10.0, 0),
+        be("B2 : B1 + nappes de gaz", 0.2, 10.0, 300),
+        // Achernar, la plus aplatie connue : un tiers de moins aux pôles.
+        be("B3 : rotation extreme (Achernar), disque large", 0.35, 16.0, 300),
+        // L'hypergéante dans son Homoncule : deux lobes de poussière pincés à
+        // l'étoile, et la jupe équatoriale de l'éruption de 1843.
+        eta("E1 : lobes du Homoncule + jupe equatoriale", 0.0),
+        eta("E2 : lobes en coques fines, eclairees par plaques", 0.6),
     ]
 }
 
-/// `(tmin, tmax, rayon, luminosité, nom, mode)` de la T Tauri, pris au
-/// catalogue plutôt que recopié.
-fn gabarit() -> crate::etoile::Gabarit {
-    crate::etoile::gabarit_du_type(NOM, 0.5).expect("la T Tauri est au catalogue")
+/// Une étoile nue, `(température, rayon, luminosité)`, teinte d'une B.
+fn etoile((temp, rayon, lumi): (f32, f32, f32)) -> Soleil {
+    let mut s = Soleil::new(Vec3::ZERO, rayon, crate::etoile::couleur_etoile("B (bleu-blanc)", temp), lumi);
+    s.base.masse = masse_luminosite(lumi);
+    s
 }
 
-/// La T Tauri, ses jets et ses taches d'accrétion, sans disque.
-fn etoile_jeune() -> Soleil {
-    let (tmin, tmax, rayon, lumi, _, _) = gabarit();
-    Soleil::new(Vec3::ZERO, rayon, crate::etoile::couleur_etoile(NOM, (tmin + tmax) * 0.5), lumi)
-        .avec_jets_3d(JETS_PROTO)
-        .avec_accretion_polaire(ACCRETION_PROTO)
-}
-
-/// **T1B4 tel que retenu** — cavité de 5 rayons, trois bras, deux flots d'un
-/// dipôle incliné de 20° —, sur l'habillage du jeu. Le jeu, lui, le varie
-/// par la graine.
-fn t1b4(s: &Soleil) -> DisqueConfig {
+/// **La jupe équatoriale d'Eta Carinae** : un disque de débris rougeâtres,
+/// effiloché, autour de la taille des lobes. Il porte aussi le flot.
+fn jupe(s: &Soleil) -> DisqueConfig {
     let r = s.base.rayon;
-    let c = habillage::jeune_etoile(s.config_protosolaire(), r, 0.0, false);
-    DisqueConfig { interne: 5.0 * r, ..c }.avec_spirales_accretion(3, r).avec_entonnoirs(2, r, 0.35)
+    DisqueConfig {
+        voile_alpha: 0.35,
+        voile_couleur: vec3(0.6, 0.28, 0.16),
+        voile_couleur2: vec3(1.0, 0.6, 0.35),
+        granulation: 0.6,
+        ..DisqueConfig::protosolaire(0, r * 1.5, r * 0.5 * LOBES_ETA, s.base.masse)
+    }
+    .avec_nuages_3d(700, 0.04)
+    .avec_grappe(5)
+    .avec_aspect_nuages(1.2, 0.5)
+}
+
+/// **Les lobes du Homoncule** : deux bulbes de poussière, presque
+/// symétriques, pleins (`finesse` 0) ou en coques éclairées par plaques.
+fn homoncule(rayon: f32, finesse: f32) -> Flot {
+    Flot {
+        longueur: rayon * LOBES_ETA,
+        rayon_astre: rayon,
+        cone: 0.6,
+        parois: 1.0,
+        finesse,
+        forme: 1.0,
+        asymetrie: 0.15,
+        ..Flot::default()
+    }
 }
 
 /// Un système de cette seule étoile.

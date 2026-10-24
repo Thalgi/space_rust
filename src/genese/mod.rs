@@ -555,6 +555,7 @@ fn construire_simple(profil: ProfilEtoile) -> (Systeme, String) {
     // Dernière planète posée (a, rayon) -> évite que deux corps se chevauchent quand
     // l'espacement géométrique les rapproche trop (systèmes compacts / rémanents).
     let mut precedent: Option<(f32, f32)> = None;
+    let mut orbites = Vec::new();
     for _ in 0..nb {
         // Position normalisée (équivalent solaire) : le TYPE dépend de la distance
         // relative à la ligne des neiges, qui suit l'échelle `ech`. Sans ça, une
@@ -596,6 +597,7 @@ fn construire_simple(profil: ProfilEtoile) -> (Systeme, String) {
         let incl: f32 = gen_range(0.0, 0.16);
         let idx = ajouter_planete(&mut sys, masse_etoile, a, e, incl, rayon, masse, app, None);
         precedent = Some((a, rayon));
+        orbites.push(a);
 
         let n_lunes: i32 = match type_p {
             TypePlanete::Gazeuse => gen_range(1, 4),
@@ -617,6 +619,20 @@ fn construire_simple(profil: ProfilEtoile) -> (Systeme, String) {
     sys.ajouter(Box::new(Disque::new(DisqueConfig::asteroides(
         900, bi * etoile::UA, bo * etoile::UA, masse_etoile,
     ))));
+    // **Le grand disque d'une jeune étoile** (lot 12, 2026-10-24) : de la
+    // lisière de son petit disque à la ceinture d'astéroïdes, un sillon à
+    // chaque orbite de planète. ⚠️ Aucun tirage : un `gen_range` de plus
+    // décalerait tout le reste du système à graine égale. Systèmes à une
+    // étoile seulement, pour l'instant ; à juger en régénérant (*« c'est la
+    // genèse testée en boucle qui fera l'affaire »*).
+    if matches!(Variante::de_mode(profil.couronne), Variante::Proto) {
+        let interne = crate::soleil::RAYON_PROTOSOLAIRE.1 * profil.rayon / etoile::UA;
+        let externe = 0.9 * bi;
+        if externe > interne * 1.5 {
+            let c = crate::disque::habillage::grand_disque(interne, externe, masse_etoile, &orbites);
+            sys.ajouter(Box::new(Disque::new(c)));
+        }
+    }
     let ki: f32 = bo + gen_range(20.0, 30.0) * ech;
     let ko: f32 = ki + gen_range(12.0, 20.0) * ech;
     sys.ajouter(Box::new(Disque::new(DisqueConfig::kuiper(

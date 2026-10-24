@@ -46,6 +46,10 @@ pub struct Flot {
     pub asymetrie: f32,
     /// Ouverture de la cavité (multiplicateur, 0 = 1) : posée par lobe.
     pub ouverture: f32,
+    /// **Forme des lobes**, 0..1 : 0 = cavité parabolique, ouverte au bout
+    /// (le flot d'une étoile jeune) ; 1 = **bulbe** fermé, pincé à l'étoile —
+    /// les lobes du Homoncule d'Eta Carinae.
+    pub forme: f32,
 }
 
 /// **Où commence le sablier**, en part de la longueur : il partait de
@@ -63,7 +67,10 @@ fn h(i: f32, s: f32) -> f32 {
 /// étroit au pied, large de 45 % de la longueur au bout.
 pub fn rayon_cavite(f: &Flot, z: f32) -> f32 {
     let ouverture = if f.ouverture > 0.0 { f.ouverture } else { 1.0 };
-    0.45 * ouverture * (f.longueur * z.abs().min(f.longueur)).sqrt()
+    let z = z.abs().min(f.longueur);
+    let parabole = 0.45 * (f.longueur * z).sqrt();
+    let bulbe = 0.38 * f.longueur * (std::f32::consts::PI * z / f.longueur).sin().max(0.0).sqrt();
+    ouverture * (parabole + (bulbe - parabole) * f.forme)
 }
 
 /// **Le lobe d'un côté** (`cote` = ±1) : le flot tel quel au-dessus ; au-
@@ -186,10 +193,12 @@ fn parois(f: &Flot, temps: f32, cote: f32, g: f32, v: &mut Vec<Boule>) {
     for j in 0..n {
         let i = j as f32 + g + 6_000.0;
         let s = (h(i, 1.0) + temps * 0.01).fract().powf(1.5);
-        let z = (DEPART_PAROIS + s * (1.0 - DEPART_PAROIS)) * l;
+        // Un bulbe part de l'étoile même : il y est pincé.
+        let depart = DEPART_PAROIS * (1.0 - f.forme);
+        let z = (depart + s * (1.0 - depart)) * l;
         let phi = h(i, 2.0) * TAU;
         let rho = rayon_cavite(f, z) * (1.0 + epaisseur * (h(i, 3.0) - 0.5));
-        let monte = (s / 0.3).min(1.0);
+        let monte = if f.forme > 0.5 { 1.0 } else { (s / 0.3).min(1.0) };
         let mut lum = monte * monte * (3.0 - 2.0 * monte) * (1.0 - s).powf(0.7);
         if f.finesse > 0.0 {
             // Par plaques, d'un côté : le reste de la paroi est dans l'ombre.
@@ -264,6 +273,18 @@ mod tests {
         assert!(lobe(&asym, -1.0).parois < lobe(&asym, 1.0).parois * 0.7, "même éclat");
         let bout_haut = boules(&asym, 1.0).iter().filter(|x| x.0.y > 0.8 * asym.longueur).map(|x| x.0.x).sum::<f32>();
         assert!(bout_haut > 0.0, "pas de courbure");
+    }
+
+    /// **Un bulbe est fermé** : large au milieu, pincé aux deux bouts ; une
+    /// parabole, elle, s'ouvre sans cesse.
+    #[test]
+    fn un_bulbe_se_referme_au_bout() {
+        let b = Flot { forme: 1.0, ..flot() };
+        let l = b.longueur;
+        assert!(rayon_cavite(&b, 0.5 * l) > rayon_cavite(&b, 0.95 * l) * 2.0, "pas fermé");
+        assert!(rayon_cavite(&b, 0.5 * l) > rayon_cavite(&b, 0.05 * l) * 1.5, "pas pincé");
+        let p = flot();
+        assert!(rayon_cavite(&p, 0.95 * l) > rayon_cavite(&p, 0.5 * l));
     }
 
     /// **Fine, la paroi ne s'éclaire plus partout** : bien plus mince que la

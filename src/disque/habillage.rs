@@ -16,6 +16,7 @@
 
 use super::flot::Flot;
 use super::DisqueConfig;
+use macroquad::prelude::*;
 use crate::etoile::UA;
 use crate::genese::masse_luminosite;
 
@@ -130,6 +131,49 @@ pub fn jeune_etoile(c: DisqueConfig, rayon: f32, graine: f32, herbig: bool) -> D
     DisqueConfig { interne: (4.0 + 3.0 * f(11.1)) * rayon, ..c }
         .avec_spirales_accretion(2 + (f(3.7) * 3.0) as u32, rayon)
         .avec_entonnoirs(flots, rayon, incl)
+}
+
+/// **Le grand disque protoplanétaire d'un système jeune, choisi par la
+/// genèse** (2026-10-24) : cotonneux, de `interne_ua` à `externe_ua`, avec un
+/// **sillon à chaque orbite de planète** qui le traverse — c'est elle qui l'y
+/// creuse. *« Le disque doit pouvoir être choisi pour travailler correctement
+/// avec le module genèse »* : la démo du prototype T1B4-G, rendue au système
+/// qui le porte. Quatre sillons au plus (les emplacements de `lacunes`) : les
+/// planètes suivantes restent dans le disque.
+///
+/// Normale **−Y** : le plan des planètes de `poser_sur_rails`, et leur sens
+/// de rotation (`a1 × q = −Y`) — sans quoi le disque tournerait à rebours
+/// d'elles.
+pub fn grand_disque(interne_ua: f32, externe_ua: f32, masse: f32, orbites_ua: &[f32]) -> DisqueConfig {
+    let part = ((externe_ua - interne_ua) / 7.7 * 5000.0).max(0.0) as usize;
+    let mut c = DisqueConfig::protoplanetaire(part, interne_ua * UA, externe_ua * UA, masse).avec_normale(-Vec3::Y);
+    for &a in orbites_ua.iter().filter(|&&a| a > interne_ua && a < externe_ua) {
+        c = c.avec_lacune((a - interne_ua) / (externe_ua - interne_ua), 0.04, 0.92);
+    }
+    cotonneux(c)
+}
+
+/// **Le disque de décrétion d'une étoile Be** (lot 12, 2026-10-24) : la
+/// matière qu'elle **éjecte** par son équateur, tant elle tourne vite — un
+/// disque de gaz mince, sans poussière, collé à sa surface (de 1 à `etendue`
+/// rayons), qui brille de lui-même : blanc-bleu contre l'étoile, rose plus
+/// loin (la raie Hα qui fait d'elles des « Be », *e* pour émission).
+/// `nuages` > 0 : des nappes de gaz en volume, très minces.
+pub fn decretion(rayon: f32, masse: f32, etendue: f32, nuages: u32) -> DisqueConfig {
+    let c = DisqueConfig {
+        voile_alpha: 0.6,
+        voile_couleur: vec3(1.0, 0.45, 0.6),
+        voile_couleur2: vec3(0.85, 0.9, 1.0),
+        voile_bord: 0.15,
+        granulation: 0.2,
+        emissif: 1.0,
+        ..DisqueConfig::protosolaire(0, rayon * 1.02, rayon * etendue, masse)
+    }
+    .avec_couches(3, 0.02);
+    if nuages == 0 {
+        return c;
+    }
+    c.avec_nuages_3d(nuages, 0.03).avec_grappe(4).avec_aspect_nuages(0.8, 0.0)
 }
 
 /// **Le jet polaire standard du chantier** (J5, validé le 2026-10-24) :
@@ -295,6 +339,18 @@ mod tests {
             vus.insert((t.entonnoirs, t.spirales_accretion));
         }
         assert!(vus.len() >= 4, "les graines ne varient presque pas : {vus:?}");
+    }
+
+    /// **Le grand disque se creuse aux orbites qui le traversent**, et
+    /// seulement là ; il tourne dans le plan et le sens des planètes.
+    #[test]
+    fn le_grand_disque_se_creuse_aux_orbites() {
+        let c = grand_disque(1.0, 5.0, 1000.0, &[0.5, 2.0, 3.0, 9.0]);
+        let sillons: Vec<f32> = c.lacunes.iter().filter(|l| l.y > 0.0 && l.z > 0.0).map(|l| l.x).collect();
+        assert_eq!(sillons.len(), 2, "{sillons:?}");
+        assert!((sillons[0] - 0.25).abs() < 1e-4 && (sillons[1] - 0.5).abs() < 1e-4, "{sillons:?}");
+        assert_eq!(c.normale, -Vec3::Y);
+        assert!(c.nuages_3d > 0, "pas cotonneux");
     }
 
     /// **-F : la planète est dans son sillon.**
