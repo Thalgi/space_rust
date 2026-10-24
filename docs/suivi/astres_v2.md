@@ -547,6 +547,14 @@ l'étoile) et `deux_lobes_dissymetriques_ne_se_refletent_pas` (red-check :
 « même longueur »). Captures : l'étoile reparaît au cœur du sablier de J3 ;
 les lobes de J5 ne se reflètent plus.
 
+**Le temps des effets du lot 12, divisé par 8** (2026-10-24) : *« je suis
+obligé de le mettre en 0,125 pour avoir un rendu correct »*. Choix de
+l'utilisateur : **eux seuls** — nuages 3D, bras de matière, flots bipolaires
+—, partout dans le jeu (`RALENTI_NUAGES`, `Disque::temps_nuages`). Les
+particules et le voile des disques, l'accrétion des trous noirs et les
+animations des étoiles gardent leur pas, validé aux lots précédents. L'axe
+magnétique suit la même horloge que ses entonnoirs.
+
 *L'étoile à neutrons et les jets* (question de l'utilisateur, pour le
 lot 13) : isolée, sans matière à avaler, elle n'en a pas — le jet naît de
 l'accrétion ; accrétante, en binaire X (Sco X-1, Cir X-1), elle peut en

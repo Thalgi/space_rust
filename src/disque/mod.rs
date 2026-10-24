@@ -236,6 +236,12 @@ impl Disque {
         Some(self.point_du_plan(r, self.phase_lacune(i)))
     }
 
+    /// **L'horloge des effets du lot 12** — nuages 3D, bras de matière,
+    /// flots bipolaires — : celle du disque, ralentie (`RALENTI_NUAGES`).
+    fn temps_nuages(&self) -> f32 {
+        self.temps * RALENTI_NUAGES
+    }
+
     /// **L'axe magnétique** de l'astre qui porte ce disque, en coordonnées du
     /// monde, quand ses entonnoirs suivent un dipôle **incliné** — c'est là
     /// que la matière s'écrase. `None` sinon : les pôles magnétiques sont
@@ -244,7 +250,7 @@ impl Disque {
         if self.cfg.entonnoirs == 0 || self.cfg.inclinaison_dipole.abs() < 1e-3 {
             return None;
         }
-        let m = bras::axe_dipole(self.cfg.inclinaison_dipole, bras::rotation(&self.cfg) * self.temps);
+        let m = bras::axe_dipole(self.cfg.inclinaison_dipole, bras::rotation(&self.cfg) * self.temps_nuages());
         Some((self.axe_u * m.x + self.axe_n * m.y + self.axe_v * m.z).normalize_or(self.axe_n))
     }
 
@@ -412,7 +418,7 @@ impl Disque {
             // l'écran se compte sur l'ensemble (voir `attenuation_globale`).
             let mut boules = Vec::new();
             for k in 0..n {
-                let (loc, taille, eclat, t) = nuage_3d(k, &self.cfg, self.temps);
+                let (loc, taille, eclat, t) = nuage_3d(k, &self.cfg, self.temps_nuages());
                 let eclat = eclat * hors_lacunes(t, &self.cfg);
                 if eclat <= 0.0 {
                     continue;
@@ -460,11 +466,12 @@ impl Disque {
             }
             // **Les bras de matière** (`bras`) : de la lumière propre, hors
             // de l'amorti — c'est le gaz qui chauffe en tombant.
-            let flots = bras::entonnoirs(&self.cfg, self.temps)
+            let t = self.temps_nuages();
+            let flots = bras::entonnoirs(&self.cfg, t)
                 .into_iter()
-                .chain(bras::spirales(&self.cfg, self.temps))
-                .chain(bras::bord_brulant(&self.cfg, self.temps))
-                .chain(flot::boules(&self.cfg.flot, self.temps));
+                .chain(bras::spirales(&self.cfg, t))
+                .chain(bras::bord_brulant(&self.cfg, t))
+                .chain(flot::boules(&self.cfg.flot, t));
             for (loc, t_b, c, a) in flots {
                 let rel = self.axe_u * loc.x + self.axe_n * loc.y + self.axe_v * loc.z;
                 if du_cote_camera(rel, self.axe_n, cote_cam) != cote_camera {
@@ -481,6 +488,15 @@ impl Disque {
         }
     }
 }
+
+/// **Le pas des effets du lot 12** — nuages 3D, bras de matière, flots
+/// bipolaires —, rapporté à l'horloge de spectacle : *« il va falloir diviser
+/// la vitesse du temps par 8 au moins, je suis obligé de la mettre en 0,125
+/// pour avoir un rendu correct »* (2026-10-24). Eux seuls : les particules et
+/// le voile du disque, comme les animations des étoiles, gardent leur pas,
+/// validé aux lots précédents. L'axe magnétique suit la même horloge que ses
+/// entonnoirs, sans quoi les taches ne tomberaient plus sous les flots.
+pub(crate) const RALENTI_NUAGES: f32 = 1.0 / 8.0;
 
 /// **Rayon apparent d'un disque, en pixels, sous lequel ses nuages et ses
 /// bras ne se dessinent plus** : le voile seul le porte.
