@@ -8,14 +8,15 @@
 //! cours ». Les galeries montrent ce que le jeu produit ; les essais vivent ici.
 //!
 //! Adoptés le 2026-10-24, et donc retirés : la T Tauri en T1B4 (variée par la
-//! graine) et la Herbig Ae/Be en T1B2 — `disque::habillage::jeune_etoile`.
+//! graine) et la Herbig Ae/Be en T1B2 — `disque::habillage::jeune_etoile` ;
+//! puis le jet polaire J5, devenu le standard (`habillage::jet_standard`),
+//! et avec lui ses rivaux J1 à J4.
 //! Restent les essais non validés.
 //!
 //! La liste ne construit rien à la déclaration : chaque entrée porte une
 //! fonction de construction, appelée à l'affichage (un `Soleil` exige le
 //! contexte graphique, la liste elle-même se teste sans lui).
 
-use crate::disque::flot::Flot;
 use crate::disque::{habillage, DisqueConfig};
 use crate::etoile::UA;
 use crate::soleil::{Soleil, ACCRETION_PROTO, JETS_PROTO};
@@ -36,29 +37,9 @@ const NOM: &str = "T Tauri (jeune)";
 /// **Les prototypes en cours.** Vide = aucun prototype : la touche 4 le dit.
 pub fn prototypes() -> Vec<Prototype> {
     let r = gabarit().2;
-    // **Le rework des jets polaires** (2026-10-24) : *« ceux-ci canalisent une
-    // partie de la poussière et laissent une traînée plus large »* — le
-    // standard de tous les jets du chantier. Sur la T Tauri en T1B4 ; cadrés
-    // large, le flot dépasse le disque.
-    let j = |nom: &str, regler: fn(Flot) -> Flot| Prototype {
-        nom: format!("Jets {nom}"),
-        construire: Box::new(move || {
-            let s = etoile_jeune();
-            let c = t1b4(&s);
-            let f = regler(flot_base(&s, &c));
-            seule(s.avec_disque(c.avec_flot(f)))
-        }),
-        distance: r * 70.0 * 2.2,
-    };
     vec![
-        j("J1 : jet + trainee de poussiere", |f| Flot { cone: 1.0, ..f }),
-        j("J2 : J1 + noeuds de Herbig-Haro", |f| Flot { cone: 1.0, noeuds: 5, ..f }),
-        j("J3 : J1 + parois eclairees en sablier", |f| Flot { cone: 1.0, parois: 1.0, ..f }),
-        j("J4 : tout ensemble", |f| Flot { cone: 1.0, noeuds: 5, parois: 1.0, ..f }),
-        // Second tour : les deux lobes ne se reflètent plus (*« ça se voit
-        // que c'est une symétrie »*).
-        j("J5 : J1 + sablier tres fin, par plaques, lobes dissymetriques", j5),
-        // Les protos T1 portent le jet J5 (2026-10-24, à la demande).
+        // Les protos T1 portent le jet standard (J5, validé le 2026-10-24) —
+        // il vient avec le disque, `habillage::jeune_etoile`.
         //
         // Le bord interne brûlant : l'anneau incandescent au ras de la cavité
         // de l'image d'artiste. Cadré pour voir aussi le jet.
@@ -67,8 +48,7 @@ pub fn prototypes() -> Vec<Prototype> {
             construire: Box::new(|| {
                 let s = etoile_jeune();
                 let c = t1b4(&s).avec_bord_brulant(1.0);
-                let f = j5(flot_base(&s, &c));
-                seule(s.avec_disque(c.avec_flot(f)))
+                seule(s.avec_disque(c))
             }),
             distance: r * 70.0 * 2.2,
         },
@@ -79,25 +59,12 @@ pub fn prototypes() -> Vec<Prototype> {
             construire: Box::new(|| {
                 let s = etoile_jeune();
                 let petit = t1b4(&s);
-                let f = j5(flot_base(&s, &petit));
                 let grand = habillage::cotonneux(habillage::anneau(0.9, 8.0));
-                seule(s.avec_disque(petit.avec_flot(f)).avec_disque(grand))
+                seule(s.avec_disque(petit).avec_disque(grand))
             }),
             distance: 8.0 * UA * 2.2,
         },
     ]
-}
-
-/// **Le flot de départ** d'un prototype de jet : le jet seul, long de 1,2
-/// fois le rayon du disque `c`.
-fn flot_base(s: &Soleil, c: &DisqueConfig) -> Flot {
-    Flot { longueur: 1.2 * c.externe, rayon_astre: s.base.rayon, jet: 1.0, ..Flot::default() }
-}
-
-/// **J5** : traînée, sablier très fin éclairé par plaques, lobes
-/// dissymétriques (*« ça se voit que c'est une symétrie »*).
-fn j5(f: Flot) -> Flot {
-    Flot { cone: 1.0, parois: 1.0, finesse: 0.9, asymetrie: 1.0, ..f }
 }
 
 /// `(tmin, tmax, rayon, luminosité, nom, mode)` de la T Tauri, pris au

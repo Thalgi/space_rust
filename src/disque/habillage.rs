@@ -14,6 +14,7 @@
 //! - **-M** (*mixed*) : deux anneaux de l'habillage parmi d'autres types
 //!   (ceinture d'astéroïdes, Kuiper).
 
+use super::flot::Flot;
 use super::DisqueConfig;
 use crate::etoile::UA;
 use crate::genese::masse_luminosite;
@@ -119,6 +120,7 @@ pub fn jeune_etoile(c: DisqueConfig, rayon: f32, graine: f32, herbig: bool) -> D
         .avec_couches(7, 0.05)
         .avec_grappe(8)
         .avec_aspect_nuages(1.7, 0.0);
+    let c = c.avec_flot(jet_standard(rayon, c.externe));
     if herbig {
         return DisqueConfig { interne: 5.0 * rayon, ..c }.avec_entonnoirs(6, rayon, 0.0);
     }
@@ -128,6 +130,26 @@ pub fn jeune_etoile(c: DisqueConfig, rayon: f32, graine: f32, herbig: bool) -> D
     DisqueConfig { interne: (4.0 + 3.0 * f(11.1)) * rayon, ..c }
         .avec_spirales_accretion(2 + (f(3.7) * 3.0) as u32, rayon)
         .avec_entonnoirs(flots, rayon, incl)
+}
+
+/// **Le jet polaire standard du chantier** (J5, validé le 2026-10-24) :
+/// traînée de poussière en cône, sablier très fin éclairé par plaques, lobes
+/// dissymétriques courbés en S ; long de 1,2 fois le rayon `externe` du
+/// disque. *« Ce qui rendra au niveau des jets polaires aura été mis au
+/// standard pour tous les cas de jets polaires de ce chantier »* : tout astre
+/// qui **accrète** et porte un jet le prend d'ici (jeunes étoiles ; au
+/// lot 13, les étoiles à neutrons accrétantes — pas le pulsar isolé).
+pub fn jet_standard(rayon_astre: f32, externe: f32) -> Flot {
+    Flot {
+        longueur: 1.2 * externe,
+        rayon_astre,
+        jet: 1.0,
+        cone: 1.0,
+        parois: 1.0,
+        finesse: 0.9,
+        asymetrie: 1.0,
+        ..Flot::default()
+    }
 }
 
 /// Une planète d'une déclinaison : `(rayon d'orbite en UA, géante ?)`.
@@ -256,6 +278,9 @@ mod tests {
         let nu = DisqueConfig::protosolaire(0, 5.0, 48.0, 1000.0);
         let h = jeune_etoile(nu, 1.0, 3.0, true);
         assert_eq!((h.entonnoirs, h.inclinaison_dipole, h.spirales_accretion), (6, 0.0, 0));
+        // Le jet standard, pour l'une comme pour l'autre.
+        assert_eq!(h.flot, jet_standard(1.0, 48.0));
+        assert_eq!(jeune_etoile(nu, 1.0, 3.0, false).flot, jet_standard(1.0, 48.0));
         assert_eq!(h.interne, 5.0);
         let mut vus = std::collections::HashSet::new();
         for k in 0..40 {

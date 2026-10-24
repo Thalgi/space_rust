@@ -559,6 +559,15 @@ magnétique suit la même horloge que ses entonnoirs.
 (bord brûlant, recadré à 70 rayons pour voir le jet) et T1B4-G (grand
 disque, le jet part du petit). `flot_base` et `j5` partagés avec les J.
 
+**Les jets validés** (2026-10-24, *« on peut valider les jets »*) : **J5**
+devient le jet polaire standard du chantier (`habillage::jet_standard`) —
+traînée en cône, sablier très fin éclairé par plaques, lobes dissymétriques
+courbés en S, long de 1,2 fois le rayon du disque. Posé par
+`habillage::jeune_etoile` : la T Tauri **et** la Herbig du jeu le portent.
+J1 à J4 quittent la touche 4 ; T1B4-A et T1B4-G y restent, avec le jet
+venu de leur disque. Garde : le jet dans `la_jeune_etoile_varie_avec_sa_graine`
+(red-check : jet retiré). Captures : T Tauri et Herbig du défilé.
+
 *L'étoile à neutrons et les jets* (question de l'utilisateur, pour le
 lot 13) : isolée, sans matière à avaler, elle n'en a pas — le jet naît de
 l'accrétion ; accrétante, en binaire X (Sco X-1, Cir X-1), elle peut en

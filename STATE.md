@@ -25,7 +25,7 @@ quand il sera clos. ⚠️ Depuis le dossier principal, la
 branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
 worktree) : on travaille **dans le worktree**.
 
-**Vérifié (2026-10-24)** : **956 tests verts**, `cargo clippy --all-targets`
+**Vérifié (2026-10-24)** : **960 tests verts**, `cargo clippy --all-targets`
 à **0 avertissement**.
 
 **Le lot 9 (comètes) est clos** (2026-10-20), validé à l'écran. Le retour du
@@ -226,13 +226,14 @@ graine) et **la Herbig Ae/Be entre au tirage** en T1B2 (rideaux) —
 `habillage::jeune_etoile`, avec un niveau de détail (pas de nuages sous
 40 px de rayon apparent). Restent en prototypes, non validés : le bord
 interne brûlant (T1B4-A) et le grand disque 0,9–8 UA (T1B4-G).
-**Prochain : le rework des jets polaires** — ils canalisent une partie de la
-poussière et laissent une traînée plus large ; ce qui en sortira sera le
-standard de **tous** les jets polaires du chantier.
+**Les jets polaires sont refaits et validés** (J5 : traînée, sablier fin
+éclairé par plaques, lobes dissymétriques) — le **standard** de tous les
+jets du chantier (`habillage::jet_standard`), porté par la T Tauri et la
+Herbig. Les effets du lot 12 tournent 8 fois moins vite (`RALENTI_NUAGES`).
 
 **Le prochain pas** : **tous les lots livrés sont validés.** Reste à
-construire, **dans l'ordre** : la fin du lot 12 (jets polaires refaits, puis
-étoile Be, puis hypergéante), puis les lots futurs 13 à 15, puis la refonte
+construire, **dans l'ordre** : la fin du lot 12 (étoile Be, puis
+hypergéante), puis les lots futurs 13 à 15, puis la refonte
 de la genèse.
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
