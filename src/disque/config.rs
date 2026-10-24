@@ -234,12 +234,6 @@ impl DisqueConfig {
         self
     }
 
-    /// Voir le champ `evasement`.
-    pub fn avec_evasement(mut self, e: f32) -> Self {
-        self.evasement = e.max(0.0);
-        self
-    }
-
     /// Prototype **F** : voir le champ `grappe`.
     pub fn avec_grappe(mut self, boules: u32) -> Self {
         self.grappe = boules.clamp(1, 8);

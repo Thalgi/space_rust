@@ -41,8 +41,14 @@ pub(crate) fn particuliere(p: f32) -> Gabarit {
         (38000.0, 45000.0, 1.1, 5.0, "Wolf-Rayet", 2.0)
     } else if p < 0.92 {
         (18000.0, 24000.0, 1.4, 6.0, "Supergeante bleue", 2.0)
-    } else if p < 0.98 {
+    } else if p < 0.96 {
         (4000.0, 4600.0, 0.9, 1.2, "T Tauri (jeune)", 6.0)
+    } else if p < 0.98 {
+        // **Herbig Ae/Be** (lot 12, 2026-10-24) : la grande sœur de la
+        // T Tauri — même famille des jeunes étoiles, 2 à 8 masses solaires,
+        // type A/B, blanche. 2 % des particulières, pris sur la T Tauri
+        // (6 → 4 %) : plus massive, donc plus rare et plus brève.
+        (7500.0, 11000.0, 2.6, 2.0, "Herbig Ae/Be (jeune)", 6.0)
     } else {
         // **Quasi-étoile** (lot 11) : 2 % des particulières, soit ~1 système
         // sur 1 000 — rareté choisie par l'utilisateur. Une enveloppe chauffée
@@ -52,6 +58,12 @@ pub(crate) fn particuliere(p: f32) -> Gabarit {
         // T Tauri, qui passe de 8 à 6 %.
         (3400.0, 3800.0, UA, 12.0, "Quasi-etoile", 0.0)
     }
+}
+
+/// **Une Herbig Ae/Be ?** Elle partage la variante des jeunes étoiles
+/// avec la T Tauri ; c'est son disque qui diffère (`habillage::jeune_etoile`).
+pub fn est_herbig(nom: &str) -> bool {
+    nom.starts_with("Herbig")
 }
 
 /// **Quelle étoile ordinaire** — tout ce qui n'est pas une particulière — pour
@@ -433,6 +445,7 @@ pub fn surface(nom: &str) -> (f32, f32, f32) {
         // Jamais vus en essai : la règle physique, à juger à l'écran.
         "Etoile carbonee (C)" => (9.0, 1.00, 0.80),
         "T Tauri (jeune)" => (14.0, 1.00, 0.70),
+        "Herbig Ae/Be (jeune)" => (11.0, 0.25, 0.45),
         "Pulsar" | "Etoile a neutrons" | "Magnetar" => (11.0, 0.10, 0.30),
         // Surfaces validées avec leur ébullition : inchangées.
         "Geante rouge" | "Supergeante rouge" | "Mira" | "Cepheide"
@@ -546,7 +559,7 @@ mod tests_particulieres {
     use super::*;
 
     /// Les noms que le tirage des particulières doit savoir produire.
-    const ATTENDUS: [&str; 8] = [
+    const ATTENDUS: [&str; 9] = [
         "Trou noir",
         "Pulsar",
         "Etoile a neutrons",
@@ -554,6 +567,7 @@ mod tests_particulieres {
         "Wolf-Rayet",
         "Supergeante bleue",
         "T Tauri (jeune)",
+        "Herbig Ae/Be (jeune)",
         "Quasi-etoile",
     ];
 
@@ -946,11 +960,11 @@ mod tests_types {
                 assert_eq!(g.4, *nom);
             }
         }
-        // Les deux tables au complet : 8 particulières (la quasi-étoile du lot 11
-        // comprise), 16 ordinaires. Si ce
+        // Les deux tables au complet : 9 particulières (la quasi-étoile du lot 11
+        // et la Herbig Ae/Be du lot 12 comprises), 16 ordinaires. Si ce
         // compte bouge, un type est arrivé ou parti — le menu suit tout seul,
         // ce test dit seulement qu'on l'a remarqué.
-        assert_eq!(types.len(), 24, "{types:?}");
+        assert_eq!(types.len(), 25, "{types:?}");
         for attendu in ["Trou noir", "T Tauri (jeune)", "Naine brune", "O (bleue)", "Mira"] {
             assert!(types.contains(&attendu), "« {attendu} » absent : {types:?}");
         }

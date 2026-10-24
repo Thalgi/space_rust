@@ -478,6 +478,36 @@ pôles de rotation. Garde `le_bord_brulant_colle_a_la_cavite` (red-check :
 anneau élargi, boule à 3,57). Captures : les six s'affichent ; le bord brûlant
 reste discret en Palette — à régler à l'écran.
 
+**Adoption (2026-10-24)** — *« pour le moment ce qui est validé peut être
+adopté »*. Source unique : `disque::habillage::jeune_etoile`, posée par
+`Variante::Proto` (`Soleil::avec_disque_jeune`).
+
+- **T Tauri** : T1B4, **varié par la graine** (cavité 4-7 rayons, dipôle
+  0-34° — rideaux s'il est presque droit, deux flots sinon —, deux à quatre
+  bras), dérivé, jamais tiré. Le disque protosolaire passe de 3-16 à **5-48**
+  rayons stellaires (`RAYON_PROTOSOLAIRE`).
+- **Herbig Ae/Be** au tirage : 2 % des particulières, pris sur la T Tauri
+  (6 → 4 %) ; gabarit de l'étoile A (7 500-11 000 K, rayon 2,6) ; disque
+  T1B2 (rideaux). En tête du défilé avec la T Tauri, dans la galerie des
+  étoiles.
+- ⚠️ **L'épaisseur réellement validée** : `avec_couches` et `avec_nuages_3d`
+  règlent le même `h_r`, le dernier appel gagne — T1 avait h/r **0,05**,
+  pas les 0,18 de sa doc. C'est ce qui est posé.
+- **Niveau de détail** : sous 40 px de rayon apparent, ni nuages ni bras
+  (`nuages_visibles`) — en vue système, le disque fait quelques pixels et
+  porterait ~30 000 boules par image pour rien.
+- Retirés de la touche 4 (la règle) : T0-T5, T1B1-B4, les tirages, la Herbig.
+  Restent, non validés : **T1B4-A** (bord interne brûlant), **T1B4-G** (grand
+  disque 0,9-8 UA). `avec_evasement` ôté (l'évasement reste un champ).
+- Gardes : `la_jeune_etoile_varie_avec_sa_graine`,
+  `les_nuages_n_apparaissent_que_de_pres` (red-check : seuil à 0).
+  Captures : T Tauri et Herbig du défilé portent leur disque.
+
+**Rework des jets polaires, annoncé le même jour** : *« ceux-ci canalisent
+une partie de la poussière et laissent une traînée plus large […] ce qui
+rendra au niveau des jets polaires aura été mis au standard pour tous les cas
+de jets polaires de ce chantier »*.
+
 **Question encore ouverte** : le
 grand disque protoplanétaire s'ajoute-t-il au petit disque protosolaire de
 T Tauri, ou le remplace-t-il ?

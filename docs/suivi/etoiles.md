@@ -46,6 +46,10 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
 - [x] **Protoétoile / T Tauri** : preset galerie + jets bipolaires, **et son disque
   protosolaire** depuis le 2026-09-26 (mode de couronne 6, `Variante::Proto`). Il partageait
   le mode 1 avec l'étoile à neutrons, qui n'a que faire d'un berceau de planètes.
+  **Lot 12 (2026-10-24)** : disque de 5 à 48 rayons en nuages cotonneux, bras spiraux puis
+  entonnoirs magnétiques (taches d'accrétion sur les pôles magnétiques), varié par la
+  graine ; et sa grande sœur, la **Herbig Ae/Be**, au tirage (disque en rideaux).
+  `disque::habillage::jeune_etoile`. Les jets polaires sont à refaire (fin du lot 12).
 
 ## Étoiles particulières (le « un peu spécial »)
 

@@ -189,7 +189,9 @@ exactement le même système (reproductible, partageable).
       `est_remnant()` leur retire la zone habitable) — **à refaire** (lot futur 13 : peints
       dans le plan de l'écran). Wolf-Rayet **faite**, surface en relief depuis le lot 10.
       Étoiles vertes et naine noire : lots futurs 14 et 15. **Quasi-étoile faite** (lot 11,
-      2026-10-21).
+      2026-10-21). **Herbig Ae/Be faite** (lot 12, 2026-10-24) : la grande sœur de la
+      T Tauri au tirage, disque en rideaux magnétiques. Étoile Be et hypergéante : lot 12,
+      à faire.
 - [x] **Une étoile se lit comme une étoile en vue système** (2026-08-09, § P.3 bis).
       À l'échelle vraie elle fait **1,14 px de rayon** au cadrage par défaut : ni teinte, ni
       tache, ni couronne ne peut s'y voir. Plancher en pixels `soleil::PX_MIN = 8`, qui

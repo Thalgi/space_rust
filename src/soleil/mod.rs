@@ -164,7 +164,12 @@ pub struct Soleil {
 /// **Bornes du disque protosolaire**, en rayons stellaires. Bien plus large
 /// que le disque d'accrétion : c'est un berceau de planètes, pas une
 /// couronne de gaz surchauffé.
-const RAYON_PROTOSOLAIRE: (f32, f32) = (3.0, 16.0);
+///
+/// Lot 12 (2026-10-24) : de 3–16 à **5–48**. Le bord interne est la cavité
+/// magnétosphérique (le champ tronque le disque, 3 à 8 rayons chez une
+/// T Tauri) ; l'externe, la largeur retenue à l'écran (T1, *« plus large »*).
+/// `habillage::jeune_etoile` affine la cavité d'après la graine.
+const RAYON_PROTOSOLAIRE: (f32, f32) = (5.0, 48.0);
 
 /// **Normale du plan d'un disque stellaire, dérivée de la graine.**
 ///
@@ -536,16 +541,18 @@ impl Soleil {
         s
     }
 
-    /// **Disque protosolaire** d'une jeune étoile (T Tauri) : le berceau des
-    /// planètes, encore là.
+    /// **Le disque d'une jeune étoile, habillé** (lot 12) : nuages en
+    /// volume, bras de matière et entonnoirs — T1B4 pour une T Tauri, varié
+    /// par la graine ; T1B2 pour une Herbig Ae/Be. Voir
+    /// `disque::habillage::jeune_etoile`.
     ///
     /// Beaucoup plus large que le disque d'accrétion d'un trou noir, et sans
     /// beaming — sa matière est froide et lente. ⚠️ Il reste très en deçà de
     /// l'échelle réelle (une centaine d'UA) : à cette taille il couvrirait
     /// tout le système et masquerait ses planètes. Même exagération à
     /// l'envers que `ECHELLE_CORPS`.
-    pub fn avec_disque_protosolaire(self) -> Self {
-        let cfg = self.config_protosolaire();
+    pub fn avec_disque_jeune(self, herbig: bool) -> Self {
+        let cfg = crate::disque::habillage::jeune_etoile(self.config_protosolaire(), self.base.rayon, self.graine, herbig);
         self.avec_disque(cfg)
     }
 

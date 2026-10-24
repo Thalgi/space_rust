@@ -115,10 +115,13 @@ impl Variante {
             // pôles. Les jets peints dans le plan de l'écran (`avec_jets`)
             // partaient de travers dès que le disque s'inclinait ; ils restent
             // à l'étoile à neutrons jusqu'au lot 13.
+            //
+            // Son disque est habillé (lot 12, 2026-10-24) : T1B4 pour la
+            // T Tauri, T1B2 pour la Herbig Ae/Be — la seule à porter ce nom.
             Variante::Proto => s
                 .avec_jets_3d(crate::soleil::JETS_PROTO)
                 .avec_accretion_polaire(crate::soleil::ACCRETION_PROTO)
-                .avec_disque_protosolaire(),
+                .avec_disque_jeune(crate::etoile::est_herbig(nom)),
         }
     }
 }
@@ -337,7 +340,7 @@ mod tests_variante {
             "avec_pulsar(",
             "avec_magnetar(",
             "avec_trou_noir(",
-            "avec_disque_protosolaire(",
+            "avec_disque_jeune(",
             "avec_pulsation(",
             "avec_ebullition_du_type(",
             "avec_eclat_visible(",

@@ -310,6 +310,16 @@ d'abord :
 | 11 | **Quasi-étoile** (§3 bis), après le trou noir (lots 4-5) | Un objet qu'on n'oublie pas : une enveloppe rouge sombre large comme une orbite, nourrie par un trou noir |
 | 12 | Disques proto\* posés dans les systèmes générés (§5 bis) ; hypergéante, Be, Herbig Ae/Be au tirage | Les jeunes étoiles portent enfin leur disque ; trois types de plus pour peu de rendu neuf |
 
+**Lot 12, état au 2026-10-24** : le disque des jeunes étoiles est **adopté**
+— nuages 3D cotonneux, bras de matière (entonnoirs d'accrétion
+magnétosphérique, spirales), T1B4 pour la T Tauri varié par la graine, T1B2
+pour la **Herbig Ae/Be**, désormais au tirage (`disque::habillage::jeune_etoile`,
+détail au journal). Le lot gagne un **rework des jets polaires**, demandé ce
+jour : un jet canalise une partie de la poussière et laisse une traînée plus
+large ; ce qui en sortira sera **le standard de tous les jets polaires du
+chantier** (jeunes étoiles ici, rémanents au lot 13). Restent l'étoile Be et
+l'hypergéante.
+
 ## 6 bis. Le lot 3, redécoupé en sous-lots (2026-09-24)
 
 Le lot 3 a été livré (arches ancrées sur les taches, flare, activité par

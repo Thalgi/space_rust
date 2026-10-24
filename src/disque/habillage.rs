@@ -89,6 +89,47 @@ pub fn base() -> DisqueConfig {
     anneau(0.3, 8.0).avec_lacune_ondulee(0.38, 0.05, 0.92, 0.35).avec_lacune_ondulee(0.66, 0.06, 0.92, 0.35)
 }
 
+// ---- La jeune étoile du jeu (lot 12, adoptée le 2026-10-24) ----
+
+/// **Le disque d'une jeune étoile, tel que le jeu le pose** : T1B4 pour la
+/// T Tauri, T1B2 pour la Herbig Ae/Be, retenus à l'écran.
+///
+/// `c` est son disque protosolaire nu (`Soleil::config_protosolaire`, de 5 à
+/// 48 rayons stellaires), `rayon` celui de l'étoile, `graine` la sienne.
+///
+/// - **Habillage commun** (l'ex-T1) : voile en sept couches, grappes de huit
+///   boules ×1,7, voile adouci. ⚠️ `avec_couches` et `avec_nuages_3d` règlent
+///   **le même** `h_r`, et le dernier appel gagne : le T1 jugé à l'écran avait
+///   h/r **0,05** (nuages compris), pas les 0,18 que sa doc annonçait. C'est ce
+///   qu'on a vu et validé, c'est ce qui est posé.
+/// - **T Tauri** : T1B4 — bras spiraux puis flots magnétiques —, **varié par
+///   la graine** comme le montraient les tirages (*« le reste a sa pertinence,
+///   on pourrait l'utiliser pour d'autres systèmes random »*) : cavité de 4 à
+///   7 rayons, dipôle de 0 à 34° (rideaux s'il est presque droit, deux flots
+///   sinon), deux à quatre bras. Dérivé, jamais tiré.
+/// - **Herbig Ae/Be** : T1B2 — cavité de 5 rayons, dipôle aligné, six
+///   rideaux.
+///
+/// Le bord interne brûlant (T1B4-A) et le grand disque (T1B4-G) restent en
+/// prototypes : pas encore validés.
+pub fn jeune_etoile(c: DisqueConfig, rayon: f32, graine: f32, herbig: bool) -> DisqueConfig {
+    let largeur = c.externe / rayon / 16.0;
+    let c = DisqueConfig { granulation: 0.1, ..c }
+        .avec_nuages_3d((1200.0 * largeur) as u32, 0.05)
+        .avec_couches(7, 0.05)
+        .avec_grappe(8)
+        .avec_aspect_nuages(1.7, 0.0);
+    if herbig {
+        return DisqueConfig { interne: 5.0 * rayon, ..c }.avec_entonnoirs(6, rayon, 0.0);
+    }
+    let f = |k: f32| (graine * 0.618_034 * k).fract();
+    let incl = 0.6 * f(7.13);
+    let flots = if incl > 0.15 { 2 } else { 4 + (f(2.9) * 3.0) as u32 };
+    DisqueConfig { interne: (4.0 + 3.0 * f(11.1)) * rayon, ..c }
+        .avec_spirales_accretion(2 + (f(3.7) * 3.0) as u32, rayon)
+        .avec_entonnoirs(flots, rayon, incl)
+}
+
 /// Une planète d'une déclinaison : `(rayon d'orbite en UA, géante ?)`.
 pub type Planete = (f32, bool);
 
@@ -205,6 +246,30 @@ mod tests {
                 assert!(!anneaux.iter().any(|&(i, e)| (i..=e).contains(&a)), "planète à {a} UA dans un anneau");
             }
         }
+    }
+
+    /// **La jeune étoile du jeu** : la Herbig a ses six rideaux droits ; la
+    /// T Tauri ses bras et ses flots, dans les bornes des tirages, la même à
+    /// graine égale et pas la même d'une graine à l'autre.
+    #[test]
+    fn la_jeune_etoile_varie_avec_sa_graine() {
+        let nu = DisqueConfig::protosolaire(0, 5.0, 48.0, 1000.0);
+        let h = jeune_etoile(nu, 1.0, 3.0, true);
+        assert_eq!((h.entonnoirs, h.inclinaison_dipole, h.spirales_accretion), (6, 0.0, 0));
+        assert_eq!(h.interne, 5.0);
+        let mut vus = std::collections::HashSet::new();
+        for k in 0..40 {
+            let g = k as f32 * 23.7;
+            let t = jeune_etoile(nu, 1.0, g, false);
+            assert!((4.0..=7.0).contains(&t.interne), "cavité {}", t.interne);
+            assert!((2..=4).contains(&t.spirales_accretion) && (2..=6).contains(&t.entonnoirs));
+            assert!((0.0..=0.6).contains(&t.inclinaison_dipole));
+            assert_eq!(t.nuages_3d, 3600, "la densité de T1 (48 rayons)");
+            let u = jeune_etoile(nu, 1.0, g, false);
+            assert_eq!((t.interne, t.entonnoirs, t.spirales_accretion), (u.interne, u.entonnoirs, u.spirales_accretion));
+            vus.insert((t.entonnoirs, t.spirales_accretion));
+        }
+        assert!(vus.len() >= 4, "les graines ne varient presque pas : {vus:?}");
     }
 
     /// **-F : la planète est dans son sillon.**

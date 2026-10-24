@@ -15,7 +15,7 @@
 > « Où trouver quoi »). **Ne pas recommencer** : un fait qui se raconte va dans
 > un journal, pas ici.
 
-## Reprendre ici (état au 2026-10-19)
+## Reprendre ici (état au 2026-10-24)
 
 **Chantier en cours : Astres V2.** Branche `chantier-astres`, worktree
 `.claude/worktrees/astres-v2`. **Fusionnée dans `main` le 2026-10-21** (avance
@@ -25,8 +25,8 @@ quand il sera clos. ⚠️ Depuis le dossier principal, la
 branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
 worktree) : on travaille **dans le worktree**.
 
-**Vérifié (2026-10-21)** : **923 tests verts** (936 avec le binaire `mhd`),
-`cargo clippy --all-targets` à **0 avertissement**.
+**Vérifié (2026-10-24)** : **957 tests verts**, `cargo clippy --all-targets`
+à **0 avertissement**.
 
 **Le lot 9 (comètes) est clos** (2026-10-20), validé à l'écran. Le retour du
 3 octobre (« une courbe et une droite ») est soldé :
@@ -215,13 +215,25 @@ multiples ; pas de planète interne, c'est voulu.
 
 **Section prototypes** (2026-10-22) : les essais visuels vivent à la
 **touche 4 de la vue isolée** (`ecran/prototypes.rs`), plus dans les
-galeries ; un prototype validé en est retiré. **En cours : quatre disques
-protoplanétaires** (lot 12.2 — voile bouillonnant, épais, nuages 3D, les
-trois). Lot 12.1 (jets 3D des jeunes étoiles) fait et validé.
+galeries ; un prototype validé en est retiré.
+
+**Lot 12, où on en est (2026-10-24)** : 12.1 (jets 3D des jeunes étoiles)
+validé ; les **habillages du disque protoplanétaire** (B à I, chacun en base,
+-F, -R, -M) jugés bons et versés dans la galerie « Ceintures & disques »
+(`disque::habillage`) ; **la T Tauri adopte T1B4** (disque de 5 à 48 rayons
+en nuages cotonneux, bras spiraux puis entonnoirs magnétiques, varié par la
+graine) et **la Herbig Ae/Be entre au tirage** en T1B2 (rideaux) —
+`habillage::jeune_etoile`, avec un niveau de détail (pas de nuages sous
+40 px de rayon apparent). Restent en prototypes, non validés : le bord
+interne brûlant (T1B4-A) et le grand disque 0,9–8 UA (T1B4-G).
+**Prochain : le rework des jets polaires** — ils canalisent une partie de la
+poussière et laissent une traînée plus large ; ce qui en sortira sera le
+standard de **tous** les jets polaires du chantier.
 
 **Le prochain pas** : **tous les lots livrés sont validés.** Reste à
-construire, **dans l'ordre** : 12 (disques proto au tirage, hypergéante, Be,
-Herbig Ae/Be), puis les lots futurs 13 à 15, puis la refonte de la genèse.
+construire, **dans l'ordre** : la fin du lot 12 (jets polaires refaits, puis
+étoile Be, puis hypergéante), puis les lots futurs 13 à 15, puis la refonte
+de la genèse.
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de

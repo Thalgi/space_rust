@@ -393,6 +393,9 @@ impl Disque {
     /// passe derrière elle par la profondeur.
     fn dessiner_nuages_3d(&self, cam: &CameraInfo, cote_camera: bool) {
         let p = self.base.position;
+        if !nuages_visibles(self.cfg.externe, (cam.pos - p).length(), viewport_h()) {
+            return;
+        }
         if self.cfg.nuages_3d > 0 || bras::actifs(&self.cfg) {
             let cote_cam = self.axe_n.dot(cam.pos - p);
             let (mut v, mut i) = (Vec::new(), Vec::new());
@@ -475,6 +478,21 @@ impl Disque {
             gl_use_default_material();
         }
     }
+}
+
+/// **Rayon apparent d'un disque, en pixels, sous lequel ses nuages et ses
+/// bras ne se dessinent plus** : le voile seul le porte.
+const DETAIL_NUAGES_PX: f32 = 40.0;
+
+/// **Niveau de détail des nuages 3D** (lot 12, adoption de la T Tauri) :
+/// le disque d'une jeune étoile porte ~30 000 boules, recalculées à chaque
+/// image. En vue système, il ne fait que quelques pixels — les calculer
+/// serait payer pour rien, et plusieurs étoiles peuvent en porter. On les
+/// dessine dès qu'il dépasse `DETAIL_NUAGES_PX` de rayon apparent (champ
+/// vertical de 45°, la caméra de macroquad).
+pub(crate) fn nuages_visibles(externe: f32, dist: f32, hauteur_px: f32) -> bool {
+    const TAN_DEMI_CHAMP: f32 = 0.414; // tan(22,5°)
+    externe / dist.max(1e-3) / TAN_DEMI_CHAMP * hauteur_px * 0.5 >= DETAIL_NUAGES_PX
 }
 
 /// **Ce que les sillons laissent d'un nuage** posé en `t` : 1 hors sillon,
@@ -887,6 +905,16 @@ mod tests_prototypes {
         assert!(du_cote_camera(vec3(0.0, -0.2, 2.0), n, -cam));
     }
 
+    /// **De loin, pas de nuages ; de près, si** — et la limite suit la taille
+    /// du disque et celle de l'écran.
+    #[test]
+    fn les_nuages_n_apparaissent_que_de_pres() {
+        assert!(nuages_visibles(43.0, 95.0, 1440.0), "T Tauri en vue isolée");
+        assert!(!nuages_visibles(43.0, 20_000.0, 1440.0), "T Tauri en vue système");
+        assert!(nuages_visibles(43.0, 300.0, 1440.0) && !nuages_visibles(43.0, 300.0, 100.0), "l'écran ne compte pas");
+        assert!(nuages_visibles(400.0, 3000.0, 1440.0) && !nuages_visibles(40.0, 3000.0, 1440.0), "la taille ne compte pas");
+    }
+
     /// **Un sillon se vide aussi de ses nuages**, et seulement lui : intact
     /// au loin, vidé selon sa profondeur en son cœur ; une bande brillante
     /// (profondeur négative) n'y touche pas.
@@ -984,7 +1012,7 @@ mod tests_prototypes {
     #[test]
     fn un_disque_evase_s_amincit_vers_l_etoile() {
         let c = DisqueConfig::protoplanetaire(0, 10.0, 100.0, 1000.0).avec_nuages_3d(400, 0.3);
-        let e = c.avec_evasement(0.8);
+        let e = DisqueConfig { evasement: 0.8, ..c };
         let (mut dedans, mut bord) = (0, 0);
         for k in 0..400 {
             let (p, _, _, t) = nuage_3d(k, &c, 0.0);
