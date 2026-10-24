@@ -55,7 +55,15 @@ pub fn prototypes() -> Vec<Prototype> {
         j("J2 : J1 + noeuds de Herbig-Haro", |f| Flot { cone: 1.0, noeuds: 5, ..f }),
         j("J3 : J1 + parois eclairees en sablier", |f| Flot { cone: 1.0, parois: 1.0, ..f }),
         j("J4 : tout ensemble", |f| Flot { cone: 1.0, noeuds: 5, parois: 1.0, ..f }),
-        j("J5 : J1 + sablier tres fin, eclaire par plaques", |f| Flot { cone: 1.0, parois: 1.0, finesse: 0.9, ..f }),
+        // Second tour : les deux lobes ne se reflètent plus (*« ça se voit
+        // que c'est une symétrie »*).
+        j("J5 : J1 + sablier tres fin, par plaques, lobes dissymetriques", |f| Flot {
+            cone: 1.0,
+            parois: 1.0,
+            finesse: 0.9,
+            asymetrie: 1.0,
+            ..f
+        }),
         // Le bord interne brûlant : l'anneau incandescent au ras de la cavité
         // de l'image d'artiste. Cadré serré : il vit près de l'étoile.
         Prototype {

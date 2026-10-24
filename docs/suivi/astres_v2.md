@@ -535,6 +535,18 @@ plaques) : deux fois plus de boules, un peu plus grosses. Gardes :
 place : `git checkout` ne restaure rien d'un fichier pas encore suivi —
 repéré, défait à la main, et le red-check refait sur une copie.
 
+**Second tour des jets** (même jour) — *« sur J3 & J4, il faut augmenter la
+distance entre le début du sablier et l'astre, car on ne le voit plus ; il
+faut que ce soit léger. Sur J5, ça se voit que c'est une symétrie »*. Le
+sablier commence à **15 %** de la longueur (`DEPART_PAROIS`), s'y allume
+doucement ; la traînée s'efface au ras de l'étoile. Nouveau réglage
+`asymetrie` (J5) : le lobe du dessous plus court (−30 %), plus fermé, plus
+terne, et le flot courbé en S — la précession du jet. Gardes
+`le_sablier_commence_loin_de_l_etoile` (red-check : paroi à 0,0005 de
+l'étoile) et `deux_lobes_dissymetriques_ne_se_refletent_pas` (red-check :
+« même longueur »). Captures : l'étoile reparaît au cœur du sablier de J3 ;
+les lobes de J5 ne se reflètent plus.
+
 *L'étoile à neutrons et les jets* (question de l'utilisateur, pour le
 lot 13) : isolée, sans matière à avaler, elle n'en a pas — le jet naît de
 l'accrétion ; accrétante, en binaire X (Sco X-1, Cir X-1), elle peut en
