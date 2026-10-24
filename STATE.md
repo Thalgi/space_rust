@@ -25,7 +25,7 @@ quand il sera clos. ⚠️ Depuis le dossier principal, la
 branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
 worktree) : on travaille **dans le worktree**.
 
-**Vérifié (2026-10-24)** : **957 tests verts**, `cargo clippy --all-targets`
+**Vérifié (2026-10-24)** : **956 tests verts**, `cargo clippy --all-targets`
 à **0 avertissement**.
 
 **Le lot 9 (comètes) est clos** (2026-10-20), validé à l'écran. Le retour du
