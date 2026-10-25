@@ -233,8 +233,9 @@ Herbig. Les effets du lot 12 tournent 8 fois moins vite (`RALENTI_NUAGES`).
 **L'étoile Be** (aplatie, disque de décrétion) et **l'hypergéante** (Eta
 Carinae : vent, jupe, lobes en bulbe) sont au tirage (2026-10-25) ; le grand
 disque protoplanétaire est posé par la genèse, un sillon par planète. **Tout
-le lot 12 est adopté, la touche 4 est vide.** Avant de le clore : mesurer les
-FPS en jeu, et juger le grand disque en régénérant des systèmes jeunes.
+le lot 12 est adopté, la touche 4 est vide.** FPS mesurés en jeu : 60 stables,
+un peu moins de 40 tout près d'un disque. Avant de le clore : juger le grand
+disque en régénérant des systèmes jeunes.
 
 **Le prochain pas** : **tous les lots livrés sont validés.** Reste à
 construire, **dans l'ordre** : la clôture du lot 12 (validations en jeu,

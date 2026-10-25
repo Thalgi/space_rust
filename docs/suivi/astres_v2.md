@@ -632,6 +632,13 @@ satisfaisants »*). Deux variantes, deux modes de couronne :
   aplatie et son disque, une arche posée sur son bord ; l'hypergéante, son
   vent et sa nébuleuse.
 
+**FPS en jeu, mesurés par l'utilisateur** (2026-10-25) : **60 stables**,
+un peu **moins de 40** en zoomant très près d'un disque. Le niveau de détail
+fait son office de loin ; de près, la cause probable est le **remplissage**
+(des milliers de grosses boules additives qui se recouvrent à l'écran), pas
+le calcul. Jugé acceptable en l'état ; piste si besoin : borner la taille
+écran des boules, ou en dessiner moins quand le disque déborde l'écran.
+
 *L'étoile à neutrons et les jets* (question de l'utilisateur, pour le
 lot 13) : isolée, sans matière à avaler, elle n'en a pas — le jet naît de
 l'accrétion ; accrétante, en binaire X (Sco X-1, Cir X-1), elle peut en
