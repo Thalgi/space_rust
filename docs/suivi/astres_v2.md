@@ -597,6 +597,19 @@ venu de leur disque. Garde : le jet dans `la_jeune_etoile_varie_avec_sa_graine`
   le vrai est brun-rouge) ; E2 trop clairsemé. Garde `un_bulbe_se_referme_au_bout`
   (red-check : parabole seule, « pas fermé »).
 
+**Les éruptions d'une étoile aplatie** (2026-10-25) — *« un problème majeur
+sur les éruptions : comme la sphère n'est plus de la même dimension, le
+maillage où se réalisent les éruptions doit être ajusté »*. Le shader aplatit
+l'étoile, mais les arches (CPU) restaient posées sur la sphère : leurs pieds
+flottaient au-dessus des pôles. `Ecrasement` (`soleil/rendu.rs`) porte la
+sphère sur l'ellipsoïde — arches, pieds et cœurs des éjections écrasés le long
+de l'axe ; le masquage derrière l'étoile se juge **avant** l'écrasement,
+caméra comprise (une application affine garde les droites). Les taches, elles,
+sont dans le shader, qui ramène déjà tout au cercle. Garde
+`l_ecrasement_porte_la_sphere_sur_l_etoile_aplatie` (red-check : écrasement
+débranché, « pôle »). ⚠️ Pas vu à l'écran : aucune arche n'est sortie
+pendant les captures.
+
 *L'étoile à neutrons et les jets* (question de l'utilisateur, pour le
 lot 13) : isolée, sans matière à avaler, elle n'en a pas — le jet naît de
 l'accrétion ; accrétante, en binaire X (Sco X-1, Cir X-1), elle peut en

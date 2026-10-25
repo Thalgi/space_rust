@@ -137,6 +137,14 @@ impl Soleil {
         // (`disque_particules.vert.glsl`) : plancher en pixels et fondu.
         let dist = (cam.pos - c).length();
         let vh = crate::impostor::viewport_h();
+        // **Étoile aplatie** (l'étoile Be) : les arches sont calculées sur la
+        // sphère, puis écrasées comme elle le long de l'axe — leurs pieds
+        // retombent sur sa surface. Le masquage se juge dans l'espace d'avant
+        // l'écrasement, caméra comprise : une application affine garde les
+        // droites, donc « caché par la sphère » là vaut « caché par l'étoile
+        // aplatie » ici.
+        let ecrase = Ecrasement::de(axe_rot, self.aplatissement);
+        let cam_sphere = c + ecrase.inverse(cam.pos - c);
         for b in &self.boucles {
             let a_w = vers_monde(b.sa, rot, axe_rot);
             let b_w = vers_monde(b.sb, rot, axe_rot);
@@ -159,8 +167,8 @@ impl Soleil {
                 // la cubique : les points sont équidistants le long de la
                 // courbe (voir [`le_long`]).
                 let t = i as f32 / n as f32;
-                let monde = c + *point;
-                if cache_par_sphere(monde, c, r, cam.pos) {
+                let monde = c + ecrase.appliquer(*point);
+                if cache_par_sphere(c + *point, c, r, cam_sphere) {
                     // Derrière le soleil : le ruban se coupe ici et reprend
                     // au premier point revenu en vue. Un `continue` aurait
                     // relié les deux bords par-dessus l'étoile.
@@ -195,8 +203,8 @@ impl Soleil {
 
             // Une lueur au pied, qui fait l'articulation avec la surface.
             for pied in [a_w, b_w] {
-                let monde = c + pied * r;
-                if cache_par_sphere(monde, c, r, cam.pos) {
+                let monde = c + ecrase.appliquer(pied * r);
+                if cache_par_sphere(c + pied * r, c, r, cam_sphere) {
                     continue;
                 }
                 let (taille, fondu) = plancher_plasma(calibre * 2.4, dist, vh);
@@ -220,8 +228,9 @@ impl Soleil {
                 // Le milieu du **trajet**, pas le milieu du paramètre : sur
                 // une arche étirée les deux sont très loin l'un de l'autre.
                 let courbe = le_long(a_w, b_w, profil(b), r, 8);
-                let pos = c + courbe[courbe.len() / 2];
-                if !cache_par_sphere(pos, c, r, cam.pos) {
+                let milieu = courbe[courbe.len() / 2];
+                let pos = c + ecrase.appliquer(milieu);
+                if !cache_par_sphere(c + milieu, c, r, cam_sphere) {
                     let (calibre, _) = tube(1.0, etendue(a_w, b_w, b.apex.min(b.apex_max), r), b.epaisseur);
                     let (taille_c, fondu_c) = plancher_plasma(calibre * 3.2, dist, vh);
                     let lum = b.intensite.clamp(0.0, 1.0);
@@ -342,6 +351,29 @@ fn plancher_plasma(taille: f32, dist: f32, vh: f32) -> (f32, f32) {
 /// rotation propre, puis l'**inclinaison de l'axe** (`axe_rot`, identité pour
 /// la plupart des étoiles). ⚠️ Inverse exact de `tourner` dans
 /// `soleil.frag.glsl` : c'est ce qui fait naître une arche sur sa tache.
+/// **L'écrasement d'une étoile aplatie** le long de son axe de rotation :
+/// la composante axiale multipliée par `1 − aplatissement` (et divisée par lui
+/// pour revenir). Le même que le shader (`aplatir`), vu de l'autre côté :
+/// lui ramène l'ellipse au cercle, ceci porte la sphère sur l'ellipse.
+pub(super) struct Ecrasement {
+    axe: Vec3,
+    k: f32,
+}
+
+impl Ecrasement {
+    pub(super) fn de(axe_rot: Quat, aplatissement: f32) -> Self {
+        Self { axe: axe_rot * Vec3::Y, k: (1.0 - aplatissement).max(0.05) }
+    }
+
+    pub(super) fn appliquer(&self, v: Vec3) -> Vec3 {
+        v - self.axe * v.dot(self.axe) * (1.0 - self.k)
+    }
+
+    pub(super) fn inverse(&self, v: Vec3) -> Vec3 {
+        v + self.axe * v.dot(self.axe) * (1.0 / self.k - 1.0)
+    }
+}
+
 fn vers_monde(s: Vec3, a: f32, axe_rot: Quat) -> Vec3 {
     let (sa, ca) = a.sin_cos();
     axe_rot * vec3(s.x * ca + s.z * sa, s.y, -s.x * sa + s.z * ca)
@@ -875,4 +907,20 @@ mod tests_jets {
             assert!(((pts.last().unwrap().0 - c).length() - r * (1.02 + longueur)).abs() < 1e-3);
         }
     }
+    /// **Une arche d'étoile aplatie pose ses pieds sur sa surface** : un
+    /// point de la sphère écrasé tombe sur l'ellipsoïde (pôle à 1 − f, équateur
+    /// inchangé), et l'inverse le ramène.
+    #[test]
+    fn l_ecrasement_porte_la_sphere_sur_l_etoile_aplatie() {
+        let q = Quat::from_rotation_x(0.6);
+        let e = Ecrasement::de(q, 0.3);
+        let axe = q * Vec3::Y;
+        assert!((e.appliquer(axe).length() - 0.7).abs() < 1e-5, "pôle");
+        let equateur = q * Vec3::X;
+        assert!((e.appliquer(equateur) - equateur).length() < 1e-5, "équateur");
+        let v = vec3(0.3, -0.8, 0.5);
+        assert!((e.inverse(e.appliquer(v)) - v).length() < 1e-5, "aller-retour");
+        assert_eq!(Ecrasement::de(q, 0.0).appliquer(v), v, "une sphère s'écrase");
+    }
+
 }
