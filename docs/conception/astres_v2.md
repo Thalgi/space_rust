@@ -333,8 +333,8 @@ s'appliquera aux astres qui accrètent.
 disque de décrétion) et l'hypergéante (mode 8 : lobes en bulbe du Homoncule,
 `Flot::forme`) sont au tirage ; le grand disque protoplanétaire est posé par
 la genèse (`habillage::grand_disque`, un sillon par planète). Les trois types
-annoncés du lot sont livrés ; restent les validations en jeu avant sa
-clôture.
+annoncés du lot sont livrés. **Lot 12 clos le 2026-10-25**, validé à l'écran
+et en jeu, et fusionné dans `main`.
 
 ## 6 bis. Le lot 3, redécoupé en sous-lots (2026-09-24)
 

@@ -18,10 +18,10 @@
 ## Reprendre ici (état au 2026-10-25)
 
 **Chantier en cours : Astres V2.** Branche `chantier-astres`, worktree
-`.claude/worktrees/astres-v2`. **Fusionnée dans `main` le 2026-10-21** (avance
-rapide, lots 0 à 11), **rien de poussé** : `main` a 79 commits d'avance sur
-`origin/main`. Le chantier continue sur la branche (lot 12) ; refusionner
-quand il sera clos. ⚠️ Depuis le dossier principal, la
+`.claude/worktrees/astres-v2`. **Fusionnée dans `main` le 2026-10-25** (avance
+rapide, lots 0 à 12 ; une première fois le 2026-10-21, lots 0 à 11), **rien de
+poussé** : `main` a 112 commits d'avance sur `origin/main`. Le chantier
+continue sur la branche (lot 13) ; refusionner à chaque lot clos. ⚠️ Depuis le dossier principal, la
 branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
 worktree) : on travaille **dans le worktree**.
 
@@ -232,14 +232,14 @@ jets du chantier (`habillage::jet_standard`), porté par la T Tauri et la
 Herbig. Les effets du lot 12 tournent 8 fois moins vite (`RALENTI_NUAGES`).
 **L'étoile Be** (aplatie, disque de décrétion) et **l'hypergéante** (Eta
 Carinae : vent, jupe, lobes en bulbe) sont au tirage (2026-10-25) ; le grand
-disque protoplanétaire est posé par la genèse, un sillon par planète. **Tout
-le lot 12 est adopté, la touche 4 est vide.** FPS mesurés en jeu : 60 stables,
-un peu moins de 40 tout près d'un disque. Avant de le clore : juger le grand
-disque en régénérant des systèmes jeunes.
+disque protoplanétaire est posé par la genèse, un sillon par planète. **Le lot 12 est
+clos** (2026-10-25), validé à l'écran et en jeu : touche 4 vide, 60 FPS
+stables (un peu moins de 40 tout près d'un disque), grand disque jugé bon en
+régénérant. Le plan de référence d'un système (disques désaxés) est noté pour
+la refonte de la genèse.
 
 **Le prochain pas** : **tous les lots livrés sont validés.** Reste à
-construire, **dans l'ordre** : la clôture du lot 12 (validations en jeu,
-puis fusion), puis les lots futurs 13 à 15, puis la refonte
+construire, **dans l'ordre** : puis les lots futurs 13 à 15, puis la refonte
 de la genèse.
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous

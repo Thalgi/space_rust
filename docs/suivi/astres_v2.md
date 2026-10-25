@@ -118,7 +118,17 @@ protoplanétaire (12.2) y sont passés depuis la galerie des disques ; le cas
 la liste et ne rend rien quand elle est vide (red-check fait), chaque
 prototype a un nom à lui et un cadre dans la portée de la caméra.
 
-### Lot 12.2, en cours : quatre prototypes de disque protoplanétaire (2026-10-22)
+### Lot 12 clos (2026-10-25)
+
+Validé à l'écran et en jeu : T Tauri (T1B4, variée par la graine), Herbig
+Ae/Be (T1B2), jet polaire standard (J5), étoile Be, hypergéante (Eta
+Carinae) au tirage ; grand disque posé par la genèse, *« les grands disques
+rendent bien »* ; 60 FPS stables. La touche 4 est vide. Reste noté pour la
+refonte de la genèse : le plan de référence d'un système (les disques
+d'étoile désaxés du reste). Fusionné dans `main` le même jour. Le détail,
+tour par tour, suit.
+
+### Lot 12.2 : les disques protoplanétaires, de prototypes en adoption (2026-10-22 → 25)
 
 *« Je ne suis pas contre créer des disques de débris plus en 3D, types
 nuages de poussières, s'il évolue de manière dynamique en rotation avec
