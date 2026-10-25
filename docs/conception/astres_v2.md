@@ -960,6 +960,19 @@ l'utilisateur : la **masse bornée** de la quasi-étoile
 (`MASSE_QUASI_ETOILE` = 20 masses stellaires du jeu, contre des milliers dans
 les modèles) et sa **rareté** (~1 système sur 1 000).
 
+**Le plan de référence d'un système** (noté le 2026-10-25, après le lot 12) :
+*« il faudra ajuster les disques de débris par rapport à une orbite qui
+servira de base dans la vue d'un système, car sinon plein de fois je me
+retrouve avec le disque de l'astre désaxé du reste »*. Aujourd'hui chaque
+disque d'étoile prend un plan **dérivé de sa graine** (`normale_disque`,
+14° à 66° de la verticale), quand les planètes, les ceintures et le grand
+disque protoplanétaire sont dans l'écliptique (Y) : le petit disque d'une
+jeune étoile, d'une Be ou d'une hypergéante part de travers. La genèse
+refaite devra poser **un plan de base par système** — celui des orbites — et
+y aligner les disques (en gardant, au plus, un léger désaxage voulu). Les
+raretés provisoires du lot 12 (Herbig Ae/Be, étoile Be, hypergéante) sont à
+reprendre au même chantier.
+
 ## 6 terdecies. Le lot 11, livré et clos (2026-10-21)
 
 La quasi-étoile est au tirage (~1 système sur 1 000), **à l'échelle vraie**
