@@ -49,7 +49,12 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
   **Lot 12 (2026-10-24)** : disque de 5 à 48 rayons en nuages cotonneux, bras spiraux puis
   entonnoirs magnétiques (taches d'accrétion sur les pôles magnétiques), varié par la
   graine ; et sa grande sœur, la **Herbig Ae/Be**, au tirage (disque en rideaux).
-  `disque::habillage::jeune_etoile`. Les jets polaires sont à refaire (fin du lot 12).
+  `disque::habillage::jeune_etoile`. Jets polaires refaits : le standard J5 (traînée,
+  sablier fin, lobes dissymétriques).
+- [x] **Étoile Be** (lot 12, 2026-10-25) : aplatie par sa rotation (uniform `aplatissement`,
+  arches écrasées avec elle), disque de décrétion émissif blanc-bleu puis rose.
+- [x] **Hypergéante (LBV)** (lot 12, 2026-10-25) : Eta Carinae — vent, jupe équatoriale,
+  lobes de poussière en bulbe (le Homoncule).
 
 ## Étoiles particulières (le « un peu spécial »)
 

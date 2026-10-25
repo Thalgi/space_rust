@@ -34,6 +34,12 @@ pub enum Variante {
     /// Distincte de [`Variante::Jets`], que porte aussi l'étoile à neutrons —
     /// laquelle n'a rien à faire d'un disque de matière primordiale.
     Proto,
+    /// **Étoile Be** (lot 12) : aplatie par sa rotation, son disque de
+    /// décrétion autour.
+    Be,
+    /// **Hypergéante** (lot 12, Eta Carinae) : vent, jupe équatoriale et
+    /// lobes de poussière en bulbe.
+    Hypergeante,
 }
 
 impl Variante {
@@ -50,6 +56,8 @@ impl Variante {
             4 => Variante::Magnetar,
             5 => Variante::TrouNoir,
             6 => Variante::Proto,
+            7 => Variante::Be,
+            8 => Variante::Hypergeante,
             _ => Variante::Normale,
         }
     }
@@ -67,6 +75,8 @@ impl Variante {
             Variante::Magnetar => "magnetar",
             Variante::TrouNoir => "trou noir",
             Variante::Proto => "jets + disque proto",
+            Variante::Be => "aplatie + disque de decretion",
+            Variante::Hypergeante => "vent + lobes en bulbe",
         }
     }
 
@@ -122,6 +132,8 @@ impl Variante {
                 .avec_jets_3d(crate::soleil::JETS_PROTO)
                 .avec_accretion_polaire(crate::soleil::ACCRETION_PROTO)
                 .avec_disque_jeune(crate::etoile::est_herbig(nom)),
+            Variante::Be => s.avec_disque_be(),
+            Variante::Hypergeante => s.avec_vent().avec_homoncule(),
         }
     }
 }
@@ -341,6 +353,8 @@ mod tests_variante {
             "avec_magnetar(",
             "avec_trou_noir(",
             "avec_disque_jeune(",
+            "avec_disque_be(",
+            "avec_homoncule(",
             "avec_pulsation(",
             "avec_ebullition_du_type(",
             "avec_eclat_visible(",

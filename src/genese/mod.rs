@@ -2586,6 +2586,9 @@ mod tests_variante {
             (3.0, Variante::Pulsar),
             (4.0, Variante::Magnetar),
             (5.0, Variante::TrouNoir),
+            (6.0, Variante::Proto),
+            (7.0, Variante::Be),
+            (8.0, Variante::Hypergeante),
         ];
         for (mode, attendu) in attendus {
             assert!(

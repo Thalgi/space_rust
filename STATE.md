@@ -15,7 +15,7 @@
 > « Où trouver quoi »). **Ne pas recommencer** : un fait qui se raconte va dans
 > un journal, pas ici.
 
-## Reprendre ici (état au 2026-10-24)
+## Reprendre ici (état au 2026-10-25)
 
 **Chantier en cours : Astres V2.** Branche `chantier-astres`, worktree
 `.claude/worktrees/astres-v2`. **Fusionnée dans `main` le 2026-10-21** (avance
@@ -25,7 +25,7 @@ quand il sera clos. ⚠️ Depuis le dossier principal, la
 branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
 worktree) : on travaille **dans le worktree**.
 
-**Vérifié (2026-10-24)** : **960 tests verts**, `cargo clippy --all-targets`
+**Vérifié (2026-10-25)** : **964 tests verts**, `cargo clippy --all-targets`
 à **0 avertissement**.
 
 **Le lot 9 (comètes) est clos** (2026-10-20), validé à l'écran. Le retour du
@@ -230,10 +230,15 @@ interne brûlant (T1B4-A) et le grand disque 0,9–8 UA (T1B4-G).
 éclairé par plaques, lobes dissymétriques) — le **standard** de tous les
 jets du chantier (`habillage::jet_standard`), porté par la T Tauri et la
 Herbig. Les effets du lot 12 tournent 8 fois moins vite (`RALENTI_NUAGES`).
+**L'étoile Be** (aplatie, disque de décrétion) et **l'hypergéante** (Eta
+Carinae : vent, jupe, lobes en bulbe) sont au tirage (2026-10-25) ; le grand
+disque protoplanétaire est posé par la genèse, un sillon par planète. **Tout
+le lot 12 est adopté, la touche 4 est vide.** Avant de le clore : mesurer les
+FPS en jeu, et juger le grand disque en régénérant des systèmes jeunes.
 
 **Le prochain pas** : **tous les lots livrés sont validés.** Reste à
-construire, **dans l'ordre** : la fin du lot 12 (étoile Be, puis
-hypergéante), puis les lots futurs 13 à 15, puis la refonte
+construire, **dans l'ordre** : la clôture du lot 12 (validations en jeu,
+puis fusion), puis les lots futurs 13 à 15, puis la refonte
 de la genèse.
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous

@@ -610,6 +610,28 @@ sont dans le shader, qui ramène déjà tout au cercle. Garde
 débranché, « pôle »). ⚠️ Pas vu à l'écran : aucune arche n'est sortie
 pendant les captures.
 
+**L'étoile Be et l'hypergéante adoptées** (2026-10-25, *« les protos sont
+satisfaisants »*). Deux variantes, deux modes de couronne :
+- **Étoile Be** (mode 7, `Variante::Be`) : 4 % des particulières, pris sur
+  la supergéante bleue ; 15 000-25 000 K, rayon 1,8. `habillage::etoile_be`
+  varie par la graine entre B1 et B3 : aplatie de 20 à 35 %, disque de
+  décrétion de 10 à 16 rayons, nappes de gaz une fois sur deux.
+- **Hypergéante (LBV)** (mode 8, `Variante::Hypergeante`) : 1 % des
+  particulières, pris sur la Wolf-Rayet ; 18 000-30 000 K, rayon 3. Vent,
+  jupe équatoriale, lobes en bulbe de 28 rayons — pleins (E1) ou en coques
+  (E2) selon la graine (`habillage::hypergeante`).
+- Raretés **provisoires**, comme celles des autres types du lot : à reprendre
+  avec la refonte de la genèse. Galerie des étoiles, tête du défilé.
+  ⚠️ Les lobes de l'hypergéante (~1,75 UA) peuvent englober des planètes
+  internes, comme la quasi-étoile ; et le défilé la cadre trop près pour les
+  voir entiers (`dist_pour` ne connaît que le rayon).
+- **La touche 4 est vide** : tout le lot 12 est adopté.
+- Gardes : `la_be_et_l_hypergeante_varient_avec_leur_graine` (red-check :
+  lobes figés, « toujours les mêmes lobes »), modes 6 à 8 dans
+  `chaque_mode_de_couronne_trouve_sa_variante`. Captures du défilé : la Be
+  aplatie et son disque, une arche posée sur son bord ; l'hypergéante, son
+  vent et sa nébuleuse.
+
 *L'étoile à neutrons et les jets* (question de l'utilisateur, pour le
 lot 13) : isolée, sans matière à avaler, elle n'en a pas — le jet naît de
 l'accrétion ; accrétante, en binaire X (Sco X-1, Cir X-1), elle peut en

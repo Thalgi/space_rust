@@ -37,10 +37,22 @@ pub(crate) fn particuliere(p: f32) -> Gabarit {
         (35000.0, 45000.0, 0.42, 0.2, "Etoile a neutrons", 1.0)
     } else if p < 0.64 {
         (35000.0, 45000.0, 0.45, 0.3, "Magnetar", 4.0)
-    } else if p < 0.8 {
+    } else if p < 0.79 {
         (38000.0, 45000.0, 1.1, 5.0, "Wolf-Rayet", 2.0)
-    } else if p < 0.92 {
+    } else if p < 0.8 {
+        // **Hypergéante** (lot 12, 2026-10-24) : une variable lumineuse bleue
+        // dans sa nébuleuse en sablier, comme Eta Carinae. 1 % des
+        // particulières, pris sur la Wolf-Rayet : parmi les étoiles les plus
+        // rares qui soient. Rareté provisoire, comme celle des autres types
+        // du lot 12 — à reprendre avec la refonte de la genèse.
+        (18000.0, 30000.0, 3.0, 8.0, "Hypergeante (LBV)", 8.0)
+    } else if p < 0.88 {
         (18000.0, 24000.0, 1.4, 6.0, "Supergeante bleue", 2.0)
+    } else if p < 0.92 {
+        // **Étoile Be** (lot 12, 2026-10-24) : une B qui tourne si vite
+        // qu'elle s'aplatit et éjecte un disque de gaz. 4 % des
+        // particulières, pris sur la supergéante bleue. Rareté provisoire.
+        (15000.0, 25000.0, 1.8, 4.0, "Etoile Be", 7.0)
     } else if p < 0.96 {
         (4000.0, 4600.0, 0.9, 1.2, "T Tauri (jeune)", 6.0)
     } else if p < 0.98 {
@@ -385,7 +397,7 @@ pub fn ebullition(nom: &str, instable: bool) -> (f32, f32) {
         // dessous ; on ne voit pas la surface d'une Wolf-Rayet, sa
         // photosphère est dans son vent grumeleux — d'où le relief. Réglages
         // fins dans [`reglage_ebullition`].
-        ("Supergeante bleue", _) => (0.25, EBUL_PLAT),
+        ("Supergeante bleue", _) | ("Hypergeante (LBV)", _) => (0.25, EBUL_PLAT),
         ("Wolf-Rayet", _) => (0.35, EBUL_RELIEF),
         // Lot 11 : une enveloppe géante, plus démesurée qu'une supergéante,
         // au contour qui se déforme. Cellules et sillons : `reglage_ebullition`.
@@ -404,7 +416,7 @@ pub fn ebullition(nom: &str, instable: bool) -> (f32, f32) {
 ///   trop sombres.
 pub fn reglage_ebullition(nom: &str) -> (f32, f32) {
     match nom {
-        "Supergeante bleue" => (2.5, 0.5),
+        "Supergeante bleue" | "Hypergeante (LBV)" => (2.5, 0.5),
         "Wolf-Rayet" => (1.0, 0.7),
         // Quasi-étoile : cellules plus grosses encore, sillons plus profonds.
         "Quasi-etoile" => (0.7, 0.35),
@@ -433,14 +445,14 @@ pub fn reglage_ebullition(nom: &str) -> (f32, f32) {
 pub fn surface(nom: &str) -> (f32, f32, f32) {
     match nom {
         "O (bleue)" => (11.0, 0.10, 0.30),
-        "B (bleu-blanc)" => (11.0, 0.15, 0.35),
+        "B (bleu-blanc)" | "Etoile Be" => (11.0, 0.15, 0.35),
         "A (blanche)" => (11.0, 0.25, 0.45),
         "F (blanc-jaune)" => (13.0, 0.60, 0.55),
         "K (orange)" => (14.0, 1.00, 0.70),
         "M (naine rouge)" => (20.0, 0.85, 0.80),
         "Naine blanche" => (30.0, 0.08, 0.50),
         "Sous-naine (sdB)" => (30.0, 0.08, 0.40),
-        "Supergeante bleue" => (9.0, 0.10, 0.35),
+        "Supergeante bleue" | "Hypergeante (LBV)" => (9.0, 0.10, 0.35),
         "Wolf-Rayet" => (11.0, 0.10, 0.30),
         // Jamais vus en essai : la règle physique, à juger à l'écran.
         "Etoile carbonee (C)" => (9.0, 1.00, 0.80),
@@ -559,7 +571,7 @@ mod tests_particulieres {
     use super::*;
 
     /// Les noms que le tirage des particulières doit savoir produire.
-    const ATTENDUS: [&str; 9] = [
+    const ATTENDUS: [&str; 11] = [
         "Trou noir",
         "Pulsar",
         "Etoile a neutrons",
@@ -568,6 +580,8 @@ mod tests_particulieres {
         "Supergeante bleue",
         "T Tauri (jeune)",
         "Herbig Ae/Be (jeune)",
+        "Etoile Be",
+        "Hypergeante (LBV)",
         "Quasi-etoile",
     ];
 
@@ -960,11 +974,12 @@ mod tests_types {
                 assert_eq!(g.4, *nom);
             }
         }
-        // Les deux tables au complet : 9 particulières (la quasi-étoile du lot 11
-        // et la Herbig Ae/Be du lot 12 comprises), 16 ordinaires. Si ce
+        // Les deux tables au complet : 11 particulières (la quasi-étoile du
+        // lot 11, la Herbig Ae/Be, l'étoile Be et l'hypergéante du lot 12
+        // comprises), 16 ordinaires. Si ce
         // compte bouge, un type est arrivé ou parti — le menu suit tout seul,
         // ce test dit seulement qu'on l'a remarqué.
-        assert_eq!(types.len(), 25, "{types:?}");
+        assert_eq!(types.len(), 27, "{types:?}");
         for attendu in ["Trou noir", "T Tauri (jeune)", "Naine brune", "O (bleue)", "Mira"] {
             assert!(types.contains(&attendu), "« {attendu} » absent : {types:?}");
         }

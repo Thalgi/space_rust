@@ -176,6 +176,48 @@ pub fn decretion(rayon: f32, masse: f32, etendue: f32, nuages: u32) -> DisqueCon
     c.avec_nuages_3d(nuages, 0.03).avec_grappe(4).avec_aspect_nuages(0.8, 0.0)
 }
 
+/// **Une étoile Be telle que le jeu la pose** (validée le 2026-10-24, *« les
+/// protos sont satisfaisants »*) : `(aplatissement, disque de décrétion)`,
+/// variés par la graine entre les prototypes B1 et B3 — aplatie de 20 à 35 %
+/// (Achernar), disque de 10 à 16 rayons, nappes de gaz une fois sur deux.
+pub fn etoile_be(rayon: f32, masse: f32, graine: f32) -> (f32, DisqueConfig) {
+    let f = |k: f32| (graine * 0.618_034 * k).fract();
+    let nuages = if f(3.7) > 0.5 { 300 } else { 0 };
+    (0.2 + 0.15 * f(7.13), decretion(rayon, masse, 10.0 + 6.0 * f(11.1), nuages))
+}
+
+/// La longueur des lobes d'une hypergéante, en rayons stellaires.
+pub const LOBES_HYPERGEANTE: f32 = 28.0;
+
+/// **Une hypergéante dans sa nébuleuse** (Eta Carinae et son Homoncule,
+/// validée le 2026-10-24) : une jupe équatoriale de débris rougeâtres, qui
+/// porte deux lobes de poussière en bulbe, pincés à l'étoile — pleins (E1)
+/// ou en coques fines éclairées par plaques (E2), selon la graine.
+pub fn hypergeante(rayon: f32, masse: f32, graine: f32) -> DisqueConfig {
+    let finesse = if (graine * 0.618_034 * 5.3).fract() > 0.5 { 0.6 } else { 0.0 };
+    let lobes = Flot {
+        longueur: rayon * LOBES_HYPERGEANTE,
+        rayon_astre: rayon,
+        cone: 0.6,
+        parois: 1.0,
+        finesse,
+        forme: 1.0,
+        asymetrie: 0.15,
+        ..Flot::default()
+    };
+    DisqueConfig {
+        voile_alpha: 0.35,
+        voile_couleur: vec3(0.6, 0.28, 0.16),
+        voile_couleur2: vec3(1.0, 0.6, 0.35),
+        granulation: 0.6,
+        ..DisqueConfig::protosolaire(0, rayon * 1.5, rayon * 0.5 * LOBES_HYPERGEANTE, masse)
+    }
+    .avec_nuages_3d(700, 0.04)
+    .avec_grappe(5)
+    .avec_aspect_nuages(1.2, 0.5)
+    .avec_flot(lobes)
+}
+
 /// **Le jet polaire standard du chantier** (J5, validé le 2026-10-24) :
 /// traînée de poussière en cône, sablier très fin éclairé par plaques, lobes
 /// dissymétriques courbés en S ; long de 1,2 fois le rayon `externe` du
@@ -339,6 +381,28 @@ mod tests {
             vus.insert((t.entonnoirs, t.spirales_accretion));
         }
         assert!(vus.len() >= 4, "les graines ne varient presque pas : {vus:?}");
+    }
+
+    /// **La Be et l'hypergéante varient avec leur graine**, dans les bornes
+    /// des prototypes validés, et la même graine redonne la même étoile.
+    #[test]
+    fn la_be_et_l_hypergeante_varient_avec_leur_graine() {
+        let mut aplatis = Vec::new();
+        let mut finesses = Vec::new();
+        for k in 0..40 {
+            let g = k as f32 * 23.7;
+            let (a, c) = etoile_be(1.0, 1000.0, g);
+            assert!((0.2..=0.35).contains(&a), "aplatissement {a}");
+            assert!((10.0..=16.0).contains(&c.externe) && c.interne < 1.1, "disque {} - {}", c.interne, c.externe);
+            assert_eq!(etoile_be(1.0, 1000.0, g).0, a);
+            aplatis.push(a);
+            let h = hypergeante(1.0, 1000.0, g);
+            assert_eq!(h.flot.forme, 1.0, "lobes pas en bulbe");
+            assert_eq!(h.flot.longueur, LOBES_HYPERGEANTE);
+            finesses.push(h.flot.finesse);
+        }
+        assert!(aplatis.iter().any(|&a| a < 0.24) && aplatis.iter().any(|&a| a > 0.31), "{aplatis:?}");
+        assert!(finesses.contains(&0.0) && finesses.contains(&0.6), "toujours les mêmes lobes");
     }
 
     /// **Le grand disque se creuse aux orbites qui le traversent**, et

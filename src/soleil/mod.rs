@@ -441,6 +441,20 @@ impl Soleil {
     }
 
     /// **Taches d'accrétion polaires** (lot 12) : voir le champ.
+    /// **Une étoile Be** (lot 12) : aplatie, son disque de décrétion autour,
+    /// variés par sa graine (`habillage::etoile_be`).
+    pub fn avec_disque_be(self) -> Self {
+        let (aplati, c) = crate::disque::habillage::etoile_be(self.base.rayon, self.base.masse, self.graine);
+        self.avec_aplatissement(aplati).avec_disque(c)
+    }
+
+    /// **Une hypergéante dans sa nébuleuse** (lot 12) : jupe équatoriale et
+    /// lobes en bulbe, variés par sa graine (`habillage::hypergeante`).
+    pub fn avec_homoncule(self) -> Self {
+        let c = crate::disque::habillage::hypergeante(self.base.rayon, self.base.masse, self.graine);
+        self.avec_disque(c)
+    }
+
     /// **Une étoile qui tourne si vite qu'elle s'aplatit** (l'étoile Be) :
     /// rayon polaire de `1 − f` fois l'équatorial — Achernar, la plus aplatie
     /// connue, est vers 0,35. Elle tourne autour de l'axe de son disque, comme

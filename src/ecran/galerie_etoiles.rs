@@ -44,6 +44,8 @@ fn catalogue() -> Vec<(&'static str, f32, f32, f32, f32)> {
         ("Etoile carbonee (C)", 1.0, 2800.0, 2.5, 0.0),
         ("T Tauri (jeune)", 0.85, 4200.0, 1.2, 6.0), // jets bipolaires + disque protosolaire
         ("Herbig Ae/Be (jeune)", 2.6, 9000.0, 2.0, 6.0), // sa grande sœur : rideaux
+        ("Etoile Be", 1.8, 18000.0, 4.0, 7.0),           // aplatie, disque de décrétion
+        ("Hypergeante (LBV)", 3.0, 20000.0, 8.0, 8.0),   // Eta Carinae : lobes en bulbe
         ("Wolf-Rayet", 1.05, 40000.0, 5.0, 2.0),     // vent violent
         ("Etoile a flares (M)", 0.58, 3000.0, 0.4, 0.0),
         ("Etoile a neutrons", 0.42, 40000.0, 0.2, 1.0), // jets fixes
