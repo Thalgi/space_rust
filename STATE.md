@@ -20,7 +20,7 @@
 **Chantier en cours : Astres V2.** Branche `chantier-astres`, worktree
 `.claude/worktrees/astres-v2`. **Fusionnée dans `main` le 2026-10-25** (avance
 rapide, lots 0 à 12 ; une première fois le 2026-10-21, lots 0 à 11), **rien de
-poussé** : `main` a 112 commits d'avance sur `origin/main`. Le chantier
+poussé** depuis : `main` a 33 commits d'avance sur `origin/main` (lot 12). Le chantier
 continue sur la branche (lot 13) ; refusionner à chaque lot clos. ⚠️ Depuis le dossier principal, la
 branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
 worktree) : on travaille **dans le worktree**.
