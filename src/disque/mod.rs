@@ -471,6 +471,8 @@ impl Disque {
                 .into_iter()
                 .chain(bras::spirales(&self.cfg, t))
                 .chain(bras::bord_brulant(&self.cfg, t))
+                .chain(bras::pluie(&self.cfg, t))
+                .chain(bras::fragments(&self.cfg, t))
                 .chain(flot::boules(&self.cfg.flot, t));
             for (loc, t_b, c, a) in flots {
                 let rel = self.axe_u * loc.x + self.axe_n * loc.y + self.axe_v * loc.z;

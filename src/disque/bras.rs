@@ -22,7 +22,9 @@ pub type Boule = (Vec3, f32, Vec3, f32);
 
 /// **Les bras sont-ils allumés ?**
 pub fn actifs(c: &DisqueConfig) -> bool {
-    c.bord_brulant > 0.0 || c.flot.longueur > 0.0 || (c.rayon_astre > 0.0 && (c.entonnoirs > 0 || c.spirales_accretion > 0))
+    c.bord_brulant > 0.0
+        || c.flot.longueur > 0.0
+        || (c.rayon_astre > 0.0 && (c.entonnoirs > 0 || c.spirales_accretion > 0 || c.pluie > 0 || c.fragments > 0))
 }
 
 /// **Un point d'une ligne de champ dipolaire**, de son pied `pied` (dans le
@@ -141,6 +143,67 @@ pub fn bord_brulant(c: &DisqueConfig, temps: f32) -> Vec<Boule> {
         .collect()
 }
 
+/// **Une pluie de débris** (lot 14, la naine blanche polluée) : chaque
+/// débris tombe du bord interne de l'anneau jusqu'à l'étoile sur **sa propre**
+/// spirale, partie d'un angle à lui — pas de bras, un tourbillon diffus. Les
+/// bras spiraux d'une étoile jeune y faisaient *« une spirale à trois
+/// branches »* qui rendait mal (2026-10-26).
+pub fn pluie(c: &DisqueConfig, temps: f32) -> Vec<Boule> {
+    if c.pluie == 0 || c.rayon_astre <= 0.0 {
+        return Vec::new();
+    }
+    let omega = rotation(c);
+    let depart = c.interne;
+    let arrivee = c.rayon_astre * 1.05;
+    (0..c.pluie)
+        .map(|j| {
+            let i = j as f32 + 30_000.0;
+            let tau = (h(i, 1.0) + temps * omega / TAU * 0.3).fract();
+            let s = chute(tau);
+            let r = depart * (arrivee / depart).powf(s);
+            let ang = h(i, 2.0) * TAU + 1.2 * (depart / r).ln() + omega * temps;
+            let z = (h(i, 3.0) - 0.5) * 0.12 * r;
+            let p = vec3(ang.cos() * r, z, ang.sin() * r);
+            (p, r * 0.035 + c.rayon_astre * 0.14, chaleur(s), 0.35 + 0.5 * s)
+        })
+        .collect()
+}
+
+/// **Des corps qui se désagrègent** en orbite serrée (lot 14 ; WD 1145+017,
+/// dont on voit les débris planétaires se défaire en direct) : chacun une
+/// tête brillante, et derrière lui, le long de son orbite, une traînée de
+/// poussière qui s'élargit et s'éteint — une comète autour d'une étoile morte.
+pub fn fragments(c: &DisqueConfig, temps: f32) -> Vec<Boule> {
+    const TRAINEE: u32 = 90;
+    if c.fragments == 0 || c.rayon_astre <= 0.0 {
+        return Vec::new();
+    }
+    let mut v = Vec::new();
+    for k in 0..c.fragments {
+        let i = k as f32 * 97.0 + 40_000.0;
+        let rf = c.rayon_astre * (2.2 + 1.6 * h(i, 1.0));
+        let omega = (c.gm / rf.powi(3)).sqrt();
+        let tete = h(i, 2.0) * TAU + omega * temps;
+        let incl = (h(i, 3.0) - 0.5) * 0.15;
+        let point = |ang: f32, ecart: f32, haut: f32| {
+            let r = rf + ecart;
+            vec3(ang.cos() * r, (ang - tete).sin() * r * incl + haut, ang.sin() * r)
+        };
+        v.push((point(tete, 0.0, 0.0), c.rayon_astre * 0.22, vec3(1.0, 0.95, 0.88), 1.0));
+        for j in 0..TRAINEE {
+            let s = j as f32 / TRAINEE as f32;
+            let ij = i + j as f32;
+            // Derrière la tête : à rebours du sens de rotation.
+            let ang = tete - s * 1.4;
+            let largeur = c.rayon_astre * (0.08 + 0.6 * s);
+            let p = point(ang, (h(ij, 4.0) - 0.5) * largeur, (h(ij, 5.0) - 0.5) * largeur * 0.5);
+            let couleur = vec3(1.0, 0.85, 0.65).lerp(vec3(0.7, 0.55, 0.42), s);
+            v.push((p, c.rayon_astre * (0.14 + 0.26 * s), couleur, 0.85 * (1.0 - s).powf(1.2)));
+        }
+    }
+    v
+}
+
 /// **Les boules des bras spiraux** au temps `temps` : du tiers interne du
 /// disque jusqu'à la surface de l'étoile, en spirale logarithmique, le motif
 /// tournant avec elle et la matière coulant dedans, de plus en plus chaude.
@@ -221,6 +284,41 @@ mod tests {
             assert!((3.0..=3.0 * 1.12 + 1e-3).contains(&r), "boule à r = {r}");
         }
         assert!(bord_brulant(&DisqueConfig::protosolaire(0, 3.0, 16.0, 1000.0), 1.0).is_empty());
+    }
+
+    /// **La pluie tombe de partout, sans bras** : ses débris vont du bord de
+    /// l'anneau à l'étoile, et à mi-chemin ils sont répartis tout autour, pas
+    /// regroupés en quelques branches.
+    #[test]
+    fn la_pluie_tombe_de_partout_sans_bras() {
+        let c = DisqueConfig::debris_recents(0, 4.0, 10.0, 1000.0).avec_pluie(4000, 1.0);
+        let b = pluie(&c, 1.0);
+        assert!(b.iter().all(|x| (1.0..=4.0 + 1e-3).contains(&vec2(x.0.x, x.0.z).length())));
+        let mut secteurs = [0; 12];
+        for x in b.iter().filter(|x| (2.0..3.0).contains(&vec2(x.0.x, x.0.z).length())) {
+            let a = x.0.z.atan2(x.0.x).rem_euclid(TAU);
+            secteurs[((a / TAU * 12.0) as usize).min(11)] += 1;
+        }
+        let (min, max) = (secteurs.iter().min().unwrap(), secteurs.iter().max().unwrap());
+        // Des bras laisseraient des secteurs presque vides ; le hasard, non.
+        assert!(*min * 2 > *max, "regroupée en bras : {secteurs:?}");
+    }
+
+    /// **Un fragment traîne sa poussière derrière lui**, à rebours de sa
+    /// course, sur son orbite.
+    #[test]
+    fn un_fragment_traine_sa_poussiere_derriere_lui() {
+        let c = DisqueConfig::debris_recents(0, 4.0, 10.0, 1000.0).avec_fragments(1, 1.0);
+        let b = fragments(&c, 0.5);
+        let tete = b[0].0;
+        let rf = vec2(tete.x, tete.z).length();
+        assert!((2.2..=3.8).contains(&rf), "orbite à {rf}");
+        let az = |p: Vec3| p.z.atan2(p.x);
+        let queue = b.last().unwrap().0;
+        let recul = (az(tete) - az(queue)).rem_euclid(TAU);
+        assert!(recul > 1.0 && recul < 1.6, "la traînée n'est pas derrière : {recul}");
+        let plus_tard = fragments(&c, 0.6)[0].0;
+        assert!((az(plus_tard) - az(tete)).rem_euclid(TAU) < 1.0, "ne tourne pas dans ce sens");
     }
 
     /// **Les spirales vont du disque à l'étoile**, et chauffent en chemin.

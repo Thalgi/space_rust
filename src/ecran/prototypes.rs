@@ -36,8 +36,12 @@ enum Autour {
     Rien,
     /// L'anneau des débris de ses planètes.
     Anneau,
-    /// L'anneau, et les débris qui tombent sur elle en spirale.
-    Chute,
+    /// Un corps qui se désagrège en orbite serrée, sa traînée de poussière.
+    Fragments,
+    /// Une pluie diffuse de débris, chacun sur sa spirale.
+    Pluie,
+    /// Un anneau de gaz chaud au ras de l'étoile.
+    Gaz,
 }
 
 /// **Les prototypes en cours.** Vide = aucun prototype : la touche 4 le dit.
@@ -60,7 +64,12 @@ pub fn prototypes() -> Vec<Prototype> {
     vec![
         v("V1 : verte (sodium), seule", chartreuse, Autour::Rien),
         v("V2 : verte + anneau des debris de ses planetes", chartreuse, Autour::Anneau),
-        v("V3 : verte + debris qui tombent en spirale", chartreuse, Autour::Chute),
+        // ⚠️ V3 (anneau + trois bras spiraux) rendait mal — *« il faut
+        // changer de la spirale à trois branches »* : trois manières de
+        // tomber, tirées des naines polluées observées.
+        v("V3a : verte + un corps qui se desagrege (WD 1145+017)", chartreuse, Autour::Fragments),
+        v("V3b : verte + pluie diffuse de debris", chartreuse, Autour::Pluie),
+        v("V3c : verte + anneau de gaz chaud au ras de l'etoile", chartreuse, Autour::Gaz),
         // La famille annoncée, pour varier plus tard.
         v("V4 : rose", vec3(1.0, 0.7, 0.86), Autour::Rien),
         v("V5 : cyan", vec3(0.55, 0.95, 1.0), Autour::Rien),
@@ -79,7 +88,9 @@ fn naine(couleur: Vec3, autour: Autour) -> Systeme {
     let s = match autour {
         Autour::Rien => s,
         Autour::Anneau => s.avec_disque(anneau()),
-        Autour::Chute => s.avec_disque(anneau().avec_spirales_accretion(3, rayon)),
+        Autour::Fragments => s.avec_disque(anneau().avec_fragments(2, rayon)),
+        Autour::Pluie => s.avec_disque(anneau().avec_pluie(1400, rayon)),
+        Autour::Gaz => s.avec_disque(DisqueConfig { interne: rayon * 1.6, ..anneau() }.avec_bord_brulant(1.4)),
     };
     let mut sys = Systeme::new();
     sys.ajouter(Box::new(s));

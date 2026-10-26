@@ -137,11 +137,20 @@ Prototypes, sur la naine blanche du jeu (sa surface par
 |---|---|
 | V1 | verte, seule |
 | V2 | + l'anneau des débris de ses planètes (`debris_recents`, 4 à 10 rayons) |
-| V3 | + les débris qui tombent sur elle en spirale (`bras::spirales`) |
+| V3a | + un corps qui se désagrège en orbite serrée, sa traînée de poussière (`bras::fragments` ; WD 1145+017) |
+| V3b | + une pluie diffuse : chaque débris sur sa spirale, sans bras (`bras::pluie`) |
+| V3c | + un anneau de gaz chaud au ras de l'étoile (`bord_brulant`, cavité à 1,6 rayon) |
 | V4-V6 | la famille : rose, cyan, la plus rouge |
 
-Captures : V1 chartreuse douce ; V3 spectaculaire — anneau rocheux, deux
-bras qui blanchissent en tombant ; V6 rouge, taches et arches à sa teinte.
+⚠️ La première V3 — l'anneau et **trois bras spiraux** (`bras::spirales`, la
+mécanique d'une étoile jeune) — *« rend mal, il faut changer de la spirale à
+trois branches »* : remplacée par trois manières de tomber, tirées des naines
+polluées observées. Gardes `la_pluie_tombe_de_partout_sans_bras` (red-check :
+trois bras, secteurs vides) et `un_fragment_traine_sa_poussiere_derriere_lui`
+(red-check : traînée devant). Réglage à l'œil : traînée et pluie d'abord trop
+pâles, renforcées. Captures : V1 chartreuse douce ; V3a deux têtes et leurs
+queues le long de l'orbite ; V3b un tourbillon diffus qui blanchit en tombant ;
+V3c un anneau incandescent serré ; V6 rouge, taches et arches à sa teinte.
 
 ### Lot 13 clos : les rémanents refaits en 3D (2026-10-26)
 
