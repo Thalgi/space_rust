@@ -58,7 +58,7 @@ pub fn prototypes() -> Vec<Prototype> {
     let v = |nom: &str, couleur: Vec3, autour: Autour| Prototype {
         nom: format!("Naine polluee {nom}"),
         construire: Box::new(move || naine(couleur, autour)),
-        distance: NAINE.0 * if matches!(autour, Autour::Rien) { 9.0 } else { 26.0 },
+        distance: NAINE.0 * if matches!(autour, Autour::Rien) { 9.0 } else { 38.0 },
     };
     let chartreuse = vec3(0.78, 1.0, 0.42);
     vec![
@@ -84,13 +84,19 @@ fn naine(couleur: Vec3, autour: Autour) -> Systeme {
     let (rayon, lumi) = NAINE;
     let s = Variante::Normale.appliquer(Soleil::new(Vec3::ZERO, rayon, couleur, lumi), "Naine blanche").avec_arches_du_type();
     let masse = masse_luminosite(lumi);
-    let anneau = || DisqueConfig::debris_recents(1400, rayon * 4.0, rayon * 10.0, masse);
+    // L'anneau à distance de l'étoile, de 7 à 16 rayons : *« plus de
+    // distance entre les anneaux de débris et l'astre »* (2026-10-26).
+    let anneau = || DisqueConfig::debris_recents(1800, rayon * 7.0, rayon * 16.0, masse);
     let s = match autour {
         Autour::Rien => s,
         Autour::Anneau => s.avec_disque(anneau()),
         Autour::Fragments => s.avec_disque(anneau().avec_fragments(2, rayon)),
         Autour::Pluie => s.avec_disque(anneau().avec_pluie(1400, rayon)),
-        Autour::Gaz => s.avec_disque(DisqueConfig { interne: rayon * 1.6, ..anneau() }.avec_bord_brulant(1.4)),
+        // Le gaz au ras de l'étoile, sur un disque à lui : l'anneau rocheux
+        // reste au loin.
+        Autour::Gaz => s
+            .avec_disque(anneau())
+            .avec_disque(DisqueConfig::debris_recents(0, rayon * 1.6, rayon * 2.0, masse).avec_bord_brulant(1.4)),
     };
     let mut sys = Systeme::new();
     sys.ajouter(Box::new(s));
