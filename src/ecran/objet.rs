@@ -172,7 +172,7 @@ fn types_particuliers() -> Vec<(crate::etoile::Gabarit, Option<crate::disque::Ac
 /// aujourd'hui les jeunes étoiles du lot 12. Ils restent aussi à leur place
 /// dans le catalogue. Le défilé et ses gardes en tiennent compte ; vide, il
 /// redevient le catalogue seul.
-const EN_TETE: &[&str] = &["Naine blanche polluee"];
+const EN_TETE: &[&str] = &["Naine noire"];
 
 /// **Tout le catalogue d'étoiles au défilé** : les particulières d'abord —
 /// c'est pour elles que la touche existe — puis les **ordinaires**.

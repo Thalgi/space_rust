@@ -43,6 +43,8 @@ pub enum Variante {
     /// **Naine blanche polluée** (lot 14) : verte, rose, cyan ou rouge de ce
     /// qu'elle a avalé, et l'anneau des débris de ses planètes.
     Polluee,
+    /// **Naine noire** (lot 15) : un astre mort, sombre, sans éruptions.
+    NaineNoire,
 }
 
 impl Variante {
@@ -62,6 +64,7 @@ impl Variante {
             7 => Variante::Be,
             8 => Variante::Hypergeante,
             9 => Variante::Polluee,
+            10 => Variante::NaineNoire,
             _ => Variante::Normale,
         }
     }
@@ -82,6 +85,7 @@ impl Variante {
             Variante::Be => "aplatie + disque de decretion",
             Variante::Hypergeante => "vent + lobes en bulbe",
             Variante::Polluee => "polluee + anneau de debris",
+            Variante::NaineNoire => "naine noire",
         }
     }
 
@@ -140,6 +144,7 @@ impl Variante {
             Variante::Be => s.avec_disque_be(),
             Variante::Hypergeante => s.avec_vent().avec_homoncule(),
             Variante::Polluee => s.avec_pollution(),
+            Variante::NaineNoire => s.avec_naine_noire(),
         }
     }
 }
@@ -362,6 +367,7 @@ mod tests_variante {
             "avec_disque_be(",
             "avec_homoncule(",
             "avec_pollution(",
+            "avec_naine_noire(",
             "avec_pulsation(",
             "avec_ebullition_du_type(",
             "avec_eclat_visible(",

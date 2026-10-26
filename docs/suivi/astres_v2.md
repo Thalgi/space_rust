@@ -118,7 +118,21 @@ protoplanétaire (12.2) y sont passés depuis la galerie des disques ; le cas
 la liste et ne rend rien quand elle est vide (red-check fait), chaque
 prototype a un nom à lui et un cadre dans la portée de la caméra.
 
-### Lot 15, en cours : la naine noire (2026-10-26)
+### Lot 15 clos : la naine noire (2026-10-26)
+
+**Validé le même jour** — *« K1 est ok, K2 et K3 seront ok sans éruptions,
+oublie K4, on valide »*. Variante `NaineNoire` (mode 10), type **Naine noire**
+au tirage : 1 % des particulières, pris sur l'étoile à neutrons (rareté
+provisoire), 900-1 200 K, rayon 0,65. `etoile::naine_noire`, dérivé de la
+graine : K1 silhouette, K2 braise infrarouge, ou K3 cristallisée.
+`Soleil::avec_naine_noire` ; **sans aucune éruption** (`sans_eruptions` :
+ni arches, ni taches, ni flares — un astre mort). En tête du défilé, dans la
+galerie des étoiles ; la touche 4 est vide. Garde
+`les_trois_naines_noires_sortent` (red-check : toujours K1). Capture du
+défilé : une braise, sans tache ni arche sur toute la durée.
+
+**Le chantier Astres V2 a livré tous ses lots** (8 abandonné). Reste, avant la
+refonte de la genèse, la passe de relecture demandée.
 
 Une naine blanche refroidie au point de ne plus briller ; il faudrait plus
 que l'âge de l'univers pour en former une — fantaisie assumée. Prototypes, sur

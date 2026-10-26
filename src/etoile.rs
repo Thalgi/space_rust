@@ -33,8 +33,14 @@ pub(crate) fn particuliere(p: f32) -> Gabarit {
         (5500.0, 7500.0, 0.62, 0.4, "Trou noir", 5.0)
     } else if p < 0.36 {
         (35000.0, 45000.0, 0.42, 0.25, "Pulsar", 3.0)
-    } else if p < 0.52 {
+    } else if p < 0.51 {
         (35000.0, 45000.0, 0.42, 0.2, "Etoile a neutrons", 1.0)
+    } else if p < 0.52 {
+        // **Naine noire** (lot 15, 2026-10-26) : une naine blanche refroidie
+        // au point de ne plus briller — fantaisie assumée, l'univers est trop
+        // jeune pour en former une. 1 % des particulières, pris sur l'étoile
+        // à neutrons, parmi les autres astres morts. Rareté provisoire.
+        (900.0, 1200.0, 0.65, 0.03, "Naine noire", 10.0)
     } else if p < 0.64 {
         (35000.0, 45000.0, 0.45, 0.3, "Magnetar", 4.0)
     } else if p < 0.79 {
@@ -69,6 +75,18 @@ pub(crate) fn particuliere(p: f32) -> Gabarit {
         // vraie — elle dépasse les orbites internes). Prise sur la part de
         // T Tauri, qui passe de 8 à 6 %.
         (3400.0, 3800.0, UA, 12.0, "Quasi-etoile", 0.0)
+    }
+}
+
+/// **Une naine noire d'après sa graine** (lot 15) : `(couleur, luminosité,
+/// cristallisée ?)` — K1 la silhouette, K2 la braise infrarouge, K3 la
+/// surface cristallisée en facettes, retenues à l'écran (*« K1 est ok, K2 et
+/// K3 seront ok sans éruptions »*). Dérivé, jamais tiré.
+pub fn naine_noire(graine: f32) -> (Vec3, f32, bool) {
+    match ((graine * 0.618_034 * 4.9).fract() * 3.0) as u32 {
+        0 => (vec3(0.05, 0.035, 0.04), 0.02, false),
+        1 => (vec3(0.36, 0.07, 0.04), 0.05, false),
+        _ => (vec3(0.2, 0.24, 0.32), 0.04, true),
     }
 }
 
@@ -456,7 +474,7 @@ pub fn surface(nom: &str) -> (f32, f32, f32) {
         "F (blanc-jaune)" => (13.0, 0.60, 0.55),
         "K (orange)" => (14.0, 1.00, 0.70),
         "M (naine rouge)" => (20.0, 0.85, 0.80),
-        "Naine blanche" | "Naine blanche polluee" => (30.0, 0.08, 0.50),
+        "Naine blanche" | "Naine blanche polluee" | "Naine noire" => (30.0, 0.08, 0.50),
         "Sous-naine (sdB)" => (30.0, 0.08, 0.40),
         "Supergeante bleue" | "Hypergeante (LBV)" => (9.0, 0.10, 0.35),
         "Wolf-Rayet" => (11.0, 0.10, 0.30),
@@ -577,10 +595,11 @@ mod tests_particulieres {
     use super::*;
 
     /// Les noms que le tirage des particulières doit savoir produire.
-    const ATTENDUS: [&str; 11] = [
+    const ATTENDUS: [&str; 12] = [
         "Trou noir",
         "Pulsar",
         "Etoile a neutrons",
+        "Naine noire",
         "Magnetar",
         "Wolf-Rayet",
         "Supergeante bleue",
@@ -590,6 +609,19 @@ mod tests_particulieres {
         "Hypergeante (LBV)",
         "Quasi-etoile",
     ];
+
+
+    /// **Les trois naines noires retenues sortent toutes**, sombres.
+    #[test]
+    fn les_trois_naines_noires_sortent() {
+        let mut vues = std::collections::HashSet::new();
+        for k in 0..60 {
+            let (c, l, cristal) = naine_noire(k as f32 * 23.7);
+            assert!(c.max_element() < 0.4 && l < 0.1, "trop claire : {c} {l}");
+            vues.insert((cristal, (c.x * 100.0) as i32));
+        }
+        assert_eq!(vues.len(), 3, "{vues:?}");
+    }
 
     fn balayage() -> Vec<&'static str> {
         (0..1000).map(|k| particuliere(k as f32 / 1000.0).4).collect()
@@ -983,10 +1015,11 @@ mod tests_types {
         }
         // Les deux tables au complet : 11 particulières (la quasi-étoile du
         // lot 11, la Herbig Ae/Be, l'étoile Be et l'hypergéante du lot 12
-        // comprises), 17 ordinaires (la naine polluée du lot 14). Si ce
+        // comprises, et la naine noire du lot 15), 17 ordinaires (la naine
+        // polluée du lot 14). Si ce
         // compte bouge, un type est arrivé ou parti — le menu suit tout seul,
         // ce test dit seulement qu'on l'a remarqué.
-        assert_eq!(types.len(), 28, "{types:?}");
+        assert_eq!(types.len(), 29, "{types:?}");
         for attendu in ["Trou noir", "T Tauri (jeune)", "Naine brune", "O (bleue)", "Mira"] {
             assert!(types.contains(&attendu), "« {attendu} » absent : {types:?}");
         }

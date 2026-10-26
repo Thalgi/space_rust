@@ -189,7 +189,7 @@ exactement le même système (reproductible, partageable).
       `est_remnant()` leur retire la zone habitable) — **refaits en 3D au lot 13** (2026-10-26 ;
       ils étaient peints
       dans le plan de l'écran). Wolf-Rayet **faite**, surface en relief depuis le lot 10.
-      **Étoile verte faite** (lot 14, 2026-10-26) : la naine blanche polluée, verte au sodium, et sa famille. Naine noire : lot 15. **Quasi-étoile faite** (lot 11,
+      **Étoile verte faite** (lot 14, 2026-10-26) : la naine blanche polluée, verte au sodium, et sa famille. **Naine noire faite** (lot 15, 2026-10-26) : silhouette, braise ou cristallisée. **Quasi-étoile faite** (lot 11,
       2026-10-21). **Herbig Ae/Be faite** (lot 12, 2026-10-24) : la grande sœur de la
       T Tauri au tirage, disque en rideaux magnétiques. **Étoile Be et hypergéante faites**
       (lot 12, 2026-10-25) : aplatie avec son disque de décrétion ; Eta Carinae et ses lobes.

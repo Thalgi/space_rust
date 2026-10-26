@@ -456,6 +456,29 @@ impl Soleil {
         }
     }
 
+    /// **Une naine noire** (lot 15) : silhouette, braise ou cristallisée
+    /// selon sa graine (`etoile::naine_noire`), et **sans éruptions** — ni
+    /// arches, ni taches, ni flares : un astre mort.
+    pub fn avec_naine_noire(mut self) -> Self {
+        let (couleur, lumi, cristal) = crate::etoile::naine_noire(self.graine);
+        self.couleur = couleur;
+        self.luminosite = lumi;
+        let s = if cristal {
+            self.avec_ebullition_du_type("Supergeante bleue").avec_couronne(1.1)
+        } else {
+            let etendue = if lumi > 0.04 { 1.3 } else { 1.08 };
+            self.avec_couronne(etendue)
+        };
+        s.sans_eruptions()
+    }
+
+    /// **Sans aucune éruption** : ni arches, ni taches, ni flares.
+    pub fn sans_eruptions(mut self) -> Self {
+        self.prochaine_tache = f32::INFINITY;
+        self.prochain_flare = f32::INFINITY;
+        self.sans_arches()
+    }
+
     /// **Sans arches d'éruption** : la prochaine éruption n'arrive jamais —
     /// une fréquence nulle ne suffit pas, l'étoile en lance toujours une.
     pub fn sans_arches(mut self) -> Self {
