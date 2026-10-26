@@ -239,8 +239,9 @@ régénérant. Le plan de référence d'un système (disques désaxés) est not�
 la refonte de la genèse.
 
 **Le prochain pas** : **tous les lots livrés sont validés.** Reste à
-construire, **dans l'ordre** : le lot 15 (naine noire), puis la refonte de
-la genèse. **Le lot 14 est clos** (2026-10-26) : la naine blanche polluée au
+construire, **dans l'ordre** : le lot 15 (naine noire, en prototypes), puis
+**une passe de relecture** du chantier (demandée : *« observer qu'on n'a rien
+loupé »*), puis la refonte de la genèse. **Le lot 14 est clos** (2026-10-26) : la naine blanche polluée au
 tirage — verte (sodium, WD J1330+6435, la première étoile verte découverte en
 octobre 2026), rose, cyan ou rouge, l'anneau des débris de ses planètes, son
 nom qui dit ce qui la pollue. **Le lot 13 est

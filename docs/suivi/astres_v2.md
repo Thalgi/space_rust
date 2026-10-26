@@ -118,6 +118,25 @@ protoplanétaire (12.2) y sont passés depuis la galerie des disques ; le cas
 la liste et ne rend rien quand elle est vide (red-check fait), chaque
 prototype a un nom à lui et un cadre dans la portée de la caméra.
 
+### Lot 15, en cours : la naine noire (2026-10-26)
+
+Une naine blanche refroidie au point de ne plus briller ; il faudrait plus
+que l'âge de l'univers pour en former une — fantaisie assumée. Prototypes, sur
+la naine blanche du jeu (sa surface), sans éruptions :
+
+| Proto | Ce qu'on y voit |
+|---|---|
+| K1 | silhouette : un disque presque noir qui masque les étoiles du fond, un fin liseré |
+| K2 | braise infrarouge : rouge sombre, la dernière chaleur |
+| K3 | cristallisée : surface figée en facettes bleu-gris (les naines blanches cristallisent, Gaia 2019) |
+| K4 | noire, le cœur encore tiède qui transparaît (le `coeur` de la quasi-étoile) |
+
+Captures : les quatre se lisent ; K3 la plus étonnante. ⚠️ K1 et K4 portent
+encore des taches sombres de surface.
+
+*Demandé en ouvrant le lot* : avant la refonte de la genèse, **une passe de
+relecture** pour vérifier que rien n'a été oublié.
+
 ### Lot 14 clos : la naine blanche verte (2026-10-26)
 
 Validé en jeu par l'utilisateur le même jour (*« je valide, j'ai vu en jeu »*).
