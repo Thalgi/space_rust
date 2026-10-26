@@ -118,6 +118,31 @@ protoplanétaire (12.2) y sont passés depuis la galerie des disques ; le cas
 la liste et ne rend rien quand elle est vide (red-check fait), chaque
 prototype a un nom à lui et un cadre dans la portée de la caméra.
 
+### Lot 14, en cours : la naine blanche verte (2026-10-26)
+
+*« Check un peu le net, on a possiblement découvert une étoile verte »* —
+c'est vrai : **WD J1330+6435**, annoncée en octobre 2026 par l'université
+de Warwick (RASTI), ~280 années-lumière, dans le Dragon. Une **naine blanche
+polluée** : elle a avalé les débris rocheux de son système planétaire, et le
+sodium de son atmosphère absorbe l'orange — reste un vert-jaune (chartreuse),
+**prédit** d'après son spectre. La même équipe annonce des naines polluées
+roses, violettes, jaunes ou cyan, et la plus rouge connue (WD J1011+2845). La
+conception disait « il n'en existe pas » (vrai pour un corps noir) : le lot
+cesse d'être une fantaisie.
+
+Prototypes, sur la naine blanche du jeu (sa surface par
+`Variante::appliquer`, arches à sa teinte) :
+
+| Proto | Ce qu'on y voit |
+|---|---|
+| V1 | verte, seule |
+| V2 | + l'anneau des débris de ses planètes (`debris_recents`, 4 à 10 rayons) |
+| V3 | + les débris qui tombent sur elle en spirale (`bras::spirales`) |
+| V4-V6 | la famille : rose, cyan, la plus rouge |
+
+Captures : V1 chartreuse douce ; V3 spectaculaire — anneau rocheux, deux
+bras qui blanchissent en tombant ; V6 rouge, taches et arches à sa teinte.
+
 ### Lot 13 clos : les rémanents refaits en 3D (2026-10-26)
 
 Validé à l'écran par l'utilisateur, le même jour : *« je valide, on clôt le
