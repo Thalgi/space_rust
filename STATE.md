@@ -241,7 +241,12 @@ la refonte de la genèse.
 **Le prochain pas** : **tous les lots livrés sont validés.** Reste à
 construire, **dans l'ordre** : **une passe de relecture** du chantier
 (demandée : *« observer qu'on n'a rien loupé »*), puis la refonte de la
-genèse. **Le lot 15 est clos** (2026-10-26) : la naine noire au tirage —
+genèse. **Chantier-Opti-v2 ouvert** (2026-10-26) : la carte de la dette de
+performance d'Astres V2, pour 30 fps sur un premier APU Ryzen portable —
+[`docs/conception/opti_v2.md`](docs/conception/opti_v2.md). Mesuré : la T Tauri
+et la Herbig tombent à ~40 fps en vue isolée **sur la machine de dev**
+(nuages calculés deux fois, empilement dégénéré ; voile en 14 passes côté
+GPU). Lots O1 à O8 proposés, rien d'optimisé encore. **Le lot 15 est clos** (2026-10-26) : la naine noire au tirage —
 silhouette, braise ou cristallisée, sans éruptions. **Tous les lots du
 chantier Astres V2 sont livrés** (le 8 abandonné). **Le lot 14 est clos** (2026-10-26) : la naine blanche polluée au
 tirage — verte (sodium, WD J1330+6435, la première étoile verte découverte en

@@ -128,6 +128,20 @@ impl SkymapV2 {
         }
     }
 
+    /// La vue système ouverte sur un système de ce type d'étoile, graine 1 —
+    /// pour le profilage (`SYSTEME=<type>`, Chantier-Opti-v2).
+    pub fn sur_astre(nom: &'static str) -> Self {
+        let mut v = Self::new();
+        if let Some((s, i)) = construire_systeme_autour(v.seed, nom) {
+            v.sys = s;
+            v.info = i;
+            v.source = Source::Astre(v.seed, nom);
+            v.appliquer_vue();
+            if std::env::var("PROFIL").is_ok() { eprintln!("SYSTEME {}", v.info); }
+        }
+        v
+    }
+
     /// Une frame. Renvoie `true` pour revenir à l'accueil (Échap).
     pub fn frame(&mut self) -> bool {
         let dt = get_frame_time().min(0.05);

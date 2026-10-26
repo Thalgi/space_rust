@@ -46,6 +46,14 @@ fn window_conf() -> Conf {
         window_height: if capture { 1400 } else { 700 },
         // `assets/logo/model.ico`, embarquée ; l'icône par défaut si illisible.
         icon: fenetre::icone(),
+        // Sous `PROFIL`, la synchro verticale coupée : sinon toute mesure
+        // plafonne à la fréquence de l'écran, et rien au-dessus ne se
+        // distingue (Chantier-Opti-v2). Un indice pour le pilote, pas une
+        // garantie.
+        platform: miniquad::conf::Platform {
+            swap_interval: std::env::var("PROFIL").is_ok().then_some(0),
+            ..Default::default()
+        },
         ..Default::default()
     }
 }
@@ -113,6 +121,13 @@ async fn main() {
     // `DISQUES=<case>` : la galerie « Ceintures & disques », sur cette case.
     if let Some(case) = std::env::var("DISQUES").ok().and_then(|r| r.parse().ok()) {
         etat = Etat::GalerieDisques(Box::new(GalerieDisques::sur_case(case)));
+    }
+    // `SYSTEME=<type d'étoile>` : la vue système sur un système de ce type
+    // (Chantier-Opti-v2, avec `PROFIL`).
+    if let Ok(nom) = std::env::var("SYSTEME") {
+        if let Some(n) = crate::etoile::types_du_tirage().into_iter().find(|t| *t == nom) {
+            etat = Etat::SkymapV2(Box::new(SkymapV2::sur_astre(n)));
+        }
     }
     // `DEFILE=<rang>` : de même, sur un astre du défilé (touche 3).
     if let Some(rang) = std::env::var("DEFILE").ok().and_then(|r| r.parse().ok()) {
