@@ -206,6 +206,13 @@ pub trait Astre {
         None
     }
 
+    /// **Le type de cette planète** (chantier planètes) — habitable,
+    /// colonisable, géante… `None` pour ce qui n'en a pas : étoiles,
+    /// ceintures, engins, comètes.
+    fn classe_planete(&self) -> Option<crate::planete::classe::ClassePlanete> {
+        None
+    }
+
     /// Rayon **réellement dessiné**, en unités monde, vu depuis `cam_pos`.
     ///
     /// Par défaut le rayon physique : ce que voit l'œil est ce qui existe. Seule

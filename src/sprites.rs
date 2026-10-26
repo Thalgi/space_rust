@@ -146,6 +146,30 @@ thread_local! {
     /// Une case par ressource, dans l'ordre de `TOUTES`. `None` = fichier
     /// absent ou refusé ; l'emplacement reste vide, le jeu tourne.
     static ICONES: RefCell<Vec<Option<Texture2D>>> = const { RefCell::new(Vec::new()) };
+    /// Les icônes des types de planète (chantier planètes), dans l'ordre de
+    /// `ClassePlanete::TOUTES`. Même repli silencieux.
+    static ICONES_PLANETES: RefCell<Vec<Option<Texture2D>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Charge un sprite 16 × 16, filtré au plus proche voisin ; `None` s'il
+/// manque ou n'a pas la bonne taille.
+async fn charger_un(fichier: &str) -> Option<Texture2D> {
+    let t = load_texture(&format!("assets/sprites/{fichier}.png")).await.ok()?;
+    (t.width() as u16 == COTE && t.height() as u16 == COTE).then(|| {
+        t.set_filter(FilterMode::Nearest);
+        t
+    })
+}
+
+/// Dessine l'icône du type de planète `c`, coin haut-gauche en `(x, y)`, sur
+/// `cote` pixels (un multiple entier de [`COTE`], voir [`taille_ecran`]).
+/// Rien si le sprite manque.
+pub fn dessiner_classe(c: crate::planete::classe::ClassePlanete, x: f32, y: f32, cote: f32) {
+    let i = crate::planete::classe::ClassePlanete::TOUTES.iter().position(|x| *x == c).unwrap_or(0);
+    ICONES_PLANETES.with(|v| {
+        let Some(Some(t)) = v.borrow().get(i).cloned() else { return };
+        draw_texture_ex(&t, x, y, WHITE, DrawTextureParams { dest_size: Some(vec2(cote, cote)), ..Default::default() });
+    });
 }
 
 /// Charge les quatorze icônes. À appeler une fois au démarrage, avant la boucle
@@ -178,6 +202,16 @@ pub async fn charger() {
         warn!("Sprites de ressources absents ou mal dimensionnés : {manquantes:?} — emplacements laissés vides.");
     }
     ICONES.with(|i| *i.borrow_mut() = chargees);
+
+    let mut planetes = Vec::new();
+    for c in crate::planete::classe::ClassePlanete::TOUTES {
+        let t = charger_un(c.fichier()).await;
+        if t.is_none() {
+            warn!("Icône de type de planète absente ou mal dimensionnée : {} — emplacement laissé vide.", c.fichier());
+        }
+        planetes.push(t);
+    }
+    ICONES_PLANETES.with(|i| *i.borrow_mut() = planetes);
 }
 
 /// Taille d'affichage, en pixels : le plus grand **multiple entier** de [`COTE`]
@@ -252,20 +286,25 @@ mod tests {
         }
     }
 
-    // Le dossier ne contient **rien d'autre** que les quatorze. Sans ce test,
+    // Le dossier ne contient **rien d'autre** que les quatorze ressources et
+    // les huit types de planète (chantier planètes). Sans ce test,
     // un sprite ajouté sur le disque resterait invisible au jeu sans que rien
     // ne le signale — exactement le défaut que la colonne d'items a corrigé
     // côté composants (`suivi/stations.md` §F.7).
     #[test]
     fn aucun_sprite_du_dossier_nest_orphelin() {
-        let connus: Vec<&str> = Ressource::TOUTES.iter().map(|r| r.fichier()).collect();
+        let connus: Vec<&str> = Ressource::TOUTES
+            .iter()
+            .map(|r| r.fichier())
+            .chain(crate::planete::classe::ClassePlanete::TOUTES.iter().map(|c| c.fichier()))
+            .collect();
         let dossier = std::fs::read_dir("assets/sprites").expect("assets/sprites");
         for e in dossier.flatten() {
             let nom = e.file_name().to_string_lossy().to_string();
             let Some(tige) = nom.strip_suffix(".png") else { continue };
             assert!(
                 connus.contains(&tige),
-                "{nom} est sur le disque mais aucune Ressource ne le réclame"
+                "{nom} est sur le disque mais ni une Ressource ni un type de planète ne le réclame"
             );
         }
     }

@@ -346,6 +346,12 @@ impl Systeme {
         self.astres.get(idx).and_then(|a| a.gazeuse())
     }
 
+    /// Le type de l'astre `idx`, s'il en a un — voir
+    /// [`Astre::classe_planete`].
+    pub fn classe_planete_de(&self, idx: usize) -> Option<crate::planete::classe::ClassePlanete> {
+        self.astres.get(idx).and_then(|a| a.classe_planete())
+    }
+
     /// **Luminosité cumulée** de toutes les étoiles du système.
     ///
     /// C'est la grandeur dont dépend la zone habitable, y compris circumbinaire

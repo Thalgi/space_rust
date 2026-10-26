@@ -1,4 +1,5 @@
 mod apparence;
+pub mod classe;
 mod materiau;
 mod palette;
 pub mod terrain;
@@ -400,6 +401,11 @@ impl Astre for Planete {
     }
     fn gazeuse(&self) -> Option<bool> {
         Some(self.app.type_p == TypePlanete::Gazeuse)
+    }
+    /// Le type de la planète (`classe::classer`) ; une comète n'en a pas —
+    /// elle aura son logo à elle.
+    fn classe_planete(&self) -> Option<classe::ClassePlanete> {
+        (!self.comete).then(|| classe::classer(&self.app))
     }
     fn teinte(&self) -> Option<Vec3> {
         let a = &self.app;

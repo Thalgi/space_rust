@@ -1659,6 +1659,9 @@ pub fn catalogue_gazeuses() -> Vec<(String, Apparence)> {
         // touche au garde. On la corrige a la source.
         app.villes = 0.0;
         app.relief = 0.0;
+        // Les naines brunes sont rendues en géantes gazeuses ; leur type
+        // (chantier planètes) n'est pas celui d'une géante.
+        app.naine_brune = nom.starts_with("Naine brune");
         v.push((nom.to_string(), app));
     };
     let spot = vec3(0.6, -0.22, 0.77);

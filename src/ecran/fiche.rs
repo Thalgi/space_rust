@@ -35,7 +35,10 @@ pub enum Habitabilite {
 impl Habitabilite {
     pub fn libelle(self) -> &'static str {
         match self {
-            Habitabilite::Habitable => "HABITABLE",
+            // « Zone tempérée », pas « habitable » : depuis le chantier
+            // planètes, c'est le **type** de la planète qui dit si on peut y
+            // vivre (`classe`) ; ceci ne dit que la distance à l'étoile.
+            Habitabilite::Habitable => "ZONE TEMPEREE",
             Habitabilite::TropChaud => "TROP CHAUD",
             Habitabilite::TropFroid => "TROP FROID",
             Habitabilite::SansObjet => "-",
@@ -54,6 +57,10 @@ pub struct Fiche {
     /// sa propre orbite de quelques centièmes d'UA.
     pub distance_ua: f32,
     pub habitabilite: Habitabilite,
+    /// **Le type de la planète** (chantier planètes) : habitable,
+    /// colonisable, géante… `None` pour une étoile, une ceinture, un engin,
+    /// une comète.
+    pub classe: Option<crate::planete::classe::ClassePlanete>,
     /// Un vaisseau **pilotable**, prêt à s'élancer — voir
     /// [`crate::astre::Astre::pilotable`]. Décide si le panneau montre le
     /// bouton LANCER (`docs/conception/trajectoires.md` §4 décision 8).
@@ -156,6 +163,7 @@ pub fn fiche(sys: &Systeme, idx: usize) -> Option<Fiche> {
         rayon: sys.rayon_de(idx).unwrap_or(0.0),
         distance_ua,
         habitabilite: habitabilite(sys, categorie, distance_ua),
+        classe: sys.classe_planete_de(idx),
         pilotable: sys.pilotable_de(idx),
     })
 }

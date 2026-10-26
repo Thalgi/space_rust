@@ -138,6 +138,10 @@ impl SkymapV2 {
             v.source = Source::Astre(v.seed, nom);
             v.appliquer_vue();
             if std::env::var("PROFIL").is_ok() { eprintln!("SYSTEME {}", v.info); }
+            // `FICHE=<rang>` : la fiche de cet astre ouverte (captures).
+            if let Some(i) = std::env::var("FICHE").ok().and_then(|i| i.parse().ok()) {
+                v.fiche_ouverte = Some(i);
+            }
         }
         v
     }
@@ -549,6 +553,16 @@ impl SkymapV2 {
             *y += 22.0;
         };
         ligne(fiche::nom_categorie(f.categorie).to_string(), cyan, &mut y);
+        // **Le type de la planète, et son icône** (chantier planètes) : la
+        // ligne qui dit ce qu'on peut faire de ce monde.
+        if let Some(c) = f.classe {
+            let cote = crate::sprites::taille_ecran(32.0);
+            // L'icône centrée sur la ligne de son libellé, sans mordre sur la
+            // ligne du dessus.
+            crate::sprites::dessiner_classe(c, r.x + 12.0, y - 20.0, cote);
+            crate::police::texte(c.libelle(), r.x + 18.0 + cote, y, 17.0, c.couleur());
+            y += cote + 4.0;
+        }
         if f.categorie != crate::astre::Categorie::Etoile {
             ligne(format!("Distance : {:.2} UA", f.distance_ua), cyan, &mut y);
         }

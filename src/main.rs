@@ -129,6 +129,10 @@ async fn main() {
             etat = Etat::SkymapV2(Box::new(SkymapV2::sur_astre(n)));
         }
     }
+    // `GALERIE` : la galerie des planètes (captures).
+    if std::env::var("GALERIE").is_ok() {
+        etat = Etat::Galerie(Box::new(Galerie::new(false)));
+    }
     // `DEFILE=<rang>` : de même, sur un astre du défilé (touche 3).
     if let Some(rang) = std::env::var("DEFILE").ok().and_then(|r| r.parse().ok()) {
         etat = Etat::Objet(Box::new(Objet::sur_defile(rang)));

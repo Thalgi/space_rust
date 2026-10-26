@@ -32,6 +32,9 @@ pub struct Apparence {
     pub tache_type: f32, // 0 = tache rouge (GRS), 1 = tache sombre (Neptune)
     // Anneau.
     pub anneau: bool,
+    /// **Une naine brune** (rendue en géante gazeuse) : son type n'est pas
+    /// celui d'une géante (`classe::classer`). Posé par le catalogue.
+    pub naine_brune: bool,
     pub anneau_couleur: Vec3,
     pub anneau_normal: Vec3, // axe perpendiculaire au plan de l'anneau
     pub anneau_in: f32,      // rayon interne (× rayon planète)
@@ -125,6 +128,7 @@ impl Apparence {
             tache_couleur: Vec3::ZERO,
             tache_type: 0.0,
             anneau: false,
+            naine_brune: false,
             anneau_couleur: Vec3::ZERO,
             anneau_normal: Vec3::Y,
             anneau_in: 1.4,

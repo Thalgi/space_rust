@@ -6,6 +6,43 @@
 
 ---
 
+## Chantier planètes : le type et l'habitabilité (branche `chantier-planetes`, 2026-10-27)
+
+*« Rajouter un indicateur de type et d'habitabilité sur les planètes gazeuses et
+rocheuses »*, huit types, chacun son logo (`assets/sprites/planet_type_*.png`,
+16 × 16, fournis par l'utilisateur ; noms régularisés — une espace et une
+coquille corrigées).
+
+| Type | Règle (`planete::classe::classer`) |
+|---|---|
+| Naine brune | gazeuse marquée `naine_brune` (catalogue : nom en « Naine brune ») |
+| Géante gazeuse annelée | gazeuse à anneaux |
+| Géante gazeuse | les autres gazeuses |
+| Inhabitable | rocheuse, lave (au-delà de 600 K à la genèse) |
+| Hostile | rocheuse sous un voile épais (étuve, comme Vénus) |
+| Dangereuse | glacée, ou banquise quasi globale (gelée) |
+| Habitable | océans (eau ≥ 0,4) **et** végétation (≥ 0,4) |
+| Colonisable | tout le reste : désert, toundra, roche nue |
+
+**Une seule règle, lue sur l'apparence** : la genèse la fabrique d'après la
+température d'équilibre, donc elle vaut partout — système généré, galerie (sans
+étoile ni distance), lunes. Les comètes n'en ont pas (*« elles auront leur
+logo »*). Affiché dans la **fiche de la skymap V2** (icône + libellé coloré,
+sous la catégorie) et dans la **galerie des planètes** (icône devant le nom).
+`Astre::classe_planete`, `Systeme::classe_planete_de`, `Fiche::classe`,
+`sprites::dessiner_classe`. La ligne de zone de la fiche passe de
+« HABITABLE » à **« ZONE TEMPEREE »** : elle ne dit que la distance à l'étoile.
+
+⚠️ Les deux peuvent se contredire : une planète du système G de la graine 1
+est **habitable** (océans, végétation) mais **trop chaude** selon la zone — la
+genèse tire son climat d'une température d'équilibre, la zone d'une
+luminosité ; deux modèles, à réconcilier avec la refonte de la genèse.
+
+Gardes : `chaque_monde_tombe_dans_son_type` (red-check : lave ignorée),
+`les_gazeuses_se_rangent`, `chaque_type_a_son_icone_sur_le_disque`, et le
+garde du dossier des sprites étendu aux types. Captures : `GALERIE`,
+`SYSTEME=<type> FICHE=<rang>` (nouveaux, pour les captures).
+
 ## Partie A — Bilan des travaux (rendu v2)
 
 

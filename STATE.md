@@ -241,7 +241,10 @@ la refonte de la genèse.
 **Le prochain pas** : **tous les lots livrés sont validés.** Reste à
 construire, **dans l'ordre** : **une passe de relecture** du chantier
 (demandée : *« observer qu'on n'a rien loupé »*), puis la refonte de la
-genèse. **Chantier-Opti-v2 ouvert** (2026-10-26) : la carte de la dette de
+genèse. **Chantier planètes** (branche `chantier-planetes`, 2026-10-27) : le type et
+l'habitabilité des planètes — huit types, chacun son icône, dans la fiche de
+la skymap V2 et la galerie des planètes (`planete::classe`, journal dans
+`docs/suivi/planetes.md`). **Chantier-Opti-v2 ouvert** (2026-10-26) : la carte de la dette de
 performance d'Astres V2, pour 30 fps sur un premier APU Ryzen portable —
 [`docs/conception/opti_v2.md`](docs/conception/opti_v2.md). Mesuré : la T Tauri
 et la Herbig tombent à ~40 fps en vue isolée **sur la machine de dev**

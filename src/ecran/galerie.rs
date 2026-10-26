@@ -202,7 +202,7 @@ impl Galerie {
         }
 
         // --- Phase 3D : dessiner les planètes (viewport par cellule). Aucun texte ici. ---
-        let mut labels: Vec<(String, bool, f32, f32)> = Vec::new();
+        let mut labels: Vec<(String, bool, f32, f32, Option<crate::planete::classe::ClassePlanete>)> = Vec::new();
         for (i, (nom, rare, planete)) in self.cellules.iter_mut().enumerate() {
             let cell_x = (i % cols) as f32 * cw;
             let cell_y = top + (i / cols) as f32 * ch - self.scroll;
@@ -275,7 +275,8 @@ impl Galerie {
             let ech = if pixelise { super::pixel::PIX as f32 } else { 1.0 };
             crate::planete::set_viewport_h(render_h / ech);
             planete.draw(&cam);
-            labels.push((nom.clone(), *rare, cell_x, cell_y + render_h + 16.0));
+            let classe = crate::astre::Astre::classe_planete(&*planete);
+            labels.push((nom.clone(), *rare, cell_x, cell_y + render_h + 16.0, classe));
         }
         crate::planete::set_viewport_h(0.0); // retour plein écran pour les autres vues
 
@@ -288,10 +289,17 @@ impl Galerie {
         }
         let nom_col = Color::new(0.7, 0.9, 0.8, 1.0);
         let violet = Color::new(0.72, 0.45, 1.0, 1.0);
-        for (nom, rare, cell_x, y) in &labels {
+        // L'icône du type de la planète (chantier planètes), devant son nom.
+        let cote_icone = crate::sprites::taille_ecran(16.0);
+        for (nom, rare, cell_x, y, classe) in &labels {
             let prefix = if *rare { "[R] " } else { "" };
-            let tw = crate::police::mesure(&format!("{}{}", prefix, nom), 18);
+            let place = if classe.is_some() { cote_icone + 6.0 } else { 0.0 };
+            let tw = crate::police::mesure(&format!("{}{}", prefix, nom), 18) + place;
             let x = cell_x + (cw - tw) * 0.5;
+            if let Some(c) = classe {
+                crate::sprites::dessiner_classe(*c, x, *y - cote_icone + 2.0, cote_icone);
+            }
+            let x = x + place;
             if *rare {
                 crate::police::texte("[R] ", x, *y, 18.0, violet);
                 let pw = crate::police::mesure("[R] ", 18);
