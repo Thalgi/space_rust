@@ -430,6 +430,14 @@ impl Soleil {
         self
     }
 
+    /// **Une étoile sans arches d'éruption** (lot 13, à juger sur les
+    /// rémanents : une étoile à neutrons n'a pas de boucles coronales de soleil
+    /// ordinaire). La prochaine éruption n'arrive jamais.
+    pub fn sans_arches(mut self) -> Self {
+        self.prochaine_eruption = f32::INFINITY;
+        self
+    }
+
     /// **Fixe l'activité propre au type d'étoile** (§1.3, `etoile::activite_type`).
     /// À poser à la génération, avant tout appel à `set_eruptions` : c'est ce
     /// facteur que celui-ci module au lieu d'écraser.

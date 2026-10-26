@@ -152,7 +152,10 @@ Gardes : `l_axe_magnetique_tourne_autour_de_la_rotation`,
 inversé, « recul de 5,48 rad »), `une_boucle_part_de_la_surface_et_y_retombe`
 (red-check : pieds hors de la surface). Faisceaux et boucles éclaircis après
 la première capture. ⚠️ Les rémanents du jeu, à l'activité maximale, portent
-encore des **arches d'éruption** de soleil ordinaire — à trancher.
+encore des **arches d'éruption** de soleil ordinaire — *« avec et sans »*, en
+prototypes : P1, N1 et M1 ont chacun leur version sans arches
+(`Soleil::sans_arches`, la prochaine éruption n'arrive jamais ; une fréquence
+nulle ne suffisait pas, l'étoile en lance toujours au moins une).
 
 ### Lot 12 clos (2026-10-25)
 
