@@ -148,6 +148,9 @@ pub struct Soleil {
     rotation_mag: f32,
     /// Voir `avec_arches_du_type`.
     arches_du_type: bool,
+    /// **Ce qui pollue une naine blanche**, pour son nom (lot 14). `None`
+    /// pour toutes les autres.
+    pollution: Option<&'static str>,
     /// **Inclinaison de l'axe de rotation** (lot 12) : amène le pôle
     /// nord de la surface sur l'axe réel de l'étoile. Identité pour presque
     /// toutes ; pour une étoile à jets, l'axe de son disque — une étoile tourne
@@ -374,6 +377,7 @@ impl Soleil {
             inclinaison_mag: 0.0,
             rotation_mag: 0.0,
             arches_du_type: false,
+            pollution: None,
             axe_rot: Quat::IDENTITY,
             accretion_pol: 0.0,
             disques: Vec::new(),
@@ -530,7 +534,13 @@ impl Soleil {
     pub fn avec_pollution(mut self) -> Self {
         let (couleur, disques) = crate::disque::habillage::naine_polluee(self.base.rayon, self.base.masse, self.graine);
         self.couleur = couleur;
+        self.pollution = Some(crate::disque::habillage::etiquette_polluee(couleur));
         disques.into_iter().fold(self.avec_arches_du_type(), |s, c| s.avec_disque(c))
+    }
+
+    /// Voir le champ `pollution`.
+    pub fn pollution(&self) -> Option<&'static str> {
+        self.pollution
     }
 
     /// **Une étoile Be** (lot 12) : aplatie, son disque de décrétion autour,

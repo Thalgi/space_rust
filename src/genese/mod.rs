@@ -511,6 +511,8 @@ fn construire_simple(profil: ProfilEtoile) -> (Systeme, String) {
     };
 
     let mut sys = Systeme::new();
+    // Ce qui pollue l'étoile, s'il y a lieu : pour qu'il ressorte dans son nom.
+    let mut pollution = None;
     // ⚠️ **Une naine brune n'est pas une photosphère.** Elle ne fusionne pas
     // l'hydrogène, et le dépôt la rend depuis toujours en géante gazeuse —
     // bandes, vortex, émission thermique côté nuit — ce qui vaut bien mieux que
@@ -542,6 +544,7 @@ fn construire_simple(profil: ProfilEtoile) -> (Systeme, String) {
         } else {
             soleil
         };
+        pollution = soleil.pollution();
         sys.ajouter(Box::new(soleil));
     }
 
@@ -643,7 +646,10 @@ fn construire_simple(profil: ProfilEtoile) -> (Systeme, String) {
     // c'est voulu — une comète qui plonge coupe le plan des planètes.
     ajouter_cometes(&mut sys, masse_etoile, ech);
 
-    let info = format!("Etoile {}  -  {} K", profil.nom(), profil.temperature as i32);
+    let info = match pollution {
+        Some(p) => format!("Etoile {} ({p})  -  {} K", profil.nom(), profil.temperature as i32),
+        None => format!("Etoile {}  -  {} K", profil.nom(), profil.temperature as i32),
+    };
     (sys, info)
 }
 

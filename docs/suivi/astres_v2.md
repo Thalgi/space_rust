@@ -130,6 +130,11 @@ de gaz chaud (V3c). `Soleil::avec_pollution`. V3a et V3b non retenus, gardés
 en presets (`avec_fragments`, `avec_pluie`). En tête du défilé et dans la
 galerie des étoiles ; la touche 4 est vide. Garde
 `les_naines_polluees_varient_avec_leur_graine` (red-check : jamais de gaz).
+*« Il faut aussi que l'indication polluée ressorte »*, dans le nom affiché :
+l'info du système dit « Etoile Naine blanche polluee (POLLUEE AU SODIUM -
+VERTE) », ou ROSE, CYAN, ROUGE (`habillage::etiquette_polluee`,
+`Soleil::pollution`) ; le sodium n'est nommé que pour la verte, la seule dont
+on connaisse le polluant. Systèmes à une étoile.
 
 **Les prototypes, d'abord** :
 

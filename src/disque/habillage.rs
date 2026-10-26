@@ -229,6 +229,19 @@ pub const COULEURS_POLLUEES: [Vec3; 4] = [
     vec3(1.0, 0.42, 0.32),
 ];
 
+/// **Ce que dit le nom d'une naine polluée**, d'après sa couleur : *« il
+/// faut aussi que l'indication polluée ressorte »* (2026-10-26). Le sodium
+/// n'est nommé que pour la verte, la seule dont on connaisse le polluant.
+pub fn etiquette_polluee(couleur: Vec3) -> &'static str {
+    match COULEURS_POLLUEES.iter().position(|c| *c == couleur) {
+        Some(0) => "POLLUEE AU SODIUM - VERTE",
+        Some(1) => "POLLUEE - ROSE",
+        Some(2) => "POLLUEE - CYAN",
+        Some(3) => "POLLUEE - ROUGE",
+        _ => "POLLUEE",
+    }
+}
+
 /// **Une naine blanche polluée telle que le jeu la pose** (validée le
 /// 2026-10-26 : V2 et V3c, *« toute la famille »*) : `(sa couleur, ses
 /// disques)`, dérivés de la graine. L'anneau des débris de ses planètes, de 7
@@ -425,6 +438,10 @@ mod tests {
             avec_gaz += usize::from(d.len() == 2);
         }
         assert_eq!(couleurs.len(), 4, "toutes les couleurs ne sortent pas");
+        // Chaque couleur a son étiquette, et toutes disent « polluée ».
+        let e: std::collections::HashSet<_> = COULEURS_POLLUEES.iter().map(|c| etiquette_polluee(*c)).collect();
+        assert_eq!(e.len(), 4);
+        assert!(e.iter().all(|x| x.contains("POLLUEE")));
         assert!((60..=140).contains(&avec_gaz), "{avec_gaz} avec gaz sur 200");
     }
 
