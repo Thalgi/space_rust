@@ -85,8 +85,9 @@ fn naine(couleur: Vec3, autour: Autour) -> Systeme {
     let s = Variante::Normale.appliquer(Soleil::new(Vec3::ZERO, rayon, couleur, lumi), "Naine blanche").avec_arches_du_type();
     let masse = masse_luminosite(lumi);
     // L'anneau à distance de l'étoile, de 7 à 16 rayons : *« plus de
-    // distance entre les anneaux de débris et l'astre »* (2026-10-26).
-    let anneau = || DisqueConfig::debris_recents(1800, rayon * 7.0, rayon * 16.0, masse);
+    // distance entre les anneaux de débris et l'astre »* (2026-10-26). Et
+    // allégé : 1 800 cailloux, *« un peu trop de débris »*.
+    let anneau = || DisqueConfig::debris_recents(600, rayon * 7.0, rayon * 16.0, masse);
     let s = match autour {
         Autour::Rien => s,
         Autour::Anneau => s.avec_disque(anneau()),

@@ -155,6 +155,7 @@ Puis *« plus de distance entre les anneaux de débris et l'astre »* : l'anneau
 rocheux passe de 4–10 à **7–16 rayons** ; le gaz chaud de V3c reste au ras
 de l'étoile, sur un disque à lui. Captures : un grand vide autour de la naine,
 ses débris et son anneau de gaz bien détachés.
+Puis *« un peu trop de débris »* : l'anneau passe de 1 800 cailloux à 600.
 
 ### Lot 13 clos : les rémanents refaits en 3D (2026-10-26)
 
