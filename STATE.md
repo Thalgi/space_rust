@@ -18,10 +18,10 @@
 ## Reprendre ici (état au 2026-10-25)
 
 **Chantier en cours : Astres V2.** Branche `chantier-astres`, worktree
-`.claude/worktrees/astres-v2`. **Fusionnée dans `main` le 2026-10-25** (avance
-rapide, lots 0 à 12 ; une première fois le 2026-10-21, lots 0 à 11), **rien de
-poussé** depuis : `main` porte le lot 12 de plus que `origin/main`. Le chantier
-continue sur la branche (lot 13) ; refusionner à chaque lot clos. ⚠️ Depuis le dossier principal, la
+`.claude/worktrees/astres-v2`. **Fusionnée dans `main` le 2026-10-26** (avance
+rapide, lots 0 à 13 ; avant, le 2026-10-21 et le 2026-10-25), **rien de
+poussé** depuis : `main` porte les lots 12 et 13 de plus que `origin/main`. Le chantier
+continue sur la branche (lot 14) ; refusionner à chaque lot clos. ⚠️ Depuis le dossier principal, la
 branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
 worktree) : on travaille **dans le worktree**.
 
@@ -239,9 +239,10 @@ régénérant. Le plan de référence d'un système (disques désaxés) est not�
 la refonte de la genèse.
 
 **Le prochain pas** : **tous les lots livrés sont validés.** Reste à
-construire, **dans l'ordre** : la clôture du lot 13 (rémanents refaits en 3D,
-adoptés le 2026-10-26 — à valider en jeu), puis les lots 14 et 15, puis la
-refonte de la genèse.
+construire, **dans l'ordre** : les lots 14 (étoiles vertes, fantaisie à
+trancher) et 15 (naine noire), puis la refonte de la genèse. **Le lot 13 est
+clos** (2026-10-26) : pulsar blanc à faisceaux 3D courbés, étoile à neutrons
+violette (ou turquoise et stable), magnétars à boucles 3D.
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de

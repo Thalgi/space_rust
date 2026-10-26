@@ -118,7 +118,10 @@ protoplanétaire (12.2) y sont passés depuis la galerie des disques ; le cas
 la liste et ne rend rien quand elle est vide (red-check fait), chaque
 prototype a un nom à lui et un cadre dans la portée de la caméra.
 
-### Lot 13 : les rémanents refaits en 3D (2026-10-26)
+### Lot 13 clos : les rémanents refaits en 3D (2026-10-26)
+
+Validé à l'écran par l'utilisateur, le même jour : *« je valide, on clôt le
+lot »*. Fusionné dans `main`.
 
 **Adoptés le même jour** — *« pour l'étoile à neutrons, le violet par défaut ;
 sur les pulsars, le P3 est le mieux ; la turquoise, un exemple d'étoile à
