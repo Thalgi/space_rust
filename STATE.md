@@ -19,9 +19,9 @@
 
 **Chantier en cours : Astres V2.** Branche `chantier-astres`, worktree
 `.claude/worktrees/astres-v2`. **Fusionnée dans `main` le 2026-10-26** (avance
-rapide, lots 0 à 13 ; avant, le 2026-10-21 et le 2026-10-25), **rien de
-poussé** depuis : `main` porte les lots 12 et 13 de plus que `origin/main`. Le chantier
-continue sur la branche (lot 14) ; refusionner à chaque lot clos. ⚠️ Depuis le dossier principal, la
+rapide, lots 0 à 14 ; avant, le 2026-10-21 et le 2026-10-25), **rien de
+poussé** depuis : `main` porte les lots 12 à 14 de plus que `origin/main`. Le chantier
+continue sur la branche (lot 15) ; refusionner à chaque lot clos. ⚠️ Depuis le dossier principal, la
 branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
 worktree) : on travaille **dans le worktree**.
 
@@ -239,8 +239,11 @@ régénérant. Le plan de référence d'un système (disques désaxés) est not�
 la refonte de la genèse.
 
 **Le prochain pas** : **tous les lots livrés sont validés.** Reste à
-construire, **dans l'ordre** : les lots 14 (étoiles vertes, fantaisie à
-trancher) et 15 (naine noire), puis la refonte de la genèse. **Le lot 13 est
+construire, **dans l'ordre** : le lot 15 (naine noire), puis la refonte de
+la genèse. **Le lot 14 est clos** (2026-10-26) : la naine blanche polluée au
+tirage — verte (sodium, WD J1330+6435, la première étoile verte découverte en
+octobre 2026), rose, cyan ou rouge, l'anneau des débris de ses planètes, son
+nom qui dit ce qui la pollue. **Le lot 13 est
 clos** (2026-10-26) : pulsar blanc à faisceaux 3D courbés, étoile à neutrons
 violette (ou turquoise et stable), magnétars à boucles 3D.
 

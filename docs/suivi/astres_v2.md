@@ -118,7 +118,10 @@ protoplanétaire (12.2) y sont passés depuis la galerie des disques ; le cas
 la liste et ne rend rien quand elle est vide (red-check fait), chaque
 prototype a un nom à lui et un cadre dans la portée de la caméra.
 
-### Lot 14, en cours : la naine blanche verte (2026-10-26)
+### Lot 14 clos : la naine blanche verte (2026-10-26)
+
+Validé en jeu par l'utilisateur le même jour (*« je valide, j'ai vu en jeu »*).
+Fusionné dans `main`.
 
 **Adoptée le même jour** — *« V2 et V3 me plaisent beaucoup »* (V3c, l'anneau
 de gaz), *« toute la famille »*. Nouvelle variante `Polluee` (mode 9), type

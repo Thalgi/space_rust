@@ -40,6 +40,9 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
   (à plat) ou **instable** (relief éclairé).
 - [x] **Supergéante bleue** (Rigel) : preset galerie + vent stellaire (`couronne_type 2`).
 - [x] **Sous-naine** (subdwarf) : preset galerie (petite/chaude).
+- [x] **Naine blanche polluée** (lot 14, 2026-10-26) : verte au sodium (WD J1330+6435, la
+  première étoile verte, octobre 2026), rose, cyan ou rouge ; l'anneau des débris de ses
+  planètes, teinté de sa couleur, et parfois un anneau de gaz chaud ; son nom dit ce qui la pollue.
 - [x] **Naine brune** (déjà côté gazeuses) : reliée au lot 6.2 (2026-09-30) — elle peut tenir le
   **centre** d'un système, rendue en géante gazeuse ; ses quatre classes (M, L, T, Y) sont
   dans la galerie des étoiles.
