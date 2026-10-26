@@ -271,12 +271,74 @@ impl Soleil {
                 }
             }
         }
+        // ---- 4) La magnétosphère en 3D (lot 13) : faisceaux du pulsar,
+        // boucles du magnétar — dans le monde, plus dans le plan de l'écran.
+        self.dessiner_magnetosphere(cam, c, r, dist, vh);
         flush(&mut self.verts, &mut self.inds, &self.halo);
         gl_use_default_material();
 
         // Moitié avant APRÈS tout le reste : elle passe devant l'horizon.
         for d in &mut self.disques {
             d.draw_moitie(cam, 1.0);
+        }
+    }
+}
+
+impl super::Soleil {
+    /// **Faisceaux et boucles** (`magnetosphere`), en rubans de plasma.
+    fn dessiner_magnetosphere(&mut self, cam: &CameraInfo, c: Vec3, r: f32, dist: f32, vh: f32) {
+        use super::magnetosphere as mag;
+        let rot = self.axe_rot * Vec3::Y;
+        let phase = self.rotation_mag * self.temps;
+        let mut brin: Vec<crate::impostor::PointRuban> = Vec::new();
+        // Un lot vidé avant chaque ruban long : un appel de dessin plafonne à
+        // 5 000 indices (`impostor::QUADS_PAR_DESSIN`).
+        flush(&mut self.verts, &mut self.inds, &self.halo);
+        if self.faisceaux.x > 0.0 {
+            // Un éclat quand un faisceau balaie la caméra : le phare.
+            let vers_cam = (cam.pos - c).normalize_or_zero();
+            let m = mag::axe_magnetique(rot, self.inclinaison_mag, phase);
+            let phare = m.dot(vers_cam).abs().powf(40.0);
+            let blanc = vec3(0.92, 0.96, 1.0);
+            for sens in [1.0_f32, -1.0] {
+                let f = mag::faisceau(rot, self.inclinaison_mag, phase, sens, r, self.faisceaux.x, self.faisceaux.y);
+                for (p, demi, eclat) in f {
+                    let (taille, fondu) = plancher_plasma(demi, dist, vh);
+                    let a = 0.9 * eclat * fondu;
+                    brin.push((c + p, taille, Color::new(blanc.x * a, blanc.y * a, blanc.z * a, a)));
+                }
+                emettre(&mut self.verts, &mut self.inds, cam, &mut brin);
+            }
+            if phare > 0.01 {
+                let (taille, fondu) = plancher_plasma(r * 6.0, dist, vh);
+                let a = phare * fondu;
+                push_quad(&mut self.verts, &mut self.inds, cam, c, taille, Color::new(a, a, a, a));
+            }
+            flush(&mut self.verts, &mut self.inds, &self.halo);
+        }
+        if self.boucles_mag > 0 {
+            let m = mag::axe_magnetique(rot, self.inclinaison_mag, phase);
+            let sursaut = if self.sursauts_mag > 0.0 { mag::sursaut(self.temps, self.sursauts_mag, self.graine) } else { 0.0 };
+            let teinte = vec3(0.55, 0.65, 1.0).lerp(vec3(1.0, 0.9, 1.0), sursaut);
+            for (k, b) in mag::boucles(m, r, self.boucles_mag, self.graine, self.torsion_mag).into_iter().enumerate() {
+                let n = b.len() as f32;
+                for (i, p) in b.into_iter().enumerate() {
+                    let s = i as f32 / n;
+                    // La matière court le long de la ligne, d'un pied à l'autre.
+                    let flot = 0.55 + 0.45 * (s * 12.0 - self.temps * 3.0 + k as f32).sin();
+                    let (taille, fondu) = plancher_plasma(r * 0.09, dist, vh);
+                    let a = (0.6 + 0.4 * sursaut) * flot * fondu;
+                    brin.push((c + p, taille, Color::new(teinte.x * a, teinte.y * a, teinte.z * a, a)));
+                }
+                emettre(&mut self.verts, &mut self.inds, cam, &mut brin);
+                flush(&mut self.verts, &mut self.inds, &self.halo);
+            }
+            if sursaut > 0.01 {
+                let (taille, fondu) = plancher_plasma(r * 5.0, dist, vh);
+                let a = sursaut * fondu * 0.8;
+                push_quad(&mut self.verts, &mut self.inds, cam, c, taille, Color::new(teinte.x * a, teinte.y * a, teinte.z * a, a));
+            }
+            flush(&mut self.verts, &mut self.inds, &self.halo);
         }
     }
 }

@@ -118,6 +118,42 @@ protoplanétaire (12.2) y sont passés depuis la galerie des disques ; le cas
 la liste et ne rend rien quand elle est vide (red-check fait), chaque
 prototype a un nom à lui et un cadre dans la portée de la caméra.
 
+### Lot 13, en cours : les rémanents refaits en 3D (2026-10-26)
+
+La première question du lot, répondue : *« le pulsar plus blanc en couleur,
+avec des pôles qui se courbent un peu par rapport au sens de rotation à une
+longue distance de l'astre ; l'étoile à neutrons avec un set de couleurs qui
+la distinguerait de ses homologues bleus ; pour le magnétar, rendre visibles
+en 3D les boucles magnétiques au lieu d'un sticker »*.
+
+`soleil/magnetosphere.rs` (pur, testé) : l'axe magnétique incliné qui tourne
+avec l'étoile (`axe_magnetique`) ; le **faisceau** du pulsar, courbé au loin
+à rebours de la rotation — un point du faisceau a quitté l'étoile quand l'axe
+pointait en arrière, retard croissant comme le carré de la distance (le jet
+d'un tuyau d'arrosage qu'on fait tourner) ; les **boucles** fermées du dipôle
+(`ρ = L·sin²θ`, d'un pied à l'autre, torsion possible) ; les **sursauts**.
+Dessinés en rubans de plasma (`Soleil::dessiner_magnetosphere`), un éclat
+quand un faisceau balaie la caméra. Builders `avec_faisceaux`,
+`avec_boucles_magnetiques`.
+
+| Proto | Ce qu'on y voit |
+|---|---|
+| P1 | pulsar blanc, faisceaux de 20 rayons, légèrement courbés |
+| P2 | faisceaux de 40 rayons, très courbés — une spirale |
+| P3 | axe presque aligné, rotation rapide |
+| N1-N3 | étoile à neutrons violette, turquoise, rose-blanc |
+| N4 | violette, et de fins jets 3D (`avec_jets_3d`) |
+| M1 | magnétar, huit boucles de champ en 3D |
+| M2 | M1 + sursauts (toutes les 6 s) |
+| M3 | dix boucles torsadées + sursauts |
+
+Gardes : `l_axe_magnetique_tourne_autour_de_la_rotation`,
+`un_faisceau_se_courbe_a_rebours_de_la_rotation` (red-check : retard
+inversé, « recul de 5,48 rad »), `une_boucle_part_de_la_surface_et_y_retombe`
+(red-check : pieds hors de la surface). Faisceaux et boucles éclaircis après
+la première capture. ⚠️ Les rémanents du jeu, à l'activité maximale, portent
+encore des **arches d'éruption** de soleil ordinaire — à trancher.
+
 ### Lot 12 clos (2026-10-25)
 
 Validé à l'écran et en jeu : T Tauri (T1B4, variée par la graine), Herbig

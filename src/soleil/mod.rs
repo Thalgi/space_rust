@@ -2,6 +2,7 @@
 // et assombrissement du shader (3.4) — `docs/conception/astres_v2.md` §6 bis.
 mod champ;
 mod eruptions;
+mod magnetosphere;
 mod materiau;
 mod rendu;
 
@@ -133,6 +134,18 @@ pub struct Soleil {
     /// peints le long de l'axe vertical de l'écran — ce qui les faisait partir
     /// de travers dès que le disque s'inclinait. Posés par la variante `Proto`.
     jets_3d: f32,
+    /// **Faisceaux de pulsar en 3D** (lot 13) : `(longueur en rayons,
+    /// retard au bout en rad)`. Longueur 0 = aucun.
+    faisceaux: Vec2,
+    /// **Boucles magnétiques en 3D** (lot 13, magnétar) : nombre de lignes,
+    /// torsion, et période des sursauts (0 = aucun).
+    boucles_mag: u32,
+    torsion_mag: f32,
+    sursauts_mag: f32,
+    /// Inclinaison de l'axe magnétique sur l'axe de rotation (rad), et vitesse
+    /// de rotation (rad/s) des rémanents du lot 13.
+    inclinaison_mag: f32,
+    rotation_mag: f32,
     /// **Inclinaison de l'axe de rotation** (lot 12) : amène le pôle
     /// nord de la surface sur l'axe réel de l'étoile. Identité pour presque
     /// toutes ; pour une étoile à jets, l'axe de son disque — une étoile tourne
@@ -352,6 +365,12 @@ impl Soleil {
             coeur: 0.0,
             aplatissement: 0.0,
             jets_3d: 0.0,
+            faisceaux: Vec2::ZERO,
+            boucles_mag: 0,
+            torsion_mag: 0.0,
+            sursauts_mag: 0.0,
+            inclinaison_mag: 0.0,
+            rotation_mag: 0.0,
             axe_rot: Quat::IDENTITY,
             accretion_pol: 0.0,
             disques: Vec::new(),
@@ -376,6 +395,31 @@ impl Soleil {
         self.couronne_type = 3.0;
         self.couronne = 5.0;
         self.couronne_irreg = 0.0;
+        self
+    }
+
+    /// **Faisceaux de pulsar en 3D** (lot 13) : deux faisceaux de `longueur`
+    /// rayons le long d'un axe magnétique incliné de `inclinaison`, qui tourne
+    /// à `rotation` rad/s autour de l'axe propre de l'étoile ; ils se courbent
+    /// de `retard` rad au bout. Remplace la couronne peinte dans l'écran.
+    pub fn avec_faisceaux(mut self, longueur: f32, retard: f32, inclinaison: f32, rotation: f32) -> Self {
+        self.faisceaux = vec2(longueur.max(0.0), retard);
+        self.inclinaison_mag = inclinaison;
+        self.rotation_mag = rotation;
+        self.axe_rot = quat_axe(normale_disque(self.graine));
+        self
+    }
+
+    /// **Boucles magnétiques en 3D** (lot 13, magnétar) : `n` lignes fermées
+    /// du dipôle, tordues de `torsion` rad, et un sursaut toutes les
+    /// `sursauts` secondes (0 = aucun).
+    pub fn avec_boucles_magnetiques(mut self, n: u32, torsion: f32, sursauts: f32, inclinaison: f32) -> Self {
+        self.boucles_mag = n;
+        self.torsion_mag = torsion;
+        self.sursauts_mag = sursauts;
+        self.inclinaison_mag = inclinaison;
+        self.rotation_mag = 0.3;
+        self.axe_rot = quat_axe(normale_disque(self.graine));
         self
     }
 
