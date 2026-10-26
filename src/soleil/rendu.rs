@@ -180,7 +180,7 @@ impl Soleil {
                 let flow = 0.55 + 0.45 * (t * 16.0 - self.temps * 6.0).sin();
                 let lum = (b.intensite * (0.55 + 0.45 * flow)).clamp(0.0, 1.0);
                 // plasma chaud, additif -> les recouvrements forment un cœur blanc
-                let chaud = vec3(1.0, 0.8 + 0.15 * lum, 0.5 + 0.3 * lum);
+                let chaud = teinte_plasma(self.couleur, lum, self.arches_du_type);
                 // **Ancrage du pied** : près de la surface, le plasma cède la
                 // place à la teinte de l'étoile et perd de l'éclat. Sans ça,
                 // l'arche s'arrête net sur la photosphère et se lit comme
@@ -208,7 +208,7 @@ impl Soleil {
                     continue;
                 }
                 let (taille, fondu) = plancher_plasma(calibre * 2.4, dist, vh);
-                let lueur = self.couleur.lerp(vec3(1.0, 0.85, 0.6), 0.5);
+                let lueur = self.couleur.lerp(teinte_plasma(self.couleur, 1.0, self.arches_du_type), 0.5);
                 let a = b.intensite.clamp(0.0, 1.0) * fondu * 0.35;
                 let col = Color::new(lueur.x, lueur.y, lueur.z, a);
                 push_quad(&mut self.verts, &mut self.inds, cam, monde, taille, col);
@@ -234,7 +234,8 @@ impl Soleil {
                     let (calibre, _) = tube(1.0, etendue(a_w, b_w, b.apex.min(b.apex_max), r), b.epaisseur);
                     let (taille_c, fondu_c) = plancher_plasma(calibre * 3.2, dist, vh);
                     let lum = b.intensite.clamp(0.0, 1.0);
-                    let col = Color::new(1.0, 0.72, 0.45, lum * fondu_c);
+                    let t = teinte_plasma(self.couleur, 0.5, self.arches_du_type);
+                    let col = Color::new(t.x, t.y, t.z, lum * fondu_c);
                     push_quad(&mut self.verts, &mut self.inds, cam, pos, taille_c, col);
                     quads += 1;
                     if quads >= QUADS_PAR_LOT {
@@ -340,6 +341,17 @@ impl super::Soleil {
             }
             flush(&mut self.verts, &mut self.inds, &self.halo);
         }
+    }
+}
+
+/// **La teinte du plasma d'une arche** à l'éclat `lum` (0..1) : orangée, à
+/// cœur blanc-jaune, pour un soleil ; à la couleur de l'étoile, éclaircie vers
+/// le blanc au cœur, pour un rémanent (`arches_du_type`, lot 13).
+fn teinte_plasma(couleur: Vec3, lum: f32, du_type: bool) -> Vec3 {
+    if du_type {
+        couleur.lerp(Vec3::ONE, 0.25 + 0.35 * lum)
+    } else {
+        vec3(1.0, 0.8 + 0.15 * lum, 0.5 + 0.3 * lum)
     }
 }
 
@@ -983,6 +995,20 @@ mod tests_jets {
         let v = vec3(0.3, -0.8, 0.5);
         assert!((e.inverse(e.appliquer(v)) - v).length() < 1e-5, "aller-retour");
         assert_eq!(Ecrasement::de(q, 0.0).appliquer(v), v, "une sphère s'écrase");
+    }
+
+
+    /// **Les arches d'un rémanent prennent sa teinte** : un violet reste
+    /// violet, un bleu reste bleu ; un soleil garde son plasma orangé.
+    #[test]
+    fn les_arches_d_un_remanent_prennent_sa_teinte() {
+        let violet = vec3(0.78, 0.6, 1.0);
+        for lum in [0.0, 0.5, 1.0] {
+            let t = teinte_plasma(violet, lum, true);
+            assert!(t.z > t.y && t.x > t.y, "lum {lum} : {t} n'est plus violet");
+            let soleil = teinte_plasma(violet, lum, false);
+            assert!(soleil.x > soleil.z, "le soleil perd son orangé : {soleil}");
+        }
     }
 
 }

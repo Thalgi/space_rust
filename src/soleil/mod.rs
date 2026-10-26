@@ -146,6 +146,8 @@ pub struct Soleil {
     /// de rotation (rad/s) des rémanents du lot 13.
     inclinaison_mag: f32,
     rotation_mag: f32,
+    /// Voir `avec_arches_du_type`.
+    arches_du_type: bool,
     /// **Inclinaison de l'axe de rotation** (lot 12) : amène le pôle
     /// nord de la surface sur l'axe réel de l'étoile. Identité pour presque
     /// toutes ; pour une étoile à jets, l'axe de son disque — une étoile tourne
@@ -371,6 +373,7 @@ impl Soleil {
             sursauts_mag: 0.0,
             inclinaison_mag: 0.0,
             rotation_mag: 0.0,
+            arches_du_type: false,
             axe_rot: Quat::IDENTITY,
             accretion_pol: 0.0,
             disques: Vec::new(),
@@ -430,11 +433,13 @@ impl Soleil {
         self
     }
 
-    /// **Une étoile sans arches d'éruption** (lot 13, à juger sur les
-    /// rémanents : une étoile à neutrons n'a pas de boucles coronales de soleil
-    /// ordinaire). La prochaine éruption n'arrive jamais.
-    pub fn sans_arches(mut self) -> Self {
-        self.prochaine_eruption = f32::INFINITY;
+    /// **Les arches d'un rémanent** (lot 13) : à la teinte de l'étoile,
+    /// plus petites, plus nombreuses — *« les rayons devraient reprendre la
+    /// teinte de ces étoiles, en plus d'être légèrement plus petits mais
+    /// nombreux »*. Elles restaient celles d'un soleil ordinaire : orangées,
+    /// rares et grandes, sur un astre bleu, violet ou blanc.
+    pub fn avec_arches_du_type(mut self) -> Self {
+        self.arches_du_type = true;
         self
     }
 

@@ -162,9 +162,12 @@ const MARGE_ARCHES: f32 = 0.16;
 /// augmenter la part des petites boucles revenait à voir moins de grandes
 /// arches : elles se disputaient les mêmes places alors qu'elles ne coûtent
 /// pas la même chose à la lecture.
-pub(super) fn categorie_pleine(boucles: &[Boucle], courte: bool) -> bool {
+///
+/// `facteur` multiplie les deux plafonds : 2 pour les arches d'un rémanent,
+/// petites et nombreuses (`Soleil::arches_du_type`).
+pub(super) fn categorie_pleine(boucles: &[Boucle], courte: bool, facteur: usize) -> bool {
     let vivantes = boucles.iter().filter(|b| b.courte == courte).count();
-    vivantes >= if courte { MAX_COURTES } else { MAX_ARCHES }
+    vivantes >= facteur * if courte { MAX_COURTES } else { MAX_ARCHES }
 }
 
 /// Empreinte angulaire d'une boucle : l'écart entre ses deux pieds.
@@ -361,7 +364,7 @@ impl Soleil {
     pub(super) fn declencher_boucle(&mut self) {
         // La catégorie se décide d'abord, parce que chacune a **son** plafond.
         let courte = gen_range(0.0, 1.0) < PART_COURTES;
-        if categorie_pleine(&self.boucles, courte) {
+        if categorie_pleine(&self.boucles, courte, if self.arches_du_type { 2 } else { 1 }) {
             return;
         }
         let Some(i) = tache_porteuse(&self.taches, gen_range(0.0, 1.0)) else {
@@ -438,6 +441,9 @@ impl Soleil {
         // Puissance et forme gouvernent le rapport hauteur/écart ; l'aléa le
         // disperse. L'écart, lui, vient des pieds — voir [`apex_pour`].
         let rapport = (0.30 + 0.95 * p) * (1.0 + f * 0.3) * (1.0 + gen_range(-0.45, 0.85) * j);
+        // Plus basses et plus fines sur un rémanent (lot 13).
+        let (petit, fin) = if self.arches_du_type { (0.6, 0.7) } else { (1.0, 1.0) };
+        let rapport = rapport * petit;
         let apex_max = apex_pour(sa, sb, rapport);
         let skew = gen_range(-0.8, 0.8) * j * apex_max;
 
@@ -458,7 +464,7 @@ impl Soleil {
             // Un fil ténu ou un ruban massif, et tout l'entre-deux. Borné bas
             // pour que le plancher en pixels ait encore quelque chose à
             // relever, haut pour qu'un tube n'avale pas l'étoile.
-            epaisseur: (1.0 + gen_range(-0.5, 0.9) * j).clamp(0.45, 2.1),
+            epaisseur: (1.0 + gen_range(-0.5, 0.9) * j).clamp(0.45, 2.1) * fin,
             courte,
             etat: EtatBoucle::Montee,
             timer: 0.0,
@@ -535,11 +541,14 @@ impl Soleil {
             // Les plafonds sont vérifiés par catégorie dans `declencher_boucle` :
             // les petites boucles ne prennent pas la place des grandes arches.
             let n_loops = 1 + (self.freq * 2.5) as usize; // 1..=3
-            for _ in 0..n_loops {
+            // Un rémanent en fait naître trois fois plus, plus souvent :
+            // *« légèrement plus petits, mais nombreux »* (lot 13).
+            let (fois, cadence) = if self.arches_du_type { (3, 0.6) } else { (1, 1.0) };
+            for _ in 0..n_loops * fois {
                 self.declencher_boucle();
             }
             // Fréquence haute -> intervalle court.
-            let moy = 3.5 - 3.2 * self.freq;
+            let moy = (3.5 - 3.2 * self.freq) * cadence;
             self.prochaine_eruption = self.temps + (gen_range(0.5, 1.5) * moy).max(CADENCE_MIN);
         }
 
@@ -850,20 +859,21 @@ mod tests_repulsion {
         // Autant de petites boucles qu'il en tient : les arches gardent leurs
         // places.
         let pleines: Vec<Boucle> = (0..MAX_COURTES).map(|_| courte()).collect();
-        assert!(categorie_pleine(&pleines, true), "les petites devraient être au complet");
+        assert!(categorie_pleine(&pleines, true, 1), "les petites devraient être au complet");
+        assert!(!categorie_pleine(&pleines, true, 2), "un rémanent en tient deux fois plus");
         assert!(
-            !categorie_pleine(&pleines, false),
+            !categorie_pleine(&pleines, false, 1),
             "les petites boucles ont mangé les places des grandes arches"
         );
         // Et réciproquement.
         let arches: Vec<Boucle> = (0..MAX_ARCHES)
             .map(|_| boucle(vec3(1.0, 0.3, 0.0), vec3(1.0, -0.3, 0.0)))
             .collect();
-        assert!(categorie_pleine(&arches, false));
-        assert!(!categorie_pleine(&arches, true), "une arche bloque une petite boucle");
+        assert!(categorie_pleine(&arches, false, 1));
+        assert!(!categorie_pleine(&arches, true, 1), "une arche bloque une petite boucle");
         // Il y a bien plus de place pour les petites : c'est tout l'objet.
         const { assert!(MAX_COURTES > MAX_ARCHES) };
-        assert!(!categorie_pleine(&[], true) && !categorie_pleine(&[], false));
+        assert!(!categorie_pleine(&[], true, 1) && !categorie_pleine(&[], false, 1));
     }
 
     /// **Deux petites boucles se serrent plus que deux grandes arches.**

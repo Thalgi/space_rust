@@ -153,9 +153,17 @@ inversé, « recul de 5,48 rad »), `une_boucle_part_de_la_surface_et_y_retombe`
 (red-check : pieds hors de la surface). Faisceaux et boucles éclaircis après
 la première capture. ⚠️ Les rémanents du jeu, à l'activité maximale, portent
 encore des **arches d'éruption** de soleil ordinaire — *« avec et sans »*, en
-prototypes : P1, N1 et M1 ont chacun leur version sans arches
-(`Soleil::sans_arches`, la prochaine éruption n'arrive jamais ; une fréquence
-nulle ne suffisait pas, l'étoile en lance toujours au moins une).
+prototypes : P1, N1 et M1 ont eu leur version sans arches. Tranché : *« les
+rayons devraient reprendre la teinte de ces étoiles, en plus d'être
+légèrement plus petits mais nombreux »*. `Soleil::avec_arches_du_type` : la
+teinte de l'étoile éclaircie vers le blanc au cœur (`teinte_plasma`), des
+arches 40 % plus basses et 30 % plus fines, trois fois plus de naissances par
+cycle, un cycle 40 % plus court, des plafonds doublés (`categorie_pleine`
+prend un facteur). Les versions sans arches sont retirées. Garde
+`les_arches_d_un_remanent_prennent_sa_teinte` (red-check : plasma orangé,
+« n'est plus violet »). Captures : arches violet-blanc sur N1, bleu-blanc sur
+M1, plus petites ; ⚠️ guère plus nombreuses à l'image — elles naissent sur
+les taches, peu nombreuses sur ces astres.
 
 ### Lot 12 clos (2026-10-25)
 
