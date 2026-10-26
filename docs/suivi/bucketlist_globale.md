@@ -186,7 +186,8 @@ exactement le même système (reproductible, partageable).
       ZZ Ceti. L'éclat n'est **visible à l'image** que pour la céphéide ; les autres types
       variables sont un chantier ultérieur (conception astres §6 decies).
 - [~] **Classes spéciales** : pulsar, magnétar, étoile à neutrons **faits** (`etoile.rs`, et
-      `est_remnant()` leur retire la zone habitable) — **à refaire** (lot futur 13 : peints
+      `est_remnant()` leur retire la zone habitable) — **refaits en 3D au lot 13** (2026-10-26 ;
+      ils étaient peints
       dans le plan de l'écran). Wolf-Rayet **faite**, surface en relief depuis le lot 10.
       Étoiles vertes et naine noire : lots futurs 14 et 15. **Quasi-étoile faite** (lot 11,
       2026-10-21). **Herbig Ae/Be faite** (lot 12, 2026-10-24) : la grande sœur de la

@@ -118,7 +118,27 @@ protoplanétaire (12.2) y sont passés depuis la galerie des disques ; le cas
 la liste et ne rend rien quand elle est vide (red-check fait), chaque
 prototype a un nom à lui et un cadre dans la portée de la caméra.
 
-### Lot 13, en cours : les rémanents refaits en 3D (2026-10-26)
+### Lot 13 : les rémanents refaits en 3D (2026-10-26)
+
+**Adoptés le même jour** — *« pour l'étoile à neutrons, le violet par défaut ;
+sur les pulsars, le P3 est le mieux ; la turquoise, un exemple d'étoile à
+neutrons stable, sans éruptions ; les trois magnétars à retenir par leurs
+variations »*. Par `Variante::appliquer`, les trois builders refaits
+(`soleil::magnetosphere` pour les réglages, dérivés de la graine) :
+- **Pulsar** (`avec_pulsar`) : blanc, faisceaux P3 — 25 rayons, retard
+  0,8 rad, axe incliné de 0,25 rad, 2,5 rad/s —, arches à sa teinte ;
+- **Étoile à neutrons** (`avec_etoile_a_neutrons`, variante `Jets`) :
+  violette et ses arches, ou **une sur trois turquoise et stable**, sans
+  éruptions (`sans_arches`) ; **sans jet** — une isolée n'accrète pas ;
+- **Magnétar** (`avec_magnetar`) : M1, M2 ou M3 selon la graine, arches à sa
+  teinte.
+Les `couronne_type` 1, 3 et 4 ne sont plus posés par personne (les branches
+du shader restent, mortes). En tête du défilé ; la touche 4 est vide. Garde
+`les_remanents_varient_avec_leur_graine` (red-check : aucune stable, « 0
+stables sur 300 »). Captures du défilé : pulsar blanc, faisceaux courbés sous
+deux angles ; étoile à neutrons violette ; magnétar et ses boucles.
+
+**Les prototypes, d'abord** :
 
 La première question du lot, répondue : *« le pulsar plus blanc en couleur,
 avec des pôles qui se courbent un peu par rapport au sens de rotation à une

@@ -239,8 +239,9 @@ régénérant. Le plan de référence d'un système (disques désaxés) est not�
 la refonte de la genèse.
 
 **Le prochain pas** : **tous les lots livrés sont validés.** Reste à
-construire, **dans l'ordre** : puis les lots futurs 13 à 15, puis la refonte
-de la genèse.
+construire, **dans l'ordre** : la clôture du lot 13 (rémanents refaits en 3D,
+adoptés le 2026-10-26 — à valider en jeu), puis les lots 14 et 15, puis la
+refonte de la genèse.
 
 Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de

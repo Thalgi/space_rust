@@ -58,8 +58,12 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
 
 ## Étoiles particulières (le « un peu spécial »)
 
-- [x] **Étoile à neutrons** : jets de matière bipolaires **fixes** (`couronne_type 1`).
-- [x] **Pulsar** : faisceau bipolaire qui **tourne** (effet phare) + flash périodique (`couronne_type 3`).
+- [x] **Étoile à neutrons** : refaite au lot 13 (2026-10-26) — violette, ou turquoise et
+  stable sans éruptions une fois sur trois ; plus de jets (une isolée n'accrète pas).
+  Elle portait des jets fixes peints dans l'écran (`couronne_type 1`).
+- [x] **Pulsar** : refait au lot 13 — blanc, deux faisceaux en 3D le long d'un axe
+  magnétique incliné, qui tournent et se courbent au loin, éclat au passage sur la caméra.
+  Il était peint dans l'écran (`couronne_type 3`).
 - [x] **Wolf-Rayet** : **vent stellaire** turbulent en expansion, bleu-violet (`couronne_type 2`).
 - [x] **Quasi-étoile** (lot 11, 2026-10-21) : enveloppe d'une UA chauffée par un trou noir
   central — pourpre, bouillonnante à contour, couronne serrée, **lueur du cœur** au centre
@@ -86,7 +90,9 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
     sans copie d'écran, les cubemaps étant core en GLSL ES 100 ([`technique.md`](technique.md)).
   - ⚠️ Aspect **non validé à l'écran** au moment de l'arrêt. Journal :
     [`astres_v2.md`](astres_v2.md).
-- [x] **Magnétar** : arcs de champ magnétique dipolaire brillants, violets (`couronne_type 4`).
+- [x] **Magnétar** : refait au lot 13 — boucles de champ fermées en 3D, droites ou
+  torsadées, avec ou sans sursauts selon la graine. Il était peint dans l'écran
+  (`couronne_type 4`).
 
 ---
 

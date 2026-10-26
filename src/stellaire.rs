@@ -69,7 +69,7 @@ impl Variante {
     pub fn nom(self) -> &'static str {
         match self {
             Variante::Normale => "normale",
-            Variante::Jets => "jets",
+            Variante::Jets => "etoile a neutrons",
             Variante::Vent => "vent",
             Variante::Pulsar => "pulsar",
             Variante::Magnetar => "magnetar",
@@ -115,7 +115,7 @@ impl Variante {
         };
         match self {
             Variante::Normale => s,
-            Variante::Jets => s.avec_jets(),
+            Variante::Jets => s.avec_etoile_a_neutrons(),
             Variante::Vent => s.avec_vent(),
             Variante::Pulsar => s.avec_pulsar(),
             Variante::Magnetar => s.avec_magnetar(),
@@ -347,7 +347,7 @@ mod tests_variante {
         let ici = include_str!("stellaire.rs");
         let ici = ici.split("#[cfg(test)]").next().unwrap_or(ici);
         for builder in [
-            "avec_jets(",
+            "avec_etoile_a_neutrons(",
             "avec_vent(",
             "avec_pulsar(",
             "avec_magnetar(",

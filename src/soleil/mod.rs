@@ -393,12 +393,14 @@ impl Soleil {
         self
     }
 
-    /// Pulsar : jets bipolaires qui tournent (effet phare) + flash périodique.
+    /// **Pulsar** (lot 13) : blanc, deux faisceaux en 3D le long d'un axe
+    /// magnétique presque aligné, en rotation rapide, courbés au loin (P3) ;
+    /// ses arches à sa teinte. Il était peint dans le plan de l'écran
+    /// (`couronne_type` 3) : ses faisceaux restaient verticaux à l'écran.
     pub fn avec_pulsar(mut self) -> Self {
-        self.couronne_type = 3.0;
-        self.couronne = 5.0;
-        self.couronne_irreg = 0.0;
-        self
+        let (longueur, retard, inclinaison, rotation) = magnetosphere::PULSAR;
+        self.couleur = magnetosphere::BLANC_PULSAR;
+        self.avec_faisceaux(longueur, retard, inclinaison, rotation).avec_arches_du_type()
     }
 
     /// **Faisceaux de pulsar en 3D** (lot 13) : deux faisceaux de `longueur`
@@ -426,10 +428,34 @@ impl Soleil {
         self
     }
 
-    /// Magnétar : arcs de champ magnétique dipolaire brillants autour de l'étoile.
-    pub fn avec_magnetar(mut self) -> Self {
-        self.couronne_type = 4.0;
-        self.couronne = 2.8;
+    /// **Magnétar** (lot 13) : des boucles de champ fermées en 3D — huit
+    /// droites, huit avec sursauts, ou dix torsadées avec sursauts, selon sa
+    /// graine ; ses arches à sa teinte. Il était peint dans le plan de
+    /// l'écran (`couronne_type` 4), *« un sticker »*.
+    pub fn avec_magnetar(self) -> Self {
+        let (n, torsion, sursauts) = magnetosphere::variante_magnetar(self.graine);
+        self.avec_boucles_magnetiques(n, torsion, sursauts, 0.35).avec_arches_du_type()
+    }
+
+    /// **Étoile à neutrons** (lot 13) : violette, ses arches à sa teinte ; ou,
+    /// une fois sur trois selon sa graine, **stable** — turquoise et sans
+    /// éruptions. Pas de jet : une étoile à neutrons isolée n'avale rien, et
+    /// un jet naît de l'accrétion. Elle portait des jets peints dans le plan
+    /// de l'écran (`couronne_type` 1).
+    pub fn avec_etoile_a_neutrons(mut self) -> Self {
+        if magnetosphere::neutrons_stable(self.graine) {
+            self.couleur = magnetosphere::TURQUOISE_NEUTRONS;
+            self.sans_arches()
+        } else {
+            self.couleur = magnetosphere::VIOLET_NEUTRONS;
+            self.avec_arches_du_type()
+        }
+    }
+
+    /// **Sans arches d'éruption** : la prochaine éruption n'arrive jamais —
+    /// une fréquence nulle ne suffit pas, l'étoile en lance toujours une.
+    pub fn sans_arches(mut self) -> Self {
+        self.prochaine_eruption = f32::INFINITY;
         self
     }
 

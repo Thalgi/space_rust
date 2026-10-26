@@ -87,6 +87,35 @@ pub fn boucles(m: Vec3, r: f32, n: u32, graine: f32, torsion: f32) -> Vec<Vec<Ve
         .collect()
 }
 
+/// Le blanc du pulsar (lot 13 : *« plus blanc en couleur »*).
+pub const BLANC_PULSAR: Vec3 = vec3(0.92, 0.96, 1.0);
+/// La couleur de l'étoile à neutrons, *« qui la distinguerait de ses
+/// homologues bleus »* : violette par défaut, turquoise quand elle est stable.
+pub const VIOLET_NEUTRONS: Vec3 = vec3(0.78, 0.6, 1.0);
+pub const TURQUOISE_NEUTRONS: Vec3 = vec3(0.5, 1.0, 0.9);
+
+/// Le pulsar retenu (P3) : `(longueur des faisceaux en rayons, retard au
+/// bout, inclinaison de l'axe magnétique, rotation en rad/s)` — axe presque
+/// aligné, rotation rapide.
+pub const PULSAR: (f32, f32, f32, f32) = (25.0, 0.8, 0.25, 2.5);
+
+/// **Une étoile à neutrons stable ?** Une sur trois, d'après sa graine :
+/// turquoise et sans éruptions — *« un exemple d'étoile à neutrons stable »*.
+/// Dérivé, jamais tiré.
+pub fn neutrons_stable(graine: f32) -> bool {
+    (graine * 0.618_034 * 3.1).fract() < 1.0 / 3.0
+}
+
+/// **Le magnétar d'une graine** : `(boucles, torsion, période des sursauts)`
+/// — M1, M2 ou M3, *« les trois à retenir par leurs variations »*.
+pub fn variante_magnetar(graine: f32) -> (u32, f32, f32) {
+    match ((graine * 0.618_034 * 5.7).fract() * 3.0) as u32 {
+        0 => (8, 0.0, 0.0),
+        1 => (8, 0.0, 6.0),
+        _ => (10, 1.2, 6.0),
+    }
+}
+
 /// **Un sursaut de magnétar**, 0..1, au temps `temps` : un éclair bref toutes
 /// les `periode` secondes environ, qui retombe vite.
 pub fn sursaut(temps: f32, periode: f32, graine: f32) -> f32 {
@@ -130,6 +159,20 @@ mod tests {
         assert!(recul > 0.5 && recul < 1.0, "recul de {recul} rad");
         let droit = faisceau(rot, 0.6, 0.0, 1.0, 1.0, 20.0, 0.0);
         assert!(droit.last().unwrap().0.normalize().dot(depart) > 0.9999, "courbé sans retard");
+    }
+
+    /// **Les rémanents varient avec leur graine** : une étoile à neutrons sur
+    /// trois environ est stable, et les trois magnétars sortent tous.
+    #[test]
+    fn les_remanents_varient_avec_leur_graine() {
+        let n = 300;
+        let stables = (0..n).filter(|&k| neutrons_stable(k as f32 * 23.7)).count();
+        assert!((60..=140).contains(&stables), "{stables} stables sur {n}");
+        let mut vus = std::collections::HashSet::new();
+        for k in 0..60 {
+            vus.insert(variante_magnetar(k as f32 * 23.7).0 * 10 + variante_magnetar(k as f32 * 23.7).2 as u32);
+        }
+        assert_eq!(vus.len(), 3, "les trois magnétars ne sortent pas : {vus:?}");
     }
 
     /// **Une boucle sort de la surface et y retombe**, en montant jusqu'à son
