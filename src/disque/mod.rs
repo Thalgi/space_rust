@@ -935,6 +935,18 @@ mod tests_prototypes {
         assert!(nuages_visibles(400.0, 3000.0, 1440.0) && !nuages_visibles(40.0, 3000.0, 1440.0), "la taille ne compte pas");
     }
 
+    /// **Une étoile verte teinte de vert ce qu'elle éclaire**, légèrement ;
+    /// une blanche, rien.
+    #[test]
+    fn une_etoile_verte_teinte_ses_debris() {
+        let c = DisqueConfig::debris_recents(0, 4.0, 10.0, 1000.0);
+        assert_eq!(c.teinte_eclairage, Vec3::ONE);
+        let t = c.avec_teinte_eclairage(vec3(0.78, 1.0, 0.42), 0.35).teinte_eclairage;
+        assert!(t.y > t.x && t.x > t.z, "pas vert : {t}");
+        assert!(t.y > 0.99 && t.z > 0.75, "trop fort : {t}");
+        assert_eq!(c.avec_teinte_eclairage(Vec3::ONE, 0.35).teinte_eclairage, Vec3::ONE);
+    }
+
     /// **Un sillon se vide aussi de ses nuages**, et seulement lui : intact
     /// au loin, vidé selon sa profondeur en son cœur ; une bande brillante
     /// (profondeur négative) n'y touche pas.
@@ -1207,7 +1219,7 @@ fn construire_lots(c: &DisqueConfig) -> Vec<Mesh> {
         // ---- Couleur : gradient radial interne->externe + variation ----
         let t = (r - c.interne) / (c.externe - c.interne).max(1e-6);
         let g: f32 = gen_range(0.7, 1.05);
-        let teinte = (c.couleur2 * (1.0 - t) + c.couleur * t) * g;
+        let teinte = (c.couleur2 * (1.0 - t) + c.couleur * t) * g * c.teinte_eclairage;
         let col = Color::new(
             teinte.x.clamp(0.0, 1.0),
             teinte.y.clamp(0.0, 1.0),

@@ -87,7 +87,14 @@ fn naine(couleur: Vec3, autour: Autour) -> Systeme {
     // L'anneau à distance de l'étoile, de 7 à 16 rayons : *« plus de
     // distance entre les anneaux de débris et l'astre »* (2026-10-26). Et
     // allégé : 1 800 cailloux, *« un peu trop de débris »*.
-    let anneau = || DisqueConfig::debris_recents(600, rayon * 7.0, rayon * 16.0, masse);
+    // Puis, sur V2 : *« alléger l'anneau d'au moins la moitié des plus gros
+    // cailloux, et la lumière touchant les astéroïdes prend une légère teinte
+    // verte »* — taille maximale divisée par deux, teinte de l'étoile.
+    let anneau = || DisqueConfig {
+        taille_max: 0.08,
+        ..DisqueConfig::debris_recents(600, rayon * 7.0, rayon * 16.0, masse)
+    }
+    .avec_teinte_eclairage(couleur, 0.35);
     let s = match autour {
         Autour::Rien => s,
         Autour::Anneau => s.avec_disque(anneau()),

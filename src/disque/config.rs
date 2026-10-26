@@ -123,6 +123,9 @@ pub struct DisqueConfig {
     /// **Fragments qui se désagrègent** (`bras::fragments`, lot 14) : nombre
     /// de corps en orbite serrée, chacun sa traînée de poussière, 0 = aucun.
     pub fragments: u32,
+    /// **Teinte de la lumière** reçue par les particules (multiplicateur, 1 =
+    /// neutre) : une étoile colorée teinte ce qu'elle éclaire (lot 14).
+    pub teinte_eclairage: Vec3,
     /// **Flot bipolaire** (`disque::flot`) : jet, traînée, nœuds, parois.
     pub flot: super::flot::Flot,
 }
@@ -178,6 +181,7 @@ impl DisqueConfig {
             bord_brulant: 0.0,
             pluie: 0,
             fragments: 0,
+            teinte_eclairage: Vec3::ONE,
             flot: super::flot::Flot::default(),
         }
     }
@@ -257,6 +261,20 @@ impl DisqueConfig {
     pub fn avec_fragments(mut self, n: u32, rayon_astre: f32) -> Self {
         self.fragments = n.min(6);
         self.rayon_astre = rayon_astre.max(0.0);
+        self
+    }
+
+    /// **Les particules prennent la teinte de l'étoile qui les éclaire**,
+    /// dosée de `force` (0 = neutre, 1 = sa couleur pure) — *« la lumière
+    /// touchant les astéroïdes prend une légère teinte verte, à cause de la
+    /// couleur de l'étoile »* (lot 14, la naine verte).
+    ///
+    /// ponytail: cuite dans la couleur des particules à leur construction,
+    /// faces sombres comprises — un uniform de lumière dans le shader des
+    /// particules ne teinterait que la face éclairée, si ça se voit un jour.
+    pub fn avec_teinte_eclairage(mut self, couleur_etoile: Vec3, force: f32) -> Self {
+        let c = couleur_etoile / couleur_etoile.max_element().max(1e-6);
+        self.teinte_eclairage = Vec3::ONE.lerp(c, force.clamp(0.0, 1.0));
         self
     }
 

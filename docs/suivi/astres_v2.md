@@ -156,6 +156,14 @@ rocheux passe de 4–10 à **7–16 rayons** ; le gaz chaud de V3c reste au ras
 de l'étoile, sur un disque à lui. Captures : un grand vide autour de la naine,
 ses débris et son anneau de gaz bien détachés.
 Puis *« un peu trop de débris »* : l'anneau passe de 1 800 cailloux à 600.
+Puis, sur V2 : *« alléger l'anneau d'au moins la moitié des plus gros
+cailloux, et la lumière touchant les astéroïdes prend une légère teinte
+verte »* — taille maximale divisée par deux (0,16 → 0,08), et
+`DisqueConfig::avec_teinte_eclairage` (la couleur de l'étoile, dosée à 35 %,
+cuite dans la couleur des particules — faces sombres comprises ; un uniform de
+lumière ne teinterait que la face éclairée). Garde
+`une_etoile_verte_teinte_ses_debris` (red-check : teinte neutre, « pas
+vert »). Captures : des cailloux fins, kaki-olive au lieu de bruns.
 
 ### Lot 13 clos : les rémanents refaits en 3D (2026-10-26)
 
