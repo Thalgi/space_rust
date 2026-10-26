@@ -96,9 +96,15 @@ pub(crate) fn ordinaire(p: f32, q: f32) -> Gabarit {
     if p < 0.08 {
         // Géante rouge : énorme, froide, très lumineuse.
         (3000.0, 3900.0, entre(4.5, 7.0), entre(3.0, 6.0), "Geante rouge", 0.0)
-    } else if p < 0.15 {
+    } else if p < 0.13 {
         // Naine blanche : petite, très chaude, peu lumineuse.
         (12000.0, 28000.0, entre(0.5, 0.8), entre(0.15, 0.4), "Naine blanche", 0.0)
+    } else if p < 0.15 {
+        // **Naine blanche polluée** (lot 14, 2026-10-26) : une naine blanche
+        // qui a avalé les débris de ses planètes — verte, rose, cyan ou rouge
+        // (`habillage::naine_polluee`). Même gabarit ; 2 % des ordinaires,
+        // pris sur la naine blanche. Rareté provisoire.
+        (12000.0, 28000.0, entre(0.5, 0.8), entre(0.15, 0.4), "Naine blanche polluee", 9.0)
     } else if p < 0.18 {
         // **Supergéante rouge** (lot 6). Se distingue de la géante par la
         // taille et l'éclat, pas par la teinte : 150 K d'écart ne se voient
@@ -450,7 +456,7 @@ pub fn surface(nom: &str) -> (f32, f32, f32) {
         "F (blanc-jaune)" => (13.0, 0.60, 0.55),
         "K (orange)" => (14.0, 1.00, 0.70),
         "M (naine rouge)" => (20.0, 0.85, 0.80),
-        "Naine blanche" => (30.0, 0.08, 0.50),
+        "Naine blanche" | "Naine blanche polluee" => (30.0, 0.08, 0.50),
         "Sous-naine (sdB)" => (30.0, 0.08, 0.40),
         "Supergeante bleue" | "Hypergeante (LBV)" => (9.0, 0.10, 0.35),
         "Wolf-Rayet" => (11.0, 0.10, 0.30),
@@ -663,9 +669,10 @@ mod tests_ordinaires {
         "O (bleue)",
     ];
 
-    const ATTENDUS: [&str; 16] = [
+    const ATTENDUS: [&str; 17] = [
         "Geante rouge",
         "Naine blanche",
+        "Naine blanche polluee",
         "Supergeante rouge",
         "Sous-naine (sdB)",
         "Etoile carbonee (C)",
@@ -976,10 +983,10 @@ mod tests_types {
         }
         // Les deux tables au complet : 11 particulières (la quasi-étoile du
         // lot 11, la Herbig Ae/Be, l'étoile Be et l'hypergéante du lot 12
-        // comprises), 16 ordinaires. Si ce
+        // comprises), 17 ordinaires (la naine polluée du lot 14). Si ce
         // compte bouge, un type est arrivé ou parti — le menu suit tout seul,
         // ce test dit seulement qu'on l'a remarqué.
-        assert_eq!(types.len(), 27, "{types:?}");
+        assert_eq!(types.len(), 28, "{types:?}");
         for attendu in ["Trou noir", "T Tauri (jeune)", "Naine brune", "O (bleue)", "Mira"] {
             assert!(types.contains(&attendu), "« {attendu} » absent : {types:?}");
         }

@@ -250,6 +250,9 @@ impl DisqueConfig {
     }
 
     /// Voir le champ `pluie` : `n` débris vers un astre de rayon `rayon_astre`.
+    ///
+    /// Prototype du lot 14 non retenu (V3b, V3a) : gardé en preset.
+    #[allow(dead_code)]
     pub fn avec_pluie(mut self, n: u32, rayon_astre: f32) -> Self {
         self.pluie = n;
         self.rayon_astre = rayon_astre.max(0.0);
@@ -258,6 +261,9 @@ impl DisqueConfig {
 
     /// Voir le champ `fragments` : `n` corps autour d'un astre de rayon
     /// `rayon_astre`.
+    ///
+    /// Prototype du lot 14 non retenu (V3b, V3a) : gardé en preset.
+    #[allow(dead_code)]
     pub fn avec_fragments(mut self, n: u32, rayon_astre: f32) -> Self {
         self.fragments = n.min(6);
         self.rayon_astre = rayon_astre.max(0.0);

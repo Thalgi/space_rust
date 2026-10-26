@@ -524,6 +524,15 @@ impl Soleil {
     }
 
     /// **Taches d'accrétion polaires** (lot 12) : voir le champ.
+    /// **Une naine blanche polluée** (lot 14) : teinte de ce qu'elle a avalé,
+    /// ses arches à sa teinte, l'anneau des débris de ses planètes et,
+    /// parfois, un anneau de gaz chaud (`habillage::naine_polluee`).
+    pub fn avec_pollution(mut self) -> Self {
+        let (couleur, disques) = crate::disque::habillage::naine_polluee(self.base.rayon, self.base.masse, self.graine);
+        self.couleur = couleur;
+        disques.into_iter().fold(self.avec_arches_du_type(), |s, c| s.avec_disque(c))
+    }
+
     /// **Une étoile Be** (lot 12) : aplatie, son disque de décrétion autour,
     /// variés par sa graine (`habillage::etoile_be`).
     pub fn avec_disque_be(self) -> Self {

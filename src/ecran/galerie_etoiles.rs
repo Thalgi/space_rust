@@ -46,6 +46,7 @@ fn catalogue() -> Vec<(&'static str, f32, f32, f32, f32)> {
         ("Herbig Ae/Be (jeune)", 2.6, 9000.0, 2.0, 6.0), // sa grande sœur : rideaux
         ("Etoile Be", 1.8, 18000.0, 4.0, 7.0),           // aplatie, disque de décrétion
         ("Hypergeante (LBV)", 3.0, 20000.0, 8.0, 8.0),   // Eta Carinae : lobes en bulbe
+        ("Naine blanche polluee", 0.65, 16000.0, 0.27, 9.0), // verte, rose, cyan ou rouge
         ("Wolf-Rayet", 1.05, 40000.0, 5.0, 2.0),     // vent violent
         ("Etoile a flares (M)", 0.58, 3000.0, 0.4, 0.0),
         ("Etoile a neutrons", 0.42, 40000.0, 0.2, 1.0), // jets fixes

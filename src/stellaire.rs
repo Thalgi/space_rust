@@ -40,6 +40,9 @@ pub enum Variante {
     /// **Hypergéante** (lot 12, Eta Carinae) : vent, jupe équatoriale et
     /// lobes de poussière en bulbe.
     Hypergeante,
+    /// **Naine blanche polluée** (lot 14) : verte, rose, cyan ou rouge de ce
+    /// qu'elle a avalé, et l'anneau des débris de ses planètes.
+    Polluee,
 }
 
 impl Variante {
@@ -58,6 +61,7 @@ impl Variante {
             6 => Variante::Proto,
             7 => Variante::Be,
             8 => Variante::Hypergeante,
+            9 => Variante::Polluee,
             _ => Variante::Normale,
         }
     }
@@ -77,6 +81,7 @@ impl Variante {
             Variante::Proto => "jets + disque proto",
             Variante::Be => "aplatie + disque de decretion",
             Variante::Hypergeante => "vent + lobes en bulbe",
+            Variante::Polluee => "polluee + anneau de debris",
         }
     }
 
@@ -134,6 +139,7 @@ impl Variante {
                 .avec_disque_jeune(crate::etoile::est_herbig(nom)),
             Variante::Be => s.avec_disque_be(),
             Variante::Hypergeante => s.avec_vent().avec_homoncule(),
+            Variante::Polluee => s.avec_pollution(),
         }
     }
 }
@@ -355,6 +361,7 @@ mod tests_variante {
             "avec_disque_jeune(",
             "avec_disque_be(",
             "avec_homoncule(",
+            "avec_pollution(",
             "avec_pulsation(",
             "avec_ebullition_du_type(",
             "avec_eclat_visible(",

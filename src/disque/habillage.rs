@@ -218,6 +218,34 @@ pub fn hypergeante(rayon: f32, masse: f32, graine: f32) -> DisqueConfig {
     .avec_flot(lobes)
 }
 
+/// **Les couleurs d'une naine blanche polluée** (lot 14) : ce que son
+/// atmosphère a avalé des débris de ses planètes la teinte. Le vert du sodium
+/// (WD J1330+6435, la première étoile verte, Warwick, octobre 2026) ; le rose,
+/// le cyan, et le rouge de la plus rouge connue (WD J1011+2845).
+pub const COULEURS_POLLUEES: [Vec3; 4] = [
+    vec3(0.78, 1.0, 0.42),
+    vec3(1.0, 0.7, 0.86),
+    vec3(0.55, 0.95, 1.0),
+    vec3(1.0, 0.42, 0.32),
+];
+
+/// **Une naine blanche polluée telle que le jeu la pose** (validée le
+/// 2026-10-26 : V2 et V3c, *« toute la famille »*) : `(sa couleur, ses
+/// disques)`, dérivés de la graine. L'anneau des débris de ses planètes, de 7
+/// à 16 rayons, cailloux fins, à la teinte de l'étoile ; et une fois sur deux
+/// (V3c), l'anneau de gaz chaud au ras de sa surface.
+pub fn naine_polluee(rayon: f32, masse: f32, graine: f32) -> (Vec3, Vec<DisqueConfig>) {
+    let f = |k: f32| (graine * 0.618_034 * k).fract();
+    let couleur = COULEURS_POLLUEES[((f(3.3) * 4.0) as usize).min(3)];
+    let anneau = DisqueConfig { taille_max: 0.08, ..DisqueConfig::debris_recents(600, rayon * 7.0, rayon * 16.0, masse) }
+        .avec_teinte_eclairage(couleur, 0.35);
+    let mut d = vec![anneau];
+    if f(7.7) > 0.5 {
+        d.push(DisqueConfig::debris_recents(0, rayon * 1.6, rayon * 2.0, masse).avec_bord_brulant(1.4));
+    }
+    (couleur, d)
+}
+
 /// **Le jet polaire standard du chantier** (J5, validé le 2026-10-24) :
 /// traînée de poussière en cône, sablier très fin éclairé par plaques, lobes
 /// dissymétriques courbés en S ; long de 1,2 fois le rayon `externe` du
@@ -381,6 +409,23 @@ mod tests {
             vus.insert((t.entonnoirs, t.spirales_accretion));
         }
         assert!(vus.len() >= 4, "les graines ne varient presque pas : {vus:?}");
+    }
+
+    /// **Les naines polluées varient avec leur graine** : les quatre couleurs
+    /// sortent, l'anneau de gaz une fois sur deux environ, l'anneau des débris
+    /// toujours, à distance.
+    #[test]
+    fn les_naines_polluees_varient_avec_leur_graine() {
+        let mut couleurs = std::collections::HashSet::new();
+        let mut avec_gaz = 0;
+        for k in 0..200 {
+            let (c, d) = naine_polluee(1.0, 1000.0, k as f32 * 23.7);
+            couleurs.insert(COULEURS_POLLUEES.iter().position(|x| *x == c).unwrap());
+            assert!(d[0].interne >= 7.0 && d[0].taille_max <= 0.08);
+            avec_gaz += usize::from(d.len() == 2);
+        }
+        assert_eq!(couleurs.len(), 4, "toutes les couleurs ne sortent pas");
+        assert!((60..=140).contains(&avec_gaz), "{avec_gaz} avec gaz sur 200");
     }
 
     /// **La Be et l'hypergéante varient avec leur graine**, dans les bornes

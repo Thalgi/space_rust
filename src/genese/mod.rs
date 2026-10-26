@@ -2589,6 +2589,7 @@ mod tests_variante {
             (6.0, Variante::Proto),
             (7.0, Variante::Be),
             (8.0, Variante::Hypergeante),
+            (9.0, Variante::Polluee),
         ];
         for (mode, attendu) in attendus {
             assert!(

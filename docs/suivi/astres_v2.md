@@ -120,6 +120,19 @@ prototype a un nom à lui et un cadre dans la portée de la caméra.
 
 ### Lot 14, en cours : la naine blanche verte (2026-10-26)
 
+**Adoptée le même jour** — *« V2 et V3 me plaisent beaucoup »* (V3c, l'anneau
+de gaz), *« toute la famille »*. Nouvelle variante `Polluee` (mode 9), type
+**Naine blanche polluee** au tirage : 2 % des ordinaires, pris sur la naine
+blanche (rareté provisoire). `habillage::naine_polluee`, dérivé de la graine :
+couleur parmi vert (sodium), rose, cyan et rouge ; l'anneau des débris (7–16
+rayons, cailloux fins, à la teinte de l'étoile) ; une fois sur deux, l'anneau
+de gaz chaud (V3c). `Soleil::avec_pollution`. V3a et V3b non retenus, gardés
+en presets (`avec_fragments`, `avec_pluie`). En tête du défilé et dans la
+galerie des étoiles ; la touche 4 est vide. Garde
+`les_naines_polluees_varient_avec_leur_graine` (red-check : jamais de gaz).
+
+**Les prototypes, d'abord** :
+
 *« Check un peu le net, on a possiblement découvert une étoile verte »* —
 c'est vrai : **WD J1330+6435**, annoncée en octobre 2026 par l'université
 de Warwick (RASTI), ~280 années-lumière, dans le Dragon. Une **naine blanche
