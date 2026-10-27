@@ -28,7 +28,7 @@ mod vaisseau;
 
 use ecran::{
     Parametres,
-    Accueil, Categorie, Cible, Galerie, GalerieCometes, GalerieDisques, GalerieEtoiles, Objet, Skymap,
+    Accueil, Categorie, Cible, Galerie, GalerieCometes, GalerieDisques, GalerieEtoiles, Objet, Skymap, Tableur,
     SkymapV2,
     SortieStarmap, Starmap, VueAssembleur, VueStation,
 };
@@ -69,6 +69,7 @@ enum Etat {
     GalerieDisques(Box<GalerieDisques>),
     GalerieEtoiles(Box<GalerieEtoiles>),
     GalerieCometes(Box<GalerieCometes>),
+    Tableur(Box<Tableur>),
     Station(Box<VueStation>),
     Assembleur(Box<VueAssembleur>),
     Parametres(Parametres),
@@ -129,6 +130,10 @@ async fn main() {
             etat = Etat::SkymapV2(Box::new(SkymapV2::sur_astre(n)));
         }
     }
+    // `TABLEUR` : le tableur d'habitabilité (captures).
+    if std::env::var("TABLEUR").is_ok() {
+        etat = Etat::Tableur(Box::new(Tableur::new()));
+    }
     // `GALERIE` : la galerie des planètes (captures).
     if std::env::var("GALERIE").is_ok() {
         etat = Etat::Galerie(Box::new(Galerie::new(false)));
@@ -159,6 +164,7 @@ async fn main() {
                         Cible::GalerieCometes => {
                             Etat::GalerieCometes(Box::new(GalerieCometes::new()))
                         }
+                        Cible::Tableur => Etat::Tableur(Box::new(Tableur::new())),
                         Cible::Parametres => Etat::Parametres(Parametres::new()),
                         // On sort de la boucle de jeu plutôt que d'appeler
                         // `process::exit` : miniquad ferme alors sa fenêtre
@@ -229,6 +235,11 @@ async fn main() {
             }
             Etat::GalerieCometes(g) => {
                 if g.frame() {
+                    etat = Etat::Accueil(Accueil::new());
+                }
+            }
+            Etat::Tableur(t) => {
+                if t.frame() {
                     etat = Etat::Accueil(Accueil::new());
                 }
             }

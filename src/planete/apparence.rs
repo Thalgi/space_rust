@@ -35,6 +35,10 @@ pub struct Apparence {
     /// **Une naine brune** (rendue en géante gazeuse) : son type n'est pas
     /// celui d'une géante (`classe::classer`). Posé par le catalogue.
     pub naine_brune: bool,
+    /// **Le preset du catalogue** dont vient cette apparence (son nom, qui
+    /// sert d'identifiant stable : `assets/planetes.json` le règle). `None`
+    /// pour une apparence fabriquée par la genèse.
+    pub preset: Option<&'static str>,
     pub anneau_couleur: Vec3,
     pub anneau_normal: Vec3, // axe perpendiculaire au plan de l'anneau
     pub anneau_in: f32,      // rayon interne (× rayon planète)
@@ -129,6 +133,7 @@ impl Apparence {
             tache_type: 0.0,
             anneau: false,
             naine_brune: false,
+            preset: None,
             anneau_couleur: Vec3::ZERO,
             anneau_normal: Vec3::Y,
             anneau_in: 1.4,

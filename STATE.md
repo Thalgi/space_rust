@@ -244,7 +244,10 @@ construire, **dans l'ordre** : **une passe de relecture** du chantier
 genèse. **Chantier planètes** (branche `chantier-planetes`, 2026-10-27) : le type et
 l'habitabilité des planètes — huit types, chacun son icône, dans la fiche de
 la skymap V2 et la galerie des planètes (`planete::classe`, journal dans
-`docs/suivi/planetes.md`). **Chantier-Opti-v2 ouvert** (2026-10-26) : la carte de la dette de
+`docs/suivi/planetes.md`) ; P1-P2 : le type de base des presets rocheux réglé
+dans `assets/planetes.json` (relu à chaud, nom affiché, retrait) et la vue
+**tableur** qui l'écrit. Reste P3 : l'habitabilité en contexte (astre hôte,
+position), règles dans un JSON à part. **Chantier-Opti-v2 ouvert** (2026-10-26) : la carte de la dette de
 performance d'Astres V2, pour 30 fps sur un premier APU Ryzen portable —
 [`docs/conception/opti_v2.md`](docs/conception/opti_v2.md). Mesuré : la T Tauri
 et la Herbig tombent à ~40 fps en vue isolée **sur la machine de dev**

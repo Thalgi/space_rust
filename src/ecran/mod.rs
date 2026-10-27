@@ -32,6 +32,7 @@ mod skymap_v2;
 mod trace_orbite;
 mod starmap;
 mod station;
+mod tableur;
 mod vignette;
 
 pub use accueil::{Accueil, Cible};
@@ -46,3 +47,4 @@ pub use skymap::Skymap;
 pub use skymap_v2::SkymapV2;
 pub use starmap::{SortieStarmap, Starmap};
 pub use station::{Categorie, VueStation};
+pub use tableur::Tableur;

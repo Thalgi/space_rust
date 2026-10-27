@@ -1349,9 +1349,10 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
     // **Deterministe.** Une entree de catalogue est une reference : elle doit
     // etre la meme d'une lecture a l'autre, sinon rien ne peut s'y comparer.
     // Le brassage vit desormais dans la galerie (touche G).
-    let mut push = |nom: &str, mut app: Apparence| {
+    let mut push = |nom: &'static str, mut app: Apparence| {
         app.seed = graine_de_nom(nom);
         app.taille = classe_tellurique(nom).rayon_pour(fraction_de_nom(nom));
+        app.preset = Some(nom);
         // **Pas d'air ni d'eau, pas de villes.**
         //
         // `Apparence::villes` vaut 1 par defaut et le shader n'exigeait rien de
@@ -1647,9 +1648,10 @@ pub fn catalogue_telluriques() -> Vec<(String, Apparence)> {
 pub fn catalogue_gazeuses() -> Vec<(String, Apparence)> {
     let mut v: Vec<(String, Apparence)> = Vec::new();
     // Deterministe, comme les telluriques ci-dessus.
-    let mut push = |nom: &str, mut app: Apparence| {
+    let mut push = |nom: &'static str, mut app: Apparence| {
         app.seed = graine_de_nom(nom);
         app.taille = classe_gazeuse(nom).rayon_pour(fraction_de_nom(nom));
+        app.preset = Some(nom);
         // **Une geante gazeuse n'a ni sol ni villes.**
         //
         // `Apparence::new` donne 1 a `villes` et 0,35 a `relief` : des valeurs

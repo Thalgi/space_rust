@@ -7,13 +7,28 @@
 //! étuve, désert, tempérée, toundra, gelée), donc l'apparence la porte déjà.
 //! Une seule règle vaut ainsi partout : dans un système généré, dans la galerie
 //! des planètes (où il n'y a ni étoile ni distance), pour une lune.
+//!
+//! **Les cinq niveaux d'une rocheuse sont une échelle** — ce qu'il en coûte à
+//! une colonie humaine de s'y installer durablement : habitable (sans
+//! difficulté) → colonisable (plus de matériaux) → dangereuse (une recherche)
+//! → hostile (une recherche de plus) → inhabitable (personne en surface).
+//!
+//! **Le type de base d'un preset du catalogue se règle à la main** dans
+//! [`FICHIER`] (vue tableur, ou édition directe : relu à chaud). Un preset
+//! absent du fichier, et toute apparence fabriquée par la genèse, retombent sur
+//! la règle ([`selon_apparence`]). Le même fichier donne à un preset son nom
+//! affiché et peut le retirer : son nom de code, lui, ne change jamais.
 
 use super::apparence::{Apparence, TypePlanete};
 use macroquad::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
+use std::collections::BTreeMap;
 
 /// **Le type d'une planète**, du pire au meilleur pour une rocheuse, puis les
 /// gazeuses.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ClassePlanete {
     /// Rien n'y survivra : un monde de lave.
     Inhabitable,
@@ -31,6 +46,16 @@ pub enum ClassePlanete {
 }
 
 impl ClassePlanete {
+    /// **L'échelle des rocheuses**, du plus simple au plus dur à coloniser :
+    /// les colonnes de la vue tableur.
+    pub const ECHELLE: [ClassePlanete; 5] = [
+        ClassePlanete::Habitable,
+        ClassePlanete::Colonisable,
+        ClassePlanete::Dangereuse,
+        ClassePlanete::Hostile,
+        ClassePlanete::Inhabitable,
+    ];
+
     pub const TOUTES: [ClassePlanete; 8] = [
         ClassePlanete::Inhabitable,
         ClassePlanete::Hostile,
@@ -84,13 +109,115 @@ impl ClassePlanete {
     }
 }
 
-/// **Le type d'une planète, d'après son apparence.**
+/// **Le fichier des presets**, éditable à la main.
+pub const FICHIER: &str = "assets/planetes.json";
+
+/// **Ce que le fichier règle pour un preset.** Tout est facultatif : un champ
+/// absent laisse la valeur par défaut (la règle, le nom de code, présent).
+#[derive(Clone, Default, PartialEq, Debug, Serialize, Deserialize)]
+pub struct Reglage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub habitabilite: Option<ClassePlanete>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nom: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub retiree: bool,
+}
+
+/// Les réglages, par nom de code du preset. Trié : le fichier écrit se lit et
+/// se compare (git) sans bruit.
+pub type Table = BTreeMap<String, Reglage>;
+
+/// La table en mémoire, la date du fichier lu, et le dernier coup d'œil.
+struct Cache {
+    table: Table,
+    date: Option<std::time::SystemTime>,
+    vu: f64,
+}
+
+thread_local! {
+    static CACHE: RefCell<Option<Cache>> = const { RefCell::new(None) };
+}
+
+fn date_fichier() -> Option<std::time::SystemTime> {
+    std::fs::metadata(FICHIER).and_then(|m| m.modified()).ok()
+}
+
+/// **La table, relue à chaud** : la date du fichier est regardée au plus une
+/// fois par seconde, et il n'est relu que s'il a changé. Un fichier illisible
+/// (JSON cassé pendant une édition) garde la table précédente.
+fn avec_table<R>(f: impl FnOnce(&Table) -> R) -> R {
+    CACHE.with(|c| {
+        let mut c = c.borrow_mut();
+        let maintenant = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0.0, |d| d.as_secs_f64());
+        let cache = c.get_or_insert_with(|| Cache { table: Table::new(), date: None, vu: f64::NEG_INFINITY });
+        if maintenant - cache.vu >= 1.0 {
+            cache.vu = maintenant;
+            let date = date_fichier();
+            if date != cache.date {
+                cache.date = date;
+                match std::fs::read_to_string(FICHIER).map(|t| serde_json::from_str::<Table>(&t)) {
+                    Ok(Ok(t)) => cache.table = t,
+                    Ok(Err(e)) => warn!("{FICHIER} illisible ({e}) : on garde la table précédente."),
+                    Err(_) => cache.table.clear(),
+                }
+            }
+        }
+        f(&cache.table)
+    })
+}
+
+/// **Une copie de la table** (pour la modifier, puis [`ecrire`]).
+pub fn table() -> Table {
+    avec_table(Table::clone)
+}
+
+/// **Écrit la table** dans le fichier et la garde en mémoire telle quelle.
+pub fn ecrire(table: &Table) -> std::io::Result<()> {
+    let texte = serde_json::to_string_pretty(table).map_err(std::io::Error::other)?;
+    std::fs::write(FICHIER, texte + "\n")?;
+    CACHE.with(|c| {
+        if let Some(cache) = c.borrow_mut().as_mut() {
+            cache.table = table.clone();
+            cache.date = date_fichier();
+        }
+    });
+    Ok(())
+}
+
+/// Le réglage du preset `id`, s'il en a un.
+pub fn reglage(id: &str) -> Option<Reglage> {
+    avec_table(|t| t.get(id).cloned())
+}
+
+/// **Le nom affiché du preset `id`** : celui du fichier, sinon son nom de code.
+pub fn nom_affiche(id: &str) -> String {
+    reglage(id).and_then(|r| r.nom).unwrap_or_else(|| id.to_string())
+}
+
+/// **Le type d'une planète.**
+///
+/// Gazeuses : toujours la règle (naine brune, puis annelée, puis géante).
+/// Rocheuses et glacées : le niveau réglé pour son preset s'il y en a un, la
+/// règle sinon.
+pub fn classer(app: &Apparence) -> ClassePlanete {
+    if app.type_p != TypePlanete::Gazeuse {
+        if let Some(c) = app.preset.and_then(reglage).and_then(|r| r.habitabilite) {
+            return c;
+        }
+    }
+    selon_apparence(app)
+}
+
+/// **Le type d'une planète, d'après son apparence seule.**
 ///
 /// Gazeuses : naine brune, puis annelée, puis géante. Rocheuses et glacées,
 /// dans cet ordre : lave → inhabitable ; voile épais (étuve) → hostile ;
 /// glacée ou banquise quasi globale → dangereuse ; océans et végétation →
 /// habitable ; tout le reste → colonisable.
-pub fn classer(app: &Apparence) -> ClassePlanete {
+pub fn selon_apparence(app: &Apparence) -> ClassePlanete {
     if app.type_p == TypePlanete::Gazeuse {
         return if app.naine_brune {
             ClassePlanete::NaineBrune
@@ -146,6 +273,51 @@ mod tests {
         assert_eq!(classer(&Apparence { naine_brune: true, anneau: true, ..g }), ClassePlanete::NaineBrune);
         // Une gazeuse ne passe jamais par les règles des rocheuses.
         assert_eq!(classer(&Apparence { lave: 1.0, ..g }), ClassePlanete::GeanteGazeuse);
+    }
+
+    /// **Le fichier ne règle que des presets qui existent, et seulement à
+    /// l'échelle des rocheuses.** Un nom de code mal recopié serait ignoré
+    /// sans bruit ; un « geante_gazeuse » sur un monde rocheux n'a pas de sens.
+    #[test]
+    fn le_fichier_regle_des_presets_qui_existent() {
+        let texte = std::fs::read_to_string(FICHIER).expect("assets/planetes.json");
+        let t: Table = serde_json::from_str(&texte).expect("JSON valide");
+        let noms: Vec<String> = crate::genese::catalogue_telluriques()
+            .into_iter()
+            .chain(crate::genese::catalogue_gazeuses())
+            .map(|(n, _)| n)
+            .collect();
+        for (id, r) in &t {
+            assert!(noms.contains(id), "« {id} » n'est pas un preset du catalogue");
+            if let Some(c) = r.habitabilite {
+                assert!(ClassePlanete::ECHELLE.contains(&c), "« {id} » : {c:?} hors de l'échelle des rocheuses");
+            }
+        }
+    }
+
+    /// **Un preset réglé prend le niveau du fichier ; une gazeuse, jamais.**
+    #[test]
+    fn le_reglage_prime_sur_la_regle() {
+        let id = "Terre";
+        let lave = Apparence { lave: 1.0, preset: Some(id), ..roche() };
+        let attendu = reglage(id).and_then(|r| r.habitabilite).unwrap_or(ClassePlanete::Inhabitable);
+        assert_eq!(classer(&lave), attendu);
+        assert_eq!(classer(&Apparence { preset: None, ..lave }), ClassePlanete::Inhabitable);
+        let g = Apparence::new(TypePlanete::Gazeuse, Vec3::ONE, Vec3::ONE, Vec3::ONE, 0.0);
+        assert_eq!(classer(&Apparence { preset: Some(id), ..g }), ClassePlanete::GeanteGazeuse);
+    }
+
+    /// **Écrit `assets/planetes.json` d'après la règle** — le point de départ
+    /// des réglages à la main. Lancé à la demande seulement
+    /// (`cargo test generer_planetes_json -- --ignored`) : il écrase le fichier.
+    #[test]
+    #[ignore]
+    fn generer_planetes_json() {
+        let t: Table = crate::genese::catalogue_telluriques()
+            .into_iter()
+            .map(|(n, app)| (n, Reglage { habitabilite: Some(selon_apparence(&app)), ..Default::default() }))
+            .collect();
+        ecrire(&t).expect("écriture");
     }
 
     /// **Chaque type pointe une icône qui existe**, et chacun la sienne.

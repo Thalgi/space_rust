@@ -43,6 +43,41 @@ Gardes : `chaque_monde_tombe_dans_son_type` (red-check : lave ignorée),
 garde du dossier des sprites étendu aux types. Captures : `GALERIE`,
 `SYSTEME=<type> FICHE=<rang>` (nouveaux, pour les captures).
 
+### P1-P2 : le type de base réglé à la main, et le tableur (2026-10-27)
+
+**L'échelle, posée par l'utilisateur** : ce qu'il en coûte à une colonie
+humaine de s'installer durablement — **habitable** (sans difficulté) →
+**colonisable** (plus de matériaux) → **dangereuse** (une recherche) →
+**hostile** (une recherche de plus) → **inhabitable** (personne en surface).
+Une seule case par planète. Les gazeuses restent automatiques.
+
+**`assets/planetes.json`** règle, par **nom de code** de preset (le nom du
+catalogue, qui ne change plus : 56 appels `preset_tellurique("…")` s'y
+réfèrent) : `habitabilite`, `nom` (le nom affiché — pour s'éloigner des noms
+de Stellaris sans rien casser), `retiree` (hors de la galerie). Tout est
+facultatif ; un preset absent retombe sur la règle (`classe::selon_apparence`).
+Généré au départ d'après la règle (`cargo test generer_planetes_json --
+--ignored`) : 132 rocheuses. **Relu à chaud** (date du fichier regardée chaque
+seconde ; un JSON cassé garde la table précédente). L'apparence porte son preset
+(`Apparence::preset`) ; celles que fabrique la genèse n'en ont pas — **le
+fichier ne gouvernera les systèmes générés que quand la genèse tirera dans le
+catalogue** (refonte de la genèse).
+
+**Le tableur** (accueil → *TABLEUR - HABITABILITE*, ou `TABLEUR` pour les
+captures) : une ligne par preset rocheux, vignette, nom (et nom de code s'il est
+renommé), une case par niveau et une case *retirée*. Un clic écrit le fichier.
+Une case **en creux** montre le niveau de la règle quand le fichier se tait. La
+vignette vient de `galerie::vignette`, extraite de la galerie.
+
+Gardes : `le_fichier_regle_des_presets_qui_existent` (red-check : clé mal
+recopiée, niveau gazeux sur une rocheuse), `le_reglage_prime_sur_la_regle`
+(red-check : réglage ignoré).
+
+**Reste (P3)** : l'habitabilité **en contexte** — le type de base corrigé par
+l'astre hôte (une Mars autour d'un pulsar n'est pas viable) et par la position,
+avec des cas particuliers (distance à une géante rouge…), dans un **JSON de
+règles à part**.
+
 ## Partie A — Bilan des travaux (rendu v2)
 
 

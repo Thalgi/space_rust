@@ -1,0 +1,398 @@
+{
+  "Acacia": {
+    "habitabilite": "colonisable"
+  },
+  "Aeolian": {
+    "habitabilite": "colonisable"
+  },
+  "Aerial": {
+    "habitabilite": "habitable"
+  },
+  "Algues roses": {
+    "habitabilite": "colonisable"
+  },
+  "Alpin": {
+    "habitabilite": "colonisable"
+  },
+  "Amber": {
+    "habitabilite": "colonisable"
+  },
+  "Amethyst": {
+    "habitabilite": "colonisable"
+  },
+  "Antarctic": {
+    "habitabilite": "dangereuse"
+  },
+  "Aquifer": {
+    "habitabilite": "colonisable"
+  },
+  "Archipelago": {
+    "habitabilite": "habitable"
+  },
+  "Arctique": {
+    "habitabilite": "colonisable"
+  },
+  "Ash (volcanique)": {
+    "habitabilite": "colonisable"
+  },
+  "Atoll": {
+    "habitabilite": "habitable"
+  },
+  "Badlands": {
+    "habitabilite": "colonisable"
+  },
+  "Baobab": {
+    "habitabilite": "colonisable"
+  },
+  "Barnacle": {
+    "habitabilite": "colonisable"
+  },
+  "Bioluminescent": {
+    "habitabilite": "habitable"
+  },
+  "Blossom": {
+    "habitabilite": "colonisable"
+  },
+  "Bog": {
+    "habitabilite": "habitable"
+  },
+  "Boreal": {
+    "habitabilite": "colonisable"
+  },
+  "Boule de neige": {
+    "habitabilite": "dangereuse"
+  },
+  "Brumeux": {
+    "habitabilite": "habitable"
+  },
+  "Bushveld": {
+    "habitabilite": "colonisable"
+  },
+  "Cactus": {
+    "habitabilite": "colonisable"
+  },
+  "Carbone": {
+    "habitabilite": "colonisable"
+  },
+  "Carotene": {
+    "habitabilite": "habitable"
+  },
+  "Cascadian": {
+    "habitabilite": "habitable"
+  },
+  "Cenote": {
+    "habitabilite": "colonisable"
+  },
+  "Chthonien": {
+    "habitabilite": "inhabitable"
+  },
+  "Coastal": {
+    "habitabilite": "colonisable"
+  },
+  "Cold Cave": {
+    "habitabilite": "colonisable"
+  },
+  "Cold Desert": {
+    "habitabilite": "colonisable"
+  },
+  "Cold Gaia": {
+    "habitabilite": "habitable"
+  },
+  "Cold Superhabitable": {
+    "habitabilite": "habitable"
+  },
+  "Columnar": {
+    "habitabilite": "colonisable"
+  },
+  "Coral (aride)": {
+    "habitabilite": "colonisable"
+  },
+  "Crag": {
+    "habitabilite": "colonisable"
+  },
+  "Craton": {
+    "habitabilite": "colonisable"
+  },
+  "Crevasse": {
+    "habitabilite": "colonisable"
+  },
+  "Cryflora": {
+    "habitabilite": "colonisable"
+  },
+  "Cryovolcan": {
+    "habitabilite": "colonisable"
+  },
+  "Cyclone": {
+    "habitabilite": "habitable"
+  },
+  "Desert": {
+    "habitabilite": "colonisable"
+  },
+  "Diamant": {
+    "habitabilite": "colonisable"
+  },
+  "Dry Cave": {
+    "habitabilite": "colonisable"
+  },
+  "Dry Gaia": {
+    "habitabilite": "colonisable"
+  },
+  "Dry Superhabitable": {
+    "habitabilite": "habitable"
+  },
+  "Dune (erg)": {
+    "habitabilite": "colonisable"
+  },
+  "Dune Forest": {
+    "habitabilite": "colonisable"
+  },
+  "Eyeball gele": {
+    "habitabilite": "colonisable"
+  },
+  "Eyeball humide": {
+    "habitabilite": "habitable"
+  },
+  "Eyeball sec": {
+    "habitabilite": "colonisable"
+  },
+  "Fer (Mercure)": {
+    "habitabilite": "colonisable"
+  },
+  "Ferrosprings": {
+    "habitabilite": "colonisable"
+  },
+  "Fjord": {
+    "habitabilite": "colonisable"
+  },
+  "Fog Desert": {
+    "habitabilite": "colonisable"
+  },
+  "Forest": {
+    "habitabilite": "habitable"
+  },
+  "Fungal": {
+    "habitabilite": "habitable"
+  },
+  "Fungi": {
+    "habitabilite": "colonisable"
+  },
+  "Geoglyph": {
+    "habitabilite": "colonisable"
+  },
+  "Geothermal": {
+    "habitabilite": "colonisable"
+  },
+  "Glacial": {
+    "habitabilite": "colonisable"
+  },
+  "Glaciovolcanic": {
+    "habitabilite": "colonisable"
+  },
+  "Heath": {
+    "habitabilite": "colonisable"
+  },
+  "Highland": {
+    "habitabilite": "colonisable"
+  },
+  "Hycean": {
+    "habitabilite": "colonisable"
+  },
+  "Ice Dunes": {
+    "habitabilite": "dangereuse"
+  },
+  "Iceberg": {
+    "habitabilite": "colonisable"
+  },
+  "Io (soufre)": {
+    "habitabilite": "inhabitable"
+  },
+  "Kelp": {
+    "habitabilite": "habitable"
+  },
+  "Lacs": {
+    "habitabilite": "habitable"
+  },
+  "Lanthanide": {
+    "habitabilite": "colonisable"
+  },
+  "Lave": {
+    "habitabilite": "inhabitable"
+  },
+  "Lichen": {
+    "habitabilite": "colonisable"
+  },
+  "Lilypad": {
+    "habitabilite": "habitable"
+  },
+  "Lune": {
+    "habitabilite": "colonisable"
+  },
+  "Mangrove": {
+    "habitabilite": "habitable"
+  },
+  "Marais": {
+    "habitabilite": "habitable"
+  },
+  "Mars": {
+    "habitabilite": "colonisable"
+  },
+  "Mediterraneenne": {
+    "habitabilite": "habitable"
+  },
+  "Megaflora": {
+    "habitabilite": "habitable"
+  },
+  "Mesa": {
+    "habitabilite": "colonisable"
+  },
+  "Monde-ocean": {
+    "habitabilite": "habitable"
+  },
+  "Mousse": {
+    "habitabilite": "colonisable"
+  },
+  "Mud": {
+    "habitabilite": "habitable"
+  },
+  "Mushroom": {
+    "habitabilite": "habitable"
+  },
+  "Oasis": {
+    "habitabilite": "colonisable"
+  },
+  "Obsidian": {
+    "habitabilite": "habitable"
+  },
+  "Ocean de magma": {
+    "habitabilite": "inhabitable"
+  },
+  "Ocean pur": {
+    "habitabilite": "colonisable"
+  },
+  "Opal": {
+    "habitabilite": "colonisable"
+  },
+  "Orageux": {
+    "habitabilite": "habitable"
+  },
+  "Outback": {
+    "habitabilite": "colonisable"
+  },
+  "Pampa": {
+    "habitabilite": "colonisable"
+  },
+  "Pandora": {
+    "habitabilite": "habitable"
+  },
+  "Peatland": {
+    "habitabilite": "colonisable"
+  },
+  "Petrified": {
+    "habitabilite": "colonisable"
+  },
+  "Pics de glace": {
+    "habitabilite": "dangereuse"
+  },
+  "Primal": {
+    "habitabilite": "colonisable"
+  },
+  "Ravine": {
+    "habitabilite": "colonisable"
+  },
+  "Recif": {
+    "habitabilite": "habitable"
+  },
+  "Retinal": {
+    "habitabilite": "habitable"
+  },
+  "Sable ferreux": {
+    "habitabilite": "colonisable"
+  },
+  "Sakura": {
+    "habitabilite": "habitable"
+  },
+  "Salines": {
+    "habitabilite": "colonisable"
+  },
+  "Scrubland": {
+    "habitabilite": "colonisable"
+  },
+  "Snow": {
+    "habitabilite": "colonisable"
+  },
+  "Sodalite": {
+    "habitabilite": "colonisable"
+  },
+  "Steppe": {
+    "habitabilite": "colonisable"
+  },
+  "Storm": {
+    "habitabilite": "colonisable"
+  },
+  "Striped": {
+    "habitabilite": "colonisable"
+  },
+  "Subglaciaire": {
+    "habitabilite": "dangereuse"
+  },
+  "Succulent": {
+    "habitabilite": "colonisable"
+  },
+  "Superbloom": {
+    "habitabilite": "colonisable"
+  },
+  "Supraglacial": {
+    "habitabilite": "dangereuse"
+  },
+  "Swamp": {
+    "habitabilite": "habitable"
+  },
+  "Taiga": {
+    "habitabilite": "colonisable"
+  },
+  "Tempete de poussiere": {
+    "habitabilite": "colonisable"
+  },
+  "Tepid": {
+    "habitabilite": "habitable"
+  },
+  "Tepui": {
+    "habitabilite": "habitable"
+  },
+  "Termite": {
+    "habitabilite": "colonisable"
+  },
+  "Terre": {
+    "habitabilite": "habitable"
+  },
+  "Tidepool": {
+    "habitabilite": "habitable"
+  },
+  "Titan": {
+    "habitabilite": "hostile"
+  },
+  "Toundra": {
+    "habitabilite": "colonisable"
+  },
+  "Travertine": {
+    "habitabilite": "colonisable"
+  },
+  "Treeline": {
+    "habitabilite": "colonisable"
+  },
+  "Tuya": {
+    "habitabilite": "colonisable"
+  },
+  "Veldt": {
+    "habitabilite": "colonisable"
+  },
+  "Venus (etuve)": {
+    "habitabilite": "hostile"
+  },
+  "Wet Cave": {
+    "habitabilite": "habitable"
+  },
+  "Wet Superhabitable": {
+    "habitabilite": "habitable"
+  }
+}

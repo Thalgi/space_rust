@@ -74,8 +74,11 @@ impl Galerie {
         } else {
             crate::genese::graine_de_nom(&format!("variation~{}", self.variation))
         };
+        // Un preset retiré (`assets/planetes.json`) quitte la galerie ; la vue
+        // tableur, elle, les montre tous.
         self.cellules = catalogue
             .into_iter()
+            .filter(|(nom, _)| !crate::planete::classe::reglage(nom).is_some_and(|r| r.retiree))
             .map(|(nom, mut app)| {
                 app.seed = (app.seed + decalage) % 1000.0;
                 let rare = crate::genese::est_rare(&nom);
@@ -211,72 +214,12 @@ impl Galerie {
                 continue;
             }
 
-            // Caméra par cellule : viewport pixel (origine bas-gauche en GL).
-            // Le cadrage est normalisé par le rayon du corps -> chaque preset remplit
-            // sa case quelle que soit sa taille (les tailles relatives sont montrées
-            // dans les vues objet/système, pas dans cette grille de validation).
-            // Les planètes à anneau sont vues de plus loin pour que l'anneau tienne dans la case.
-            let r = planete.rayon().max(0.001);
-            let (dist, haut) = if planete.a_un_anneau() {
-                let ext = r * planete.rayon_anneau();
-                (3.2 * ext, 0.18 * ext)
-            } else {
-                (3.0 * r, 0.0)
-            };
-            let pos = vec3(0.0, haut, dist);
-            let mut cam3d = Camera3D {
-                position: pos,
-                target: Vec3::ZERO,
-                up: Vec3::Y,
-                fovy: 45.0_f32.to_radians(),
-                aspect: Some(cw / render_h),
-                viewport: Some((
-                    cell_x as i32,
-                    (screen_height() - (cell_y + render_h)) as i32,
-                    cw as i32,
-                    render_h as i32,
-                )),
-                ..Default::default()
-            };
-            if pixelise {
-                // Rendu dans la cible basse-déf. Le blit final (flip_y) PRÉSERVE
-                // les hauteurs GL (bas de la cible = bas de l'écran) : on adresse
-                // donc la cible dans le MÊME repère bas-gauche que le rendu
-                // direct, juste divisé par l'échelle. (L'ancien adressage haut-bas
-                // inversait l'ordre des rangées et décalait étiquettes/scroll.)
-                let p = super::pixel::PIX as f32;
-                cam3d.render_target = self.cible.clone();
-                cam3d.viewport = Some((
-                    (cell_x / p) as i32,
-                    ((screen_height() - (cell_y + render_h)) / p) as i32,
-                    (cw / p) as i32,
-                    (render_h / p) as i32,
-                ));
-            }
-            set_camera(&cam3d);
-
-            let (right, up, forward) = crate::camera::base_camera(Vec3::ZERO - pos);
-            let cam = CameraInfo {
-                pos,
-                // Le sujet est posé à l'origine du monde et la caméra à
-                // quelques unités : aucun grand nombre, donc rien à
-                // translater — comportement inchangé à l'identique.
-                origine: Vec3::ZERO,
-                right,
-                up,
-                forward,
-                light_pos,
-                light_color: Vec3::ONE,
-                lights_pos: [light_pos, Vec3::ZERO, Vec3::ZERO, Vec3::ZERO],
-                lights_color: [Vec3::ONE, Vec3::ZERO, Vec3::ZERO, Vec3::ZERO],
-            };
             planete.set_villes(self.villes as f32 * 0.5);
-            // LOD : le rendu se fait dans la cellule, pas plein écran.
-            let ech = if pixelise { super::pixel::PIX as f32 } else { 1.0 };
-            crate::planete::set_viewport_h(render_h / ech);
-            planete.draw(&cam);
+            let cible = if pixelise { self.cible.as_ref() } else { None };
+            vignette(planete, Rect::new(cell_x, cell_y, cw, render_h), light_pos, cible);
             let classe = crate::astre::Astre::classe_planete(&*planete);
-            labels.push((nom.clone(), *rare, cell_x, cell_y + render_h + 16.0, classe));
+            let nom = crate::planete::classe::nom_affiche(nom);
+            labels.push((nom, *rare, cell_x, cell_y + render_h + 16.0, classe));
         }
         crate::planete::set_viewport_h(0.0); // retour plein écran pour les autres vues
 
@@ -384,6 +327,69 @@ impl Galerie {
         false
     }
 
+}
+
+/// **Dessine `planete` dans le rectangle écran `r`**, cadrée pour le remplir,
+/// éclairée depuis `light_pos`. Avec `cible`, le rendu va dans la cible
+/// basse-déf du filtre pixel. Laisse la caméra 3D posée : à l'appelant de
+/// remettre la caméra écran (et `set_viewport_h(0.0)`) après sa boucle.
+pub(super) fn vignette(planete: &mut Planete, r: Rect, light_pos: Vec3, cible: Option<&RenderTarget>) {
+    // Caméra par cellule : viewport pixel (origine bas-gauche en GL).
+    // Le cadrage est normalisé par le rayon du corps -> chaque preset remplit
+    // sa case quelle que soit sa taille (les tailles relatives sont montrées
+    // dans les vues objet/système, pas dans cette grille de validation).
+    // Les planètes à anneau sont vues de plus loin pour que l'anneau tienne dans la case.
+    let rayon = planete.rayon().max(0.001);
+    let (dist, haut) = if planete.a_un_anneau() {
+        let ext = rayon * planete.rayon_anneau();
+        (3.2 * ext, 0.18 * ext)
+    } else {
+        (3.0 * rayon, 0.0)
+    };
+    let pos = vec3(0.0, haut, dist);
+    // Rendu dans la cible basse-déf : le blit final (flip_y) PRÉSERVE les
+    // hauteurs GL (bas de la cible = bas de l'écran) : on adresse donc la cible
+    // dans le MÊME repère bas-gauche que le rendu direct, juste divisé par
+    // l'échelle. (L'ancien adressage haut-bas inversait l'ordre des rangées et
+    // décalait étiquettes/scroll.)
+    let ech = if cible.is_some() { super::pixel::PIX as f32 } else { 1.0 };
+    set_camera(&Camera3D {
+        position: pos,
+        target: Vec3::ZERO,
+        up: Vec3::Y,
+        fovy: 45.0_f32.to_radians(),
+        aspect: Some(r.w / r.h),
+        viewport: Some((
+            (r.x / ech) as i32,
+            ((screen_height() - (r.y + r.h)) / ech) as i32,
+            (r.w / ech) as i32,
+            (r.h / ech) as i32,
+        )),
+        render_target: cible.cloned(),
+        ..Default::default()
+    });
+
+    let (right, up, forward) = crate::camera::base_camera(Vec3::ZERO - pos);
+    let cam = CameraInfo {
+        pos,
+        // Le sujet est posé à l'origine du monde et la caméra à
+        // quelques unités : aucun grand nombre, donc rien à
+        // translater — comportement inchangé à l'identique.
+        origine: Vec3::ZERO,
+        right,
+        up,
+        forward,
+        light_pos,
+        light_color: Vec3::ONE,
+        lights_pos: [light_pos, Vec3::ZERO, Vec3::ZERO, Vec3::ZERO],
+        lights_color: [Vec3::ONE, Vec3::ZERO, Vec3::ZERO, Vec3::ZERO],
+    };
+    // LOD : le rendu se fait dans la cellule, pas plein écran.
+    crate::planete::set_viewport_h(r.h / ech);
+    planete.draw(&cam);
+}
+
+impl Galerie {
     /// Une étape (une frame) de la session de capture : exporte les cellules
     /// entièrement visibles puis avance d'une rangée. Attend que les terrains
     /// soient prêts (aucun placeholder figé dans les PNG).

@@ -14,6 +14,8 @@ pub enum Cible {
     GalerieDisques,
     GalerieEtoiles,
     GalerieCometes,
+    /// Le tableur d'habitabilité des telluriques (chantier planètes).
+    Tableur,
     /// Catalogue des composants (vue station, catégorie Briques).
     Briques,
     /// Reproductions de petites stations réelles.
@@ -100,6 +102,7 @@ const BLOC_ASTRES: &[(&str, Cible)] = &[
     ("GALERIE - CEINTURES & DISQUES", Cible::GalerieDisques),
     ("GALERIE - ETOILES", Cible::GalerieEtoiles),
     ("GALERIE - COMETES", Cible::GalerieCometes),
+    ("TABLEUR - HABITABILITE", Cible::Tableur),
 ];
 
 /// Bloc de droite : briques, stations et mégastructures.
