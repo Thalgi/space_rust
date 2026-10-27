@@ -128,45 +128,51 @@ pub struct Reglage {
 /// se compare (git) sans bruit.
 pub type Table = BTreeMap<String, Reglage>;
 
-/// La table en mémoire, la date du fichier lu, et le dernier coup d'œil.
-struct Cache {
-    table: Table,
+/// **Un fichier JSON relu à chaud** : sa valeur en mémoire, la date du
+/// fichier lu, et le dernier coup d'œil. Sert aussi aux règles de contexte.
+pub(super) struct Relu<T> {
+    pub valeur: T,
     date: Option<std::time::SystemTime>,
     vu: f64,
 }
 
-thread_local! {
-    static CACHE: RefCell<Option<Cache>> = const { RefCell::new(None) };
+fn date_fichier(chemin: &str) -> Option<std::time::SystemTime> {
+    std::fs::metadata(chemin).and_then(|m| m.modified()).ok()
 }
 
-fn date_fichier() -> Option<std::time::SystemTime> {
-    std::fs::metadata(FICHIER).and_then(|m| m.modified()).ok()
-}
-
-/// **La table, relue à chaud** : la date du fichier est regardée au plus une
-/// fois par seconde, et il n'est relu que s'il a changé. Un fichier illisible
-/// (JSON cassé pendant une édition) garde la table précédente.
-fn avec_table<R>(f: impl FnOnce(&Table) -> R) -> R {
-    CACHE.with(|c| {
-        let mut c = c.borrow_mut();
-        let maintenant = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0.0, |d| d.as_secs_f64());
-        let cache = c.get_or_insert_with(|| Cache { table: Table::new(), date: None, vu: f64::NEG_INFINITY });
-        if maintenant - cache.vu >= 1.0 {
-            cache.vu = maintenant;
-            let date = date_fichier();
-            if date != cache.date {
-                cache.date = date;
-                match std::fs::read_to_string(FICHIER).map(|t| serde_json::from_str::<Table>(&t)) {
-                    Ok(Ok(t)) => cache.table = t,
-                    Ok(Err(e)) => warn!("{FICHIER} illisible ({e}) : on garde la table précédente."),
-                    Err(_) => cache.table.clear(),
-                }
+/// **La valeur de `chemin`, relue à chaud** : la date du fichier est regardée
+/// au plus une fois par seconde, et il n'est relu que s'il a changé. Un fichier
+/// illisible (JSON cassé pendant une édition) garde la valeur précédente ; un
+/// fichier absent donne la valeur par défaut.
+pub(super) fn relu<'a, T: serde::de::DeserializeOwned + Default>(
+    chemin: &str,
+    c: &'a mut Option<Relu<T>>,
+) -> &'a mut Relu<T> {
+    let maintenant = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0.0, |d| d.as_secs_f64());
+    let r = c.get_or_insert_with(|| Relu { valeur: T::default(), date: None, vu: f64::NEG_INFINITY });
+    if maintenant - r.vu >= 1.0 {
+        r.vu = maintenant;
+        let date = date_fichier(chemin);
+        if date != r.date {
+            r.date = date;
+            match std::fs::read_to_string(chemin).map(|t| serde_json::from_str::<T>(&t)) {
+                Ok(Ok(v)) => r.valeur = v,
+                Ok(Err(e)) => warn!("{chemin} illisible ({e}) : on garde la version précédente."),
+                Err(_) => r.valeur = T::default(),
             }
         }
-        f(&cache.table)
-    })
+    }
+    r
+}
+
+thread_local! {
+    static CACHE: RefCell<Option<Relu<Table>>> = const { RefCell::new(None) };
+}
+
+fn avec_table<R>(f: impl FnOnce(&Table) -> R) -> R {
+    CACHE.with(|c| f(&relu(FICHIER, &mut c.borrow_mut()).valeur))
 }
 
 /// **Une copie de la table** (pour la modifier, puis [`ecrire`]).
@@ -179,10 +185,10 @@ pub fn ecrire(table: &Table) -> std::io::Result<()> {
     let texte = serde_json::to_string_pretty(table).map_err(std::io::Error::other)?;
     std::fs::write(FICHIER, texte + "\n")?;
     CACHE.with(|c| {
-        if let Some(cache) = c.borrow_mut().as_mut() {
-            cache.table = table.clone();
-            cache.date = date_fichier();
-        }
+        let mut c = c.borrow_mut();
+        let r = relu::<Table>(FICHIER, &mut c);
+        r.valeur = table.clone();
+        r.date = date_fichier(FICHIER);
     });
     Ok(())
 }

@@ -57,10 +57,14 @@ pub struct Fiche {
     /// sa propre orbite de quelques centièmes d'UA.
     pub distance_ua: f32,
     pub habitabilite: Habitabilite,
-    /// **Le type de la planète** (chantier planètes) : habitable,
-    /// colonisable, géante… `None` pour une étoile, une ceinture, un engin,
-    /// une comète.
+    /// **Le type de la planète, en contexte** (chantier planètes) : son type
+    /// de base corrigé par ses étoiles et sa zone (`planete::contexte`).
+    /// `None` pour une étoile, une ceinture, un engin, une comète.
     pub classe: Option<crate::planete::classe::ClassePlanete>,
+    /// Son type de base, avant le contexte.
+    pub classe_base: Option<crate::planete::classe::ClassePlanete>,
+    /// Ce qui l'a fait descendre de son type de base (« PULSAR »…).
+    pub raisons: Vec<String>,
     /// Un vaisseau **pilotable**, prêt à s'élancer — voir
     /// [`crate::astre::Astre::pilotable`]. Décide si le panneau montre le
     /// bouton LANCER (`docs/conception/trajectoires.md` §4 décision 8).
@@ -157,13 +161,31 @@ pub fn fiche(sys: &Systeme, idx: usize) -> Option<Fiche> {
     // planète.
     let porteur = sys.parent_de(idx).unwrap_or(idx);
     let distance_ua = sys.position(porteur).length() / crate::etoile::UA;
+    let hab = habitabilite(sys, categorie, distance_ua);
+    let classe_base = sys.classe_planete_de(idx);
+    let (classe, raisons) = match classe_base {
+        Some(b) => {
+            use crate::planete::contexte::{juger, Zone};
+            let zone = match hab {
+                Habitabilite::Habitable => Zone::Temperee,
+                Habitabilite::TropChaud => Zone::TropChaud,
+                Habitabilite::TropFroid => Zone::TropFroid,
+                Habitabilite::SansObjet => Zone::SansObjet,
+            };
+            let (c, r) = juger(b, &sys.etoiles_exposees(porteur), zone);
+            (Some(c), r)
+        }
+        None => (None, Vec::new()),
+    };
     Some(Fiche {
         designation: sys.designation(idx),
         categorie,
         rayon: sys.rayon_de(idx).unwrap_or(0.0),
         distance_ua,
-        habitabilite: habitabilite(sys, categorie, distance_ua),
-        classe: sys.classe_planete_de(idx),
+        habitabilite: hab,
+        classe,
+        classe_base,
+        raisons,
         pilotable: sys.pilotable_de(idx),
     })
 }

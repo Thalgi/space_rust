@@ -73,10 +73,45 @@ Gardes : `le_fichier_regle_des_presets_qui_existent` (red-check : clé mal
 recopiée, niveau gazeux sur une rocheuse), `le_reglage_prime_sur_la_regle`
 (red-check : réglage ignoré).
 
-**Reste (P3)** : l'habitabilité **en contexte** — le type de base corrigé par
-l'astre hôte (une Mars autour d'un pulsar n'est pas viable) et par la position,
-avec des cas particuliers (distance à une géante rouge…), dans un **JSON de
-règles à part**.
+### P3 : l'habitabilité en contexte (2026-10-27)
+
+*« Une planète tellurique type Mars, autour d'un pulsar… c'est pas viable »* ;
+*« couvrir tous les cas d'étoiles, qu'on sache ce qui aurait plutôt tendance à
+créer des planètes habitables ou non »*. **`assets/habitabilite.json`**, relu à
+chaud, une entrée pour **chacun des 29 types du tirage** :
+
+| Champ | Effet |
+|---|---|
+| `crans` | descend d'autant sur l'échelle, à toute distance |
+| `proche` `{ua, crans}` | descend encore, en deçà de `ua` |
+| `plafond` | le meilleur niveau possible autour de ce type |
+| `raison` | le mot affiché dans la fiche |
+| `note` | le pourquoi, pour qui règle le fichier (jamais affiché) |
+
+Plus `zone` (`trop_chaud`, `trop_froid`) : crans perdus hors de la zone
+tempérée. Les règles ne font que dégrader : G et K n'ont aucun effet (les
+meilleures). Plusieurs étoiles : chacune juge à sa distance, la pire l'emporte ;
+la zone s'ajoute ensuite. Les gazeuses ne sont pas touchées. Premières valeurs
+(à régler avec la genèse) : pulsar, magnétar, quasi-étoile → inhabitable ;
+O, supergéante bleue, LBV, Wolf-Rayet, naine noire, étoile à neutrons, trou noir
+→ au mieux hostile ; géante rouge −1, −4 en deçà de 2 UA ; naine rouge −1
+(éruptions) ; jeunes étoiles −2 (système en formation)…
+
+**L'étoile retient son type** (`Soleil::avec_type`, posé par
+`Variante::appliquer` — la source unique de toutes les étoiles du tirage — et à
+la main pour les quatre presets : Soleil, Tau Ceti, Alpha Centauri A en G,
+Proxima en M). `Systeme::etoiles_exposees`. **La fiche de la skymap V2**
+affiche le type en contexte, et dessous, quand il diffère, le type de base et
+ses raisons : *« COLONISABLE - PULSAR »* (vérifié en jeu, `SYSTEME=Pulsar
+FICHE=2`). La galerie et le tableur montrent le type de base (ni étoile ni
+distance).
+
+La relecture à chaud est commune aux deux fichiers (`classe::relu`).
+
+Gardes : `chaque_etoile_du_tirage_a_sa_regle` (red-check : clé mal recopiée),
+`une_mars_autour_d_un_pulsar_n_est_pas_viable` (red-check : plafond adouci),
+`les_regles_se_combinent` (red-checks : crans ignorés ; dernière étoile au lieu
+de la pire — **resté vert** d'abord, la pire venait en dernier ; ordre inversé).
 
 ## Partie A — Bilan des travaux (rendu v2)
 

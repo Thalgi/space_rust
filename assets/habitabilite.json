@@ -1,0 +1,160 @@
+{
+  "zone": {
+    "trop_chaud": 1,
+    "trop_froid": 1
+  },
+  "astres": {
+    "G (jaune)": {
+      "note": "La référence : stable dix milliards d'années, la Terre en est la preuve."
+    },
+    "K (orange)": {
+      "note": "Peut-être mieux que G : plus calme, plus durable, moins d'UV. Le meilleur candidat à la vie."
+    },
+    "F (blanc-jaune)": {
+      "crans": 0,
+      "proche": { "ua": 1.0, "crans": 1 },
+      "raison": "UV",
+      "note": "Plus d'UV qu'une G, vie plus courte (2 à 4 milliards d'années) : viable, sauf de près."
+    },
+    "M (naine rouge)": {
+      "crans": 1,
+      "raison": "ERUPTIONS",
+      "note": "Éruptions qui décapent les atmosphères ; la zone tempérée est si proche que les planètes y sont en rotation synchrone (une face brûlée, une gelée)."
+    },
+    "A (blanche)": {
+      "crans": 1,
+      "raison": "UV INTENSE",
+      "note": "UV intenses, vie d'un milliard d'années : la vie n'a pas le temps, une colonie s'abrite."
+    },
+    "B (bleu-blanc)": {
+      "crans": 2,
+      "raison": "UV EXTREME",
+      "note": "Rayonnement UV extrême, vie de quelques dizaines de millions d'années."
+    },
+    "O (bleue)": {
+      "crans": 3,
+      "plafond": "hostile",
+      "raison": "UV EXTREME",
+      "note": "La plus brutale des étoiles ordinaires : vents, UV, supernova en quelques millions d'années."
+    },
+    "Geante rouge": {
+      "crans": 1,
+      "proche": { "ua": 2.0, "crans": 3 },
+      "raison": "GEANTE ROUGE",
+      "note": "Une étoile en fin de vie : la zone tempérée a reculé, les planètes proches sont rôties ou avalées par l'enveloppe."
+    },
+    "Supergeante rouge": {
+      "crans": 2,
+      "proche": { "ua": 5.0, "crans": 3 },
+      "raison": "SUPERNOVA PROCHE",
+      "note": "Vents massifs et supernova imminente à l'échelle astronomique."
+    },
+    "Supergeante bleue": {
+      "crans": 3,
+      "plafond": "hostile",
+      "raison": "UV EXTREME",
+      "note": "Luminosité et UV écrasants, vie très courte."
+    },
+    "Hypergeante (LBV)": {
+      "crans": 3,
+      "plafond": "hostile",
+      "raison": "ERUPTIONS GEANTES",
+      "note": "Variable lumineuse bleue (Eta Carinae) : éruptions qui éjectent des masses solaires entières."
+    },
+    "Wolf-Rayet": {
+      "crans": 3,
+      "plafond": "hostile",
+      "raison": "VENTS STELLAIRES",
+      "note": "Vents stellaires et UV parmi les plus violents connus ; supernova à venir."
+    },
+    "Cepheide": {
+      "crans": 2,
+      "raison": "LUMINOSITE VARIABLE",
+      "note": "La luminosité varie d'un facteur plusieurs en quelques jours : climat instable."
+    },
+    "Mira": {
+      "crans": 2,
+      "proche": { "ua": 3.0, "crans": 2 },
+      "raison": "LUMINOSITE VARIABLE",
+      "note": "Géante pulsante sur des mois, vent de poussière."
+    },
+    "Etoile carbonee (C)": {
+      "crans": 1,
+      "proche": { "ua": 2.0, "crans": 2 },
+      "raison": "VENT CARBONE",
+      "note": "Géante froide qui souffle de la suie ; le système est encrassé de carbone."
+    },
+    "Sous-naine (sdB)": {
+      "crans": 2,
+      "raison": "UV INTENSE",
+      "note": "Cœur d'hélium mis à nu : petite mais très chaude, UV intenses."
+    },
+    "T Tauri (jeune)": {
+      "crans": 2,
+      "raison": "SYSTEME EN FORMATION",
+      "note": "Le système se forme encore : bombardements, éruptions, disque de poussière."
+    },
+    "Herbig Ae/Be (jeune)": {
+      "crans": 2,
+      "raison": "SYSTEME EN FORMATION",
+      "note": "Jeune étoile massive : formation en cours, UV."
+    },
+    "Etoile Be": {
+      "crans": 2,
+      "raison": "UV INTENSE",
+      "note": "Étoile B en rotation rapide, entourée d'un disque de décrétion."
+    },
+    "Naine blanche": {
+      "crans": 1,
+      "raison": "NAINE BLANCHE",
+      "note": "Lumière faible, zone tempérée minuscule et serrée ; les planètes y ont survécu à la mort de l'étoile."
+    },
+    "Naine blanche polluee": {
+      "crans": 1,
+      "raison": "DEBRIS PLANETAIRES",
+      "note": "Elle avale les débris de ses propres planètes : le système est un champ de ruines."
+    },
+    "Naine blanche pulsante (ZZ Ceti)": {
+      "crans": 1,
+      "raison": "NAINE BLANCHE",
+      "note": "Comme une naine blanche, avec une luminosité qui pulse."
+    },
+    "Naine noire": {
+      "plafond": "hostile",
+      "raison": "SANS LUMIERE",
+      "note": "Une naine blanche éteinte : ni lumière ni chaleur, tout se fait sous abri."
+    },
+    "Naine brune": {
+      "crans": 1,
+      "plafond": "dangereuse",
+      "raison": "SANS LUMIERE PROPRE",
+      "note": "Une étoile ratée : un peu de chaleur infrarouge, presque pas de lumière."
+    },
+    "Etoile a neutrons": {
+      "plafond": "hostile",
+      "raison": "RAYONNEMENT X",
+      "note": "Pas de lumière utile, des rayons X : sous blindage seulement."
+    },
+    "Pulsar": {
+      "plafond": "inhabitable",
+      "raison": "PULSAR",
+      "note": "Faisceaux de rayonnement qui balaient le système : une Mars autour d'un pulsar, c'est pas viable."
+    },
+    "Magnetar": {
+      "plafond": "inhabitable",
+      "raison": "MAGNETAR",
+      "note": "Champ magnétique le plus intense de l'univers, sursauts gamma."
+    },
+    "Trou noir": {
+      "plafond": "hostile",
+      "proche": { "ua": 1.0, "crans": 4 },
+      "raison": "TROU NOIR",
+      "note": "Sans lumière ; de près, le disque d'accrétion et les marées."
+    },
+    "Quasi-etoile": {
+      "plafond": "inhabitable",
+      "raison": "QUASI-ETOILE",
+      "note": "Un trou noir enfoui dans une enveloppe d'étoile géante : instable et brûlant."
+    }
+  }
+}

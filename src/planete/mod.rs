@@ -1,5 +1,6 @@
 mod apparence;
 pub mod classe;
+pub mod contexte;
 mod materiau;
 mod palette;
 pub mod terrain;

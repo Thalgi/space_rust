@@ -62,6 +62,10 @@ pub fn vider_cache_materials() {
 
 pub struct Soleil {
     pub base: CorpsBase,
+    /// **Son type** (« Pulsar », « G (jaune) »…, la table de `etoile`) : ce
+    /// qu'il fait aux planètes qui l'entourent (`planete::contexte`). `None`
+    /// pour une étoile de vitrine sans type.
+    type_etoile: Option<&'static str>,
     /// **Graine de surface**, propre à cette étoile.
     ///
     /// Sans elle, la granulation du shader est une fonction déterministe de
@@ -340,6 +344,7 @@ impl Soleil {
         let graine = gen_range(0.0, 1000.0);
         Self {
             base: CorpsBase::new(position, 1000.0, rayon),
+            type_etoile: None,
             graine,
             poles: champ::poles(graine),
             temps: temps_initial(graine),
@@ -390,6 +395,12 @@ impl Soleil {
     }
 
     /// Couronne en jets bipolaires (pulsar, protoétoile) : 2 cônes le long de l'axe + disque.
+    /// Donne son type à l'étoile (voir `type_etoile`).
+    pub fn avec_type(mut self, nom: &'static str) -> Self {
+        self.type_etoile = Some(nom);
+        self
+    }
+
     pub fn avec_jets(mut self) -> Self {
         self.couronne_type = 1.0;
         self.couronne = 5.0; // place pour de longs jets
@@ -886,6 +897,9 @@ impl Astre for Soleil {
     }
     fn luminosite(&self) -> Option<f32> {
         Some(self.luminosite * self.variation_eclat())
+    }
+    fn type_etoile(&self) -> Option<&'static str> {
+        self.type_etoile
     }
     /// Une étoile se résume à sa couleur de corps noir : c'est déjà ce qui la
     /// distingue à l'œil (une naine rouge d'une géante bleue).

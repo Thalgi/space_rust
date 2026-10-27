@@ -110,6 +110,14 @@ impl Variante {
     /// étoiles — ne pulse pas.
     pub fn appliquer(self, s: crate::soleil::Soleil, nom: &str) -> crate::soleil::Soleil {
         let (amp, periode) = crate::etoile::pulsation(nom);
+        // Le type, retenu pour ce qu'il fait aux planètes (`planete::contexte`).
+        // Le nom du tirage, `'static`, retrouvé dans la table : un nom inconnu
+        // (vide pour les presets) laisse l'étoile sans type.
+        let type_etoile = crate::etoile::types_du_tirage().into_iter().find(|t| *t == nom);
+        let s = match type_etoile {
+            Some(t) => s.avec_type(t),
+            None => s,
+        };
         let s = s
             .avec_pulsation(amp, periode)
             .avec_ebullition_du_type(nom)

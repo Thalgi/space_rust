@@ -361,6 +361,19 @@ impl Systeme {
         self.astres.iter().filter_map(|a| a.luminosite()).sum()
     }
 
+    /// **Les étoiles typées auxquelles l'astre `idx` est exposé**, avec leur
+    /// distance en UA — de quoi juger son habitabilité en contexte
+    /// (`planete::contexte`).
+    pub fn etoiles_exposees(&self, idx: usize) -> Vec<(&'static str, f32)> {
+        let p = self.position(idx);
+        (0..self.astres.len())
+            .filter_map(|i| {
+                let t = self.astres[i].type_etoile()?;
+                Some((t, (self.position(i) - p).length() / crate::etoile::UA))
+            })
+            .collect()
+    }
+
     /// Donne un nom propre à l'astre `idx`. Sans effet si l'index est invalide.
     ///
     /// Réservé aux presets écrits à la main : voir [`Self::designation`] pour ce

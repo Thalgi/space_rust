@@ -285,7 +285,7 @@ pub fn construire_preset_solaire() -> (Systeme, String) {
         R_SOLEIL,
         etoile::couleur_corps_noir(5800.0),
         1.0,
-    )));
+    ).avec_type("G (jaune)")));
     sys.nommer(soleil, "Soleil");
     // Masse du Soleil : derivee de SA luminosite (1.0 ci-dessus, pas recopiee)
     // -- vaut exactement MASSE_ETOILE, donc les periodes des neuf planetes ne
@@ -465,7 +465,7 @@ pub fn construire_preset_tau_ceti() -> (Systeme, String) {
         1.8,
         etoile::couleur_corps_noir(5344.0),
         lumi_tau_ceti,
-    )));
+    ).avec_type("G (jaune)")));
     let masse_tau_ceti = masse_luminosite(lumi_tau_ceti);
 
     use TypePlanete::Tellurique;
@@ -504,7 +504,7 @@ pub fn construire_preset_avatar() -> (Systeme, String) {
         2.05,
         etoile::couleur_corps_noir(5790.0),
         lumi_aca_avatar,
-    )));
+    ).avec_type("G (jaune)")));
     let masse_aca_avatar = masse_luminosite(lumi_aca_avatar);
 
     use TypePlanete::Tellurique;
@@ -693,7 +693,7 @@ pub fn construire_preset_proxima() -> (Systeme, String) {
         0.75,
         etoile::couleur_corps_noir(3040.0),
         lumi_proxima,
-    )));
+    ).avec_type("M (naine rouge)")));
     let masse_proxima = masse_luminosite(lumi_proxima);
 
     // Apparences = presets nommés du catalogue.

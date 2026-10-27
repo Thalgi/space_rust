@@ -148,6 +148,11 @@ pub trait Astre {
         None
     }
 
+    /// Le type d'une étoile (« Pulsar », « G (jaune) »…), s'il est connu.
+    fn type_etoile(&self) -> Option<&'static str> {
+        None
+    }
+
     /// **Teinte d'ensemble** de l'astre, telle qu'on la résumerait en un point :
     /// la couleur de sa pastille dans le sélecteur.
     ///

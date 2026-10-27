@@ -562,6 +562,11 @@ impl SkymapV2 {
             crate::sprites::dessiner_classe(c, r.x + 12.0, y - 20.0, cote);
             crate::police::texte(c.libelle(), r.x + 18.0 + cote, y, 17.0, c.couleur());
             y += cote + 4.0;
+            // Ce que le contexte lui a coûté : son type de base, et pourquoi.
+            if let Some(b) = f.classe_base.filter(|b| *b != c) {
+                let gris = Color::new(0.55, 0.62, 0.65, 1.0);
+                ligne(format!("{} - {}", b.libelle(), f.raisons.join(", ")), gris, &mut y);
+            }
         }
         if f.categorie != crate::astre::Categorie::Etoile {
             ligne(format!("Distance : {:.2} UA", f.distance_ua), cyan, &mut y);
