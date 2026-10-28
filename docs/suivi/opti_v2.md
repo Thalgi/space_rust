@@ -313,3 +313,27 @@ passe elle-même (une cible de plus), soit du voile en mode Palette. Le DIAG
 gagne deux phases pour trancher : « sans voile, rendu Pixel » (à comparer à
 « sans voile » en Palette) et « tout (bis) », la première phase répétée à la
 fin pour mesurer la dérive.
+
+**Le verdict** (Jupiter, binaire 6688b7b confirmé) :
+
+| phase | image (ms) |
+|---|---|
+| tout | 31,2 |
+| sans voile | 17,2 |
+| ni voile ni nuages | 17,0 |
+| rendu Net | 22,1 |
+| rendu Pixel | 22,2 |
+| sans voile, rendu Pixel | 16,7 |
+| qualité basse | 23,5 |
+| tout (bis) | 24,7 |
+
+- La passe Palette ne coûte que **~0,5 ms** (sans voile : 17,2 contre 16,7).
+- « tout » et « tout (bis) » sont la même configuration : 31,2 contre 24,7.
+  La **première phase** du DIAG était **mal chauffée** (~6 ms de trop) — et
+  c'était elle, « tout », qu'on comparait à Pixel. Les « ~8 ms de
+  quantification » étaient pour l'essentiel ce biais ; toutes les lectures
+  « tout − x » des relevés précédents en sont gonflées d'autant.
+- Correctif : la première phase chauffe 4 s au lieu de 1.
+- Jupiter en gros plan coûte en vrai ~22–25 ms (40–45 fps), dont ~6 ms de
+  voile. Net ≈ Pixel : le fond de ~17 ms ne vient pas du remplissage des
+  pixels (le Pixel en dessine quatre fois moins).

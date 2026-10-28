@@ -383,11 +383,14 @@ impl Diagnostic {
     /// Compte une image ; `true` quand tout est mesuré.
     fn image(&mut self, image: f32, cpu: f32) -> bool {
         let t = get_time() - self.debut;
-        if t > 1.0 {
+        // La première phase chauffe plus longtemps : sur la cible, à 1 s,
+        // « tout » sortait ~6 ms plus lent que sa répétition en fin de DIAG.
+        let chauffe = if self.phase == 0 { 4.0 } else { 1.0 };
+        if t > chauffe {
             self.images.push(image);
             self.cpu.push(cpu);
         }
-        if t < 5.0 {
+        if t < chauffe + 4.0 {
             return false;
         }
         let moy = |v: &[f32]| v.iter().sum::<f32>() / v.len().max(1) as f32 * 1000.0;
