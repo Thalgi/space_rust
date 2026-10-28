@@ -168,3 +168,30 @@ figer sur le GPU, plus d'envoi par image), le voile (O3), puis la DPI —
 1536 × 864 vient de la mise à l'échelle de Windows, qui agrandit l'image du
 jeu (flou) ; rendre à 1920 × 1080 coûterait 56 % de pixels en plus, à
 trancher avec l'utilisateur.
+
+## Le tour de diagnostic, `DIAG=tour` (2026-10-28)
+
+*« Ce serait pas sage aussi de faire un diag aléatoire sur d'autres cas ? »*
+Un lancement passe en revue **76 cas** — chaque astre du défilé en vue isolée,
+chaque type d'étoile en vue système (graine 1), huit systèmes engendrés à graine
+fixe (1 à 8, les mêmes partout), le système solaire, la galerie des planètes,
+la starmap —, 3,5 s chacun (1 s de chauffe écartée), dans la qualité et le
+rendu du joueur ; une ligne par cas, puis le tout du pire au meilleur.
+~4 min 30.
+
+Sur la machine de dev (Palette, Haute), le haut du classement :
+
+| Cas | fps | image | CPU |
+|---|---|---|---|
+| isolée Herbig Ae/Be | 133 | 7,5 ms | 7,4 ms |
+| isolée T Tauri | 134 | 7,4 | 7,3 |
+| **système solaire** | **170** | **5,9** | **3,9** |
+| galerie des planètes | 202 | 4,9 | 1,7 |
+| système T Tauri | 295 | 3,4 | 2,6 |
+| système Herbig | 347 | 2,9 | 1,2 |
+| isolée hypergéante | 422 | 2,4 | 2,3 |
+
+Tout le reste au-delà de 450 fps. **Surprise : le système solaire**, la vue
+d'ouverture de la skymap V2, est troisième — et c'est du GPU (5,9 ms d'image
+pour 3,9 de CPU), donc ce qui grossira le plus sur la cible. À regarder dès le
+tour du petit PC.

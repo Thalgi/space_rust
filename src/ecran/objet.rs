@@ -367,6 +367,17 @@ impl Objet {
 
     /// La vue isolée sur le `rang`-ième astre du défilé (touche 3), pour les
     /// captures (`DEFILE=<rang>`) : le rang 0 est la tête du défilé.
+    /// **Le défilé, nommé** : le nom de chaque rang (le tour du diagnostic,
+    /// `DIAG=tour`).
+    pub fn noms_du_defile() -> Vec<String> {
+        (0..types_au_defile().len() + EN_TETE.len())
+            .map(|i| match Specimen::du_defile(i) {
+                Specimen::Soleil { nom, .. } => nom,
+                _ => format!("rang {i}"),
+            })
+            .collect()
+    }
+
     pub fn sur_defile(rang: usize) -> Self {
         let mut o = Self::new();
         o.spec = Specimen::du_defile(rang);

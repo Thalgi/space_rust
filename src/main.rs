@@ -107,7 +107,11 @@ async fn main() {
     let debut = get_time();
     // `DIAG` (Opti-v2) : la décomposition du coût sur la machine cible, en
     // un lancement — voir `Diagnostic`.
-    let mut diag = std::env::var("DIAG").is_ok().then(Diagnostic::new);
+    let mut diag = std::env::var("DIAG").is_ok_and(|d| d != "tour").then(Diagnostic::new);
+    let mut tour = (std::env::var("DIAG").as_deref() == Ok("tour")).then(Tour::new);
+    if let Some(t) = &tour {
+        etat = t.etat();
+    }
 
     // Capture d'écran ponctuelle (facultative) : `CAPTURE=<chemin.png>` ouvre
     // la Skymap (système solaire) et exporte l'écran après quelques frames de
@@ -269,6 +273,13 @@ async fn main() {
                 return;
             }
         }
+        if let Some(t) = &mut tour {
+            match t.image(get_frame_time(), (get_time() - debut_image) as f32) {
+                Suite::Rester => {}
+                Suite::Changer(e) => etat = e,
+                Suite::Fin => return,
+            }
+        }
 
         if profil.is_some() {
             let ecoule = get_time() - debut;
@@ -387,6 +398,104 @@ impl Diagnostic {
         }
         self.appliquer();
         false
+    }
+}
+
+/// Un cas du tour de diagnostic.
+enum Cas {
+    Defile(usize),
+    Systeme(&'static str),
+    Graine(u64),
+    Solaire,
+    Galerie,
+    Starmap,
+}
+
+/// Ce que le tour demande à la boucle.
+enum Suite {
+    Rester,
+    Changer(Etat),
+    Fin,
+}
+
+/// **Le tour de diagnostic** (Opti-v2, `DIAG=tour`) : un lancement passe en
+/// revue tout ce qui se dessine — chaque astre du défilé en vue isolée, chaque
+/// type d'étoile en vue système, des systèmes engendrés à graine fixe (les
+/// mêmes chez l'utilisateur et sur la machine de dev), le système solaire,
+/// la galerie des planètes et la starmap —, 3,5 s chacun (1 s de chauffe
+/// écartée), dans la qualité et le rendu du joueur. Chaque cas s'imprime à
+/// sa fin, puis le tout, du pire au meilleur.
+struct Tour {
+    cas: Vec<(String, Cas)>,
+    i: usize,
+    debut: f64,
+    images: Vec<f32>,
+    cpu: Vec<f32>,
+    resultats: Vec<(String, f32, f32)>,
+}
+
+impl Tour {
+    const CHAUFFE: f64 = 1.0;
+    const DUREE: f64 = 3.5;
+
+    fn new() -> Self {
+        let mut cas: Vec<(String, Cas)> = Objet::noms_du_defile()
+            .into_iter()
+            .enumerate()
+            .map(|(i, nom)| (format!("isolee  {nom}"), Cas::Defile(i)))
+            .collect();
+        for t in etoile::types_du_tirage() {
+            cas.push((format!("systeme {t}"), Cas::Systeme(t)));
+        }
+        for g in 1..=8 {
+            cas.push((format!("graine  {g}"), Cas::Graine(g)));
+        }
+        cas.push(("systeme solaire".into(), Cas::Solaire));
+        cas.push(("galerie des planetes".into(), Cas::Galerie));
+        cas.push(("starmap".into(), Cas::Starmap));
+        println!("TOUR : {} cas, ~{:.0} s", cas.len(), cas.len() as f64 * Self::DUREE);
+        Self { cas, i: 0, debut: get_time(), images: Vec::new(), cpu: Vec::new(), resultats: Vec::new() }
+    }
+
+    /// L'écran du cas courant.
+    fn etat(&self) -> Etat {
+        match self.cas[self.i].1 {
+            Cas::Defile(r) => Etat::Objet(Box::new(Objet::sur_defile(r))),
+            Cas::Systeme(t) => Etat::SkymapV2(Box::new(SkymapV2::sur_astre(t))),
+            Cas::Graine(g) => Etat::SkymapV2(Box::new(SkymapV2::sur_graine(g))),
+            Cas::Solaire => Etat::SkymapV2(Box::new(SkymapV2::new())),
+            Cas::Galerie => Etat::Galerie(Box::new(Galerie::new(false))),
+            Cas::Starmap => Etat::Starmap(Box::new(Starmap::new())),
+        }
+    }
+
+    fn image(&mut self, image: f32, cpu: f32) -> Suite {
+        let t = get_time() - self.debut;
+        if t > Self::CHAUFFE {
+            self.images.push(image);
+            self.cpu.push(cpu);
+        }
+        if t < Self::DUREE {
+            return Suite::Rester;
+        }
+        let moy = |v: &[f32]| v.iter().sum::<f32>() / v.len().max(1) as f32 * 1000.0;
+        let (i, c) = (moy(&self.images), moy(&self.cpu));
+        let nom = self.cas[self.i].0.clone();
+        println!("TOUR {:>3}/{}  {:<44} {:>7.1} fps  image {:>6.1} ms  CPU {:>6.1} ms", self.i + 1, self.cas.len(), nom, 1000.0 / i.max(1e-3), i, c);
+        self.resultats.push((nom, i, c));
+        self.images.clear();
+        self.cpu.clear();
+        self.i += 1;
+        self.debut = get_time();
+        if self.i == self.cas.len() {
+            self.resultats.sort_by(|a, b| b.1.total_cmp(&a.1));
+            println!("TOUR, du pire au meilleur ({} x {}, rendu {:?}, qualite {:?}) :", screen_width(), screen_height(), reglages::mode_rendu(), reglages::qualite());
+            for (nom, i, c) in &self.resultats {
+                println!("  {:<44} {:>7.1} fps  image {:>6.1} ms  CPU {:>6.1} ms", nom, 1000.0 / i.max(1e-3), i, c);
+            }
+            return Suite::Fin;
+        }
+        Suite::Changer(self.etat())
     }
 }
 

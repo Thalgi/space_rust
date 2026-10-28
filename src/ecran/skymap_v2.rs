@@ -146,6 +146,19 @@ impl SkymapV2 {
         v
     }
 
+    /// La vue système sur le système engendré par `seed` (le tour du
+    /// diagnostic, `DIAG=tour`).
+    pub fn sur_graine(seed: u64) -> Self {
+        let mut v = Self::new();
+        let (s, i) = construire_systeme(seed);
+        v.seed = seed;
+        v.sys = s;
+        v.info = i;
+        v.source = Source::Graine(seed);
+        v.appliquer_vue();
+        v
+    }
+
     /// Une frame. Renvoie `true` pour revenir à l'accueil (Échap).
     pub fn frame(&mut self) -> bool {
         let dt = get_frame_time().min(0.05);
