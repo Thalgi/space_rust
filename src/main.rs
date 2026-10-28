@@ -131,9 +131,11 @@ async fn main() {
         etat = Etat::GalerieDisques(Box::new(GalerieDisques::sur_case(case)));
     }
     // `SYSTEME=<type d'étoile>` : la vue système sur un système de ce type
-    // (Chantier-Opti-v2, avec `PROFIL`).
+    // (Chantier-Opti-v2, avec `PROFIL`) ; `SYSTEME=solaire` : le système solaire.
     if let Ok(nom) = std::env::var("SYSTEME") {
-        if let Some(n) = crate::etoile::types_du_tirage().into_iter().find(|t| *t == nom) {
+        if nom == "solaire" {
+            etat = Etat::SkymapV2(Box::new(SkymapV2::new()));
+        } else if let Some(n) =crate::etoile::types_du_tirage().into_iter().find(|t| *t == nom) {
             etat = Etat::SkymapV2(Box::new(SkymapV2::sur_astre(n)));
         }
     }

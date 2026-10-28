@@ -195,3 +195,52 @@ Tout le reste au-delà de 450 fps. **Surprise : le système solaire**, la vue
 d'ouverture de la skymap V2, est troisième — et c'est du GPU (5,9 ms d'image
 pour 3,9 de CPU), donc ce qui grossira le plus sur la cible. À regarder dès le
 tour du petit PC.
+
+### Le tour du petit PC (1536 × 864, Palette, Haute)
+
+Le haut du classement :
+
+| Cas | fps | image | CPU |
+|---|---|---|---|
+| isolée T Tauri | 14,1 | 70,9 ms | 70,1 ms |
+| isolée Herbig Ae/Be | 14,2 | 70,4 | 69,5 |
+| **système solaire** | **15,7** | **63,8** | **60,6** |
+| isolée naine noire (1er cas) | 30,8 | 32,4 | 29,6 |
+| système T Tauri | 31,0 | 32,2 | 29,6 |
+| système Herbig | 34,5 | 29,0 | 26,4 |
+| système K (orange) | 40,3 | 24,8 | 22,7 |
+
+Le gros des systèmes tient entre 77 et 112 fps (≈ 10-13 ms), la galerie 88,
+la starmap 117, les astres isolés sans disque 200-340.
+
+- **La naine noire en tête est un artefact** : c'est le premier cas du tour,
+  qui paie encore le chargement ; la même, plus loin, fait 343 fps.
+- **Le système K** fait deux fois moins que ses voisins là-bas, mais K et G
+  sont identiques au fps près sur la machine de dev (`SYSTEME`, `DIAG=1`) :
+  probablement un à-coup de la cible, à revoir au prochain tour.
+- **T Tauri et Herbig isolées** restent les nuages par boule (O7).
+
+### Le système solaire : l'ISS et le Starship
+
+`SYSTEME=solaire` ouvre désormais la vue sur le système solaire (avec
+`PROFIL` ou `DIAG`). En retirant à l'essai ce qui lui est propre (machine de
+dev, `PROFIL`) :
+
+| Retiré | fps |
+|---|---|
+| rien | 169 |
+| les quatre ceintures | 224 |
+| Halley | 206 |
+| **l'ISS et le Starship** | **485** |
+| les trois | 637 |
+
+Leurs maillages — des milliers de triangles — passaient par `draw_mesh`, qui
+**recopie et transforme chaque sommet à chaque image**, alors qu'à l'échelle
+du système ils tiennent dans moins d'un pixel. `engin::dessiner_engin`
+(partagé avec `VaisseauEnTransit`) les dessine désormais en **cube d'un pixel**
+de leur teinte sous 2 px de rayon apparent, et en maillage au-delà. Test
+`un_engin_lointain_se_dessine_en_point` (rouge vérifié : seuil à 0).
+
+Système solaire, machine de dev : **169 → 484 fps** (image 5,9 → 2,1 ms).
+Rapproché d'un engin, le maillage repasse par `draw_mesh` : dette notée, des
+tampons GPU persistants si une vue rapprochée rame.

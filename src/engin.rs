@@ -242,18 +242,7 @@ impl Astre for EnginOrbital {
         // milliers de sommets du maillage sont déjà relatifs à l'origine de la
         // station (`vaisseau/maillage.rs`) : seule cette `Mat4` porte une
         // coordonnée héliocentrique, donc seule elle a besoin de `rel`.
-        let m = Mat4::from_scale_rotation_translation(
-            Vec3::splat(self.echelle),
-            Quat::from_rotation_y(self.lacet),
-            cam.rel(self.base.position),
-        );
-        unsafe {
-            get_internal_gl().quad_gl.push_model_matrix(m);
-        }
-        self.maillage.dessiner();
-        unsafe {
-            get_internal_gl().quad_gl.pop_model_matrix();
-        }
+        dessiner_engin(&self.maillage, cam, self.base.position, self.base.rayon, self.echelle, Quat::from_rotation_y(self.lacet));
     }
 
     /// Métal clair : ce qu'on retient d'une station à contre-jour.
@@ -289,6 +278,43 @@ impl Astre for EnginOrbital {
     }
 }
 
+/// Rayon apparent, en pixels, sous lequel un engin se dessine en **point**.
+const ENGIN_PX_POINT: f32 = 2.0;
+
+/// Vrai si l'engin est trop petit à l'écran pour mériter son maillage.
+fn en_point(rayon: f32, dist: f32, vh: f32) -> bool {
+    crate::impostor::px_rayon(rayon, dist, vh) < ENGIN_PX_POINT
+}
+
+/// **Dessine un engin, ou son point quand il est trop loin** (Opti-v2).
+///
+/// ⚠️ Le maillage de l'ISS et du Starship, des milliers de triangles, était
+/// recopié et transformé **à chaque image**, même réduit à moins d'un pixel :
+/// c'était les deux tiers du système solaire sur la machine de dev (169 →
+/// 485 fps sans eux), et la vue d'ouverture tombait à 16 fps sur le petit PC
+/// (`DIAG=tour`). Sous [`ENGIN_PX_POINT`], un cube d'un pixel de sa teinte
+/// le remplace : c'est tout ce qu'on en voit.
+///
+/// ponytail: rapproché, le maillage repasse toujours par `draw_mesh` (copie
+/// par image) ; des tampons GPU persistants si une vue rapprochée rame.
+pub(crate) fn dessiner_engin(maillage: &MaillageStation, cam: &CameraInfo, position: Vec3, rayon: f32, echelle: f32, rotation: Quat) {
+    let vh = crate::impostor::viewport_h();
+    let dist = (cam.pos - position).length();
+    if en_point(rayon, dist, vh) {
+        let cote = 2.0 * crate::impostor::rayon_plancher(rayon, dist, vh, 0.5);
+        draw_cube(cam.rel(position), Vec3::splat(cote), None, Color::new(0.78, 0.80, 0.84, 1.0));
+        return;
+    }
+    let m = Mat4::from_scale_rotation_translation(Vec3::splat(echelle), rotation, cam.rel(position));
+    unsafe {
+        get_internal_gl().quad_gl.push_model_matrix(m);
+    }
+    maillage.dessiner();
+    unsafe {
+        get_internal_gl().quad_gl.pop_model_matrix();
+    }
+}
+
 #[cfg(test)]
 // Ces tests affirment des choses sur des CONSTANTES, et clippy y voit une
 // condition toujours vraie. Elle l'est — aujourd'hui. Le jour où quelqu'un
@@ -297,6 +323,15 @@ impl Astre for EnginOrbital {
 #[allow(clippy::assertions_on_constants)]
 mod tests {
     use super::*;
+
+    // **Loin, un point ; près, le maillage.** Le seuil ne doit couper que ce
+    // qui ne se voit plus : un engin de 10 px garde ses triangles.
+    #[test]
+    fn un_engin_lointain_se_dessine_en_point() {
+        let vh = 1000.0;
+        assert!(en_point(0.01, 100.0, vh), "0,12 px : le maillage serait dessiné pour rien");
+        assert!(!en_point(1.0, 100.0, vh), "12 px : l'engin perdrait sa forme");
+    }
 
     // **L'engin tient dans son orbite** : son envergure ne doit pas dépasser le
     // rayon auquel il tourne, sinon il traverse sa planète à chaque tour.
