@@ -249,7 +249,7 @@ dans `assets/planetes.json` (relu à chaud, nom affiché, retrait) et la vue
 **tableur** qui l'écrit ; P3 : l'habitabilité en contexte — le type de base
 corrigé par chacun des 29 types d'étoile et par la zone
 (`assets/habitabilite.json`, `planete::contexte`), affichée dans la fiche avec
-ses raisons. Le fichier sera réglé finement avec la genèse. **Chantier-Opti-v2 ouvert** (2026-10-26) : la carte de la dette de
+ses raisons. Le fichier sera réglé finement avec la genèse. **Chantier Genèse V2 cartographié** (2026-10-28) : [`docs/conception/genese_v2.md`](docs/conception/genese_v2.md), lots G0 à G8, rien de codé ; G0 = décisions à trancher. **Chantier-Opti-v2 ouvert** (2026-10-26) : la carte de la dette de
 performance d'Astres V2, pour 30 fps sur un premier APU Ryzen portable —
 [`docs/conception/opti_v2.md`](docs/conception/opti_v2.md). Mesuré : la T Tauri
 et la Herbig tombent à ~40 fps en vue isolée **sur la machine de dev**
