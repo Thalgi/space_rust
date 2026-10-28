@@ -30,10 +30,10 @@
     "habitabilite": "habitable"
   },
   "Arctique": {
-    "habitabilite": "colonisable"
+    "habitabilite": "dangereuse"
   },
   "Ash (volcanique)": {
-    "habitabilite": "colonisable"
+    "habitabilite": "hostile"
   },
   "Atoll": {
     "habitabilite": "habitable"
@@ -63,7 +63,7 @@
     "habitabilite": "dangereuse"
   },
   "Brumeux": {
-    "habitabilite": "habitable"
+    "habitabilite": "colonisable"
   },
   "Bushveld": {
     "habitabilite": "colonisable"
@@ -72,7 +72,7 @@
     "habitabilite": "colonisable"
   },
   "Carbone": {
-    "habitabilite": "colonisable"
+    "habitabilite": "hostile"
   },
   "Carotene": {
     "habitabilite": "habitable"
@@ -84,7 +84,7 @@
     "habitabilite": "colonisable"
   },
   "Chthonien": {
-    "habitabilite": "inhabitable"
+    "habitabilite": "hostile"
   },
   "Coastal": {
     "habitabilite": "colonisable"
@@ -93,7 +93,7 @@
     "habitabilite": "colonisable"
   },
   "Cold Desert": {
-    "habitabilite": "colonisable"
+    "habitabilite": "dangereuse"
   },
   "Cold Gaia": {
     "habitabilite": "habitable"
@@ -120,16 +120,16 @@
     "habitabilite": "colonisable"
   },
   "Cryovolcan": {
-    "habitabilite": "colonisable"
+    "habitabilite": "dangereuse"
   },
   "Cyclone": {
-    "habitabilite": "habitable"
+    "habitabilite": "colonisable"
   },
   "Desert": {
     "habitabilite": "colonisable"
   },
   "Diamant": {
-    "habitabilite": "colonisable"
+    "habitabilite": "hostile"
   },
   "Dry Cave": {
     "habitabilite": "colonisable"
@@ -156,7 +156,7 @@
     "habitabilite": "colonisable"
   },
   "Fer (Mercure)": {
-    "habitabilite": "colonisable"
+    "habitabilite": "inhabitable"
   },
   "Ferrosprings": {
     "habitabilite": "colonisable"
@@ -183,7 +183,7 @@
     "habitabilite": "colonisable"
   },
   "Glacial": {
-    "habitabilite": "colonisable"
+    "habitabilite": "dangereuse"
   },
   "Glaciovolcanic": {
     "habitabilite": "colonisable"
@@ -231,7 +231,7 @@
     "habitabilite": "habitable"
   },
   "Marais": {
-    "habitabilite": "habitable"
+    "habitabilite": "colonisable"
   },
   "Mars": {
     "habitabilite": "colonisable"
@@ -252,10 +252,10 @@
     "habitabilite": "colonisable"
   },
   "Mud": {
-    "habitabilite": "habitable"
+    "habitabilite": "colonisable"
   },
   "Mushroom": {
-    "habitabilite": "habitable"
+    "habitabilite": "colonisable"
   },
   "Oasis": {
     "habitabilite": "colonisable"
@@ -273,7 +273,7 @@
     "habitabilite": "colonisable"
   },
   "Orageux": {
-    "habitabilite": "habitable"
+    "habitabilite": "colonisable"
   },
   "Outback": {
     "habitabilite": "colonisable"
@@ -282,7 +282,7 @@
     "habitabilite": "colonisable"
   },
   "Pandora": {
-    "habitabilite": "habitable"
+    "habitabilite": "colonisable"
   },
   "Peatland": {
     "habitabilite": "colonisable"
@@ -354,7 +354,7 @@
     "habitabilite": "colonisable"
   },
   "Tepid": {
-    "habitabilite": "habitable"
+    "habitabilite": "colonisable"
   },
   "Tepui": {
     "habitabilite": "habitable"
@@ -372,7 +372,7 @@
     "habitabilite": "hostile"
   },
   "Toundra": {
-    "habitabilite": "colonisable"
+    "habitabilite": "dangereuse"
   },
   "Travertine": {
     "habitabilite": "colonisable"
