@@ -304,3 +304,12 @@ la T Tauri : identiques à l'œil.
 GL de la texture. Lâchée aussitôt, elle était libérée et son identifiant
 repris par la cible de la scène — le shader lisait la scène en guise de table
 (Jupiter jaune et noir). La table est gardée en vie dans `pixel::TABLE`.
+
+**Premier relevé cible avec la table** (Jupiter) : Palette 33,1 ms contre
+Pixel 24,4 — le même écart de ~8 ms qu'avant. Toute la machine a dérivé de
+~3 ms entre les deux relevés (Pixel 21,5 → 24,4). Si la table est bien dans
+le binaire, ces ~8 ms ne viennent pas du calcul de la palette : soit de la
+passe elle-même (une cible de plus), soit du voile en mode Palette. Le DIAG
+gagne deux phases pour trancher : « sans voile, rendu Pixel » (à comparer à
+« sans voile » en Palette) et « tout (bis) », la première phase répétée à la
+fin pour mesurer la dérive.

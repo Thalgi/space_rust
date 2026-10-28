@@ -342,15 +342,20 @@ struct Diagnostic {
 
 impl Diagnostic {
     /// (nom, voile, nuages, rendu imposé, qualité basse). Le rendu Pixel
-    /// sépare la cible basse résolution de la quantification de palette.
-    const PHASES: [(&'static str, bool, bool, Option<reglages::ModeRendu>, bool); 7] = [
+    /// sépare la cible basse résolution de la quantification de palette ; sans
+    /// voile, il dit si l'écart Palette/Pixel tient au voile. « tout (bis) »
+    /// répète la première phase : l'écart entre les deux est la dérive de la
+    /// machine pendant la mesure (chauffe, fréquence).
+    const PHASES: [(&'static str, bool, bool, Option<reglages::ModeRendu>, bool); 9] = [
         ("tout", true, true, None, false),
         ("sans voile", false, true, None, false),
         ("sans nuages ni bras", true, false, None, false),
         ("ni voile ni nuages", false, false, None, false),
         ("tout, rendu Net", true, true, Some(reglages::ModeRendu::Net), false),
         ("tout, rendu Pixel", true, true, Some(reglages::ModeRendu::Pixel), false),
+        ("sans voile, rendu Pixel", false, true, Some(reglages::ModeRendu::Pixel), false),
         ("tout, qualite basse", true, true, None, true),
+        ("tout (bis)", true, true, None, false),
     ];
 
     fn new() -> Self {
@@ -388,7 +393,7 @@ impl Diagnostic {
         let moy = |v: &[f32]| v.iter().sum::<f32>() / v.len().max(1) as f32 * 1000.0;
         let (i, c) = (moy(&self.images), moy(&self.cpu));
         self.lignes.push(format!(
-            "  {:<22} {:>7.1} fps   image {:>6.1} ms   CPU {:>6.1} ms",
+            "  {:<24} {:>7.1} fps   image {:>6.1} ms   CPU {:>6.1} ms",
             Self::PHASES[self.phase].0,
             1000.0 / i.max(1e-3),
             i,
