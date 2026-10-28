@@ -269,3 +269,38 @@ La géante coûte ~2 ms de GPU ici : le shader enchaîne une vingtaine de `fbm`
 quantification ne pèse presque rien ici (Pixel ≈ Palette). La Terre de près
 repaie le maillage de l'ISS et du Starship, désormais assez gros pour être
 dessinés (dette notée plus haut). À trancher avec le relevé de la cible.
+
+### Relevé propre de la cible, et la palette en table
+
+`SYSTEME=solaire FOCUS=Jupiter DIAG=1` sur le petit PC :
+
+| Phase | image |
+|---|---|
+| tout | 29,3 ms |
+| sans voile | 18,3 |
+| sans nuages ni bras | 22,8 |
+| ni voile ni nuages | 17,6 |
+| rendu Net | 23,1 |
+| rendu Pixel | 21,5 |
+| qualité basse | 22,0 |
+
+Saturne remplissant l'écran (`FOCUS_RAYONS=1.6`) : 35,3 ms, dont ~12 de voile
+(anneaux, ceintures) et ~8 de quantification (Palette 35,3 contre Pixel 27,4).
+
+Trois postes sur la cible, dans le système solaire : **voiles ~11 ms**,
+**quantification ~8 ms**, nuages ~5 ms. La quantification ne coûtait presque
+rien sur la machine de dev : c'était la boucle de 182 distances Lab par pixel,
+lourde pour le premier APU Ryzen.
+
+**La palette en table** : `palette::table` précalcule, une fois par palette,
+la couleur retenue pour chacune des 64³ couleurs d'une grille (atlas RGBA
+512 × 512) ; le shader n'y fait plus qu'une lecture. Écart à la recherche
+exacte : ~6 % des couleurs changent de gagnant, pour un voisin au plus
+~3 ΔE plus loin (`la_table_ne_trahit_pas_la_recherche`, rouge vérifié en
+écrivant les canaux dans le désordre). Captures avant/après de Jupiter et de
+la T Tauri : identiques à l'œil.
+
+⚠️ Piège rencontré : `Material::set_texture` ne retient que l'**identifiant**
+GL de la texture. Lâchée aussitôt, elle était libérée et son identifiant
+repris par la cible de la scène — le shader lisait la scène en guise de table
+(Jupiter jaune et noir). La table est gardée en vie dans `pixel::TABLE`.

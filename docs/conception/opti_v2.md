@@ -165,6 +165,7 @@ là ») ; les rémanents du lot 13 et les naines des lots 14-15 sont légers.
 | O7 | Nuages figés sur le GPU (si O1-O2 ne suffisent pas) | D3, D4 | le reste du CPU |
 | O8 | **Mesure sur la vraie machine** (ou la plus proche disponible) | — | la seule preuve de l'objectif |
 | O9 | Engins (ISS, Starship) en point sous 2 px — trouvé par `DIAG=tour` ✅ | — | système solaire 169 → 484 fps (dev) |
+| O10 | Quantification de palette en table précalculée ✅ | — | ~8 ms sur la cible, à confirmer |
 
 Après O1 et O2, le calcul des nuages de la T Tauri tomberait de ~23 ms à ~5 ms
 par image sur la machine de dev — soit ~11 ms sur la cible, dans le budget

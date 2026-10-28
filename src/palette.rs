@@ -56,11 +56,11 @@
 use macroquad::prelude::*;
 use std::sync::OnceLock;
 
-/// Plafond du tableau d'uniformes du shader.
+/// Plafond du nombre de couleurs d'une palette.
 ///
-/// Le shader déclare `vec3 palette_lab[MAX]` : une palette plus longue serait
-/// tronquée en silence. `aucune_palette_ne_depasse_le_plafond` l'interdit. Le
-/// relever se fait ici **et** dans `palette.frag.glsl` (`#define MAX`).
+/// Né du tableau d'uniformes de l'ancien shader ; depuis que la recherche se
+/// précalcule en table ([`table`]), il ne borne plus que le temps de calcul de
+/// celle-ci. `aucune_palette_ne_depasse_le_plafond` le garde.
 ///
 /// **256 et non 64.** Le premier plafond était calé sur Resurrect 64, mais les
 /// palettes publiées vont bien au-delà : Lospec 2000 en compte 182, AllStars 128.
@@ -68,12 +68,6 @@ use std::sync::OnceLock;
 /// console que personne ne lit — d'où des palettes déposées qui n'apparaissaient
 /// jamais au menu.
 ///
-/// Coût : 2 × 256 `vec3` d'uniformes, soit 1 536 composantes. Le minimum garanti
-/// par GL de bureau est très au-dessus ; ce serait à repenser (palette en
-/// texture) pour une cible WebGL/mobile stricte.
-///
-/// ⚠️ Coût **par pixel** aussi : la recherche parcourt `nb_couleurs` entrées. Une
-/// palette de 182 coûte presque trois fois une de 64.
 pub const MAX: usize = 256;
 
 /// Au-dessus de ce niveau, les hautes lumières sont comprimées au lieu de
@@ -187,19 +181,9 @@ impl Palette {
         Ok(Palette { nom: nom.to_string(), rgb, lab })
     }
 
+    #[cfg(test)]
     pub fn nb(&self) -> usize {
         self.rgb.len()
-    }
-
-    /// Les couleurs complétées jusqu'à [`MAX`], prêtes pour l'uniforme.
-    ///
-    /// Le remplissage répète la dernière couleur : le shader s'arrête à
-    /// `nb_couleurs`, mais un tableau à moitié nul serait un piège si cette
-    /// borne venait à sauter.
-    pub fn tableau(&self, source: &[Vec3]) -> [Vec3; MAX] {
-        let mut t = [*source.last().unwrap_or(&Vec3::ZERO); MAX];
-        t[..source.len()].copy_from_slice(source);
-        t
     }
 }
 
@@ -335,6 +319,72 @@ pub fn rgb_vers_lab(c: Vec3) -> Vec3 {
     vec3(116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
 }
 
+// ------------------------------------------------------ table de recherche
+
+/// Niveaux par canal de la table de quantification.
+pub const TABLE_NIVEAUX: usize = 64;
+/// Tranches de bleu par rangée de l'atlas : 8 × 8 tranches de 64 × 64.
+const TABLE_TRANCHES: usize = 8;
+/// Côté, en texels, de la texture de la table.
+pub const TABLE_COTE: usize = TABLE_NIVEAUX * TABLE_TRANCHES;
+
+/// Le texel de la table qui répond pour `c` (0..1). **Miroir exact** de
+/// l'adressage de `palette.frag.glsl` : changer l'un, c'est changer l'autre.
+fn texel(c: Vec3) -> (usize, usize) {
+    let n = (TABLE_NIVEAUX - 1) as f32;
+    let q = |v: f32| (v.clamp(0.0, 1.0) * n + 0.5).floor() as usize;
+    let (r, g, b) = (q(c.x), q(c.y), q(c.z));
+    ((b % TABLE_TRANCHES) * TABLE_NIVEAUX + r, (b / TABLE_TRANCHES) * TABLE_NIVEAUX + g)
+}
+
+/// **La quantification précalculée** (Opti-v2) : pour chacune des 64³
+/// couleurs de la grille, la couleur de palette la plus proche en CIELAB,
+/// rangée en atlas RGBA de [`TABLE_COTE`]² texels.
+///
+/// ⚠️ Le shader cherchait le plus proche **à chaque pixel** — 182 distances
+/// Lab pour Lospec 2000 : ~8 ms par image sur le premier APU Ryzen de
+/// l'utilisateur (`DIAG`, phases Palette contre Pixel), presque rien sur la
+/// machine de dev. La table se calcule une fois par palette ; le pixel n'y
+/// fait plus qu'une lecture. La grille arrondit la couleur d'au plus 1/126
+/// par canal : ~6 % des couleurs changent de gagnant, pour un voisin au plus
+/// ~3 ΔE plus loin, le seuil de perception (`la_table_ne_trahit_pas_la_recherche`).
+pub fn table(p: &Palette) -> Vec<u8> {
+    let n = (TABLE_NIVEAUX - 1) as f32;
+    let mut t = vec![255u8; TABLE_COTE * TABLE_COTE * 4];
+    for b in 0..TABLE_NIVEAUX {
+        for g in 0..TABLE_NIVEAUX {
+            for r in 0..TABLE_NIVEAUX {
+                let c = vec3(r as f32, g as f32, b as f32) / n;
+                let (x, y) = texel(c);
+                let q = p.rgb[plus_proche(p, c)];
+                let i = (y * TABLE_COTE + x) * 4;
+                t[i] = (q.x * 255.0).round() as u8;
+                t[i + 1] = (q.y * 255.0).round() as u8;
+                t[i + 2] = (q.z * 255.0).round() as u8;
+            }
+        }
+    }
+    t
+}
+
+/// Indice de la couleur la plus proche **en CIELAB**.
+///
+/// Distances **au carré** : la racine est monotone, elle ne change pas le
+/// gagnant. C'est elle qui remplit la [`table`] du shader.
+pub fn plus_proche(p: &Palette, couleur: Vec3) -> usize {
+    let cible = rgb_vers_lab(couleur);
+    let mut meilleur = 0;
+    let mut min = f32::INFINITY;
+    for (i, l) in p.lab.iter().enumerate() {
+        let d = (cible - *l).length_squared();
+        if d < min {
+            min = d;
+            meilleur = i;
+        }
+    }
+    meilleur
+}
+
 // -------------------------------------------------- miroir CPU (tests seuls)
 
 /// Luminance perçue (Rec. 709) — l'axe autour duquel la saturation pivote.
@@ -372,27 +422,6 @@ pub fn ecreter(c: Vec3) -> Vec3 {
     }
     let vise = ECRETAGE_SEUIL + (m - ECRETAGE_SEUIL) * ECRETAGE_FORCE;
     c * (vise / m)
-}
-
-/// Indice de la couleur la plus proche **en CIELAB**.
-///
-/// Distances **au carré** : la racine est monotone, elle ne change pas le
-/// gagnant, et l'économiser vaut N racines par pixel. Le shader fait pareil.
-///
-/// Réservé aux tests : à l'exécution, c'est le GPU qui cherche.
-#[cfg(test)]
-pub fn plus_proche(p: &Palette, couleur: Vec3) -> usize {
-    let cible = rgb_vers_lab(couleur);
-    let mut meilleur = 0;
-    let mut min = f32::INFINITY;
-    for (i, l) in p.lab.iter().enumerate() {
-        let d = (cible - *l).length_squared();
-        if d < min {
-            min = d;
-            meilleur = i;
-        }
-    }
-    meilleur
 }
 
 /// La même recherche, **en RGB** — la version naïve, qui n'est utilisée par
@@ -640,19 +669,36 @@ ffffff".to_string()))]);
         }
     }
 
-    // Le complément jusqu'à MAX **ne crée pas de couleur** que la recherche
-    // pourrait choisir par accident : il répète la dernière.
+    // **La table ne trahit pas la recherche** : pour des couleurs tirées au
+    // hasard, la couleur lue dans la table est aussi proche (en CIELAB) que
+    // la vraie plus proche, à l'arrondi de la grille près : ~6 % changent de
+    // gagnant, pour au plus ~3 ΔE.
     #[test]
-    fn le_tableau_transmis_est_complete_sans_inventer_de_couleur() {
-        // Une petite palette construite pour l'occasion : le registre n'en
-        // contient plus qu'une, longue.
-        let p = &Palette::depuis_hex("ESSAI", &["#000000", "#ffffff", "#ff0000"]).unwrap();
-        let t = p.tableau(&p.rgb);
-        assert_eq!(t.len(), MAX);
-        assert_eq!(&t[..p.nb()], &p.rgb[..], "les vraies couleurs ont bougé");
-        for (i, c) in t.iter().enumerate().skip(p.nb()) {
-            assert_eq!(*c, *p.rgb.last().unwrap(), "case {i} : remplissage inattendu");
+    fn la_table_ne_trahit_pas_la_recherche() {
+        let p = &integrees()[0];
+        let t = table(p);
+        let mut x = 0x2545_f491_u32;
+        let mut alea = || {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            (x % 10_000) as f32 / 9_999.0
+        };
+        let (mut differents, mut pire) = (0, 0.0f32);
+        for _ in 0..5_000 {
+            let c = vec3(alea(), alea(), alea());
+            let (tx, ty) = texel(c);
+            let i = (ty * TABLE_COTE + tx) * 4;
+            let lue = vec3(t[i] as f32, t[i + 1] as f32, t[i + 2] as f32) / 255.0;
+            let vraie = quantifier(p, c);
+            let ecart = |q: Vec3| (rgb_vers_lab(c) - rgb_vers_lab(q)).length();
+            if octets(lue) != octets(vraie) {
+                differents += 1;
+                pire = pire.max(ecart(lue) - ecart(vraie));
+            }
         }
+        assert!(differents < 5_000 / 10, "{differents} / 5000 couleurs changent de gagnant");
+        assert!(pire < 4.0,"la table choisit jusqu'à {pire} ΔE plus loin que la recherche");
     }
 
     /// Chroma CIELAB — la « vivacité » d'une couleur.

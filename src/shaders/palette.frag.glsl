@@ -6,23 +6,24 @@ precision highp float;
 // Applique au BLIT de la cible basse resolution, pas a la scene : la couche
 // pixelisee est deja rendue, on ne fait ici que remplacer chaque couleur.
 //
-// `palette_lab` arrive DEJA converti depuis `src/palette.rs` : le shader ne
-// convertit que le pixel courant, une fois au lieu de N+1.
+// La recherche du plus proche est PRECALCULEE (`palette::table`, Opti-v2) :
+// une texture de 64 x 64 x 64 couleurs, rangee en atlas de 8 x 8 tranches de
+// bleu. Le shader n'y fait plus qu'une lecture, au lieu de 182 distances Lab.
 //
-// Trois etapes, dans cet ordre :
-//   1. ecretage des hautes lumieres  (sinon le halo du speculaire devient blanc)
-//   3. recherche du plus proche      (la quantification elle-meme)
+// Etapes, dans cet ordre :
+//   1. saturation, puis ecretage des hautes lumieres (sinon le halo du
+//      speculaire devient blanc), puis gamma
+//   2. lecture de la table (la quantification elle-meme)
 
 varying lowp vec2 uv;
 varying lowp vec4 color;
 
 uniform sampler2D Texture;
-
-#define MAX 256
-uniform vec3 palette_lab[MAX];
-uniform vec3 palette_rgb[MAX];
-// Longueur reelle : les palettes ne font pas toutes MAX couleurs.
-uniform float nb_couleurs;
+// La couleur de palette retenue pour chaque case de la grille (`palette::table`).
+uniform sampler2D table;
+// `palette::TABLE_NIVEAUX` et `TABLE_TRANCHES` : changer l'un, c'est changer l'autre.
+#define NIVEAUX 64.0
+#define TRANCHES 8.0
 
 // Taille de la cible basse resolution, pour indexer le tramage sur la grille
 // des GROS pixels et non sur celle de l'ecran.
@@ -44,31 +45,6 @@ uniform float saturation;
 // un anneau colore autour du point chaud.
 uniform float sat_hautes;
 uniform vec2 sat_rolloff;
-
-vec3 rgb2xyz(vec3 c) {
-    // sRGB -> lineaire. Sans cette etape, les tons sombres seraient traites
-    // comme bien plus clairs qu'ils ne sont.
-    c = vec3(
-        (c.r > 0.04045) ? pow((c.r + 0.055) / 1.055, 2.4) : c.r / 12.92,
-        (c.g > 0.04045) ? pow((c.g + 0.055) / 1.055, 2.4) : c.g / 12.92,
-        (c.b > 0.04045) ? pow((c.b + 0.055) / 1.055, 2.4) : c.b / 12.92
-    );
-    return vec3(
-        c.r * 0.4124 + c.g * 0.3576 + c.b * 0.1805,
-        c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722,
-        c.r * 0.0193 + c.g * 0.1192 + c.b * 0.9505
-    );
-}
-
-float f_lab(float t) {
-    return (t > 0.008856) ? pow(t, 1.0 / 3.0) : (7.787 * t) + (16.0 / 116.0);
-}
-
-vec3 rgb2lab(vec3 c) {
-    vec3 x = rgb2xyz(c);
-    vec3 v = vec3(f_lab(x.x / 0.95047), f_lab(x.y / 1.00000), f_lab(x.z / 1.08883));
-    return vec3((116.0 * v.y) - 16.0, 500.0 * (v.x - v.y), 200.0 * (v.y - v.z));
-}
 
 // Ravive la chroma A LUMINANCE CONSTANTE : on ecarte du gris de meme clarte,
 // donc l'ombrage n'est pas touche. Le gain retombe a `sat_hautes` en haut de
@@ -117,32 +93,10 @@ void main() {
         c = pow(c, vec3(1.0 / gamma));
     }
 
-    vec3 lab = rgb2lab(c);
-
-    // ATTENTION : on retient la COULEUR, pas l'indice.
-    //
-    // `palette_rgb[meilleurIndice]` serait la forme naturelle, mais GLSL ES 1.00
-    // n'autorise l'indexation d'un tableau d'uniformes que par une
-    // « constant-index-expression » — un indice de boucle en est une, une
-    // variable calculee non.
-    vec3 meilleure = palette_rgb[0];
-    float dmin = 1.0e9;
-
-    for (int i = 0; i < MAX; i++) {
-        // Les palettes courtes s'arretent ici ; les cases au-dela sont un
-        // remplissage.
-        if (float(i) >= nb_couleurs) {
-            break;
-        }
-        vec3 d = lab - palette_lab[i];
-        // Distance AU CARRE : la racine est monotone, elle ne change pas le
-        // gagnant. `palette.rs` compare de la meme facon.
-        float d2 = dot(d, d);
-        if (d2 < dmin) {
-            dmin = d2;
-            meilleure = palette_rgb[i];
-        }
-    }
+    // Adressage : miroir exact de `palette::texel`.
+    vec3 q = floor(c * (NIVEAUX - 1.0) + 0.5);
+    vec2 t = vec2(mod(q.b, TRANCHES), floor(q.b / TRANCHES)) * NIVEAUX + q.rg + 0.5;
+    vec3 meilleure = texture2D(table, t / (NIVEAUX * TRANCHES)).rgb;
 
     // L'alpha est conserve tel quel : c'est lui qui laisse voir le fond
     // stellaire net a travers le vide de la cible.

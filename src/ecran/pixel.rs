@@ -61,6 +61,8 @@ thread_local! {
     /// ne sont réécrits que sur **changement** : 128 vec3 par frame seraient du
     /// gaspillage pour une donnée qui ne bouge qu'au clic.
     static PALETTE_CHARGEE: Cell<Option<usize>> = const { Cell::new(None) };
+    /// La table de la palette chargée (`palette::table`), gardée en vie.
+    static TABLE: RefCell<Option<Texture2D>> = const { RefCell::new(None) };
     /// La cible où la scène se quantifie, **à sa propre taille** (Opti-v2).
     static QUANTIFIEE: RefCell<Option<RenderTarget>> = const { RefCell::new(None) };
 }
@@ -77,16 +79,8 @@ fn charger() -> Option<Material> {
             fragment: &crate::impostor::source("palette.frag.glsl", FRAG),
         },
         MaterialParams {
+            textures: vec!["table".to_string()],
             uniforms: vec![
-                UniformDesc::array(
-                    UniformDesc::new("palette_lab", UniformType::Float3),
-                    palette::MAX,
-                ),
-                UniformDesc::array(
-                    UniformDesc::new("palette_rgb", UniformType::Float3),
-                    palette::MAX,
-                ),
-                UniformDesc::new("nb_couleurs", UniformType::Float1),
                 UniformDesc::new("taille_cible", UniformType::Float2),
                 UniformDesc::new("gamma", UniformType::Float1),
                 UniformDesc::new("ecretage_seuil", UniformType::Float1),
@@ -100,7 +94,6 @@ fn charger() -> Option<Material> {
             // l'écran, au matériau par défaut, qui compose ensuite par-dessus
             // le fond stellaire net — mélanger deux fois éteindrait les bords.
             pipeline_params: PipelineParams::default(),
-            ..Default::default()
         },
     )
     .map_err(|e| error!("shader de palette non compilé, rendu sans quantification : {e}"))
@@ -123,12 +116,17 @@ fn activer_quantificateur(cible: Vec2) -> bool {
             return false;
         };
 
-        // La palette ne repart vers le GPU que si elle a changé.
-        let p = palette::palette(etat.palette);
+        // La table ne se recalcule et ne repart vers le GPU que si la palette
+        // a changé (~50 ms en release).
         if PALETTE_CHARGEE.with(|c| c.get()) != Some(etat.palette) {
-            m.set_uniform_array("palette_lab", &p.tableau(&p.lab)[..]);
-            m.set_uniform_array("palette_rgb", &p.tableau(&p.rgb)[..]);
-            m.set_uniform("nb_couleurs", p.nb() as f32);
+            let c = palette::TABLE_COTE as u16;
+            let t = Texture2D::from_rgba8(c, c, &palette::table(palette::palette(etat.palette)));
+            t.set_filter(FilterMode::Nearest);
+            m.set_texture("table", t.clone());
+            // ⚠️ `set_texture` ne retient que l'identifiant GL : sans ce
+            // double, la texture serait libérée ici et son identifiant repris
+            // par la cible de la scène — le shader lirait la scène pour table.
+            TABLE.with(|c| *c.borrow_mut() = Some(t));
             PALETTE_CHARGEE.with(|c| c.set(Some(etat.palette)));
         }
 
