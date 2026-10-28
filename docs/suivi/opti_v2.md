@@ -118,3 +118,53 @@ le menu.
 
 **Suite** : le tableau `DIAG` du petit PC décidera — voile (O3), remplissage
 des nuages (O4), étoile (O6) ou CPU (O7).
+
+## Le tableau `DIAG` du petit PC, et la palette quantifiée à sa taille (2026-10-28)
+
+Mesuré par l'utilisateur sur la cible (écran 1920 × 1080 à 125 % : le jeu voit
+**1536 × 864**), qualité haute, Palette :
+
+| T Tauri, vue isolée | fps | image | CPU |
+|---|---|---|---|
+| tout | 14,5 | 69,1 ms | 68,0 ms |
+| sans nuages ni bras | 51,2 | 19,5 | 18,4 |
+| ni voile ni nuages | 279,5 | 3,6 | 1,6 |
+| tout, rendu Net | 12,1 | 82,4 | 81,4 |
+| tout, qualité basse | 30,7 | 32,5 | 31,6 |
+
+| T Tauri, vue système | fps | image | CPU |
+|---|---|---|---|
+| tout | 30,4 | 32,9 ms | 30,0 ms |
+| sans voile | 87,8 | 11,4 | 9,2 |
+| sans nuages ni bras | 30,1 | 33,2 | 30,3 |
+| ni voile ni nuages | 89,7 | 11,1 | 8,8 |
+| tout, rendu Net | 47,8 | 20,9 | 18,7 |
+| tout, qualité basse | 50,4 | 19,8 | 17,0 |
+
+(La ligne « sans voile » de la vue isolée manque au relevé.) Ce qu'il dit :
+
+- **Vue isolée : les nuages et les bras coûtent ~50 ms**, le voile ~16 ms,
+  le reste 3,6. Le rendu Net (4 × plus de pixels) n'ajoute que 13 ms : le
+  coût des nuages est **par boule** (calcul, envoi, appels de dessin), pas
+  par pixel. Le « CPU » colle à l'image partout : les appels de dessin
+  bloquent dans le pilote — le GPU et le CPU s'attendent l'un l'autre.
+- **Vue système : le voile coûte ~21 ms** (le grand disque, sept couches) ;
+  les nuages, rien.
+- **Le filtre Palette coûtait plus que le rendu Net** en vue système (32,9
+  contre 20,9 ms). Cause trouvée : la quantification se faisait **pendant
+  l'agrandissement à l'écran**, donc à la résolution de l'écran — chaque gros
+  pixel quantifié quatre fois, jusqu'à 182 distances Lab chacune.
+
+**Corrigé** (`pixel::quantifier`) : la cible se quantifie **à sa propre
+taille** dans une seconde cible (sans mélange), puis s'agrandit au matériau
+par défaut. Même image — un gros pixel ne lit qu'un texel, et le shader n'a
+pas de tramage lié à l'écran (vérifié par captures de la galerie, avant et
+après : mêmes couleurs, étiquettes à leur place) —, **quatre fois moins de
+quantification**. Invisible sur la machine de dev (sa 3090 ne la sentait pas) ;
+à remesurer sur la cible.
+
+**Suite, par ordre de poids sur la cible** : les nuages par boule (O7 : les
+figer sur le GPU, plus d'envoi par image), le voile (O3), puis la DPI —
+1536 × 864 vient de la mise à l'échelle de Windows, qui agrandit l'image du
+jeu (flou) ; rendre à 1920 × 1080 coûterait 56 % de pixels en plus, à
+trancher avec l'utilisateur.

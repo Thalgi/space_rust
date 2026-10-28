@@ -18,7 +18,6 @@
 //! pilote.
 
 use crate::palette;
-use macroquad::miniquad::{BlendFactor, BlendState, BlendValue, Equation};
 use macroquad::prelude::*;
 use std::cell::{Cell, RefCell};
 
@@ -62,6 +61,8 @@ thread_local! {
     /// ne sont réécrits que sur **changement** : 128 vec3 par frame seraient du
     /// gaspillage pour une donnée qui ne bouge qu'au clic.
     static PALETTE_CHARGEE: Cell<Option<usize>> = const { Cell::new(None) };
+    /// La cible où la scène se quantifie, **à sa propre taille** (Opti-v2).
+    static QUANTIFIEE: RefCell<Option<RenderTarget>> = const { RefCell::new(None) };
 }
 
 /// Compile le matériau de quantification.
@@ -94,17 +95,11 @@ fn charger() -> Option<Material> {
                 UniformDesc::new("sat_hautes", UniformType::Float1),
                 UniformDesc::new("sat_rolloff", UniformType::Float2),
             ],
-            pipeline_params: PipelineParams {
-                // Le blit compose la couche pixelisée PAR-DESSUS le fond
-                // stellaire net : sans mélange alpha explicite, le vide de la
-                // cible serait écrit en opaque et masquerait tout le décor.
-                color_blend: Some(BlendState::new(
-                    Equation::Add,
-                    BlendFactor::Value(BlendValue::SourceAlpha),
-                    BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
-                )),
-                ..Default::default()
-            },
+            // **Sans mélange** : la quantification écrit dans une cible vide
+            // (`quantifier`), couleur et alpha tels quels. C'est le blit à
+            // l'écran, au matériau par défaut, qui compose ensuite par-dessus
+            // le fond stellaire net — mélanger deux fois éteindrait les bords.
+            pipeline_params: PipelineParams::default(),
             ..Default::default()
         },
     )
@@ -152,12 +147,9 @@ fn activer_quantificateur(cible: Vec2) -> bool {
 /// rendu le demande. C'est le seul endroit du jeu qui décide de l'un ou de
 /// l'autre : les quatre vues passent toutes par ici.
 pub fn blit(texture: &Texture2D) {
-    // La taille de la cible sert à indexer le tramage sur la grille des GROS
-    // pixels ; elle se lit sur la texture, sans paramètre supplémentaire.
-    let cible = vec2(texture.width(), texture.height());
-    let quantifie = crate::reglages::mode_rendu().quantifie() && activer_quantificateur(cible);
+    let quantifiee = if crate::reglages::mode_rendu().quantifie() { quantifier(texture) } else { None };
     draw_texture_ex(
-        texture,
+        quantifiee.as_ref().unwrap_or(texture),
         0.0,
         0.0,
         WHITE,
@@ -168,9 +160,41 @@ pub fn blit(texture: &Texture2D) {
             ..Default::default()
         },
     );
-    if quantifie {
-        gl_use_default_material();
-    }
+}
+
+/// **Quantifie la cible à sa propre taille**, dans une seconde cible ; `None`
+/// si le matériau manque.
+///
+/// ⚠️ La quantification se faisait **pendant** l'agrandissement à l'écran :
+/// chaque gros pixel, `PIX` × `PIX` pixels d'écran, était quantifié quatre
+/// fois — jusqu'à 182 distances Lab chacune. Sur le premier APU Ryzen de
+/// l'utilisateur, le rendu Net allait plus vite que le Palette (Opti-v2,
+/// `DIAG`). Le résultat est le même : un gros pixel ne lit qu'un texel, et le
+/// shader n'a pas de tramage lié à l'écran.
+fn quantifier(texture: &Texture2D) -> Option<Texture2D> {
+    let cible = vec2(texture.width(), texture.height());
+    QUANTIFIEE.with(|q| {
+        let mut q = q.borrow_mut();
+        if q.as_ref().is_none_or(|rt| rt.texture.size() != cible) {
+            let rt = render_target_ex(cible.x as u32, cible.y as u32, RenderTargetParams { sample_count: 1, depth: false });
+            rt.texture.set_filter(FilterMode::Nearest);
+            *q = Some(rt);
+        }
+        let rt = q.as_ref()?;
+        let mut cam = Camera2D::from_display_rect(Rect::new(0.0, 0.0, cible.x, cible.y));
+        cam.render_target = Some(rt.clone());
+        set_camera(&cam);
+        clear_background(BLANK);
+        let ok = activer_quantificateur(cible);
+        if ok {
+            // `flip_y` : la cible quantifiée garde le sens de la source (de bas
+            // en haut), que le blit à l'écran retourne comme avant.
+            draw_texture_ex(texture, 0.0, 0.0, WHITE, DrawTextureParams { dest_size: Some(cible), flip_y: true, ..Default::default() });
+            gl_use_default_material();
+        }
+        set_default_camera();
+        ok.then(|| rt.texture.clone())
+    })
 }
 
 /// Vertex shader par défaut de macroquad, recopié : un matériau doit fournir le
