@@ -51,7 +51,7 @@ fn window_conf() -> Conf {
         // distingue (Chantier-Opti-v2). Un indice pour le pilote, pas une
         // garantie.
         platform: miniquad::conf::Platform {
-            swap_interval: std::env::var("PROFIL").is_ok().then_some(0),
+            swap_interval: (std::env::var("PROFIL").is_ok() || std::env::var("DIAG").is_ok()).then_some(0),
             ..Default::default()
         },
         ..Default::default()
@@ -105,6 +105,9 @@ async fn main() {
     }
     let mut echantillons: Vec<f32> = Vec::new();
     let debut = get_time();
+    // `DIAG` (Opti-v2) : la décomposition du coût sur la machine cible, en
+    // un lancement — voir `Diagnostic`.
+    let mut diag = std::env::var("DIAG").is_ok().then(Diagnostic::new);
 
     // Capture d'écran ponctuelle (facultative) : `CAPTURE=<chemin.png>` ouvre
     // la Skymap (système solaire) et exporte l'écran après quelques frames de
@@ -145,6 +148,7 @@ async fn main() {
     let mut frames_capture = 0u32;
 
     loop {
+        let debut_image = get_time();
         match &mut etat {
             Etat::Accueil(a) => {
                 if let Some(cible) = a.frame() {
@@ -260,6 +264,12 @@ async fn main() {
             }
         }
 
+        if let Some(d) = &mut diag {
+            if d.image(get_frame_time(), (get_time() - debut_image) as f32) {
+                return;
+            }
+        }
+
         if profil.is_some() {
             let ecoule = get_time() - debut;
             if ecoule > 1.0 {
@@ -292,6 +302,91 @@ async fn main() {
         }
 
         next_frame().await;
+    }
+}
+
+/// **Le diagnostic de performance sur la machine cible** (Opti-v2, `DIAG=1`,
+/// avec `DEFILE` ou `SYSTEME`, synchro coupée) : quelques phases de 5 s, une
+/// configuration chacune — tout, sans voile, sans nuages, sans les deux, en
+/// rendu net —, puis un tableau sur la sortie standard et la fenêtre se
+/// ferme. Pour chaque phase : l'image moyenne, et le temps **CPU** (de la
+/// boucle jusqu'à `next_frame`) ; une image bien plus longue que son CPU dit
+/// que le GPU est le verrou.
+struct Diagnostic {
+    phase: usize,
+    debut: f64,
+    images: Vec<f32>,
+    cpu: Vec<f32>,
+    lignes: Vec<String>,
+    mode_initial: reglages::ModeRendu,
+    qualite_initiale: reglages::Qualite,
+}
+
+impl Diagnostic {
+    /// (nom, voile, nuages, rendu net, qualité basse)
+    const PHASES: [(&'static str, bool, bool, bool, bool); 6] = [
+        ("tout", true, true, false, false),
+        ("sans voile", false, true, false, false),
+        ("sans nuages ni bras", true, false, false, false),
+        ("ni voile ni nuages", false, false, false, false),
+        ("tout, rendu Net", true, true, true, false),
+        ("tout, qualite basse", true, true, false, true),
+    ];
+
+    fn new() -> Self {
+        let d = Self {
+            phase: 0,
+            debut: get_time(),
+            images: Vec::new(),
+            cpu: Vec::new(),
+            lignes: Vec::new(),
+            mode_initial: reglages::mode_rendu(),
+            qualite_initiale: reglages::qualite(),
+        };
+        d.appliquer();
+        d
+    }
+
+    fn appliquer(&self) {
+        let (_, voile, nuages, net, basse) = Self::PHASES[self.phase];
+        disque::set_voiles(voile);
+        disque::set_nuages(nuages);
+        reglages::regler_qualite(if basse { reglages::Qualite::Basse } else { self.qualite_initiale });
+        reglages::regler_rendu(if net { reglages::ModeRendu::Net } else { self.mode_initial });
+    }
+
+    /// Compte une image ; `true` quand tout est mesuré.
+    fn image(&mut self, image: f32, cpu: f32) -> bool {
+        let t = get_time() - self.debut;
+        if t > 1.0 {
+            self.images.push(image);
+            self.cpu.push(cpu);
+        }
+        if t < 5.0 {
+            return false;
+        }
+        let moy = |v: &[f32]| v.iter().sum::<f32>() / v.len().max(1) as f32 * 1000.0;
+        let (i, c) = (moy(&self.images), moy(&self.cpu));
+        self.lignes.push(format!(
+            "  {:<22} {:>7.1} fps   image {:>6.1} ms   CPU {:>6.1} ms",
+            Self::PHASES[self.phase].0,
+            1000.0 / i.max(1e-3),
+            i,
+            c
+        ));
+        self.phase += 1;
+        self.images.clear();
+        self.cpu.clear();
+        self.debut = get_time();
+        if self.phase == Self::PHASES.len() {
+            println!("DIAG ({} x {}, rendu de départ {:?})", screen_width(), screen_height(), self.mode_initial);
+            for l in &self.lignes {
+                println!("{l}");
+            }
+            return true;
+        }
+        self.appliquer();
+        false
     }
 }
 

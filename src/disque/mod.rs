@@ -53,6 +53,8 @@ thread_local! {
     static TPL_ACCRETION: RefCell<Option<Material>> = const { RefCell::new(None) };
     // Instrument de mesure (voir set_voiles) : allumé par défaut.
     static VOILES: Cell<bool> = const { Cell::new(true) };
+    // Idem pour les nuages 3D et les bras (voir set_nuages).
+    static NUAGES: Cell<bool> = const { Cell::new(true) };
 }
 
 fn mat_particules() -> Material {
@@ -99,6 +101,18 @@ fn mat_accretion() -> Material {
 /// Éteindre le voile **à cadrage identique** ne change qu'une chose.
 pub fn set_voiles(actifs: bool) {
     VOILES.with(|v| v.set(actifs));
+}
+
+/// **Interrupteur des nuages 3D et des bras** — instrument de mesure, comme
+/// [`set_voiles`] : le diagnostic `DIAG` (Opti-v2) les éteint à cadrage
+/// identique pour chiffrer leur part sur la machine cible.
+pub fn set_nuages(actifs: bool) {
+    NUAGES.with(|v| v.set(actifs));
+}
+
+/// Vrai si les nuages 3D et les bras sont dessinés (défaut).
+fn nuages_actifs() -> bool {
+    NUAGES.with(|v| v.get())
 }
 
 /// Vrai si la couche voile est dessinée (défaut).
@@ -173,7 +187,7 @@ pub struct Disque {
     nuages: Vec<(Vec3, f32, Color, bool)>,
     /// Ce qui les a fait calculer : caméra, position, temps, viewport. Tant
     /// qu'il ne change pas, `nuages` vaut pour cette image.
-    nuages_cle: Option<[f32; 14]>,
+    nuages_cle: Option<[f32; 15]>,
     /// Les boules avant l'amorti, et les quads : réutilisés d'une image à
     /// l'autre plutôt que réalloués.
     boules: Vec<(Vec3, f32, Vec3, f32, bool)>,
@@ -375,7 +389,12 @@ impl Disque {
             // **Prototype B** (lot 12) : le voile en couches empilées le long
             // de la normale, chacune sa graine — une épaisseur, lisible par la
             // tranche. Une seule couche : le rendu de toujours.
-            let n = self.cfg.couches.max(1);
+            // Qualité basse (O5) : une seule couche, le voile d'avant le lot 12
+            // (`uniforms_voile` vient d'en poser l'alpha, le plan et la graine).
+            let n = match crate::reglages::qualite() {
+                crate::reglages::Qualite::Haute => self.cfg.couches.max(1),
+                crate::reglages::Qualite::Basse => 1,
+            };
             for k in 0..n {
                 if n > 1 {
                     let (alpha, couche, graine) = couche_voile(&self.cfg, k);
@@ -415,7 +434,7 @@ impl Disque {
     /// passe derrière elle par la profondeur.
     fn dessiner_nuages_3d(&mut self, cam: &CameraInfo, cote_camera: bool) {
         let p = self.base.position;
-        if !nuages_visibles(self.cfg.externe, (cam.pos - p).length(), viewport_h()) {
+        if !nuages_actifs() || !nuages_visibles(self.cfg.externe, (cam.pos - p).length(), viewport_h()) {
             return;
         }
         if self.cfg.nuages_3d > 0 || bras::actifs(&self.cfg) {
@@ -456,6 +475,7 @@ impl Disque {
             cam.right.x, cam.right.y, cam.right.z,
             p.x, p.y, p.z,
             self.temps_nuages(), viewport_h(),
+            (crate::reglages::qualite() == crate::reglages::Qualite::Basse) as u8 as f32,
         ];
         if self.nuages_cle == Some(cle) {
             return;
@@ -466,6 +486,13 @@ impl Disque {
         {
             let grappe = self.cfg.grappe.max(1);
             let n = self.cfg.nuages_3d.min(40_000 / grappe);
+            // Qualité basse (O5) : un amas sur trois — `nuage_3d` les sème au
+            // hasard de leur rang, les premiers sont donc un tirage du disque
+            // entier, pas un secteur.
+            let n = match crate::reglages::qualite() {
+                crate::reglages::Qualite::Haute => n,
+                crate::reglages::Qualite::Basse => n / 3,
+            };
             // Toutes les boules, des deux côtés du plan : l'empilement à
             // l'écran se compte sur l'ensemble (voir `attenuation_globale`).
             // Sortie le temps du calcul (`self` y est lu), rendue à la fin.

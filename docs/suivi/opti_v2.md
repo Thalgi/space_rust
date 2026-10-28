@@ -77,3 +77,44 @@ en une passe) et O4 (remplissage borné), qui ne se jugent que sur la cible ou
 au plus près.
 
 **Suite : O3**, le voile en une passe.
+
+## Retour du petit PC, `DIAG` et la qualité (O5 avancé) — 2026-10-28
+
+**Mesuré par l'utilisateur sur la cible** (premier APU Ryzen portable),
+branche après O1 + O2 : **T Tauri 10 à 14 fps, Herbig pareil** — contre 170 sur
+la machine de dev. Et la skymap V2 se mettait mal à l'échelle sur son petit
+écran (corrigé à part : la ligne d'état passait sous les bascules et sortait à
+droite, la ligne de raison de la fiche débordait).
+
+**Sur la machine de dev, tout est CPU** (sonde provisoire, par image) : les
+nuages coûtent ~4,9 ms — construire 1,9, bras et jets 1,2, pousser les quads
+0,8, lots 0,4, empilement 0,6. Même ×3 ou ×4 sur la cible, ça ne fait pas
+80 ms : **le verrou y est le GPU**, et il ne se mesure que là-bas.
+
+**`DIAG=1`** (avec `DEFILE` ou `SYSTEME`) : un lancement, six phases de 5 s —
+tout, sans voile, sans nuages ni bras, ni l'un ni l'autre, rendu Net, qualité
+basse —, puis un tableau (fps, image, **CPU** jusqu'à `next_frame`). Une image
+bien plus longue que son CPU désigne le GPU. Interrupteur des nuages ajouté
+(`disque::set_nuages`), à côté de celui du voile.
+
+**Le réglage QUALITE** (paramètres, sauvegardé ; un `reglages.json` d'avant se
+relit en Haute) : **Haute** = le rendu validé, à l'identique ; **Basse** = le
+voile en une couche au lieu de sept (le voile d'avant le lot 12) et un amas de
+nuages sur trois. Le système ne change pas.
+
+| Machine de dev, T Tauri vue isolée | fps | image | CPU |
+|---|---|---|---|
+| tout | 161,5 | 6,2 ms | 6,1 ms |
+| sans voile | 162,9 | 6,1 | 6,1 |
+| sans nuages ni bras | 572 | 1,7 | 0,5 |
+| ni voile ni nuages | 1 977 | 0,5 | 0,1 |
+| tout, rendu Net | 160,5 | 6,2 | 6,2 |
+| **tout, qualité basse** | **307** | 3,3 | 3,2 |
+
+Gardes : `un_fichier_d_avant_la_qualite_garde_ses_reglages` (red-check : sans
+`serde(default)`, rouge), l'aller-retour JSON des réglages étendu à la qualité
+(en Basse, pour qu'un champ ignoré ne passe pas), la ligne QUALITE portée par
+le menu.
+
+**Suite** : le tableau `DIAG` du petit PC décidera — voile (O3), remplissage
+des nuages (O4), étoile (O6) ou CPU (O7).

@@ -120,6 +120,51 @@ impl Saturation {
     }
 }
 
+/// **La qualité du dessin** (Opti-v2 O5, 2026-10-28) : ce qu'on dessine des
+/// effets lourds, pour un petit PC — *« une T Tauri ne donne que 10 à 14 fps »*
+/// sur un premier APU Ryzen portable.
+///
+/// **Haute** est le rendu validé, à l'identique. **Basse** allège ce qui
+/// remplit l'écran : le voile d'un disque en une couche au lieu de sept (le
+/// voile d'avant le lot 12), un tiers des nuages 3D. Le **système** ne change
+/// pas : seule la richesse du dessin.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum Qualite {
+    #[default]
+    Haute,
+    Basse,
+}
+
+impl Qualite {
+    pub fn nom(self) -> &'static str {
+        match self {
+            Qualite::Haute => "HAUTE",
+            Qualite::Basse => "BASSE",
+        }
+    }
+
+    pub fn suivant(self) -> Self {
+        match self {
+            Qualite::Haute => Qualite::Basse,
+            Qualite::Basse => Qualite::Haute,
+        }
+    }
+}
+
+thread_local! {
+    static QUALITE: Cell<Qualite> = const { Cell::new(Qualite::Haute) };
+}
+
+/// La qualité courante — ce que lit le code de dessin.
+pub fn qualite() -> Qualite {
+    QUALITE.with(|q| q.get())
+}
+
+/// Change la qualité, sans rien écrire (le diagnostic `DIAG` s'en sert).
+pub fn regler_qualite(q: Qualite) {
+    QUALITE.with(|c| c.set(q));
+}
+
 /// Bornes du gamma. En dessous de 0,5 l'image se noie, au-dessus de 2,5 elle
 /// se delave : au-dela, le curseur ne reglerait plus rien d'utile.
 pub const GAMMA_MIN: f32 = 0.5;
@@ -290,6 +335,10 @@ pub struct Reglages {
     pub saturation: Saturation,
     /// Correction gamma appliquee avant la quantification. 1 = neutre.
     pub gamma: f32,
+    /// Absente des fichiers d'avant Opti-v2 : ils se relisent en Haute,
+    /// plutôt que de perdre tous leurs réglages (`charger`).
+    #[serde(default)]
+    pub qualite: Qualite,
 }
 
 impl Default for Reglages {
@@ -304,6 +353,7 @@ impl Default for Reglages {
             palette: RENDU_INITIAL.palette,
             saturation: RENDU_INITIAL.saturation,
             gamma: RENDU_INITIAL.gamma,
+            qualite: Qualite::Haute,
         }
     }
 }
@@ -375,6 +425,7 @@ impl Reglages {
             saturation: self.saturation,
             gamma: self.gamma,
         });
+        regler_qualite(self.qualite);
         match self.mode {
             ModeAffichage::Fenetre => {
                 set_fullscreen(false);
@@ -496,10 +547,25 @@ mod tests {
             // champ casse la compilation ICI, ce qui force a se demander s'il
             // doit etre serialise. C'est tout l'objet du test.
             palette: 0,
+            // Pas la valeur par defaut : sinon un champ ignore a la lecture
+            // passerait quand meme.
+            qualite: Qualite::Basse,
         };
         let txt = serde_json::to_string(&r).expect("serialisation");
         let relu: Reglages = serde_json::from_str(&txt).expect("deserialisation");
         assert_eq!(relu, r, "un reglage s'est perdu dans le JSON");
+    }
+
+    // **Un fichier d'avant la qualite (Opti-v2 O5) se relit en entier**, en
+    // qualite haute : sans `serde(default)`, il retomberait sur les defauts et
+    // le joueur perdrait tous ses reglages au premier lancement.
+    #[test]
+    fn un_fichier_d_avant_la_qualite_garde_ses_reglages() {
+        let ancien = r#"{"mode":"SansBordure","resolution":{"largeur":1920,"hauteur":1080},
+            "rendu":"Palette","palette":0,"saturation":"Fort","gamma":1.05}"#;
+        let r: Reglages = serde_json::from_str(ancien).expect("un fichier d'avant la qualite se relit");
+        assert_eq!(r.rendu, ModeRendu::Palette);
+        assert_eq!(r.qualite, Qualite::Haute);
     }
 
     // **Un fichier abime ne casse pas le jeu.** Il est editable a la main et

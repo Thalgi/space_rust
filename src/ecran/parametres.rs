@@ -27,6 +27,8 @@ pub enum Action {
     GlisserGamma,
     /// Passe au niveau de saturation suivant. Sans objet hors du mode palette.
     CyclerSaturation,
+    /// Bascule la qualité du dessin (Opti-v2 O5).
+    CyclerQualite,
     /// Revient à l'accueil.
     Retour,
 }
@@ -100,6 +102,11 @@ pub fn lignes(r: &Reglages) -> Vec<Ligne> {
             libelle: format!("SATURATION : {}", r.saturation.nom()),
             action: Action::CyclerSaturation,
             active: r.rendu.quantifie(),
+        },
+        Ligne {
+            libelle: format!("QUALITE : {}", r.qualite.nom()),
+            action: Action::CyclerQualite,
+            active: true,
         },
         Ligne { libelle: "RETOUR".to_string(), action: Action::Retour, active: true },
     ]
@@ -303,6 +310,11 @@ impl Parametres {
             }
             Some(Action::CyclerSaturation) => {
                 reglages.saturation = reglages.saturation.suivant();
+                reglages.appliquer();
+                false
+            }
+            Some(Action::CyclerQualite) => {
+                reglages.qualite = reglages.qualite.suivant();
                 reglages.appliquer();
                 false
             }
@@ -640,6 +652,7 @@ mod tests {
             Action::CyclerPalette,
             Action::GlisserGamma,
             Action::CyclerSaturation,
+            Action::CyclerQualite,
             Action::Retour,
         ] {
             assert!(portees.contains(&a), "{a:?} n'est portée par aucune ligne");
