@@ -191,6 +191,18 @@ impl Menu {
         Rect::new(b.x - Self::LARGEUR_MENU - 6.0, b.y, Self::LARGEUR_MENU, Self::HAUT_BTN)
     }
 
+    /// **La place de la ligne d'etat** (graine, FPS, zoom, raccourcis) : entre
+    /// la derniere bascule et RETOUR. Elle etait posee au debut de la bande,
+    /// **sous** les bascules, et sortait de l'ecran a droite — illisible sur un
+    /// petit ecran (petit PC, 2026-10-28).
+    pub fn zone_etat(outils: Rect) -> Rect {
+        let fin = Self::btn(outils, Self::LARGEURS.len() - 1);
+        // Plus de place (640 px de large) : une zone vide, collée à RETOUR.
+        let bord = Self::retour(outils).x - 10.0;
+        let x = (fin.x + fin.w + 10.0).min(bord);
+        Rect::new(x, outils.y, bord - x, outils.h)
+    }
+
     /// Place laissee aux bascules : la bande **moins** le couple de droite.
     fn bande_bascules(outils: Rect) -> Rect {
         let pris = Self::LARGEUR_MENU * 2.0 + 12.0;
@@ -418,6 +430,12 @@ mod tests_mise_en_page {
             let e = vec2(l, h);
             let o = strip(l, h);
             let barre = crate::ecran::bandeau::rectangle(e);
+            // La ligne d'etat ne passe ni sous une bascule ni sous MENU/RETOUR.
+            let z = Menu::zone_etat(o);
+            for (i, b) in Menu::bascules(o).iter().enumerate() {
+                assert!(z.w == 0.0 || z.x >= b.x + b.w, "{l}x{h} : la ligne d'etat passe sous la bascule {i}");
+            }
+            assert!(z.x + z.w <= Menu::retour(o).x, "{l}x{h} : la ligne d'etat passe sous RETOUR");
             for (nom, r) in [("MENU", Menu::bouton(o)), ("RETOUR", Menu::retour(o))] {
                 assert!(r.x >= o.x - 1e-3 && r.x + r.w <= o.x + o.w + 1e-3, "{l}x{h} : {nom} hors bande");
                 let sur_barre = r.x < barre.x + barre.w && barre.x < r.x + r.w

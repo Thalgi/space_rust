@@ -368,19 +368,17 @@ impl SkymapV2 {
         // Ligne d'outillage de developpement (graine, FPS, raccourcis). Passee
         // **en bas** : le haut de l'ecran appartient desormais au bandeau de
         // ressources, et les deux se recouvraient.
-        crate::police::texte(
-            &format!(
-                "{}   |   {} FPS   |   zoom x{:.2}   |   vitesse {}   clic: centrer   P: pixel   V: voiles   G: aleatoire   R: shaders   Espace: pause   Haut/Bas: vitesse   Echap: menu",
-                self.info,
-                get_fps(),
-                self.cam.zoom(),
-                temps
-            ),
-            bandeau::strip_outils(vec2(screen_width(), screen_height())).x,
-            screen_height() - 8.0,
-            15.0,
-            Color::new(0.55, 0.7, 0.75, 1.0),
-        );
+        // Entre les bascules et RETOUR (`Menu::zone_etat`), sur deux lignes :
+        // l'etat, puis les raccourcis. Ce qui ne tient pas dans la place est
+        // coupe — un petit ecran ne doit pas voir le texte sortir a droite.
+        let zone = crate::menu::Menu::zone_etat(bandeau::strip_outils(vec2(screen_width(), screen_height())));
+        let gris = Color::new(0.55, 0.7, 0.75, 1.0);
+        // Les FPS en tête : sur un petit écran, c'est ce qu'on vient lire, et la
+        // fin de ligne est coupée la première.
+        let etat = format!("{} FPS  |  zoom x{:.2}  |  vitesse {}  |  {}", get_fps(), self.cam.zoom(), temps, self.info);
+        let raccourcis = "clic: centrer  P: pixel  V: voiles  G: aleatoire  R: shaders  Espace: pause  Haut/Bas: vitesse  Echap: menu";
+        crate::police::texte(&tenir(&etat, zone.w, 15), zone.x, zone.y + 22.0, 15.0, gris);
+        crate::police::texte(&tenir(raccourcis, zone.w, 15), zone.x, zone.y + 42.0, 15.0, gris);
         let ecran_ui = vec2(screen_width(), screen_height());
         self.bandeau_dessiner(ecran_ui);
         self.selecteur_dessiner(ecran_ui, bandeau::hauteur_occupee(ecran_ui), m);
@@ -563,9 +561,17 @@ impl SkymapV2 {
             crate::police::texte(c.libelle(), r.x + 18.0 + cote, y, 17.0, c.couleur());
             y += cote + 4.0;
             // Ce que le contexte lui a coûté : son type de base, et pourquoi.
+            // Sur une ligne si elle tient dans le panneau, sinon sur deux.
             if let Some(b) = f.classe_base.filter(|b| *b != c) {
                 let gris = Color::new(0.55, 0.62, 0.65, 1.0);
-                ligne(format!("{} - {}", b.libelle(), f.raisons.join(", ")), gris, &mut y);
+                let raisons = f.raisons.join(", ");
+                let entiere = format!("{} - {}", b.libelle(), raisons);
+                if crate::police::mesure(&entiere, 17) <= r.w - 24.0 {
+                    ligne(entiere, gris, &mut y);
+                } else {
+                    ligne(format!("{} -", b.libelle()), gris, &mut y);
+                    ligne(tenir(&raisons, r.w - 24.0, 17), gris, &mut y);
+                }
             }
         }
         if f.categorie != crate::astre::Categorie::Etoile {
@@ -903,4 +909,21 @@ impl SkymapV2 {
 
 fn nouvelle_graine(seed: u64) -> u64 {
     seed.wrapping_mul(6364136223846793005).wrapping_add(1)
+}
+
+/// **`texte` coupé pour tenir dans `largeur`** pixels à la taille `taille`,
+/// terminé par « .. » s'il a fallu couper ; vide si rien ne tient.
+fn tenir(texte: &str, largeur: f32, taille: u16) -> String {
+    if crate::police::mesure(texte, taille) <= largeur {
+        return texte.to_string();
+    }
+    let mut t: Vec<char> = texte.chars().collect();
+    while !t.is_empty() {
+        t.pop();
+        let essai = format!("{}..", t.iter().collect::<String>().trim_end());
+        if crate::police::mesure(&essai, taille) <= largeur {
+            return essai;
+        }
+    }
+    String::new()
 }
