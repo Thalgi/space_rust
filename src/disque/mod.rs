@@ -620,8 +620,14 @@ impl Empilement {
         let portee = rc + 0.5;
         let n = portee.ceil().min(12.0) as i32;
         let (cx, cy) = (c.x.floor() as i32, c.y.floor() as i32);
-        for dy in -n..=n {
-            for dx in -n..=n {
+        // **Les boucles bornées à la grille** (Opti-v2 O2) : caméra dans le
+        // disque, la grille dégénère en une case (`new`) et chaque boule
+        // parcourait jusqu'à 625 cases hors champ pour rien — 7,2 ms par
+        // calcul pour la T Tauri. Mêmes cases visitées, même ordre : même
+        // résultat.
+        let m = self.cote as i32 - 1;
+        for dy in (-n).max(cy.saturating_neg())..=n.min(m.saturating_sub(cy)) {
+            for dx in (-n).max(cx.saturating_neg())..=n.min(m.saturating_sub(cx)) {
                 let d2 = (dx * dx + dy * dy) as f32;
                 if d2 >= portee * portee {
                     continue;
@@ -1024,6 +1030,46 @@ mod tests_prototypes {
         }
         assert!(dense.lire(Vec2::ZERO) > 5.0);
         assert_eq!(dense.lire(vec2(5.0, 0.0)), 0.0, "hors champ");
+    }
+
+    /// **Borner les boucles à la grille ne change rien** (Opti-v2 O2) :
+    /// l'ancien parcours, gardé ici en référence, et le nouveau remplissent
+    /// les mêmes cases des mêmes valeurs — grille dégénérée (une case, la
+    /// caméra dans le disque) comme grille ordinaire, boules hors champ
+    /// comprises.
+    #[test]
+    fn borner_l_empilement_ne_change_rien() {
+        fn verser_sans_borne(e: &mut Empilement, centre: Vec2, r: f32, a: f32) {
+            let c = e.en_cases(centre);
+            let rc = r / e.case;
+            let couverture = (2.0 * rc).min(1.0).powi(2);
+            let portee = rc + 0.5;
+            let n = portee.ceil().min(12.0) as i32;
+            let (cx, cy) = (c.x.floor() as i32, c.y.floor() as i32);
+            for dy in -n..=n {
+                for dx in -n..=n {
+                    let d2 = (dx * dx + dy * dy) as f32;
+                    if d2 >= portee * portee {
+                        continue;
+                    }
+                    if let Some(i) = e.indice(cx + dx, cy + dy) {
+                        e.pile[i] += a * couverture * (1.0 - d2.sqrt() / portee).powi(2);
+                    }
+                }
+            }
+        }
+        for case in [5.0, 0.3, 0.05, 0.004] {
+            let (mut borne, mut libre) = (Empilement::new(case), Empilement::new(case));
+            for k in 0..3000u32 {
+                let h = |m: f32| ((k as f32 * m).sin() * 43758.547).fract();
+                let centre = vec2(h(12.9) * 6.0 - 3.0, h(78.2) * 6.0 - 3.0);
+                let r = 0.001 + h(37.7).abs() * 0.4;
+                borne.verser(centre, r, 0.3);
+                verser_sans_borne(&mut libre, centre, r, 0.3);
+            }
+            assert_eq!(borne.cote, libre.cote);
+            assert!(borne.pile == libre.pile, "case {case} ({} de côté) : les piles diffèrent", borne.cote);
+        }
     }
 
     /// **Les nuages superposés saturent au lieu de s'additionner** : sous le
