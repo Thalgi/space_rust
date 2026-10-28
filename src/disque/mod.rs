@@ -167,6 +167,17 @@ pub struct Disque {
     mat: Option<Material>,
     voile_lots: Vec<Mesh>, // annulus figé (local, plan Y)
     mat_voile: Option<Material>,
+    /// **Les nuages de l'image** (Opti-v2 O1) : position monde, rayon, couleur
+    /// prémultipliée, côté caméra du plan. Calculés une fois, dessinés par
+    /// moitié — ils l'étaient deux fois par image (`calculer_nuages`).
+    nuages: Vec<(Vec3, f32, Color, bool)>,
+    /// Ce qui les a fait calculer : caméra, position, temps, viewport. Tant
+    /// qu'il ne change pas, `nuages` vaut pour cette image.
+    nuages_cle: Option<[f32; 14]>,
+    /// Les boules avant l'amorti, et les quads : réutilisés d'une image à
+    /// l'autre plutôt que réalloués.
+    boules: Vec<(Vec3, f32, Vec3, f32, bool)>,
+    quads: (Vec<Vertex>, Vec<u16>),
 }
 
 impl Disque {
@@ -206,6 +217,10 @@ impl Disque {
             mat,
             voile_lots,
             mat_voile,
+            nuages: Vec::new(),
+            nuages_cle: None,
+            boules: Vec::new(),
+            quads: (Vec::new(), Vec::new()),
         }
     }
 
@@ -398,25 +413,64 @@ impl Disque {
     /// voile est un plan : ce qui est au-delà, vu de la caméra, est sous lui
     /// partout, et ce qui est en deçà par-dessus. L'étoile, elle, cache ce qui
     /// passe derrière elle par la profondeur.
-    fn dessiner_nuages_3d(&self, cam: &CameraInfo, cote_camera: bool) {
+    fn dessiner_nuages_3d(&mut self, cam: &CameraInfo, cote_camera: bool) {
         let p = self.base.position;
         if !nuages_visibles(self.cfg.externe, (cam.pos - p).length(), viewport_h()) {
             return;
         }
         if self.cfg.nuages_3d > 0 || bras::actifs(&self.cfg) {
-            let cote_cam = self.axe_n.dot(cam.pos - p);
-            let (mut v, mut i) = (Vec::new(), Vec::new());
+            self.calculer_nuages(cam);
             // ⚠️ **Envoyé au fil de l'eau, un lot dès qu'il est plein**
             // (`QUADS_PAR_DESSIN`) : la numérotation `u16` de `push_quad`
             // repart de zéro à chaque lot, donc rien ne déborde, et aucun
             // appel ne passe la limite de macroquad. Le plafond n'est plus
             // qu'une affaire de coût.
             gl_use_material(&crate::soleil::materiau_ruban_lumineux());
+            let (v, i) = &mut self.quads;
+            for &(q, t, c, cote) in &self.nuages {
+                if cote != cote_camera {
+                    continue;
+                }
+                crate::impostor::push_quad(v, i, cam, q, t, c);
+                if v.len() >= crate::impostor::QUADS_PAR_DESSIN * 4 {
+                    crate::impostor::dessiner_par_lots(v, i, Some(crate::impostor::halo_partage()));
+                }
+            }
+            crate::impostor::dessiner_par_lots(v, i, Some(crate::impostor::halo_partage()));
+            vider_lot();
+            gl_use_default_material();
+        }
+    }
+
+    /// **Les nuages et les bras de l'image, calculés une seule fois**
+    /// (Opti-v2 O1, dette D1) : ils l'étaient à chaque moitié du disque, soit
+    /// deux fois par image, l'empilement compris, pour n'en garder chaque fois
+    /// que la moitié — 23 ms par image pour la T Tauri sur la machine de dev.
+    /// Rien ne change tant que la caméra, la position, le temps et le viewport
+    /// sont les mêmes : la seconde moitié relit le premier calcul.
+    fn calculer_nuages(&mut self, cam: &CameraInfo) {
+        let p = self.base.position;
+        let cle = [
+            cam.pos.x, cam.pos.y, cam.pos.z,
+            cam.forward.x, cam.forward.y, cam.forward.z,
+            cam.right.x, cam.right.y, cam.right.z,
+            p.x, p.y, p.z,
+            self.temps_nuages(), viewport_h(),
+        ];
+        if self.nuages_cle == Some(cle) {
+            return;
+        }
+        self.nuages_cle = Some(cle);
+        self.nuages.clear();
+        let cote_cam = self.axe_n.dot(cam.pos - p);
+        {
             let grappe = self.cfg.grappe.max(1);
             let n = self.cfg.nuages_3d.min(40_000 / grappe);
             // Toutes les boules, des deux côtés du plan : l'empilement à
             // l'écran se compte sur l'ensemble (voir `attenuation_globale`).
-            let mut boules = Vec::new();
+            // Sortie le temps du calcul (`self` y est lu), rendue à la fin.
+            let mut boules = std::mem::take(&mut self.boules);
+            boules.clear();
             for k in 0..n {
                 let (loc, taille, eclat, t) = nuage_3d(k, &self.cfg, self.temps_nuages());
                 let eclat = eclat * hors_lacunes(t, &self.cfg);
@@ -448,22 +502,17 @@ impl Disque {
             };
             let somme: f32 = boules.iter().map(|b| b.1 / ecran(b.0).1).sum();
             let mut pile = Empilement::new(2.0 * somme / boules.len().max(1) as f32);
-            for b in &boules {
+            for b in boules.iter() {
                 let (e, z) = ecran(b.0);
                 pile.verser(e, b.1 / z, b.3);
             }
             // Un seul facteur pour tout le disque (voir `attenuation_globale`).
             let f = attenuation_globale(pile.pic());
-            for (q, t_j, c, a, cote) in boules {
-                if cote != cote_camera {
-                    continue;
-                }
+            for &(q, t_j, c, a, cote) in boules.iter() {
                 let a = a * f;
-                crate::impostor::push_quad(&mut v, &mut i, cam, q, t_j, Color::new(c.x * a, c.y * a, c.z * a, a));
-                if v.len() >= crate::impostor::QUADS_PAR_DESSIN * 4 {
-                    crate::impostor::dessiner_par_lots(&mut v, &mut i, Some(crate::impostor::halo_partage()));
-                }
+                self.nuages.push((q, t_j, Color::new(c.x * a, c.y * a, c.z * a, a), cote));
             }
+            self.boules = boules;
             // **Les bras de matière** (`bras`) : de la lumière propre, hors
             // de l'amorti — c'est le gaz qui chauffe en tombant.
             let t = self.temps_nuages();
@@ -476,17 +525,9 @@ impl Disque {
                 .chain(flot::boules(&self.cfg.flot, t));
             for (loc, t_b, c, a) in flots {
                 let rel = self.axe_u * loc.x + self.axe_n * loc.y + self.axe_v * loc.z;
-                if du_cote_camera(rel, self.axe_n, cote_cam) != cote_camera {
-                    continue;
-                }
-                crate::impostor::push_quad(&mut v, &mut i, cam, p + rel, t_b, Color::new(c.x * a, c.y * a, c.z * a, a));
-                if v.len() >= crate::impostor::QUADS_PAR_DESSIN * 4 {
-                    crate::impostor::dessiner_par_lots(&mut v, &mut i, Some(crate::impostor::halo_partage()));
-                }
+                let cote = du_cote_camera(rel, self.axe_n, cote_cam);
+                self.nuages.push((p + rel, t_b, Color::new(c.x * a, c.y * a, c.z * a, a), cote));
             }
-            crate::impostor::dessiner_par_lots(&mut v, &mut i, Some(crate::impostor::halo_partage()));
-            vider_lot();
-            gl_use_default_material();
         }
     }
 }
