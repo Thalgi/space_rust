@@ -143,6 +143,14 @@ là ») ; les rémanents du lot 13 et les naines des lots 14-15 sont légers.
   Palette rend déjà dans une cible basse résolution : c'est le premier levier
   sur un iGPU, il suffit d'en faire un réglage à part entière.
 - **Un plafond d'images** (30 / 60) pour ne pas chauffer une machine portable.
+- **Où poser la qualité** (ajouté le 2026-10-28) : les nombres de particules
+  des ceintures (900, 1 400) et des disques sont aujourd'hui écrits **dans la
+  genèse**, au milieu des tirages — les baisser changerait les systèmes. Le
+  lot G1 de [`genese_v2.md`](genese_v2.md) (§5.4) sépare le plan
+  (ce qui existe, tiré) de la construction (combien on en dessine, sans tirage) :
+  c'est là que O5 réglera la richesse du dessin, à système identique. Même
+  découpage, deux gains de plus : la construction à la demande (G1 bis) et
+  les plans lus sans rien construire (starmap).
 
 ## 5. Les lots proposés, dans l'ordre
 
@@ -152,7 +160,7 @@ là ») ; les rémanents du lot 13 et les naines des lots 14-15 sont légers.
 | O2 | Empilement réparé (médiane, grille bornée) | D2, D9 | → ~150 fps |
 | O3 | Voile en une passe, couches selon la taille écran | D5 | le gros du GPU sur la cible |
 | O4 | Remplissage borné | D6 | la chute de près |
-| O5 | Réglage de qualité, résolution de rendu, plafond d'images | transverse | la marge sur la cible |
+| O5 | Réglage de qualité, résolution de rendu, plafond d'images — la part « nombre d'objets » s'accroche à la construction de Genèse G1 | transverse | la marge sur la cible |
 | O6 | LOD du shader de l'étoile | D7 | de près, sur la cible |
 | O7 | Nuages figés sur le GPU (si O1-O2 ne suffisent pas) | D3, D4 | le reste du CPU |
 | O8 | **Mesure sur la vraie machine** (ou la plus proche disponible) | — | la seule preuve de l'objectif |

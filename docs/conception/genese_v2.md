@@ -159,12 +159,32 @@ luminosité **de toutes les étoiles** (déjà sommée pour la zone). Taille :
 | **Grand disque et pollution en système multiple** | dettes §2 | petit |
 | **Habitat « complété » = site** | `concept_jeu.md` §5 : changement de modèle d'`Engin` | grand, **hors genèse** |
 
+### 5.4 Le plan et la construction : ce que la performance y gagne
+
+Ajouté le 2026-10-28, *« pour gagner des perf »*. G1 coupe la genèse en deux :
+**`planifier(graine) -> PlanSysteme`** (données pures, aucun objet graphique,
+sérialisable) puis **`instancier(&plan) -> Systeme`** (la seule partie qui
+touche macroquad, sans aucun tirage). Le coût par image n'en bouge pas — c'est
+le rôle d'[`opti_v2.md`](opti_v2.md) (D1 à D11) —, mais trois leviers s'ouvrent :
+
+| Levier | Ce qu'il fait | Gain |
+|---|---|---|
+| **La qualité à la construction** | le plan dit *ce qui existe* (une ceinture de telle largeur, un grand disque, trois comètes) ; `instancier` décide *combien on en dessine* selon le réglage de qualité (Opti-v2 O5) : particules des ceintures (900 et 1 400, écrites en dur aujourd'hui, mêlées aux tirages), boules des nuages, couches du voile, résolution des terrains | **le plus fort pour l'APU** — et la même graine donne le même système sur toutes les machines |
+| **La construction à la demande** | une lune lointaine, une comète hors champ restent une ligne du plan jusqu'à ce que la caméra s'en approche ; construites alors, libérées en s'éloignant | mémoire, temps de chargement, gros systèmes multiples |
+| **Les plans lus sans construction** | la starmap planifie ses voisines (nombre de planètes, sites habitables, dangers) sans rien construire ; un plan se calcule hors du fil principal | starmap, génération sans à-coup |
+
+**Règle à tenir dès G1** : aucun nombre de *rendu* (particules, boules,
+couches, résolution) dans le plan, aucun tirage dans `instancier`. C'est ce
+qui permet de baisser la qualité sans changer les systèmes — et de régler
+O5 sans rouvrir la genèse.
+
 ## 6. Découpage proposé
 
 | Lot | Contenu | Taille | Dépend de |
 |---|---|---|---|
 | **G0** | Trancher §4 (échelle, température, catalogue, hasard, Soleil, rareté, garanties) | décisions | — |
-| **G1** | Flux de hasard nommés + genèse bâtie sans contexte graphique (tests) | M | G0 |
+| **G1** | Flux de hasard nommés + genèse en deux temps, plan puis construction (§5.4) : testable sans contexte graphique, et le point d'accroche de la qualité d'Opti-v2 O5 | M | G0 |
+| **G1 bis** | Construction à la demande (lunes, comètes, terrains selon la distance caméra) | M | G1 |
 | **G2** | Banc statistique (rapport sur N graines) — l'outil qui dira si on rate des trucs | M | G1 |
 | **G3** | Un seul modèle de température ; habitabilité graduée (§5.2) | S | G0 |
 | **G4** | Tirage pondéré dans le catalogue ; `planetes.json` maître | M | G1, G3 |
@@ -173,7 +193,7 @@ luminosité **de toutes les étoiles** (déjà sommée pour la zone). Taille :
 | **G7** | Points de Lagrange (calcul fermé + mode de placement) | M | trajectoires B |
 | **G8** | Étalonnage : le Soleil dans la distribution des G, réglage des deux JSON | M | G2, G4 |
 
-Ordre de grandeur : **9 lots**, dont 4 moyens — comparable aux lots 9 à 15
+Ordre de grandeur : **10 lots**, dont 5 moyens — comparable aux lots 9 à 15
 d'Astres V2. Le gros risque n'est pas le volume de code, c'est **G0** et la
 **fiche de sortie** : tant qu'elles ne sont pas fixées, chaque chantier suivant
 (économie, stations, colonisation) rouvrira la genèse.
