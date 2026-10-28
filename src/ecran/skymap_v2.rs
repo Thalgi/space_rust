@@ -146,6 +146,15 @@ impl SkymapV2 {
         v
     }
 
+    /// Cadre l'astre nommé `nom`, la caméra à `rayons` rayons de son centre
+    /// (`FOCUS`, avec `PROFIL` ou `DIAG`). Sans effet si le nom est inconnu.
+    pub fn cadrer(&mut self, nom: &str, rayons: f32) {
+        if let Some(idx) = (0..self.sys.nb_astres()).find(|&i| self.sys.designation(i) == nom) {
+            self.cam.set_focus(idx);
+            self.cam.set_dist(self.sys.rayon_de(idx).unwrap_or(1.0) * rayons);
+        }
+    }
+
     /// La vue système sur le système engendré par `seed` (le tour du
     /// diagnostic, `DIAG=tour`).
     pub fn sur_graine(seed: u64) -> Self {

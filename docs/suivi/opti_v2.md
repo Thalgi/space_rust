@@ -244,3 +244,28 @@ de leur teinte sous 2 px de rayon apparent, et en maillage au-delà. Test
 Système solaire, machine de dev : **169 → 484 fps** (image 5,9 → 2,1 ms).
 Rapproché d'un engin, le maillage repasse par `draw_mesh` : dette notée, des
 tampons GPU persistants si une vue rapprochée rame.
+
+### Les géantes gazeuses de près
+
+Sur la cible, *« le 16 fps vient du fait que j'ai choisi de visualiser une
+géante gazeuse »* : le relevé `DIAG` a changé de vue en cours de route, ses
+phases ne se comparent donc pas. Deux outils pour le refaire proprement :
+
+- `FOCUS=<astre>` (avec `SYSTEME=solaire`) cadre l'astre à `FOCUS_RAYONS`
+  rayons (4 par défaut) ;
+- une phase **rendu Pixel** dans `DIAG` : la cible basse résolution sans la
+  quantification, pour séparer les deux coûts du rendu Palette.
+
+Machine de dev, la planète remplissant l'écran (`FOCUS_RAYONS=1.6`) :
+
+| | Palette | Net | Pixel |
+|---|---|---|---|
+| Jupiter | 3,0 ms | 3,9 | 2,7 |
+| Saturne | 3,1 | 4,1 | 2,8 |
+| Terre | 5,6 (CPU 3,0) | 3,6 | 5,3 |
+
+La géante coûte ~2 ms de GPU ici : le shader enchaîne une vingtaine de `fbm`
+à 5 octaves par pixel (courbure, deux niveaux de distorsion, détails). La
+quantification ne pèse presque rien ici (Pixel ≈ Palette). La Terre de près
+repaie le maillage de l'ISS et du Starship, désormais assez gros pour être
+dessinés (dette notée plus haut). À trancher avec le relevé de la cible.

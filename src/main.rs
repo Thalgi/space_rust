@@ -134,7 +134,12 @@ async fn main() {
     // (Chantier-Opti-v2, avec `PROFIL`) ; `SYSTEME=solaire` : le système solaire.
     if let Ok(nom) = std::env::var("SYSTEME") {
         if nom == "solaire" {
-            etat = Etat::SkymapV2(Box::new(SkymapV2::new()));
+            // `FOCUS=<astre>` : cadré de près (`FOCUS_RAYONS`, 4 par défaut).
+            let mut v = SkymapV2::new();
+            if let Ok(f) = std::env::var("FOCUS") {
+                v.cadrer(&f, std::env::var("FOCUS_RAYONS").ok().and_then(|r| r.parse().ok()).unwrap_or(4.0));
+            }
+            etat = Etat::SkymapV2(Box::new(v));
         } else if let Some(n) =crate::etoile::types_du_tirage().into_iter().find(|t| *t == nom) {
             etat = Etat::SkymapV2(Box::new(SkymapV2::sur_astre(n)));
         }
@@ -336,14 +341,16 @@ struct Diagnostic {
 }
 
 impl Diagnostic {
-    /// (nom, voile, nuages, rendu net, qualité basse)
-    const PHASES: [(&'static str, bool, bool, bool, bool); 6] = [
-        ("tout", true, true, false, false),
-        ("sans voile", false, true, false, false),
-        ("sans nuages ni bras", true, false, false, false),
-        ("ni voile ni nuages", false, false, false, false),
-        ("tout, rendu Net", true, true, true, false),
-        ("tout, qualite basse", true, true, false, true),
+    /// (nom, voile, nuages, rendu imposé, qualité basse). Le rendu Pixel
+    /// sépare la cible basse résolution de la quantification de palette.
+    const PHASES: [(&'static str, bool, bool, Option<reglages::ModeRendu>, bool); 7] = [
+        ("tout", true, true, None, false),
+        ("sans voile", false, true, None, false),
+        ("sans nuages ni bras", true, false, None, false),
+        ("ni voile ni nuages", false, false, None, false),
+        ("tout, rendu Net", true, true, Some(reglages::ModeRendu::Net), false),
+        ("tout, rendu Pixel", true, true, Some(reglages::ModeRendu::Pixel), false),
+        ("tout, qualite basse", true, true, None, true),
     ];
 
     fn new() -> Self {
@@ -361,11 +368,11 @@ impl Diagnostic {
     }
 
     fn appliquer(&self) {
-        let (_, voile, nuages, net, basse) = Self::PHASES[self.phase];
+        let (_, voile, nuages, rendu, basse) = Self::PHASES[self.phase];
         disque::set_voiles(voile);
         disque::set_nuages(nuages);
         reglages::regler_qualite(if basse { reglages::Qualite::Basse } else { self.qualite_initiale });
-        reglages::regler_rendu(if net { reglages::ModeRendu::Net } else { self.mode_initial });
+        reglages::regler_rendu(rendu.unwrap_or(self.mode_initial));
     }
 
     /// Compte une image ; `true` quand tout est mesuré.
