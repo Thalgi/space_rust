@@ -421,5 +421,28 @@ place de l'étoile y cache ce qui passe derrière elle. Remplissage mesuré :
 de `le_nombre_de_shaders_reste_sous_le_plafond` (17 pour 16) : à régler à
 l'adoption — le fondre dans un existant — ou au retrait.
 
-Mesure du temps : à refaire, la première série tournait machine chargée
-(un jeu ouvert à côté — 15 ms au lieu de 6 pour la référence).
+**Mesure du temps, machine au repos** (T Tauri, `PROTO=0/1/2`, image en ms) :
+
+| | pleine | 1/2 | 1/4 |
+|---|---|---|---|
+| cadrage par défaut, tout | 7,0 | 7,3 | 6,9 |
+| cadrage par défaut, rendu Net | 6,4 | 6,3 | 6,8 |
+
+Rien ne bouge : sur la machine de dev l'image reste égale au CPU, le GPU
+n'est jamais le verrou. Deux essais pour le rendre visible, sans succès :
+- `SURCHARGE_NUAGES=8` (les quads dessinés huit fois, retiré) : c'est le CPU
+  qui monte, ~2,8 ms par répétition — **l'envoi des 36 000 quads coûte à lui
+  seul ~2,8 ms des ~6,5 ms des nuages** (`push_quad`, la copie des lots dans
+  `dessiner_par_lots`, celle de macroquad). Le GPU avale 800 écrans sans
+  ralentir l'image. Piste pour O7.
+- Un chronomètre GPU : `ElapsedQuery` de miniquad 0.4.10 est un bouchon
+  (`get_result` rend toujours 0).
+
+Le seul relevé où le GPU était le verrou est la première série, faite
+pendant qu'un jeu le partageait : de près (dist 1,5), « tout » passait de
+49 ms à 25 (1/2) et 22 (1/4). Indicatif — c'est sur la cible que le gain se
+jugera.
+
+Corrigé en route : `prototypes()` est relu à chaque image par la vue, et la
+recherche de la T Tauri parcourait tout le défilé (~1,5 ms par image, même
+sans nuages). Le rang est maintenant cherché une fois.

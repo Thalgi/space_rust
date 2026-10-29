@@ -259,12 +259,27 @@ fn batir(spec: &Specimen) -> Systeme {
 
 /// **Un soleil du défilé, retouché par `f`** (prototypes, touche 4) : bâti
 /// comme la touche 3 le bâtit, et cadré pareil.
+///
+/// Le rang et le cadre sont cherchés une fois : la vue relit la liste des
+/// prototypes à chaque image, et parcourir le défilé coûtait ~1,5 ms.
 pub(super) fn defile_retouche(nom: &str, f: impl Fn(Soleil) -> Soleil + 'static) -> Option<(Box<dyn Fn() -> Systeme>, f32)> {
-    let spec = (0..types_au_defile().len() + EN_TETE.len())
-        .map(Specimen::du_defile)
-        .find(|s| matches!(s, Specimen::Soleil { nom: n, .. } if n == nom))?;
-    let d = dist_pour(&spec);
-    Some((Box::new(move || batir_retouche(&spec, &f)), d))
+    /// Rang au défilé et cadre, s'il y est.
+    type Trouve = Option<(usize, f32)>;
+    thread_local! {
+        static RANGS: std::cell::RefCell<Vec<(String, Trouve)>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+    let trouve = RANGS.with(|r| {
+        if let Some((_, t)) = r.borrow().iter().find(|(n, _)| n == nom) {
+            return *t;
+        }
+        let t = (0..types_au_defile().len() + EN_TETE.len())
+            .find(|&i| matches!(Specimen::du_defile(i), Specimen::Soleil { nom: n, .. } if n == nom))
+            .map(|i| (i, dist_pour(&Specimen::du_defile(i))));
+        r.borrow_mut().push((nom.to_string(), t));
+        t
+    });
+    let (rang, d) = trouve?;
+    Some((Box::new(move || batir_retouche(&Specimen::du_defile(rang), &f)), d))
 }
 
 fn batir_retouche(spec: &Specimen, f: &dyn Fn(Soleil) -> Soleil) -> Systeme {
