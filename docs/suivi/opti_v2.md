@@ -383,3 +383,43 @@ ceintures du système solaire — prennent le chemin de toujours, inchangé.
 C'était l'essentiel du voile dans le système solaire sur la cible.
 
 Outillage ajouté : la phase DIAG « voile seul, rendu Net ».
+
+## O4 : le remplissage des nuages, mesuré (2026-10-29)
+
+**Le constat.** Sur la machine de dev, les nuages limitent par le CPU
+(image ≈ CPU, ~6 ms) : le GPU absorbe leur remplissage sans broncher, le
+chronomètre ne le montre pas. D'où un instrument indépendant de la machine :
+`disque::remplissage_nuages`, la surface d'écran couverte par les quads des
+nuages et des bras, coupée au cadre, **en écrans**. Colonne « nuages » du
+DIAG ; testé (`le_remplissage_se_coupe_au_cadre`, rouge vérifié par deux
+sabotages).
+
+| T Tauri, `DEFILE=16` | remplissage |
+|---|---|
+| cadrage par défaut (dist 9,5) | ~100 écrans |
+| dist 3 | ~106 |
+| dist 1,5 | ~120 |
+| qualité basse | 55 à 79 |
+
+Chaque pixel est repeint une **centaine de fois**, dès le cadrage par
+défaut. Une trace temporaire (retirée) l'a ventilé par taille écran : le
+remplissage ne vient **pas** de quelques boules géantes collées à la caméra
+— celles-là sont surtout hors champ ou derrière elle —, il est réparti sur
+des milliers de boules de 128 à 512 px de large (écran de 720), et sur les
+bras (un tiers à la moitié selon le tirage). Le plafond de taille écran
+prévu au plan n'en retirerait qu'une part.
+
+**Le levier choisi (par l'utilisateur) : le prototype basse résolution.**
+Touche 4 de la vue isolée, trois T Tauri : nuages et bras à pleine
+résolution, à 1/2 et à 1/4 par axe (`disque::basse_res`). Ils se dessinent
+dans une cible réduite avec sa profondeur, puis s'ajoutent à l'image ; leur
+matériau est purement additif, la somme est la même. Une sphère noire à la
+place de l'étoile y cache ce qui passe derrière elle. Remplissage mesuré :
+~100 → ~25 (1/2) → ~6 écrans (1/4).
+
+⚠️ Le prototype compose avec un pipeline à lui, compté **hors de la marge**
+de `le_nombre_de_shaders_reste_sous_le_plafond` (17 pour 16) : à régler à
+l'adoption — le fondre dans un existant — ou au retrait.
+
+Mesure du temps : à refaire, la première série tournait machine chargée
+(un jeu ouvert à côté — 15 ms au lieu de 6 pour la référence).

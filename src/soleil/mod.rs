@@ -740,6 +740,15 @@ impl Soleil {
         self
     }
 
+    /// **Prototype Opti-v2 O4** : les nuages et les bras de ses disques
+    /// dessinés à `1/k` de la résolution par axe (`Disque::reduire_nuages`).
+    pub fn avec_nuages_reduits(mut self, k: u32) -> Self {
+        for d in &mut self.disques {
+            d.reduire_nuages(k, self.base.rayon);
+        }
+        self
+    }
+
     /// Pose un disque autour de l'étoile, dans un plan **dérivé de sa
     /// graine** : deux trous noirs ne présentent pas la même face.
     pub fn avec_disque(mut self, cfg: DisqueConfig) -> Self {

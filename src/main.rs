@@ -343,6 +343,8 @@ struct Diagnostic {
     debut: f64,
     images: Vec<f32>,
     cpu: Vec<f32>,
+    /// Remplissage des nuages par image, en écrans (`disque::remplissage_nuages`).
+    remplis: Vec<f32>,
     lignes: Vec<String>,
     mode_initial: reglages::ModeRendu,
     qualite_initiale: reglages::Qualite,
@@ -375,6 +377,7 @@ impl Diagnostic {
             debut: get_time(),
             images: Vec::new(),
             cpu: Vec::new(),
+            remplis: Vec::new(),
             lignes: Vec::new(),
             mode_initial: reglages::mode_rendu(),
             qualite_initiale: reglages::qualite(),
@@ -397,9 +400,11 @@ impl Diagnostic {
         // La première phase chauffe plus longtemps : sur la cible, à 1 s,
         // « tout » sortait ~6 ms plus lent que sa répétition en fin de DIAG.
         let chauffe = if self.phase == 0 { 4.0 } else { 1.0 };
+        let remplis = disque::remplissage_nuages();
         if t > chauffe {
             self.images.push(image);
             self.cpu.push(cpu);
+            self.remplis.push(remplis);
         }
         if t < chauffe + 4.0 {
             return false;
@@ -407,15 +412,17 @@ impl Diagnostic {
         let moy = |v: &[f32]| v.iter().sum::<f32>() / v.len().max(1) as f32 * 1000.0;
         let (i, c) = (moy(&self.images), moy(&self.cpu));
         self.lignes.push(format!(
-            "  {:<24} {:>7.1} fps   image {:>6.1} ms   CPU {:>6.1} ms",
+            "  {:<24} {:>7.1} fps   image {:>6.1} ms   CPU {:>6.1} ms   nuages {:>6.1} écrans",
             Self::PHASES[self.phase].0,
             1000.0 / i.max(1e-3),
             i,
-            c
+            c,
+            moy(&self.remplis) / 1000.0
         ));
         self.phase += 1;
         self.images.clear();
         self.cpu.clear();
+        self.remplis.clear();
         self.debut = get_time();
         if self.phase == Self::PHASES.len() {
             println!("DIAG ({} x {}, rendu de départ {:?})", screen_width(), screen_height(), self.mode_initial);

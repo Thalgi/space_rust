@@ -645,7 +645,7 @@ mod tests {
     fn le_nombre_de_shaders_reste_sous_le_plafond() {
         let sites = sites_de_chargement();
         let total: usize = sites.iter().map(|(_, n)| n).sum();
-        assert_eq!(total, 11, "un shader est arrivé ou parti. Détail : {sites:?}");
+        assert_eq!(total, 12, "un shader est arrivé ou parti. Détail : {sites:?}");
 
         // Décompte réel des pipelines vivants, à tenir à jour avec le précédent :
         //  10 templates en cache — planète (corps, atmosphère), soleil (disque,
@@ -662,6 +662,11 @@ mod tests {
             PIPELINES * 2 <= MAX_PIPELINES,
             "plus de marge sous le plafond de pipelines de macroquad"
         );
+        // ⚠️ **Temporaire** : le prototype O4 (`disque::basse_res`) compose sa
+        // cible avec un pipeline à lui, hors de la marge. À régler à son
+        // adoption (le fondre dans un existant) ou à son retrait.
+        const PROTOTYPE_O4: usize = 1;
+        const _: () = assert!(PIPELINES + PROTOTYPE_O4 <= MAX_PIPELINES);
     }
 
     /// **Un shader se charge une fois, pas une fois par objet.**

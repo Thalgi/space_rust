@@ -14,6 +14,7 @@
 //!   (uniform `moitie` + discard) autour du corps de la planète.
 
 pub mod accretion;
+mod basse_res;
 pub mod bras;
 pub mod flot;
 mod config;
@@ -55,6 +56,8 @@ thread_local! {
     static VOILES: Cell<bool> = const { Cell::new(true) };
     // Idem pour les nuages 3D et les bras (voir set_nuages).
     static NUAGES: Cell<bool> = const { Cell::new(true) };
+    // Instrument de mesure (Opti-v2 O4) : voir `remplissage_nuages`.
+    static REMPLISSAGE: Cell<f32> = const { Cell::new(0.0) };
 }
 
 fn mat_particules() -> Material {
@@ -113,6 +116,15 @@ pub fn set_nuages(actifs: bool) {
 /// Vrai si les nuages 3D et les bras sont dessinés (défaut).
 fn nuages_actifs() -> bool {
     NUAGES.with(|v| v.get())
+}
+
+/// **Le remplissage des nuages et des bras depuis le dernier appel**, en
+/// écrans : la surface que couvrent leurs quads, coupée au bord de l'écran,
+/// sur la surface de l'écran. Instrument de mesure (Opti-v2 O4, dette D6) : le
+/// GPU de la machine de dev l'absorbe sans broncher, ce chiffre-là ne dépend
+/// pas de la machine. Remis à zéro à la lecture.
+pub fn remplissage_nuages() -> f32 {
+    REMPLISSAGE.with(|r| r.replace(0.0))
 }
 
 /// Vrai si la couche voile est dessinée (défaut).
@@ -192,6 +204,9 @@ pub struct Disque {
     /// l'autre plutôt que réalloués.
     boules: Vec<(Vec3, f32, Vec3, f32, bool)>,
     quads: (Vec<Vertex>, Vec<u16>),
+    /// Prototype O4 (`basse_res`) : réduction par axe des nuages et des bras
+    /// (1 = pleine résolution), et le rayon de l'étoile qui les cache.
+    nuages_reduits: (u32, f32),
 }
 
 impl Disque {
@@ -235,7 +250,14 @@ impl Disque {
             nuages_cle: None,
             boules: Vec::new(),
             quads: (Vec::new(), Vec::new()),
+            nuages_reduits: (1, 0.0),
         }
+    }
+
+    /// Prototype O4 : nuages et bras dessinés à `1/k` de la résolution par
+    /// axe, cachés par une étoile de rayon `rayon_central` (voir `basse_res`).
+    pub fn reduire_nuages(&mut self, k: u32, rayon_central: f32) {
+        self.nuages_reduits = (k.max(1), rayon_central);
     }
 
     /// Rayon du corps central projetant une ombre sur le champ (planète annelée).
@@ -473,6 +495,11 @@ impl Disque {
             // repart de zéro à chaque lot, donc rien ne déborde, et aucun
             // appel ne passe la limite de macroquad. Le plafond n'est plus
             // qu'une affaire de coût.
+            let (k, rayon_central) = self.nuages_reduits;
+            let reduite = (k > 1).then(|| basse_res::ouvrir(k, viewport_h()));
+            if reduite.is_some() && cote_camera {
+                draw_sphere(cam.rel(p), rayon_central, None, BLACK);
+            }
             gl_use_material(&crate::soleil::materiau_ruban_lumineux());
             let (v, i) = &mut self.quads;
             for &(q, t, c, cote) in &self.nuages {
@@ -487,6 +514,9 @@ impl Disque {
             crate::impostor::dessiner_par_lots(v, i, Some(crate::impostor::halo_partage()));
             vider_lot();
             gl_use_default_material();
+            if let Some(m) = reduite {
+                basse_res::fermer(m);
+            }
         }
     }
 
@@ -585,7 +615,33 @@ impl Disque {
                 self.nuages.push((p + rel, t_b, Color::new(c.x * a, c.y * a, c.z * a, a), cote));
             }
         }
+        let aspect = screen_width() / screen_height().max(1.0);
+        let r = remplissage(self.nuages.iter().map(|n| (n.0 - cam.pos, n.1)), cam, aspect);
+        // En pixels de pleine résolution : la cible réduite en paie k² de moins.
+        let k = self.nuages_reduits.0 as f32;
+        REMPLISSAGE.with(|c| c.set(c.get() + r / (k * k)));
     }
+}
+
+/// **La surface d'écran couverte par des quads face caméra**, en écrans
+/// (voir [`remplissage_nuages`]) : chaque quad de demi-côté `t` centré en
+/// `rel` (relatif à la caméra), coupé au cadre du champ vertical de 45°.
+/// Derrière la caméra, rien.
+pub(crate) fn remplissage(quads: impl Iterator<Item = (Vec3, f32)>, cam: &CameraInfo, aspect: f32) -> f32 {
+    const TAN_DEMI_CHAMP: f32 = 0.414; // tan(22,5°)
+    let (bx, by) = (TAN_DEMI_CHAMP * aspect, TAN_DEMI_CHAMP);
+    let mut s = 0.0;
+    for (rel, t) in quads {
+        let z = rel.dot(cam.forward);
+        if z <= 1e-3 {
+            continue;
+        }
+        let (x, y, d) = (rel.dot(cam.right) / z, rel.dot(cam.up) / z, t / z);
+        let w = ((x + d).min(bx) - (x - d).max(-bx)).max(0.0);
+        let h = ((y + d).min(by) - (y - d).max(-by)).max(0.0);
+        s += w * h;
+    }
+    s / (4.0 * bx * by)
 }
 
 /// **Le pas des effets du lot 12** — nuages 3D, bras de matière, flots
@@ -1113,6 +1169,34 @@ mod tests_prototypes {
     /// les mêmes cases des mêmes valeurs — grille dégénérée (une case, la
     /// caméra dans le disque) comme grille ordinaire, boules hors champ
     /// comprises.
+    /// **Le remplissage se compte dans le cadre** (instrument O4) : un quad
+    /// qui couvre tout l'écran vaut 1, à moitié dehors la moitié, derrière la
+    /// caméra rien.
+    #[test]
+    fn le_remplissage_se_coupe_au_cadre() {
+        let (right, up, forward) = crate::camera::base_orbite(0.3, 0.2);
+        let cam = CameraInfo {
+            pos: Vec3::ZERO,
+            origine: Vec3::ZERO,
+            right,
+            up,
+            forward,
+            light_pos: Vec3::ZERO,
+            light_color: Vec3::ONE,
+            lights_pos: [Vec3::ZERO; 4],
+            lights_color: [Vec3::ZERO; 4],
+        };
+        let r = |q: &[(Vec3, f32)]| remplissage(q.iter().copied(), &cam, 2.0);
+        // À distance 10, le cadre fait 16,56 × 8,28 : demi-côté 10 le déborde.
+        assert!((r(&[(forward * 10.0, 10.0)]) - 1.0).abs() < 1e-5);
+        assert!((r(&[(forward * 10.0, 10.0), (forward * 10.0, 10.0)]) - 2.0).abs() < 1e-5);
+        // Un carré de 1 × 1 au centre : sa part de la surface du cadre.
+        assert!((r(&[(forward * 10.0, 0.5)]) - 1.0 / (16.56 * 8.28)).abs() < 1e-5);
+        // Centré sur le bord droit : la moitié de lui.
+        assert!((r(&[(forward * 10.0 + right * 8.28, 0.5)]) - 0.5 / (16.56 * 8.28)).abs() < 1e-5);
+        assert_eq!(r(&[(-forward * 10.0, 10.0)]), 0.0);
+    }
+
     #[test]
     fn borner_l_empilement_ne_change_rien() {
         fn verser_sans_borne(e: &mut Empilement, centre: Vec2, r: f32, a: f32) {

@@ -254,6 +254,20 @@ fn lignes_debug(
 
 /// Construit un système à un seul astre, centré à l'origine.
 fn batir(spec: &Specimen) -> Systeme {
+    batir_retouche(spec, &|s| s)
+}
+
+/// **Un soleil du défilé, retouché par `f`** (prototypes, touche 4) : bâti
+/// comme la touche 3 le bâtit, et cadré pareil.
+pub(super) fn defile_retouche(nom: &str, f: impl Fn(Soleil) -> Soleil + 'static) -> Option<(Box<dyn Fn() -> Systeme>, f32)> {
+    let spec = (0..types_au_defile().len() + EN_TETE.len())
+        .map(Specimen::du_defile)
+        .find(|s| matches!(s, Specimen::Soleil { nom: n, .. } if n == nom))?;
+    let d = dist_pour(&spec);
+    Some((Box::new(move || batir_retouche(&spec, &f)), d))
+}
+
+fn batir_retouche(spec: &Specimen, f: &dyn Fn(Soleil) -> Soleil) -> Systeme {
     let mut sys = Systeme::new();
     match spec {
         Specimen::Soleil { rayon, couleur, lumi, couronne, regime, nom } => {
@@ -271,7 +285,7 @@ fn batir(spec: &Specimen) -> Systeme {
                 Some(r) => s.avec_regime(*r),
                 None => s,
             };
-            sys.ajouter(Box::new(s));
+            sys.ajouter(Box::new(f(s)));
         }
         Specimen::Planete { rayon, app } => {
             sys.ajouter(Box::new(Planete::new(Vec3::ZERO, Vec3::ZERO, *rayon, 1.0, **app, Vec::new())));
