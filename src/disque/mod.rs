@@ -391,23 +391,52 @@ impl Disque {
             // tranche. Une seule couche : le rendu de toujours.
             // Qualité basse (O5) : une seule couche, le voile d'avant le lot 12
             // (`uniforms_voile` vient d'en poser l'alpha, le plan et la graine).
+            // Opti-v2 O3 : les couches ne font plus qu'une passe — le shader
+            // les compose — et se fondent en une seule quand elles se
+            // confondent à l'écran.
             let n = match crate::reglages::qualite() {
                 crate::reglages::Qualite::Haute => self.cfg.couches.max(1),
                 crate::reglages::Qualite::Basse => 1,
             };
-            for k in 0..n {
-                if n > 1 {
-                    let (alpha, couche, graine) = couche_voile(&self.cfg, k);
-                    mat.set_uniform("alpha", alpha * fondu_couche(couche, cote_cam));
-                    mat.set_uniform("couche", couche);
-                    mat.set_uniform("seed", graine);
+            if n > 1 {
+                let r = self.cfg.externe;
+                let epaisseur = 2.0 * self.cfg.h_r * r * (1.0 - cote_cam * cote_cam).max(0.0).sqrt();
+                let px = impostor::px_rayon(epaisseur, (cam.pos - p).length(), viewport_h());
+                let couches = couches_a_dessiner(&self.cfg, cote_cam, px);
+                if let [seule] = couches[..] {
+                    mat.set_uniform("alpha", seule.x);
+                    mat.set_uniform("seed", seule.z);
+                } else {
+                    let mut tab = [Vec4::ZERO; voile::COUCHES_MAX];
+                    for (t, c) in tab.iter_mut().zip(&couches) {
+                        *t = c.extend(0.0);
+                    }
+                    // L'annulus se pose sur la couche extrême du côté de la
+                    // caméra. ⚠️ Pas sur le plan : caméra dans le rayon du
+                    // disque, les couches hautes du bord opposé passent
+                    // au-dessus d'elle, et les rayons qui les atteignent ne
+                    // croisent jamais le plan. La marge : de combien un rayon
+                    // peut atteindre une couche au-delà du point où il
+                    // traverse celle-ci — au pire, toute l'épaisseur au bord,
+                    // vue au plus rasant.
+                    let o = cam_rel - p_rel;
+                    let h = o.dot(self.axe_n);
+                    let rho = (o - self.axe_n * h).length();
+                    let marge = (2.0 * self.cfg.h_r * r * (rho + r) / h.abs().max(1e-3)).min(r);
+                    mat.set_uniform("couche", self.cfg.h_r * h.signum());
+                    mat.set_uniform("nb_couches", couches.len() as f32);
+                    mat.set_uniform_array("couches", &tab[..]);
+                    mat.set_uniform("cam_rel", (o.x, o.y, o.z));
+                    mat.set_uniform("interne", self.cfg.interne);
+                    mat.set_uniform("externe", r);
+                    mat.set_uniform("marge", marge);
                 }
-                gl_use_material(mat);
-                for lot in &self.voile_lots {
-                    draw_mesh(lot);
-                }
-                vider_lot();
             }
+            gl_use_material(mat);
+            for lot in &self.voile_lots {
+                draw_mesh(lot);
+            }
+            vider_lot();
             gl_use_default_material();
         }
 
@@ -739,6 +768,26 @@ fn couche_voile(c: &DisqueConfig, k: u32) -> (f32, f32, f32) {
     let poids = (-2.0 * x * x).exp();
     let total: f32 = (0..n).map(|j| (-2.0 * (j as f32 / (n - 1) as f32 * 2.0 - 1.0).powi(2)).exp()).sum();
     (c.voile_alpha * poids / total * 1.6, c.h_r * x, c.graine + k as f32 * 7.3)
+}
+
+/// **Les couches du voile à dessiner**, `(alpha, décalage, graine)` chacune,
+/// effacement par la tranche compris (Opti-v2 O3). Une seule quand elles se
+/// confondent — moins d'un pixel d'épaisseur à l'écran (`epaisseur_px`) — ou
+/// qu'il ne reste que le plan : son alpha est alors celui de leur
+/// empilement, sa graine celle du milieu.
+fn couches_a_dessiner(c: &DisqueConfig, cote_cam: f32, epaisseur_px: f32) -> Vec<Vec3> {
+    let n = c.couches.clamp(2, voile::COUCHES_MAX as u32);
+    let v: Vec<Vec3> = (0..n)
+        .map(|k| {
+            let (a, h, g) = couche_voile(c, k);
+            vec3(a * fondu_couche(h, cote_cam), h, g)
+        })
+        .collect();
+    if epaisseur_px < 1.0 || v.iter().all(|x| x.y == 0.0 || x.x == 0.0) {
+        let a = 1.0 - v.iter().map(|x| 1.0 - x.x).product::<f32>();
+        return vec![vec3(a, 0.0, v[n as usize / 2].z)];
+    }
+    v
 }
 
 /// **Ce qui reste d'une couche du voile selon l'angle de vue** : 1 pour la
@@ -1211,6 +1260,31 @@ mod tests_prototypes {
         assert!(couches[3].1.abs() < 1e-6 && couches[3].0 > couches[0].0, "le plan ne pèse pas le plus");
         let somme: f32 = couches.iter().map(|x| x.0).sum();
         assert!((somme / c.voile_alpha - 1.6).abs() < 1e-3, "somme des alphas : {somme}");
+    }
+
+    /// **Le voile en une passe garde ses couches tant qu'elles se voient**
+    /// (Opti-v2 O3) : toutes, épaisses à l'écran ; une seule quand elles se
+    /// confondent, qui couvre autant que leur empilement ; et par la
+    /// tranche, exactement la couche du plan des passes d'avant.
+    #[test]
+    fn les_couches_se_fondent_quand_elles_se_confondent() {
+        let c = DisqueConfig::protoplanetaire(0, 10.0, 100.0, 1000.0).avec_couches(7, 0.08);
+        let toutes = couches_a_dessiner(&c, 0.8, 50.0);
+        assert_eq!(toutes.len(), 7, "des couches perdues à l'écran");
+        for (k, x) in toutes.iter().enumerate() {
+            let (a, h, g) = couche_voile(&c, k as u32);
+            assert_eq!((x.x, x.y, x.z), (a * fondu_couche(h, 0.8), h, g), "couche {k}");
+        }
+
+        let fondues = couches_a_dessiner(&c, 0.8, 0.5);
+        let couvre = 1.0 - toutes.iter().map(|x| 1.0 - x.x).product::<f32>();
+        assert_eq!(fondues.len(), 1, "sous un pixel, encore {} couches", fondues.len());
+        assert!((fondues[0].x - couvre).abs() < 1e-6 && fondues[0].y == 0.0);
+
+        let tranche = couches_a_dessiner(&c, 0.02, 50.0);
+        let (a, _, g) = couche_voile(&c, 3);
+        assert_eq!(tranche.len(), 1, "par la tranche, encore {} couches", tranche.len());
+        assert!(tranche[0].abs_diff_eq(vec3(a, 0.0, g), 1e-6), "par la tranche, plus la couche du plan");
     }
 }
 

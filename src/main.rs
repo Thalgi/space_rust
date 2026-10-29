@@ -156,6 +156,14 @@ async fn main() {
     if let Some(rang) = std::env::var("DEFILE").ok().and_then(|r| r.parse().ok()) {
         etat = Etat::Objet(Box::new(Objet::sur_defile(rang)));
     }
+    // `NUAGES=0` : sans nuages ni bras ; `RENDU=net` : sans filtre — pour
+    // juger un voile seul à la capture (Opti-v2 O3).
+    if std::env::var("NUAGES").is_ok_and(|v| v == "0") {
+        disque::set_nuages(false);
+    }
+    if std::env::var("RENDU").is_ok_and(|v| v == "net") {
+        reglages::regler_rendu(reglages::ModeRendu::Net);
+    }
     let mut frames_capture = 0u32;
 
     loop {
@@ -345,8 +353,10 @@ impl Diagnostic {
     /// sépare la cible basse résolution de la quantification de palette ; sans
     /// voile, il dit si l'écart Palette/Pixel tient au voile. « tout (bis) »
     /// répète la première phase : l'écart entre les deux est la dérive de la
-    /// machine pendant la mesure (chauffe, fréquence).
-    const PHASES: [(&'static str, bool, bool, Option<reglages::ModeRendu>, bool); 9] = [
+    /// machine pendant la mesure (chauffe, fréquence). « voile seul, rendu
+    /// Net » : le voile à pleine résolution, sans les nuages qui dominent le
+    /// CPU — la phase qui juge O3 sur la machine de dev.
+    const PHASES: [(&'static str, bool, bool, Option<reglages::ModeRendu>, bool); 10] = [
         ("tout", true, true, None, false),
         ("sans voile", false, true, None, false),
         ("sans nuages ni bras", true, false, None, false),
@@ -354,6 +364,7 @@ impl Diagnostic {
         ("tout, rendu Net", true, true, Some(reglages::ModeRendu::Net), false),
         ("tout, rendu Pixel", true, true, Some(reglages::ModeRendu::Pixel), false),
         ("sans voile, rendu Pixel", false, true, Some(reglages::ModeRendu::Pixel), false),
+        ("voile seul, rendu Net", true, false, Some(reglages::ModeRendu::Net), false),
         ("tout, qualite basse", true, true, None, true),
         ("tout (bis)", true, true, None, false),
     ];

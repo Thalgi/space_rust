@@ -6,7 +6,6 @@
 precision highp float;
 
 varying vec2 vtc;    // (t radial 0..1, ang 0..1)
-varying float vdot;  // dot(position relative, tocam) -> moitiés avant/arrière
 varying vec3 vpos;   // position relative au centre (monde)
 
 uniform float time;
@@ -32,6 +31,17 @@ uniform float face_lum;      // 1 = face éclairée du plan, 0.55 = face nuit
 uniform float ombre_rayon;   // rayon du corps central (0 = pas d'ombre)
 uniform vec3 lum_couleur;    // couleur * intensité de l'étoile primaire
 uniform float nuages;        // prototype A (lot 12) : amas bouillonnants, 0 = aucun
+// **Le voile en une passe** (Opti-v2 O3) : plus d'une couche, chaque pixel
+// du plan suit son rayon de vue jusqu'à chaque couche et les compose lui-même.
+uniform float nb_couches;    // 1 = le voile à plat, lu sur le maillage
+uniform vec4 couches[8];     // par couche : (alpha, décalage h/r, graine, —)
+uniform vec3 cam_rel;        // caméra, depuis le centre
+uniform vec3 tocam;          // vers la caméra -> moitiés avant/arrière
+uniform vec3 axe_u;
+uniform vec3 axe_n;
+uniform vec3 axe_v;
+uniform float interne;
+uniform float externe;
 
 float hash(float x) {
     return fract(sin(x * 12.9898) * 43758.5453);
@@ -98,15 +108,18 @@ float gauss(float x, float c, float w) {
     return exp(-d * d);
 }
 
-void main() {
+// **Une couche du voile** au point `pos` (depuis le centre) : couleur déjà
+// bornée à [0, 1] — ce que la cible en ferait — et alpha, 0 si rien.
+// `t` radial 0..1, `a0` angle 0..1 au repos, `sd` graine, `alpha_c` opacité.
+vec4 voile(float t, float a0, vec3 pos, float sd, float alpha_c) {
     // Rendu en deux moitiés autour du corps (planètes annelées).
-    if (moitie > 0.5 && vdot < 0.0) discard;
-    if (moitie < -0.5 && vdot >= 0.0) discard;
+    float vd = dot(pos, tocam);
+    if (moitie > 0.5 && vd < 0.0) return vec4(0.0);
+    if (moitie < -0.5 && vd >= 0.0) return vec4(0.0);
 
-    float t = vtc.x;
     // Rotation différentielle : Kepler ~ r^-1.5 (l'intérieur file, le bord traîne).
     float rr = mix(1.0, r_ratio, t);
-    float ang = fract(vtc.y - rotation * time / (6.2831853 * pow(rr, 1.5)));
+    float ang = fract(a0 - rotation * time / (6.2831853 * pow(rr, 1.5)));
 
     // Densité de base : plateau borné par des bords doux + atténuation interne.
     float env = smoothstep(0.0, bord, t) * (1.0 - smoothstep(1.0 - bord, 1.0, t));
@@ -122,7 +135,7 @@ void main() {
         if (b.y <= 0.0001) continue;
         float largeur = b.y;
         if (b.z > 0.0 && b.w > 0.001) {
-            float ph = vtc.y * 6.2831853 - lacune_phase[i];
+            float ph = a0 * 6.2831853 - lacune_phase[i];
             largeur *= 1.0 + 0.55 * b.w * sin(18.0 * ph);
             // Crête de matière soulevée juste au bord (sillage vertical écrasé
             // en surbrillance) : renforce la lisibilité des festons.
@@ -143,7 +156,7 @@ void main() {
         float acc = 0.0;
         for (int k = 0; k < 3; k++) {
             float fk = float(k);
-            float ck = fract(0.08 + hash(seed + fk * 7.31) * 0.12 + fk * 0.09);
+            float ck = fract(0.08 + hash(sd + fk * 7.31) * 0.12 + fk * 0.09);
             float d = abs(ang - ck);
             d = min(d, 1.0 - d);
             acc += gauss(d, 0.0, 0.022);
@@ -157,7 +170,7 @@ void main() {
     if (granulation > 0.001) {
         float angw = ang * 6.2831853;
         vec2 p = vec2(cos(angw), sin(angw)) * (rr / r_ratio); // bord externe = rayon 1
-        vec2 pn = p * gran_freq.x + seed;
+        vec2 pn = p * gran_freq.x + sd;
         float nse = vnoise(pn);
         nse = mix(nse, vnoise(pn * 2.7 + 13.1), gran_freq.y * 0.5);
         float m = smoothstep(gran_seuil - 0.18, gran_seuil + 0.22, nse) * 1.3;
@@ -169,20 +182,20 @@ void main() {
     // tournent ET se cisaillent avec la rotation différentielle.
     if (nuages > 0.001) {
         float angn = ang * 6.2831853;
-        vec2 pa = vec2(cos(angn), sin(angn)) * (rr / r_ratio) * 6.0 + seed;
+        vec2 pa = vec2(cos(angn), sin(angn)) * (rr / r_ratio) * 6.0 + sd;
         float h = amas(pa, time) + 0.5 * amas(pa * 2.3 + 7.7, time * 1.3);
         dens *= mix(1.0, 0.3 + 1.6 * h, nuages);
     }
 
     // Stries radiales fines (texture d'anneau).
-    dens *= 0.86 + 0.14 * hash(floor(t * 130.0) + seed);
+    dens *= 0.86 + 0.14 * hash(floor(t * 130.0) + sd);
 
-    float a = clamp(dens, 0.0, 1.0) * alpha;
-    if (a < 0.004) discard;
+    float a = clamp(dens, 0.0, 1.0) * alpha_c;
+    if (a < 0.004) return vec4(0.0);
 
     // Couleur : gradient radial + variation de bande + émissif interne.
     vec3 col = mix(couleur2, couleur, t);
-    col *= 0.8 + 0.25 * hash(floor(t * 47.0) + seed * 1.7);
+    col *= 0.8 + 0.25 * hash(floor(t * 47.0) + sd * 1.7);
 
     // Éclairage : teinte de l'étoile + face jour/nuit du plan de l'anneau.
     col *= clamp(lum_couleur, 0.0, 1.5) * face_lum;
@@ -190,9 +203,9 @@ void main() {
     // Ombre du corps central (planète annelée) : cylindre projeté le long de
     // la lumière, bord doux (pénombre). LE détail qui vend un Saturne.
     if (ombre_rayon > 0.001) {
-        float along = dot(vpos, dir_lumiere);
+        float along = dot(pos, dir_lumiere);
         if (along > 0.0) {
-            float perp = length(vpos - dir_lumiere * along);
+            float perp = length(pos - dir_lumiere * along);
             float ombre = smoothstep(ombre_rayon * 0.8, ombre_rayon * 1.08, perp);
             col *= mix(0.16, 1.0, ombre);
         }
@@ -201,5 +214,76 @@ void main() {
     // L'émissif (disques proto*) ne subit ni face nuit ni ombre : il émet.
     col += emissif * exp(-t * 2.6) * couleur2;
 
-    gl_FragColor = vec4(max(col, vec3(0.0)), clamp(a, 0.0, 1.0));
+    return vec4(clamp(col, 0.0, 1.0), clamp(a, 0.0, 1.0));
+}
+
+// **Où le rayon de vue croise une couche** : la couche décalée de `c` part
+// du rayon est un cône, hauteur = c × distance à l'axe. `o` l'origine du
+// rayon, `d` sa direction (unitaire), depuis le centre ; le point dans `x`.
+// Vu du côté de la caméra, un rayon ne croise chaque couche qu'une fois —
+// sauf à raser le disque (sous ~3°), là où les couches sont effacées.
+bool croiser(vec3 o, vec3 d, float c, out vec3 x) {
+    float on = dot(o, axe_n);
+    float dn = dot(d, axe_n);
+    if (abs(c) < 1e-6) {
+        if (abs(dn) < 1e-6) return false;
+        float s = -on / dn;
+        x = o + d * s;
+        return s > 0.0;
+    }
+    vec3 op = o - axe_n * on;
+    vec3 dp = d - axe_n * dn;
+    float c2 = c * c;
+    float qa = dn * dn - c2 * dot(dp, dp);
+    float qb = 2.0 * (on * dn - c2 * dot(op, dp));
+    float qc = on * on - c2 * dot(op, op);
+    float s = -1.0;
+    if (abs(qa) < 1e-9) {
+        if (abs(qb) > 1e-9) s = -qc / qb;
+    } else {
+        float disc = qb * qb - 4.0 * qa * qc;
+        if (disc < 0.0) return false;
+        float r = sqrt(disc);
+        float s1 = (-qb - r) / (2.0 * qa);
+        float s2 = (-qb + r) / (2.0 * qa);
+        // La plus proche des racines devant la caméra, du bon côté du plan
+        // (l'équation élevée au carré admet aussi le cône opposé).
+        float lo = min(s1, s2);
+        float hi = max(s1, s2);
+        if (lo > 0.0 && (on + lo * dn) * c >= 0.0) s = lo;
+        else if (hi > 0.0 && (on + hi * dn) * c >= 0.0) s = hi;
+    }
+    if (s <= 0.0) return false;
+    x = o + d * s;
+    return true;
+}
+
+void main() {
+    if (nb_couches < 1.5) {
+        vec4 v = voile(vtc.x, vtc.y, vpos, seed, alpha);
+        if (v.a <= 0.0) discard;
+        gl_FragColor = v;
+        return;
+    }
+    // Les couches composées ici dans l'ordre où elles se dessinaient, une
+    // passe chacune : la k-ième PAR-DESSUS les précédentes. `c` + `reste` ×
+    // fond est ce que donnaient les passes successives.
+    vec3 d = normalize(vpos - cam_rel);
+    vec3 c = vec3(0.0);
+    float reste = 1.0;
+    for (int k = 0; k < 8; k++) {
+        if (float(k) >= nb_couches) break;
+        vec4 p = couches[k];
+        if (p.x <= 0.0) continue;
+        vec3 x;
+        if (!croiser(cam_rel, d, p.y, x)) continue;
+        vec2 q = vec2(dot(x, axe_u), dot(x, axe_v));
+        float t = (length(q) - interne) / (externe - interne);
+        if (t < 0.0 || t > 1.0) continue;
+        vec4 v = voile(t, fract(atan(q.y, q.x) / 6.2831853), x, p.z, p.x);
+        c = v.a * v.rgb + (1.0 - v.a) * c;
+        reste *= 1.0 - v.a;
+    }
+    if (reste > 0.996) discard;
+    gl_FragColor = vec4(c / (1.0 - reste), 1.0 - reste);
 }

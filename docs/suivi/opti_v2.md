@@ -337,3 +337,49 @@ fin pour mesurer la dérive.
 - Jupiter en gros plan coûte en vrai ~22–25 ms (40–45 fps), dont ~6 ms de
   voile. Net ≈ Pixel : le fond de ~17 ms ne vient pas du remplissage des
   pixels (le Pixel en dessine quatre fois moins).
+
+## O3 : le voile en une passe (2026-10-29)
+
+L'ordre est recadré : *les ajustements sur le petit PC passent en dernier* —
+les lots du plan dans l'ordre, chacun mesuré sur la machine de dev.
+
+**Avant** : sept couches (T Tauri, Herbig ; trois pour la Be), sept passes de
+l'annulus entier par moitié, chacune son shader de bruit et son mélange.
+
+**Après** : une passe. L'annulus se pose sur la couche extrême du côté de la
+caméra ; chaque pixel suit son rayon de vue jusqu'à chaque couche (un cône :
+hauteur = décalage × distance à l'axe, intersection exacte du second degré),
+y évalue le voile, et compose les couches **dans l'ordre où elles se
+dessinaient** — le résultat des passes successives, en flottant. Les couches
+se fondent en une seule, d'alpha égal à leur empilement, quand elles tiennent
+sous un pixel d'épaisseur à l'écran ou qu'il ne reste que le plan (par la
+tranche) : `couches_a_dessiner`, testée (`les_couches_se_fondent_quand_elles_se_confondent`,
+rouge vérifié par trois sabotages).
+
+⚠️ Piège rencontré : l'annulus d'abord posé **sur le plan**. Caméra dans le
+rayon du disque (le cadrage par défaut de la T Tauri), les couches hautes du
+bord opposé passent au-dessus d'elle : les rayons qui les atteignent montent,
+ne croisent jamais le plan — le bord lointain pâlissait. Sur la couche du
+côté de la caméra, tout rayon qui atteint une couche la traverse d'abord.
+
+| T Tauri, machine de dev | avant | après |
+|---|---|---|
+| sans nuages ni bras (Palette) | 1,4 ms | 0,6 ms |
+| voile seul, rendu Net (pleine résolution) | 0,9 ms | 0,4 ms |
+| tout | 7,3 ms | 6,7 ms |
+
+Le fond sans voile est à 0,4 ms : le voile passe de ~1,0 à ~0,2 ms. Herbig :
+même chose (1,5 → 0,6 ; 1,0 → 0,4).
+
+**L'image** : captures avant/après sans nuages, en rendu net (`NUAGES=0`,
+`RENDU=net`, nouveaux), six cadrages de la T Tauri (défaut, 12°, 80°, 4°,
+loin, tout près) et trois de la Be, comparées pixel à pixel : l'écart reste
+sous le bruit d'une image à la suivante partout. De loin, un écart moyen de
+0,85/255 sans aucun pixel au-delà de 8 : les stries radiales, arrondies
+autrement par la composition en flottant.
+
+**Ce qu'O3 ne fait pas** : les voiles à **une** couche — anneaux de Saturne,
+ceintures du système solaire — prennent le chemin de toujours, inchangé.
+C'était l'essentiel du voile dans le système solaire sur la cible.
+
+Outillage ajouté : la phase DIAG « voile seul, rendu Net ».

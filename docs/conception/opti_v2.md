@@ -158,7 +158,7 @@ là ») ; les rémanents du lot 13 et les naines des lots 14-15 sont légers.
 |---|---|---|---|
 | O1 | Calcul unique par image, buffers réutilisés | D1, D8 | 38 → ~75 fps |
 | O2 | Empilement réparé (médiane, grille bornée) | D2, D9 | → ~150 fps |
-| O3 | Voile en une passe, couches selon la taille écran | D5 | le gros du GPU sur la cible |
+| O3 | Voile en une passe, couches selon la taille écran ✅ | D5 | voile de la T Tauri ÷5 (dev) ; les voiles à une couche (anneaux, ceintures) ne changent pas |
 | O4 | Remplissage borné | D6 | la chute de près |
 | O5 | Réglage de qualité, résolution de rendu, plafond d'images — la part « nombre d'objets » s'accroche à la construction de Genèse G1 | transverse | la marge sur la cible |
 | O6 | LOD du shader de l'étoile | D7 | de près, sur la cible |

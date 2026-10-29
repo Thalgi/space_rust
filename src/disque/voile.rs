@@ -14,6 +14,8 @@ use std::f32::consts::TAU;
 const N_RADIAL: usize = 10; // bandes radiales (le profil fin est dans le shader)
 const N_SEG: usize = 96;    // segments angulaires (bord externe lisse)
 const QUADS_PAR_LOT: usize = 400;
+/// Couches au plus du voile en une passe (`couches[8]` du shader).
+pub(super) const COUCHES_MAX: usize = 8;
 
 const VERT: &str = include_str!("../shaders/disque_voile.vert.glsl");
 const FRAG: &str = include_str!("../shaders/disque_voile.frag.glsl");
@@ -113,7 +115,9 @@ pub(super) fn uniforms_voile(
     mat.set_uniform("arcs", c.arcs);
     mat.set_uniform("emissif", c.emissif);
     mat.set_uniform("nuages", c.nuages);
-    // À plat par défaut : le dessin en couches (prototype B) le réécrit.
+    // Une couche, lue sur le maillage : le dessin en couches (prototype B) le
+    // réécrit. ⚠️ À poser à chaque fois — le pipeline est partagé.
+    mat.set_uniform("nb_couches", 1.0f32);
     mat.set_uniform("couche", 0.0f32);
     mat.set_uniform("rotation", c.rotation_voile);
     mat.set_uniform("r_ratio", (c.externe / c.interne.max(1e-3)).max(1.001));
@@ -157,6 +161,12 @@ fn uniforms_voile_decl() -> Vec<UniformDesc> {
             UniformDesc::new("emissif", UniformType::Float1),
             UniformDesc::new("nuages", UniformType::Float1),
             UniformDesc::new("couche", UniformType::Float1),
+            UniformDesc::new("nb_couches", UniformType::Float1),
+            UniformDesc::array(UniformDesc::new("couches", UniformType::Float4), COUCHES_MAX),
+            UniformDesc::new("cam_rel", UniformType::Float3),
+            UniformDesc::new("interne", UniformType::Float1),
+            UniformDesc::new("externe", UniformType::Float1),
+            UniformDesc::new("marge", UniformType::Float1),
             UniformDesc::new("rotation", UniformType::Float1),
             UniformDesc::new("r_ratio", UniformType::Float1),
             UniformDesc::new("lacune_phase", UniformType::Float4),
