@@ -382,6 +382,7 @@ impl Diagnostic {
             mode_initial: reglages::mode_rendu(),
             qualite_initiale: reglages::qualite(),
         };
+        disque::mesurer_remplissage(true);
         d.appliquer();
         d
     }

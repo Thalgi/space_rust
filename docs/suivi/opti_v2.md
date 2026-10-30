@@ -526,3 +526,29 @@ contre 7 à 8 d'une image à la suivante — les couleurs passent en flottant
 au lieu de 8 bits, la luminosité moyenne bouge de +0,3/255. Galerie des
 disques (rendu Palette) : identique à l'œil, quelques pixels changent de
 couleur de palette au seuil.
+
+**O7b — l'empilement sur un échantillon, la mesure seulement au DIAG.**
+Après O7a, il restait ~2,4 ms de CPU : bras 1,2 — empilement 0,95 — envoi
+des bras 0,3 — mesure du remplissage ~0,2 (trace temporaire, retirée).
+
+- **L'empilement** ne sert qu'à un facteur global, le 98ᵉ centile des cases
+  éclairées : une statistique, qui s'estime sur un échantillon. Essai sur
+  six vues de la T Tauri (de près, de loin, par la tranche, de dessus) :
+  une boule sur huit, de poids huit, redonne le pic à 3 % et l'amorti à
+  0,001 près, pour un coût ÷6 ; compter un nuage entier comme une seule
+  tache, non — l'amorti tombait à 0,65 au lieu de 0,99 vu de loin.
+  Retenu : une boule sur `n / 4000` (au plus 8) — les petits disques des
+  galeries restent comptés presque en entier (`echantillon`, test
+  `l_empilement_echantillonne_garde_l_amorti`, rouge vérifié : poids
+  oublié, échantillon trop maigre).
+- **La mesure du remplissage** ne tourne plus qu'au DIAG
+  (`mesurer_remplissage`). ⚠️ Le DIAG la paie donc encore : pour le temps
+  du jeu, lire PROFIL.
+
+| machine de dev, PROFIL | O7a | O7b |
+|---|---|---|
+| T Tauri | 346 fps (2,9 ms) | 523 fps (1,9 ms) |
+| Herbig | 339 fps | 500 fps |
+
+Image contre O7a : écart moyen 0,2 à 2/255, contre 7 à 8 d'une image à la
+suivante.

@@ -59,6 +59,7 @@ thread_local! {
     static NUAGES: Cell<bool> = const { Cell::new(true) };
     // Instrument de mesure (Opti-v2 O4) : voir `remplissage_nuages`.
     static REMPLISSAGE: Cell<f32> = const { Cell::new(0.0) };
+    static MESURE: Cell<bool> = const { Cell::new(false) };
 }
 
 fn mat_particules() -> Material {
@@ -124,8 +125,16 @@ fn nuages_actifs() -> bool {
 /// sur la surface de l'écran. Instrument de mesure (Opti-v2 O4, dette D6) : le
 /// GPU de la machine de dev l'absorbe sans broncher, ce chiffre-là ne dépend
 /// pas de la machine. Remis à zéro à la lecture.
+///
+/// Ne se compte que si [`mesurer_remplissage`] l'a demandé : ~0,2 ms par
+/// image sur la machine de dev, pour un chiffre que seul le DIAG lit.
 pub fn remplissage_nuages() -> f32 {
     REMPLISSAGE.with(|r| r.replace(0.0))
+}
+
+/// Allume le compte du remplissage (le DIAG).
+pub fn mesurer_remplissage(oui: bool) {
+    MESURE.with(|m| m.set(oui));
 }
 
 /// Vrai si la couche voile est dessinée (défaut).
@@ -590,28 +599,20 @@ impl Disque {
             let (d0, dn) = fixes.tranche(true, basse);
             let (s0, sn) = fixes.tranche(false, basse);
             let (axe_u, axe_n, axe_v) = (self.axe_u, self.axe_n, self.axe_v);
-            let boules = &mut self.positions;
-            boules.clear();
-            boules.extend(fixes.boules[d0..d0 + dn].iter().chain(&fixes.boules[s0..s0 + sn]).map(|b| {
+            let monde = |b: &nuages_gpu::Boule| {
                 let l = b.locale(temps);
-                (p + axe_u * l.x + axe_n * l.y + axe_v * l.z, b.taille, b.alpha)
-            }));
-            // **L'empilement, vu de la caméra** : en tangentes d'angle (le
-            // plan de l'écran à distance 1), cases de la taille moyenne d'une
-            // boule (voir `Empilement`).
-            let ecran = |q: Vec3| {
-                let d = q - cam.pos;
-                let z = d.dot(cam.forward).max(1e-3);
-                (vec2(d.dot(cam.right), d.dot(cam.up)) / z, z)
+                p + axe_u * l.x + axe_n * l.y + axe_v * l.z
             };
-            let somme: f32 = boules.iter().map(|b| b.1 / ecran(b.0).1).sum();
-            let mut pile = Empilement::new(2.0 * somme / boules.len().max(1) as f32);
-            for b in boules.iter() {
-                let (e, z) = ecran(b.0);
-                pile.verser(e, b.1 / z, b.2);
-            }
+            let toutes = || fixes.boules[d0..d0 + dn].iter().chain(&fixes.boules[s0..s0 + sn]);
+            let boules = &mut self.positions;
+            echantillon(toutes(), dn + sn, monde, boules);
             // Un seul facteur pour tout le disque (voir `attenuation_globale`).
-            self.amorti = attenuation_globale(pile.pic());
+            self.amorti = amorti_empilement(boules, cam);
+            // Le remplissage (DIAG) compte toutes les boules, pas l'échantillon.
+            if MESURE.with(|m| m.get()) {
+                boules.clear();
+                boules.extend(toutes().map(|b| (monde(b), b.taille, b.alpha)));
+            }
             // **Les bras de matière** (`bras`) : de la lumière propre, hors
             // de l'amorti — c'est le gaz qui chauffe en tombant.
             let t = self.temps_nuages();
@@ -628,6 +629,9 @@ impl Disque {
                 self.nuages.push((p + rel, t_b, Color::new(c.x * a, c.y * a, c.z * a, a), cote));
             }
         }
+        if !MESURE.with(|m| m.get()) {
+            return;
+        }
         let aspect = screen_width() / screen_height().max(1.0);
         let quads = self.positions.iter().map(|b| (b.0, b.1)).chain(self.nuages.iter().map(|n| (n.0, n.1)));
         let r = remplissage(quads.map(|(q, t)| (q - cam.pos, t)), cam, aspect);
@@ -635,6 +639,45 @@ impl Disque {
         let k = basse_res::REDUCTION as f32;
         REMPLISSAGE.with(|c| c.set(c.get() + r / (k * k)));
     }
+}
+
+/// Boules au moins dans l'échantillon de l'empilement (voir [`echantillon`]) :
+/// les petits disques des galeries restent comptés en entier, ou presque.
+const BOULES_EMPILEMENT: usize = 4_000;
+
+/// **L'empilement sur un échantillon** (Opti-v2 O7b) : des `nombre` boules,
+/// une sur `pas` — toujours les mêmes —, de poids `pas` ; `monde` les pose.
+/// Sur la T Tauri, un huitième redonne le pic à 3 % et l'amorti à 0,001
+/// près, pour un coût divisé par six
+/// (`l_empilement_echantillonne_garde_l_amorti`).
+fn echantillon<'a>(
+    boules: impl Iterator<Item = &'a nuages_gpu::Boule>,
+    nombre: usize,
+    monde: impl Fn(&nuages_gpu::Boule) -> Vec3,
+    sortie: &mut Vec<(Vec3, f32, f32)>,
+) {
+    let pas = (nombre / BOULES_EMPILEMENT).clamp(1, 8);
+    sortie.clear();
+    sortie.extend(boules.step_by(pas).map(|b| (monde(b), b.taille, b.alpha * pas as f32)));
+}
+
+/// **L'amorti d'un disque** : l'empilement de ses boules (position monde,
+/// rayon, alpha), vu de la caméra, en tangentes d'angle (le plan de l'écran à
+/// distance 1), cases de la taille moyenne d'une boule (voir `Empilement`,
+/// [`attenuation_globale`]).
+pub(crate) fn amorti_empilement(boules: &[(Vec3, f32, f32)], cam: &CameraInfo) -> f32 {
+    let ecran = |q: Vec3| {
+        let d = q - cam.pos;
+        let z = d.dot(cam.forward).max(1e-3);
+        (vec2(d.dot(cam.right), d.dot(cam.up)) / z, z)
+    };
+    let somme: f32 = boules.iter().map(|b| b.1 / ecran(b.0).1).sum();
+    let mut pile = Empilement::new(2.0 * somme / boules.len().max(1) as f32);
+    for b in boules {
+        let (e, z) = ecran(b.0);
+        pile.verser(e, b.1 / z, b.2);
+    }
+    attenuation_globale(pile.pic())
 }
 
 /// **La surface d'écran couverte par des quads face caméra**, en écrans
@@ -1179,6 +1222,39 @@ mod tests_prototypes {
         assert_eq!(hors_lacunes(0.2, &c), 1.0, "la bande brillante vide les nuages");
         let bord = hors_lacunes(0.547, &c);
         assert!(bord > 0.1 && bord < 1.0, "pas de fondu au bord : {bord}");
+    }
+
+    /// **L'empilement échantillonné garde l'amorti** (Opti-v2 O7b) : sur
+    /// la T Tauri, vue de près, de loin, par la tranche et de dessus, une
+    /// boule sur sept redonne l'amorti de toutes à 0,005 près.
+    #[test]
+    fn l_empilement_echantillonne_garde_l_amorti() {
+        let c = habillage::jeune_etoile(DisqueConfig::protosolaire(0, 0.9 * 5.0, 0.9 * 48.0, 1.0), 0.9, 0.37, false);
+        let f = nuages_gpu::Fixes::new(&c);
+        assert!(f.boules.len() / BOULES_EMPILEMENT >= 7, "l'échantillon ne serait pas éprouvé");
+        let mut fort = false;
+        for (yaw, pitch, dist) in [(0.8, 0.5, 9.5), (0.8, 0.5, 1.5), (0.8, 1.4, 9.5), (0.8, 0.07, 9.5), (0.8, 0.8, 60.0), (2.0, 0.2, 20.0)] {
+            let (right, up, forward) = crate::camera::base_orbite(yaw, pitch);
+            let cam = CameraInfo {
+                pos: -forward * dist,
+                origine: Vec3::ZERO,
+                right,
+                up,
+                forward,
+                light_pos: Vec3::ZERO,
+                light_color: Vec3::ONE,
+                lights_pos: [Vec3::ZERO; 4],
+                lights_color: [Vec3::ZERO; 4],
+            };
+            let toutes: Vec<_> = f.boules.iter().map(|b| (b.locale(5.0), b.taille, b.alpha)).collect();
+            let mut part = Vec::new();
+            echantillon(f.boules.iter(), f.boules.len(), |b| b.locale(5.0), &mut part);
+            assert!(part.len() * 6 < toutes.len());
+            let (a, b) = (amorti_empilement(&toutes, &cam), amorti_empilement(&part, &cam));
+            fort |= a < 0.999;
+            assert!((a - b).abs() < 0.005, "yaw {yaw} pitch {pitch} dist {dist} : {a} contre {b}");
+        }
+        assert!(fort, "aucune vue n'amortit : le test n'éprouverait rien");
     }
 
     /// **Les boules figées sont là où le calcul par image les mettait**
