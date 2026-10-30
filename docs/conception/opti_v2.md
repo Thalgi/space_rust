@@ -98,7 +98,7 @@ Classée par gravité **sur la cible**. CPU = processeur, GPU = carte graphique.
 | D3 | **Les boules reconstruites à chaque image** : position (`hache`, sinus, grappe), taille, teinte, éclairement — alors que tout sauf l'angle orbital est fixe | CPU — `nuage_3d`, `boule_de_grappe` | 2,4 ms par appel | ~11 ms par image | 🟠 |
 | D4 | **Les quads envoyés depuis le CPU** à chaque image (`push_quad`, lots de 800) — 28 800 boules + jet (~5 000 par côté) + bras | CPU — `dessiner_nuages_3d` | 2,0 ms par appel | ~9 ms par image | 🟠 |
 | D5 | **Le voile en couches** : 7 couches (T Tauri, Herbig ; 3 pour la Be) × 2 moitiés = **14 passes** de l'annulus plein, shader de bruit à chaque fois, sur un disque qui remplit l'écran de près | **GPU** — `disque_voile.frag`, `couche_voile` | ~1,4 ms par image | **~35-40 ms** par image | 🔴 |
-| D6 | **Le remplissage additif des nuages de près** : des milliers de grosses boules transparentes superposées couvrent l'écran — la chute sous 40 fps signalée en jeu, tout près d'un disque | **GPU** — nuages, jet, bras | non isolé (masqué par D1-D4 ici) | élevé, de près | 🔴 |
+| D6 | **Le remplissage additif des nuages de près** : des milliers de grosses boules transparentes superposées couvrent l'écran — la chute sous 40 fps signalée en jeu, tout près d'un disque | **GPU** — nuages, jet, bras | ~100 écrans repeints par image dès le cadrage par défaut (O4) | ~21 ms sur la cible | ✅ O4 |
 | D7 | **Le shader de l'étoile s'est alourdi** au fil d'Astres V2 : ébullition (bulles, cellules), surface par type, champ magnétique, taches d'accrétion, cœur, aplatissement — calculés sur tout le quad de l'étoile et de sa couronne. Négligeable ici (G : 2 000 fps), mais plein écran de près sur un iGPU | GPU — `soleil.frag.glsl` | < 0,5 ms | 5-15 ms de près | 🟠 |
 | D8 | **Allocations par image** : `Vec` de 28 800 boules, `Vec` des bras, du jet, des fragments… recréés à chaque appel | CPU | inclus dans D3-D4 | — | 🟡 |
 | D9 | **Le grand disque en vue système** : 3 000 boules + empilement 512², deux fois | CPU | ~1,2 ms par image | ~3 ms | 🟡 |
@@ -159,7 +159,7 @@ là ») ; les rémanents du lot 13 et les naines des lots 14-15 sont légers.
 | O1 | Calcul unique par image, buffers réutilisés | D1, D8 | 38 → ~75 fps |
 | O2 | Empilement réparé (médiane, grille bornée) | D2, D9 | → ~150 fps |
 | O3 | Voile en une passe, couches selon la taille écran ✅ | D5 | voile de la T Tauri ÷5 (dev) ; les voiles à une couche (anneaux, ceintures) ne changent pas |
-| O4 | Remplissage borné | D6 | la chute de près |
+| O4 | Remplissage borné ✅ — les nuages et les bras dans une cible à 1/2 par axe (le remplissage était réparti sur toutes les tailles de boules, pas sur quelques géantes) | D6 | petit PC : T Tauri 70 → 49 ms (défaut), 78 → 56 ms (de près) ; remplissage ~100 → ~25 écrans. Reste un plancher de 35 à 50 ms : calcul et envoi des boules — O7 |
 | O5 | Réglage de qualité, résolution de rendu, plafond d'images — la part « nombre d'objets » s'accroche à la construction de Genèse G1 | transverse | la marge sur la cible |
 | O6 | LOD du shader de l'étoile | D7 | de près, sur la cible |
 | O7 | Nuages figés sur le GPU (si O1-O2 ne suffisent pas) | D3, D4 | le reste du CPU |

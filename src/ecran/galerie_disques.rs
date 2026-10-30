@@ -156,9 +156,11 @@ impl GalerieDisques {
         let mut e = |nom: &str, cfg: DisqueConfig, soleil: Soleil, recul: f32,
                      corps: Vec<(usize, Planete)>| {
             let cam_pos = vec3(0.0, cfg.externe * 0.95, cfg.externe * recul);
+            let mut disque = Disque::new(cfg);
+            disque.set_rayon_central(soleil.base.rayon);
             self.cellules.push(Cellule {
                 nom: nom.to_string(),
-                contenu: Contenu::EtoileEtDisque(soleil, Disque::new(cfg), corps),
+                contenu: Contenu::EtoileEtDisque(soleil, disque, corps),
                 cam_pos,
             });
         };
@@ -448,7 +450,14 @@ impl GalerieDisques {
                     nom: format!("Proto {code}{} : {}", d.suffixe, d.libelle),
                     contenu: Contenu::EtoileEtAnneaux(
                         Soleil::new(Vec3::ZERO, 1.6, orange, 0.6),
-                        d.disques.into_iter().map(Disque::new).collect(),
+                        d.disques
+                            .into_iter()
+                            .map(|c| {
+                                let mut dq = Disque::new(c);
+                                dq.set_rayon_central(1.6);
+                                dq
+                            })
+                            .collect(),
                         planetes,
                     ),
                     cam_pos: vec3(0.0, ext * 0.95, ext * 2.15),

@@ -446,3 +446,41 @@ jugera.
 Corrigé en route : `prototypes()` est relu à chaque image par la vue, et la
 recherche de la T Tauri parcourait tout le défilé (~1,5 ms par image, même
 sans nuages). Le rang est maintenant cherché une fois.
+
+### Sur le petit PC, et l'adoption du 1/2 (2026-10-30)
+
+`DIAG=1 PROTO=0/1/2`, 1920 × 1080, rendu Palette, image en ms :
+
+| T Tauri | pleine | 1/2 | 1/4 |
+|---|---|---|---|
+| défaut, tout | 70,1 | 48,7 | 40,8 |
+| défaut, rendu Net | 86,1 | 70,8 | 46,6 |
+| défaut, sans nuages ni bras | 5,6 | 5,6 | 5,5 |
+| de près (1,5), tout | 78,4 | 56,5 | 57,8 |
+| de près, rendu Net | 91,5 | 96,7 | 87,6 |
+
+- **Le remplissage était bien un verrou de la cible** : ~21 ms de moins à
+  1/2, ~0,27 ms par écran repeint (~2 milliards de pixels par seconde).
+- **1/4 n'apporte presque plus rien** (−8 ms par défaut, rien de près) :
+  **1/2 retenu** par l'utilisateur.
+- **Le plancher qui reste, 35 à 50 ms pour les nuages, n'est pas du
+  remplissage** : c'est le calcul et l'envoi des ~36 000 boules par image
+  (~6,5 ms sur la machine de dev, dont ~2,8 d'envoi). C'est le lot O7.
+- Sur la cible, la colonne CPU du DIAG suit l'image même quand c'est le GPU
+  qui coûte : le pilote fait attendre le processeur dans les dessins. Là-bas
+  c'est la variation de l'image qui parle, pas l'écart image/CPU.
+- Noté au passage : en rendu Net de près, le voile seul coûte 21 ms (5 au
+  cadrage par défaut).
+
+**L'adoption** : tous les disques dessinent leurs nuages et leurs bras à 1/2
+(`disque::basse_res`, `REDUCTION`), l'étoile qui les cache est posée par
+`Soleil::avec_disque` et par la galerie des disques (`set_rayon_central`).
+La composition passe par le pipeline plasma — des UV décalées de 2 lui font
+lire la cible telle quelle —, le compte de pipelines revient à 16. Prototype
+retiré, touche 4 vide.
+
+⚠️ Piège trouvé à l'adoption : `pop_camera_state` de macroquad ne rend pas
+le viewport, et `get_viewport` rend l'**écran** quand aucun n'est posé. Le
+reposer tel quel dans la cible deux fois plus petite du rendu Palette
+grossissait toute la suite de l'image ; on ne repose qu'un viewport de
+cellule (galeries).

@@ -204,9 +204,9 @@ pub struct Disque {
     /// l'autre plutôt que réalloués.
     boules: Vec<(Vec3, f32, Vec3, f32, bool)>,
     quads: (Vec<Vertex>, Vec<u16>),
-    /// Prototype O4 (`basse_res`) : réduction par axe des nuages et des bras
-    /// (1 = pleine résolution), et le rayon de l'étoile qui les cache.
-    nuages_reduits: (u32, f32),
+    /// Rayon de l'étoile qui cache les nuages passant derrière elle, dans la
+    /// cible réduite où ils se dessinent (`basse_res`). 0 : rien ne les cache.
+    rayon_central: f32,
 }
 
 impl Disque {
@@ -250,14 +250,14 @@ impl Disque {
             nuages_cle: None,
             boules: Vec::new(),
             quads: (Vec::new(), Vec::new()),
-            nuages_reduits: (1, 0.0),
+            rayon_central: 0.0,
         }
     }
 
-    /// Prototype O4 : nuages et bras dessinés à `1/k` de la résolution par
-    /// axe, cachés par une étoile de rayon `rayon_central` (voir `basse_res`).
-    pub fn reduire_nuages(&mut self, k: u32, rayon_central: f32) {
-        self.nuages_reduits = (k.max(1), rayon_central);
+    /// Rayon de l'étoile au centre : elle cache les nuages qui passent
+    /// derrière elle (voir `basse_res`).
+    pub fn set_rayon_central(&mut self, r: f32) {
+        self.rayon_central = r;
     }
 
     /// Rayon du corps central projetant une ombre sur le champ (planète annelée).
@@ -495,10 +495,9 @@ impl Disque {
             // repart de zéro à chaque lot, donc rien ne déborde, et aucun
             // appel ne passe la limite de macroquad. Le plafond n'est plus
             // qu'une affaire de coût.
-            let (k, rayon_central) = self.nuages_reduits;
-            let reduite = (k > 1).then(|| basse_res::ouvrir(k, viewport_h()));
-            if reduite.is_some() && cote_camera {
-                draw_sphere(cam.rel(p), rayon_central, None, BLACK);
+            let retour = basse_res::ouvrir(viewport_h());
+            if cote_camera && self.rayon_central > 0.0 {
+                draw_sphere(cam.rel(p), self.rayon_central, None, BLACK);
             }
             gl_use_material(&crate::soleil::materiau_ruban_lumineux());
             let (v, i) = &mut self.quads;
@@ -514,9 +513,7 @@ impl Disque {
             crate::impostor::dessiner_par_lots(v, i, Some(crate::impostor::halo_partage()));
             vider_lot();
             gl_use_default_material();
-            if let Some(m) = reduite {
-                basse_res::fermer(m);
-            }
+            basse_res::fermer(retour);
         }
     }
 
@@ -618,7 +615,7 @@ impl Disque {
         let aspect = screen_width() / screen_height().max(1.0);
         let r = remplissage(self.nuages.iter().map(|n| (n.0 - cam.pos, n.1)), cam, aspect);
         // En pixels de pleine résolution : la cible réduite en paie k² de moins.
-        let k = self.nuages_reduits.0 as f32;
+        let k = basse_res::REDUCTION as f32;
         REMPLISSAGE.with(|c| c.set(c.get() + r / (k * k)));
     }
 }
