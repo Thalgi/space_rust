@@ -51,6 +51,21 @@ impl Camera for Reduite {
 pub(super) struct Retour {
     matrice: Mat4,
     viewport: Option<(i32, i32, i32, i32)>,
+    passe: RenderPass,
+    taille: (i32, i32),
+}
+
+impl Retour {
+    /// La matrice de l'image, que la cible reprend.
+    pub fn matrice(&self) -> Mat4 {
+        self.matrice
+    }
+
+    /// La cible, pour qui y dessine sans macroquad (`nuages_gpu`) : sa
+    /// passe miniquad et sa taille.
+    pub fn cible(&self) -> (macroquad::miniquad::RenderPass, (i32, i32)) {
+        (self.passe.raw_miniquad_id(), self.taille)
+    }
 }
 
 /// Bascule le dessin vers la cible réduite (vidée), avec la matrice de
@@ -73,7 +88,12 @@ pub(super) fn ouvrir(viewport_h: f32) -> Retour {
     // grossissait et décalait toute la suite de l'image.
     let vp = gl.get_viewport();
     let ecran = (0, 0, screen_width() as i32, screen_height() as i32);
-    let retour = Retour { matrice: gl.get_projection_matrix(), viewport: (vp != ecran).then_some(vp) };
+    let retour = Retour {
+        matrice: gl.get_projection_matrix(),
+        viewport: (vp != ecran).then_some(vp),
+        passe: cible.render_pass.clone(),
+        taille: (l as i32, h as i32),
+    };
     push_camera_state();
     set_camera(&Reduite { matrice: retour.matrice, cible });
     clear_background(Color::new(0.0, 0.0, 0.0, 0.0));

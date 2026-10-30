@@ -484,3 +484,45 @@ le viewport, et `get_viewport` rend l'**écran** quand aucun n'est posé. Le
 reposer tel quel dans la cible deux fois plus petite du rendu Palette
 grossissait toute la suite de l'image ; on ne repose qu'un viewport de
 cellule (galeries).
+
+## O7 : les nuages figés sur le GPU (2026-10-30)
+
+**Où partait le temps** (trace temporaire, retirée ; T Tauri, vue isolée,
+machine de dev, par image) : boules recalculées 1,9 ms — empilement 0,6 —
+bras et jets 1,2 — envoi des quads 1,7 (dont ~1,4 pour les boules).
+
+**O7a — les boules.** Un nuage ne fait que tourner : rayon, hauteur,
+décalages de grappe, taille, teinte et éclat sont fixes, seul l'angle
+avance (`ang0 + ω·temps`). `nuage_3d` est scindé — `nuage_fixe` en est la
+partie fixe, source unique — et les boules vivent dans un buffer GPU
+construit une fois par disque (`disque::nuages_gpu`). Le shader
+`nuages.vert.glsl` les fait tourner, les éclaire (`eclairement_boule`,
+gardée en règle de test) et pose leurs quads.
+
+- **Un pipeline miniquad brut**, pas un `Material` : `draw_mesh` recopie
+  les sommets dans le lot de macroquad à chaque appel, c'était le renvoi à
+  supprimer. Il dessine directement dans la cible réduite d'O4, après la
+  sphère qui cache.
+- **Le côté du plan d'une boule ne change pas en tournant** : rangées
+  dessus puis dessous, chaque moitié du disque dessine une tranche ; la
+  qualité basse est le début de chaque tranche.
+- **L'empilement reste sur le CPU** : il lui faut les positions écran, que
+  `Boule::locale` redonne sans hachage.
+- Test `les_boules_figees_tournent_comme_avant` : à trois instants, chaque
+  boule tombe sur `nuage_3d` + son décalage, du bon côté, dans l'ordre —
+  rouge vérifié par trois sabotages (côté inversé, décalage oublié, coupe
+  de la qualité basse).
+
+| machine de dev, image | avant | après |
+|---|---|---|
+| T Tauri, défaut | 6,3 ms | 3,2 ms |
+| T Tauri, de près (1,5) | 6,3 ms | 3,2 ms |
+| T Tauri, qualité basse | 3,4 ms | 2,5 ms |
+| Herbig, défaut | 6,1 ms | 3,0 ms |
+
+**L'image** : captures avant/après (ancienne version compilée à part),
+quatre cadrages de la T Tauri en rendu Net : écart moyen 0,3 à 2,6/255
+contre 7 à 8 d'une image à la suivante — les couleurs passent en flottant
+au lieu de 8 bits, la luminosité moyenne bouge de +0,3/255. Galerie des
+disques (rendu Palette) : identique à l'œil, quelques pixels changent de
+couleur de palette au seuil.

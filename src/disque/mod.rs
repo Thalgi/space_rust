@@ -15,6 +15,7 @@
 
 pub mod accretion;
 mod basse_res;
+mod nuages_gpu;
 pub mod bras;
 pub mod flot;
 mod config;
@@ -138,6 +139,7 @@ pub fn vider_cache_materials() {
     TPL_PART.with(|c| *c.borrow_mut() = None);
     TPL_VOILE.with(|c| *c.borrow_mut() = None);
     TPL_ACCRETION.with(|c| *c.borrow_mut() = None);
+    nuages_gpu::vider_cache();
 }
 
 /// Hauteur du viewport courant (galerie : hauteur de cellule / facteur pixel).
@@ -200,9 +202,15 @@ pub struct Disque {
     /// Ce qui les a fait calculer : caméra, position, temps, viewport. Tant
     /// qu'il ne change pas, `nuages` vaut pour cette image.
     nuages_cle: Option<[f32; 15]>,
-    /// Les boules avant l'amorti, et les quads : réutilisés d'une image à
-    /// l'autre plutôt que réalloués.
-    boules: Vec<(Vec3, f32, Vec3, f32, bool)>,
+    /// **Les boules des nuages, figées** (Opti-v2 O7) : construites au premier
+    /// calcul, sur le GPU au premier dessin (`nuages_gpu`).
+    fixes: Option<nuages_gpu::Fixes>,
+    tampons: Option<nuages_gpu::Tampons>,
+    /// L'amorti de l'image, `attenuation_globale` de l'empilement.
+    amorti: f32,
+    /// Les boules de l'image pour l'empilement (position monde, rayon,
+    /// alpha), et les quads des bras : réutilisés plutôt que réalloués.
+    positions: Vec<(Vec3, f32, f32)>,
     quads: (Vec<Vertex>, Vec<u16>),
     /// Rayon de l'étoile qui cache les nuages passant derrière elle, dans la
     /// cible réduite où ils se dessinent (`basse_res`). 0 : rien ne les cache.
@@ -248,7 +256,10 @@ impl Disque {
             mat_voile,
             nuages: Vec::new(),
             nuages_cle: None,
-            boules: Vec::new(),
+            fixes: None,
+            tampons: None,
+            amorti: 1.0,
+            positions: Vec::new(),
             quads: (Vec::new(), Vec::new()),
             rayon_central: 0.0,
         }
@@ -499,6 +510,27 @@ impl Disque {
             if cote_camera && self.rayon_central > 0.0 {
                 draw_sphere(cam.rel(p), self.rayon_central, None, BLACK);
             }
+            let temps = self.temps_nuages();
+            if let Some(fixes) = &self.fixes {
+                let tampons = self.tampons.get_or_insert_with(|| nuages_gpu::Tampons::new(fixes));
+                let cote_cam = self.axe_n.dot(cam.pos - p);
+                let basse = crate::reglages::qualite() == crate::reglages::Qualite::Basse;
+                let tranche = fixes.tranche((cote_cam >= 0.0) == cote_camera, basse);
+                let v3 = |v: Vec3| [v.x, v.y, v.z];
+                let u = nuages_gpu::Uniformes {
+                    mvp: retour.matrice(),
+                    centre: v3(cam.rel(p)),
+                    axe_u: v3(self.axe_u),
+                    axe_n: v3(self.axe_n),
+                    axe_v: v3(self.axe_v),
+                    cam_right: v3(cam.right),
+                    cam_up: v3(cam.up),
+                    temps,
+                    amorti: self.amorti,
+                };
+                let (passe, taille) = retour.cible();
+                tampons.dessiner(passe, taille, &u, tranche);
+            }
             gl_use_material(&crate::soleil::materiau_ruban_lumineux());
             let (v, i) = &mut self.quads;
             for &(q, t, c, cote) in &self.nuages {
@@ -551,30 +583,19 @@ impl Disque {
             };
             // Toutes les boules, des deux côtés du plan : l'empilement à
             // l'écran se compte sur l'ensemble (voir `attenuation_globale`).
-            // Sortie le temps du calcul (`self` y est lu), rendue à la fin.
-            let mut boules = std::mem::take(&mut self.boules);
+            // Elles sont figées (`nuages_gpu`) : seul l'angle tourne.
+            let temps = self.temps_nuages();
+            let basse = n < self.cfg.nuages_3d.min(40_000 / grappe);
+            let fixes = self.fixes.get_or_insert_with(|| nuages_gpu::Fixes::new(&self.cfg));
+            let (d0, dn) = fixes.tranche(true, basse);
+            let (s0, sn) = fixes.tranche(false, basse);
+            let (axe_u, axe_n, axe_v) = (self.axe_u, self.axe_n, self.axe_v);
+            let boules = &mut self.positions;
             boules.clear();
-            for k in 0..n {
-                let (loc, taille, eclat, t) = nuage_3d(k, &self.cfg, self.temps_nuages());
-                let eclat = eclat * hors_lacunes(t, &self.cfg);
-                if eclat <= 0.0 {
-                    continue;
-                }
-                let rel = self.axe_u * loc.x + self.axe_n * loc.y + self.axe_v * loc.z;
-                // ⚠️ **Pas teinté par la lumière de l'étoile** : elle monte à
-                // chaque flare, et le disque entier battait avec — « un effet
-                // de battement de cœur » (2026-10-22).
-                let c = self.cfg.voile_couleur2.lerp(self.cfg.voile_couleur, t) * teinte_nuage(k, &self.cfg);
-                // Vers l'étoile, depuis le nuage : c'est d'où vient la lumière.
-                let vers_etoile = (-rel).normalize_or_zero();
-                for j in 0..grappe {
-                    let (d, t_j, poids) = boule_de_grappe(k, j, grappe, taille);
-                    let dw = self.axe_u * d.x + self.axe_n * d.y + self.axe_v * d.z;
-                    let cote = du_cote_camera(rel + dw, self.axe_n, cote_cam);
-                    let lum = eclairement_boule(dw, vers_etoile);
-                    boules.push((p + rel + dw, t_j, c * lum, eclat * 0.35 * poids, cote));
-                }
-            }
+            boules.extend(fixes.boules[d0..d0 + dn].iter().chain(&fixes.boules[s0..s0 + sn]).map(|b| {
+                let l = b.locale(temps);
+                (p + axe_u * l.x + axe_n * l.y + axe_v * l.z, b.taille, b.alpha)
+            }));
             // **L'empilement, vu de la caméra** : en tangentes d'angle (le
             // plan de l'écran à distance 1), cases de la taille moyenne d'une
             // boule (voir `Empilement`).
@@ -587,15 +608,10 @@ impl Disque {
             let mut pile = Empilement::new(2.0 * somme / boules.len().max(1) as f32);
             for b in boules.iter() {
                 let (e, z) = ecran(b.0);
-                pile.verser(e, b.1 / z, b.3);
+                pile.verser(e, b.1 / z, b.2);
             }
             // Un seul facteur pour tout le disque (voir `attenuation_globale`).
-            let f = attenuation_globale(pile.pic());
-            for &(q, t_j, c, a, cote) in boules.iter() {
-                let a = a * f;
-                self.nuages.push((q, t_j, Color::new(c.x * a, c.y * a, c.z * a, a), cote));
-            }
-            self.boules = boules;
+            self.amorti = attenuation_globale(pile.pic());
             // **Les bras de matière** (`bras`) : de la lumière propre, hors
             // de l'amorti — c'est le gaz qui chauffe en tombant.
             let t = self.temps_nuages();
@@ -613,7 +629,8 @@ impl Disque {
             }
         }
         let aspect = screen_width() / screen_height().max(1.0);
-        let r = remplissage(self.nuages.iter().map(|n| (n.0 - cam.pos, n.1)), cam, aspect);
+        let quads = self.positions.iter().map(|b| (b.0, b.1)).chain(self.nuages.iter().map(|n| (n.0, n.1)));
+        let r = remplissage(quads.map(|(q, t)| (q - cam.pos, t)), cam, aspect);
         // En pixels de pleine résolution : la cible réduite en paie k² de moins.
         let k = basse_res::REDUCTION as f32;
         REMPLISSAGE.with(|c| c.set(c.get() + r / (k * k)));
@@ -894,6 +911,11 @@ pub(crate) fn boule_de_grappe(k: u32, j: u32, grappe: u32, taille: f32) -> (Vec3
 /// C'est ce qui donne du **volume** à un nuage additif, qui ne peut ni
 /// masquer ni assombrir ce qu'il y a derrière lui : sans ce dégradé, la
 /// grappe se lisait comme un autocollant posé sur le disque (2026-10-22).
+///
+/// ⚠️ **Le dessin ne l'appelle plus** : c'est `nuages.vert.glsl` qui éclaire
+/// (Opti-v2 O7). Elle reste la règle écrite, que ses tests éprouvent — le
+/// shader en est la copie.
+#[cfg(test)]
 pub(crate) fn eclairement_boule(decalage: Vec3, vers_etoile: Vec3) -> f32 {
     let cote = decalage.normalize_or_zero().dot(vers_etoile); // -1 ombre … +1 éclairé
     0.35 + 0.65 * (0.5 + 0.5 * cote)
@@ -912,12 +934,36 @@ pub(crate) fn eclairement_boule(decalage: Vec3, vers_etoile: Vec3) -> f32 {
 /// l'éclat, que la grappe du prototype F faisait s'allumer et s'éteindre d'un
 /// bloc — *« un effet de battement de cœur »* (2026-10-22). Un nuage ne
 /// respire plus : il tourne, c'est tout.
+///
+/// Le dessin passe par [`nuage_fixe`] et le shader (Opti-v2 O7) ; cette forme
+/// reste la référence des tests.
+#[cfg(test)]
 pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32, f32) {
+    let n = nuage_fixe(k, c);
+    let ang = n.ang0 + n.omega * temps;
+    (vec3(ang.cos() * n.r, n.z, ang.sin() * n.r), n.taille, n.eclat, n.t)
+}
+
+/// **Ce qui ne bouge pas d'un nuage** (Opti-v2 O7) : il ne fait que tourner,
+/// à l'angle `ang0 + omega · temps`. Source unique de [`nuage_3d`] et des
+/// boules figées sur le GPU (`nuages_gpu`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct NuageFixe {
+    pub r: f32,
+    pub z: f32,
+    pub ang0: f32,
+    pub omega: f32,
+    pub taille: f32,
+    pub eclat: f32,
+    pub t: f32,
+}
+
+pub(crate) fn nuage_fixe(k: u32, c: &DisqueConfig) -> NuageFixe {
     use std::f32::consts::TAU;
     let h = |s: f32| hache(k as f32, c.graine, s);
     let rayon = |t: f32| c.interne + t * (c.externe - c.interne);
     let kepler = |r: f32| (c.gm / (r * r * r).max(1e-6)).sqrt();
-    let (t, ang, z_rel, gros) = if c.nuages_amas > 0 {
+    let (t, ang0, omega, z_rel, gros) = if c.nuages_amas > 0 {
         // **G — des amas massés** : chaque nuage appartient à un amas, posé
         // près du plan ; l'amas tourne d'un bloc à la vitesse de son centre,
         // sans se disperser le long de l'orbite — la gravité les rassemble.
@@ -925,8 +971,8 @@ pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32,
         let ha = |s: f32| hache(a + 9_000.0, c.graine, s);
         let tc = 0.08 + 0.84 * ha(1.0);
         let t = (tc + (h(1.0) - 0.5) * 0.09).clamp(0.0, 1.0);
-        let ang = ha(2.0) * TAU + (h(2.0) - 0.5) * 0.45 + kepler(rayon(tc)) * temps;
-        (t, ang, (h(3.0) * 2.0 - 1.0) * 0.5, 1.0)
+        let ang0 = ha(2.0) * TAU + (h(2.0) - 0.5) * 0.45;
+        (t, ang0, kepler(rayon(tc)), (h(3.0) * 2.0 - 1.0) * 0.5, 1.0)
     } else if c.nuages_bras > 0 {
         // **I — un ouragan dont l'œil est l'étoile** : un quart des nuages
         // fait le **mur de l'œil**, un anneau serré tout autour d'elle ; les
@@ -941,9 +987,9 @@ pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32,
         // aspect »* — d'où des nuages tassés vers l'œil (h^1,8), et des bras
         // inégaux : longueur, largeur, enroulement, taille de leurs nuages et
         // départ propres à chacun.
-        let tourne = kepler(rayon(0.5)) * temps;
+        let tourne = kepler(rayon(0.5));
         if h(6.0) < 0.2 {
-            (0.04 + 0.08 * h(1.0), h(2.0) * TAU + tourne, (h(3.0) * 2.0 - 1.0) * 0.6, 1.0)
+            (0.04 + 0.08 * h(1.0), h(2.0) * TAU, tourne, (h(3.0) * 2.0 - 1.0) * 0.6, 1.0)
         } else {
             let bras = k % c.nuages_bras;
             let hb = |s: f32| hache(bras as f32 + 7_000.0, c.graine, s);
@@ -953,13 +999,12 @@ pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32,
             let depart = (bras as f32 + (hb(4.0) - 0.5) * 0.6) * TAU / c.nuages_bras as f32;
             let t = 0.04 + (longueur - 0.04) * h(1.0).powf(1.8);
             let spirale = depart + enroulement * (rayon(t) / c.interne.max(1e-3)).ln();
-            (t, spirale + (h(2.0) - 0.5) * largeur + tourne, (h(3.0) * 2.0 - 1.0) * 0.8, 0.7 + 0.7 * hb(5.0))
+            (t, spirale + (h(2.0) - 0.5) * largeur, tourne, (h(3.0) * 2.0 - 1.0) * 0.8, 0.7 + 0.7 * hb(5.0))
         }
     } else {
         // **C — des nuages épars** sur l'anneau, chacun à sa vitesse de Kepler.
         let t = h(1.0);
-        let ang = h(2.0) * TAU + kepler(rayon(t)) * temps;
-        (t, ang, (h(3.0) * 2.0 - 1.0) * 1.5, 1.0)
+        (t, h(2.0) * TAU, kepler(rayon(t)), (h(3.0) * 2.0 - 1.0) * 1.5, 1.0)
     };
     let r = rayon(t);
     let z = z_rel * c.h_r * r * (r / c.externe.max(1e-6)).powf(c.evasement);
@@ -969,7 +1014,7 @@ pub(crate) fn nuage_3d(k: u32, c: &DisqueConfig, temps: f32) -> (Vec3, f32, f32,
     // taille ne fond pas avec le rayon sous le quart de l'anneau.
     let r_taille = if c.nuages_bras > 0 { r.max(rayon(0.25)) } else { r };
     let taille = r_taille * (0.03 + 0.05 * h(5.0)) * c.taille_nuages * gros;
-    (vec3(ang.cos() * r, z, ang.sin() * r), taille, eclat, t)
+    NuageFixe { r, z, ang0, omega, taille, eclat, t }
 }
 
 /// Pseudo-hasard déterministe dans `[0 ; 1[`, propre à un rang et une graine.
@@ -1134,6 +1179,44 @@ mod tests_prototypes {
         assert_eq!(hors_lacunes(0.2, &c), 1.0, "la bande brillante vide les nuages");
         let bord = hors_lacunes(0.547, &c);
         assert!(bord > 0.1 && bord < 1.0, "pas de fondu au bord : {bord}");
+    }
+
+    /// **Les boules figées sont là où le calcul par image les mettait**
+    /// (Opti-v2 O7) : à tout instant, chacune tombe sur `nuage_3d` plus son
+    /// décalage de grappe, dans l'ordre des rangs ; celles d'au-dessus du plan
+    /// d'abord, et la qualité basse est le début de chaque côté.
+    #[test]
+    fn les_boules_figees_tournent_comme_avant() {
+        let c = proto().avec_grappe(5);
+        let f = nuages_gpu::Fixes::new(&c);
+        let grappe = c.grappe;
+        let n = c.nuages_3d;
+        for temps in [0.0, 13.7, 250.0] {
+            let mut attendu: Vec<(bool, bool, Vec3)> = Vec::new();
+            for k in 0..n {
+                let (loc, taille, eclat, t) = nuage_3d(k, &c, temps);
+                if eclat * hors_lacunes(t, &c) <= 0.0 {
+                    continue;
+                }
+                for j in 0..grappe {
+                    let (d, _, _) = boule_de_grappe(k, j, grappe, taille);
+                    attendu.push((loc.y + d.y >= 0.0, k < n / 3, loc + d));
+                }
+            }
+            let range = |dessus: bool, basse: bool| -> Vec<Vec3> {
+                attendu.iter().filter(|a| a.0 == dessus && (a.1 || !basse)).map(|a| a.2).collect()
+            };
+            for (dessus, basse) in [(true, false), (false, false), (true, true), (false, true)] {
+                let (debut, nombre) = f.tranche(dessus, basse);
+                let obtenu: Vec<Vec3> = f.boules[debut..debut + nombre].iter().map(|b| b.locale(temps)).collect();
+                let attendu = range(dessus, basse);
+                assert_eq!(obtenu.len(), attendu.len(), "dessus {dessus}, basse {basse}");
+                for (o, a) in obtenu.iter().zip(&attendu) {
+                    assert!(o.abs_diff_eq(*a, 1e-4), "{o} contre {a} à t = {temps}");
+                }
+            }
+        }
+        assert_eq!(f.boules.len(), f.dessus[0] + f.dessous[0]);
     }
 
     /// **Une grosse boule n'est pas éteinte par les petites qui tombent

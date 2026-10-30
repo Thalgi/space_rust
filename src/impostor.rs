@@ -652,6 +652,9 @@ mod tests {
         //     couronne, plasma), disque (particules, voile, ACCRÉTION),
         //     éclairage, palette ;
         //   6 par instance — un fond étoilé par écran (5) + le panache (1).
+        // Hors compte : le pipeline miniquad brut des boules des nuages
+        // (`disque::nuages_gpu`, Opti-v2 O7) — macroquad ne le connaît pas, il
+        // ne pèse pas sur son plafond.
         //
         // ⚠️ L'accrétion (sous-lot 5.1) est le dernier arrivé : un disque
         // d'accrétion n'occulte pas ce qu'il y a derrière lui, il **émet**, et
