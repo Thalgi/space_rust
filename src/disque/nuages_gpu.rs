@@ -15,6 +15,10 @@
 //! Le côté du plan d'une boule ne change pas en tournant (la rotation est
 //! dans le plan) : elles sont rangées **dessus**, puis **dessous**, et chaque
 //! moitié du disque dessine une tranche du buffer.
+//!
+//! **Le flot bipolaire** (les jets, O7c) suit la même recette avec son propre
+//! shader, `flot.vert.glsl`, copie de `flot::animer` : chaque boule y coule le
+//! long d'une trajectoire fixe.
 
 use super::{boule_de_grappe, hors_lacunes, nuage_fixe, teinte_nuage, DisqueConfig};
 use macroquad::miniquad::{
@@ -119,43 +123,143 @@ pub(super) struct Uniformes {
     pub amorti: f32,
 }
 
-/// Les buffers GPU d'un disque, construits une fois.
+/// **Le flot bipolaire, figé** (Opti-v2 O7c) : ses boules fixes, le côté du
+/// dessus d'abord (`flot::boules_fixes`), et combien il y en a dessus. Le
+/// côté du plan d'une boule est son lobe.
+pub(super) struct FlotFixe {
+    pub boules: Vec<super::flot::BouleFixe>,
+    pub dessus: usize,
+}
+
+impl FlotFixe {
+    pub fn new(f: &super::flot::Flot) -> Self {
+        let boules = super::flot::boules_fixes(f);
+        let dessus = boules.iter().filter(|b| b.cote > 0.0).count();
+        FlotFixe { boules, dessus }
+    }
+
+    /// La tranche `(début, nombre)` d'un côté du plan.
+    pub fn tranche(&self, dessus: bool) -> (usize, usize) {
+        if dessus {
+            (0, self.dessus)
+        } else {
+            (self.dessus, self.boules.len() - self.dessus)
+        }
+    }
+}
+
+#[repr(C)]
+struct SommetFlot {
+    boule: [f32; 4],
+    tirage: [f32; 4],
+    coin: [f32; 2],
+}
+
+#[repr(C)]
+pub(super) struct UniformesFlot {
+    pub mvp: Mat4,
+    pub centre: [f32; 3],
+    pub axe_u: [f32; 3],
+    pub axe_n: [f32; 3],
+    pub axe_v: [f32; 3],
+    pub cam_right: [f32; 3],
+    pub cam_up: [f32; 3],
+    pub temps: f32,
+    pub lobe_haut: [f32; 4],
+    pub lobe_bas: [f32; 4],
+    pub parois: [f32; 2],
+    pub flot: [f32; 4],
+    pub longueur: f32,
+}
+
+impl UniformesFlot {
+    /// Ce que le shader lit du flot `f` : ses deux lobes (`flot::lobe`).
+    pub fn lobes(f: &super::flot::Flot) -> ([f32; 4], [f32; 4], [f32; 2], [f32; 4], f32) {
+        let (h, b) = (super::flot::lobe(f, 1.0), super::flot::lobe(f, -1.0));
+        (
+            [h.longueur, h.ouverture, h.jet, h.cone],
+            [b.longueur, b.ouverture, b.jet, b.cone],
+            [h.parois, b.parois],
+            [f.rayon_astre, f.finesse, f.asymetrie, f.forme],
+            f.longueur,
+        )
+    }
+}
+
+const COINS: [[f32; 2]; 4] = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];
+
+/// Les buffers GPU de quads, construits une fois.
 pub(super) struct Tampons {
     vb: BufferId,
     ib: BufferId,
 }
 
 impl Tampons {
-    pub fn new(f: &Fixes) -> Self {
-        let mut sommets = Vec::with_capacity(f.boules.len() * 4);
-        let mut indices: Vec<u32> = Vec::with_capacity(f.boules.len() * 6);
-        for b in &f.boules {
-            let i0 = sommets.len() as u32;
-            for coin in [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]] {
-                sommets.push(Sommet {
+    /// Les boules des nuages.
+    pub fn nuages(f: &Fixes) -> Self {
+        let sommets: Vec<Sommet> = f
+            .boules
+            .iter()
+            .flat_map(|b| {
+                COINS.map(|coin| Sommet {
                     orbite: [b.r, b.z, b.ang0, b.omega],
                     decal: [b.decal.x, b.decal.y, b.decal.z, b.taille],
                     couleur: [b.couleur.x, b.couleur.y, b.couleur.z, b.alpha],
                     coin,
-                });
-            }
-            indices.extend_from_slice(&[i0, i0 + 1, i0 + 2, i0, i0 + 2, i0 + 3]);
-        }
+                })
+            })
+            .collect();
+        Self::de_quads(&sommets)
+    }
+
+    /// Les boules du flot.
+    pub fn flot(f: &FlotFixe) -> Self {
+        use super::flot::Famille;
+        let sommets: Vec<SommetFlot> = f
+            .boules
+            .iter()
+            .flat_map(|b| {
+                let famille = match b.famille {
+                    Famille::Jet => 0.0,
+                    Famille::Cone => 1.0,
+                    Famille::Noeud => 2.0,
+                    Famille::Paroi => 3.0,
+                };
+                COINS.map(|coin| SommetFlot { boule: [famille, b.cote, b.s0, 0.0], tirage: [b.k[0], b.k[1], b.k[2], 0.0], coin })
+            })
+            .collect();
+        Self::de_quads(&sommets)
+    }
+
+    /// Quatre sommets par quad, dans l'ordre de `COINS`.
+    fn de_quads<T>(sommets: &[T]) -> Self {
         // ⚠️ Indices `u32` : plus de 65 536 sommets. OpenGL de bureau les
         // prend toujours ; un GLES 2 sans `OES_element_index_uint`, non.
+        let indices: Vec<u32> = (0..sommets.len() as u32 / 4)
+            .flat_map(|q| {
+                let i0 = q * 4;
+                [i0, i0 + 1, i0 + 2, i0, i0 + 2, i0 + 3]
+            })
+            .collect();
         let ctx = unsafe { get_internal_gl() }.quad_context;
-        let vb = ctx.new_buffer(BufferType::VertexBuffer, BufferUsage::Immutable, BufferSource::slice(&sommets));
+        let vb = ctx.new_buffer(BufferType::VertexBuffer, BufferUsage::Immutable, BufferSource::slice(sommets));
         let ib = ctx.new_buffer(BufferType::IndexBuffer, BufferUsage::Immutable, BufferSource::slice(&indices));
         Tampons { vb, ib }
     }
 
-    /// Dessine `nombre` boules depuis la `debut`-ième, dans la passe
-    /// `cible` de taille `(l, h)` — la cible réduite des nuages.
-    pub fn dessiner(&self, cible: RenderPass, (l, h): (i32, i32), u: &Uniformes, (debut, nombre): (usize, usize)) {
+    /// Dessine `nombre` quads depuis le `debut`-ième avec `pipeline`, dans
+    /// la passe `cible` de taille `(l, h)` — la cible réduite des nuages.
+    pub fn dessiner<U>(
+        &self,
+        pipeline: Pipeline,
+        cible: RenderPass,
+        (l, h): (i32, i32),
+        u: &U,
+        (debut, nombre): (usize, usize),
+    ) {
         if nombre == 0 {
             return;
         }
-        let pipeline = pipeline();
         let halo = crate::impostor::halo_partage().raw_miniquad_id();
         let mut gl = unsafe { get_internal_gl() };
         gl.flush(); // ce que macroquad a en file passe avant (la sphère qui cache)
@@ -179,50 +283,79 @@ impl Drop for Tampons {
 }
 
 thread_local! {
-    static PIPELINE: RefCell<Option<Pipeline>> = const { RefCell::new(None) };
+    static PIPELINES: RefCell<[Option<Pipeline>; 2]> = const { RefCell::new([None, None]) };
 }
 
-/// Vide le pipeline : le prochain dessin relit les `.glsl` (touche R).
+/// Vide les pipelines : le prochain dessin relit les `.glsl` (touche R).
 pub(super) fn vider_cache() {
-    PIPELINE.with(|p| *p.borrow_mut() = None);
+    PIPELINES.with(|p| *p.borrow_mut() = [None, None]);
 }
 
-fn pipeline() -> Pipeline {
-    PIPELINE.with(|p| *p.borrow_mut().get_or_insert_with(construire_pipeline))
-}
-
-fn construire_pipeline() -> Pipeline {
-    let ctx = unsafe { get_internal_gl() }.quad_context;
+/// Les uniforms communs aux deux shaders, dans l'ordre des `Uniformes`.
+fn uniforms_communs() -> Vec<UniformDesc> {
     let f3 = |n: &str| UniformDesc::new(n, UniformType::Float3);
-    let meta = ShaderMeta {
-        images: vec!["Texture".to_string()],
-        uniforms: UniformBlockLayout {
-            uniforms: vec![
-                UniformDesc::new("mvp", UniformType::Mat4),
-                f3("centre"),
-                f3("axe_u"),
-                f3("axe_n"),
-                f3("axe_v"),
-                f3("cam_right"),
-                f3("cam_up"),
-                UniformDesc::new("temps", UniformType::Float1),
-                UniformDesc::new("amorti", UniformType::Float1),
-            ],
-        },
-    };
-    let vert = crate::impostor::source("nuages.vert.glsl", VERT);
+    vec![
+        UniformDesc::new("mvp", UniformType::Mat4),
+        f3("centre"),
+        f3("axe_u"),
+        f3("axe_n"),
+        f3("axe_v"),
+        f3("cam_right"),
+        f3("cam_up"),
+        UniformDesc::new("temps", UniformType::Float1),
+    ]
+}
+
+/// Le pipeline des nuages.
+pub(super) fn pipeline_nuages() -> Pipeline {
+    PIPELINES.with(|p| {
+        *p.borrow_mut()[0].get_or_insert_with(|| {
+            let mut u = uniforms_communs();
+            u.push(UniformDesc::new("amorti", UniformType::Float1));
+            let attributs = [
+                VertexAttribute::new("orbite", VertexFormat::Float4),
+                VertexAttribute::new("decal", VertexFormat::Float4),
+                VertexAttribute::new("couleur", VertexFormat::Float4),
+                VertexAttribute::new("coin", VertexFormat::Float2),
+            ];
+            construire_pipeline("nuages.vert.glsl", VERT, u, &attributs)
+        })
+    })
+}
+
+/// Le pipeline du flot.
+pub(super) fn pipeline_flot() -> Pipeline {
+    PIPELINES.with(|p| {
+        *p.borrow_mut()[1].get_or_insert_with(|| {
+            let mut u = uniforms_communs();
+            u.extend([
+                UniformDesc::new("lobe_haut", UniformType::Float4),
+                UniformDesc::new("lobe_bas", UniformType::Float4),
+                UniformDesc::new("parois", UniformType::Float2),
+                UniformDesc::new("flot", UniformType::Float4),
+                UniformDesc::new("longueur", UniformType::Float1),
+            ]);
+            let attributs = [
+                VertexAttribute::new("boule", VertexFormat::Float4),
+                VertexAttribute::new("tirage", VertexFormat::Float4),
+                VertexAttribute::new("coin", VertexFormat::Float2),
+            ];
+            construire_pipeline("flot.vert.glsl", VERT_FLOT, u, &attributs)
+        })
+    })
+}
+
+fn construire_pipeline(nom: &str, defaut: &'static str, uniforms: Vec<UniformDesc>, attributs: &[VertexAttribute]) -> Pipeline {
+    let ctx = unsafe { get_internal_gl() }.quad_context;
+    let meta = ShaderMeta { images: vec!["Texture".to_string()], uniforms: UniformBlockLayout { uniforms } };
+    let vert = crate::impostor::source(nom, defaut);
     let frag = crate::impostor::source("nuages.frag.glsl", FRAG);
     let shader = ctx
         .new_shader(ShaderSource::Glsl { vertex: &vert, fragment: &frag }, meta)
-        .expect("shader des nuages");
+        .unwrap_or_else(|e| panic!("shader {nom} : {e:?}"));
     ctx.new_pipeline(
         &[BufferLayout::default()],
-        &[
-            VertexAttribute::new("orbite", VertexFormat::Float4),
-            VertexAttribute::new("decal", VertexFormat::Float4),
-            VertexAttribute::new("couleur", VertexFormat::Float4),
-            VertexAttribute::new("coin", VertexFormat::Float2),
-        ],
+        attributs,
         shader,
         // Les réglages du plasma, que les boules empruntaient : additif, la
         // profondeur lue (l'étoile les cache) mais jamais écrite.
@@ -236,4 +369,5 @@ fn construire_pipeline() -> Pipeline {
 }
 
 const VERT: &str = include_str!("../shaders/nuages.vert.glsl");
+const VERT_FLOT: &str = include_str!("../shaders/flot.vert.glsl");
 const FRAG: &str = include_str!("../shaders/nuages.frag.glsl");

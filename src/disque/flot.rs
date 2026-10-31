@@ -63,6 +63,18 @@ fn h(i: f32, s: f32) -> f32 {
     ((i * 12.9898 + s * 37.719).sin() * 43_758.547).fract().abs()
 }
 
+/// **Le tirage d'une plaque de paroi**, dans `[0 ; 1[`, pour une case
+/// (entière, < 1 000) : sans sinus, que des produits et des parties
+/// fractionnaires, pour que le shader (`flot.vert.glsl`) tire **les mêmes**
+/// plaques. Le `sin` de `h`, sur des arguments de ~650 000, n'a pas la même
+/// valeur d'un GPU à l'autre, ni sur le CPU (Opti-v2 O7c).
+pub fn hache_plaque(case: f32) -> f32 {
+    let mut p = (case * 0.1031).fract();
+    p *= p + 33.33;
+    p *= p + p;
+    p.fract()
+}
+
 /// **Le rayon de la cavité** à la hauteur `z` : un sablier parabolique,
 /// étroit au pied, large de 45 % de la longueur au bout.
 pub fn rayon_cavite(f: &Flot, z: f32) -> f32 {
@@ -88,133 +100,168 @@ pub fn lobe(f: &Flot, cote: f32) -> Flot {
     }
 }
 
-/// **Toutes les boules du flot** au temps `temps`, les deux côtés.
+/// **Toutes les boules du flot** au temps `temps`, les deux côtés : les
+/// boules fixes ([`boules_fixes`]) posées à cet instant ([`animer`]).
 pub fn boules(f: &Flot, temps: f32) -> Vec<Boule> {
+    boules_fixes(f).iter().filter_map(|b| animer(b, f, temps)).collect()
+}
+
+/// Les quatre parts d'un flot.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Famille {
+    Jet,
+    Cone,
+    Noeud,
+    Paroi,
+}
+
+/// **Une boule du flot, ce qui ne change pas** (Opti-v2 O7c) : sa part, son
+/// côté, sa phase de départ le long du flot, et ses tirages — une boule coule
+/// le long d'une trajectoire fixe, `s = fract(s0 + vitesse · temps)`. Le
+/// shader `flot.vert.glsl` est la copie de [`animer`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BouleFixe {
+    pub famille: Famille,
+    pub cote: f32,
+    pub s0: f32,
+    pub k: [f32; 3],
+}
+
+/// Les boules du flot, le côté du dessus d'abord.
+pub fn boules_fixes(f: &Flot) -> Vec<BouleFixe> {
     if f.longueur <= 0.0 {
         return Vec::new();
     }
     let mut v = Vec::new();
     for cote in [1.0_f32, -1.0] {
-        let graine = if cote > 0.0 { 0.0 } else { 50_000.0 };
+        let g = if cote > 0.0 { 0.0 } else { 50_000.0 };
         let fc = lobe(f, cote);
-        let debut = v.len();
-        jet(&fc, temps, cote, graine, &mut v);
-        cone(&fc, temps, cote, graine, &mut v);
-        noeuds(&fc, temps, cote, graine, &mut v);
-        parois(&fc, temps, cote, graine, &mut v);
-        // La précession courbe le flot en S : chaque lobe part de son côté,
-        // d'autant plus qu'il s'éloigne.
-        if f.asymetrie > 0.0 {
-            for b in &mut v[debut..] {
-                let y = b.0.y.abs() / f.longueur;
-                b.0.x += cote * f.asymetrie * 0.12 * f.longueur * y * y;
+        let b = |famille, s0, k| BouleFixe { famille, cote, s0, k };
+        if fc.jet > 0.0 {
+            for j in 0..300 {
+                let i = j as f32 + g;
+                v.push(b(Famille::Jet, h(i, 1.0), [h(i, 2.0), h(i, 3.0), 0.0]));
+            }
+        }
+        if fc.cone > 0.0 {
+            for j in 0..1500 {
+                let i = j as f32 + g + 1_000.0;
+                v.push(b(Famille::Cone, h(i, 1.0), [h(i, 2.0), h(i, 3.0), 0.0]));
+            }
+        }
+        let n = fc.noeuds;
+        for k in 0..n {
+            for j in 0..40 {
+                let i = (k * 40 + j) as f32 + g + 3_000.0;
+                v.push(b(Famille::Noeud, k as f32 / n as f32, [h(i, 1.0), h(i, 2.0), 0.0]));
+            }
+        }
+        if fc.parois > 0.0 {
+            // Fine, la paroi n'est vue que par plaques : deux fois plus de
+            // boules, pour qu'elles se lisent comme des plaques et pas comme
+            // des points.
+            let n = if fc.finesse > 0.0 { 3200 } else { 1600 };
+            for j in 0..n {
+                let i = j as f32 + g + 6_000.0;
+                v.push(b(Famille::Paroi, h(i, 1.0), [h(i, 2.0), h(i, 3.0), g / 100.0]));
             }
         }
     }
     v
 }
 
+/// **Une boule du flot à l'instant `temps`** ; `None` si elle est éteinte
+/// (une paroi fine hors de ses plaques). La précession courbe le flot en S :
+/// chaque lobe part de son côté, d'autant plus qu'il s'éloigne.
+pub fn animer(b: &BouleFixe, f: &Flot, temps: f32) -> Option<Boule> {
+    let fc = lobe(f, b.cote);
+    let (mut p, taille, c, a) = match b.famille {
+        Famille::Jet => jet(&fc, temps, b),
+        Famille::Cone => cone(&fc, temps, b),
+        Famille::Noeud => noeud(&fc, temps, b),
+        Famille::Paroi => paroi(&fc, temps, b)?,
+    };
+    if f.asymetrie > 0.0 {
+        let y = p.y.abs() / f.longueur;
+        p.x += b.cote * f.asymetrie * 0.12 * f.longueur * y * y;
+    }
+    Some((p, taille, c, a))
+}
+
 /// Le jet : un filet vif qui file le long de l'axe, en se perdant.
-fn jet(f: &Flot, temps: f32, cote: f32, g: f32, v: &mut Vec<Boule>) {
-    if f.jet <= 0.0 {
-        return;
-    }
+fn jet(f: &Flot, temps: f32, b: &BouleFixe) -> Boule {
     let l = f.longueur;
-    for j in 0..300 {
-        let i = j as f32 + g;
-        let s = (h(i, 1.0) + temps * 0.25).fract();
-        let z = f.rayon_astre + s * (l - f.rayon_astre);
-        let ecart = 0.012 * l * (0.3 + s);
-        let a = h(i, 2.0) * TAU;
-        let p = vec3(a.cos() * ecart * h(i, 3.0), cote * z, a.sin() * ecart * h(i, 3.0));
-        v.push((p, 0.012 * l, vec3(0.85, 0.9, 1.0), f.jet * 0.4 * (1.0 - s).sqrt()));
-    }
+    let s = (b.s0 + temps * 0.25).fract();
+    let z = f.rayon_astre + s * (l - f.rayon_astre);
+    let ecart = 0.012 * l * (0.3 + s);
+    let a = b.k[0] * TAU;
+    let p = vec3(a.cos() * ecart * b.k[1], b.cote * z, a.sin() * ecart * b.k[1]);
+    (p, 0.012 * l, vec3(0.85, 0.9, 1.0), f.jet * 0.4 * (1.0 - s).sqrt())
 }
 
 /// **J1** — la traînée : la poussière entraînée remplit un cône qui
 /// s'élargit, monte lentement et s'efface au loin ; claire au pied, où
 /// l'étoile l'éclaire, brune plus haut.
-fn cone(f: &Flot, temps: f32, cote: f32, g: f32, v: &mut Vec<Boule>) {
-    if f.cone <= 0.0 {
-        return;
-    }
+fn cone(f: &Flot, temps: f32, b: &BouleFixe) -> Boule {
     let l = f.longueur;
-    for j in 0..1500 {
-        let i = j as f32 + g + 1_000.0;
-        let s = (h(i, 1.0) + temps * 0.04).fract();
-        let z = s * l;
-        let rho = rayon_cavite(f, z) * 0.9 * h(i, 2.0).sqrt();
-        let a = h(i, 3.0) * TAU;
-        let p = vec3(a.cos() * rho, cote * z, a.sin() * rho);
-        let c = vec3(1.0, 0.7, 0.45).lerp(vec3(0.55, 0.35, 0.22), s);
-        // Effacée au ras de l'étoile, qu'elle noierait.
-        let monte = (s / 0.12).min(1.0).powi(2);
-        v.push((p, 0.025 * l + 0.05 * z, c, f.cone * 0.32 * (1.0 - s) * monte));
-    }
+    let s = (b.s0 + temps * 0.04).fract();
+    let z = s * l;
+    let rho = rayon_cavite(f, z) * 0.9 * b.k[0].sqrt();
+    let a = b.k[1] * TAU;
+    let p = vec3(a.cos() * rho, b.cote * z, a.sin() * rho);
+    let c = vec3(1.0, 0.7, 0.45).lerp(vec3(0.55, 0.35, 0.22), s);
+    // Effacée au ras de l'étoile, qu'elle noierait.
+    let monte = (s / 0.12).min(1.0).powi(2);
+    (p, 0.025 * l + 0.05 * z, c, f.cone * 0.32 * (1.0 - s) * monte)
 }
 
 /// **J2** — les nœuds : des étraves de choc qui filent le long du jet,
 /// régulièrement espacées, rouges, l'apex en avant.
-fn noeuds(f: &Flot, temps: f32, cote: f32, g: f32, v: &mut Vec<Boule>) {
-    let n = f.noeuds;
+fn noeud(f: &Flot, temps: f32, b: &BouleFixe) -> Boule {
     let l = f.longueur;
-    for k in 0..n {
-        let s = (k as f32 / n as f32 + temps * 0.05).fract();
-        let z = f.rayon_astre * 2.0 + s * l;
-        let rk = 0.05 * l * (0.5 + s);
-        let fondu = (1.0 - s) * (s * 8.0).min(1.0);
-        for j in 0..40 {
-            let i = (k * 40 + j) as f32 + g + 3_000.0;
-            let alpha = h(i, 1.0) * 1.1;
-            let phi = h(i, 2.0) * TAU;
-            // Une calotte tournée vers l'avant : l'apex devant, les ailes
-            // rabattues vers l'étoile.
-            let p = vec3(alpha.sin() * phi.cos() * rk, cote * (z - (1.0 - alpha.cos()) * rk * 1.6), alpha.sin() * phi.sin() * rk);
-            let apex = 1.0 - alpha / 1.1;
-            v.push((p, rk * 0.4, vec3(1.0, 0.45, 0.42).lerp(vec3(1.0, 0.85, 0.8), apex * 0.6), fondu * (0.45 + 0.55 * apex)));
-        }
-    }
+    let s = (b.s0 + temps * 0.05).fract();
+    let z = f.rayon_astre * 2.0 + s * l;
+    let rk = 0.05 * l * (0.5 + s);
+    let fondu = (1.0 - s) * (s * 8.0).min(1.0);
+    let alpha = b.k[0] * 1.1;
+    let phi = b.k[1] * TAU;
+    // Une calotte tournée vers l'avant : l'apex devant, les ailes
+    // rabattues vers l'étoile.
+    let p = vec3(alpha.sin() * phi.cos() * rk, b.cote * (z - (1.0 - alpha.cos()) * rk * 1.6), alpha.sin() * phi.sin() * rk);
+    let apex = 1.0 - alpha / 1.1;
+    (p, rk * 0.4, vec3(1.0, 0.45, 0.42).lerp(vec3(1.0, 0.85, 0.8), apex * 0.6), fondu * (0.45 + 0.55 * apex))
 }
 
 /// **J3 / J5** — les parois des cavités : une coque en sablier, éclairée par
 /// l'étoile. Elle commence à `DEPART_PAROIS` de la longueur, légère d'abord,
 /// vive ensuite, éteinte au bout. Fine (`finesse`), elle se réduit à un fil
 /// et ne s'éclaire plus que par plaques, d'un côté — comme HH 30.
-fn parois(f: &Flot, temps: f32, cote: f32, g: f32, v: &mut Vec<Boule>) {
-    if f.parois <= 0.0 {
-        return;
-    }
+fn paroi(f: &Flot, temps: f32, b: &BouleFixe) -> Option<Boule> {
     let l = f.longueur;
     let epaisseur = 0.18 * (1.0 - f.finesse).max(0.05);
-    let cote_eclaire = 0.7 + if cote > 0.0 { 0.0 } else { 2.4 };
-    // Fine, la paroi n'est vue que par plaques : deux fois plus de boules,
-    // pour qu'elles se lisent comme des plaques et pas comme des points.
-    let n = if f.finesse > 0.0 { 3200 } else { 1600 };
-    for j in 0..n {
-        let i = j as f32 + g + 6_000.0;
-        let s = (h(i, 1.0) + temps * 0.01).fract().powf(1.5);
-        // Un bulbe part de l'étoile même : il y est pincé.
-        let depart = DEPART_PAROIS * (1.0 - f.forme);
-        let z = (depart + s * (1.0 - depart)) * l;
-        let phi = h(i, 2.0) * TAU;
-        let rho = rayon_cavite(f, z) * (1.0 + epaisseur * (h(i, 3.0) - 0.5));
-        let monte = if f.forme > 0.5 { 1.0 } else { (s / 0.3).min(1.0) };
-        let mut lum = monte * monte * (3.0 - 2.0 * monte) * (1.0 - s).powf(0.7);
-        if f.finesse > 0.0 {
-            // Par plaques, d'un côté : le reste de la paroi est dans l'ombre.
-            let face = (0.5 + 0.5 * (phi - cote_eclaire).cos()).powi(3);
-            let plaque = ((h((phi * 6.0).floor() + (s * 10.0).floor() * 13.0 + g, 7.0) - 0.35) / 0.65).clamp(0.0, 1.0);
-            lum *= face * plaque;
-            if lum < 0.02 {
-                continue;
-            }
+    let cote_eclaire = 0.7 + if b.cote > 0.0 { 0.0 } else { 2.4 };
+    let s = (b.s0 + temps * 0.01).fract().powf(1.5);
+    // Un bulbe part de l'étoile même : il y est pincé.
+    let depart = DEPART_PAROIS * (1.0 - f.forme);
+    let z = (depart + s * (1.0 - depart)) * l;
+    let phi = b.k[0] * TAU;
+    let rho = rayon_cavite(f, z) * (1.0 + epaisseur * (b.k[1] - 0.5));
+    let monte = if f.forme > 0.5 { 1.0 } else { (s / 0.3).min(1.0) };
+    let mut lum = monte * monte * (3.0 - 2.0 * monte) * (1.0 - s).powf(0.7);
+    if f.finesse > 0.0 {
+        // Par plaques, d'un côté : le reste de la paroi est dans l'ombre.
+        let face = (0.5 + 0.5 * (phi - cote_eclaire).cos()).powi(3);
+        let plaque = ((hache_plaque((phi * 6.0).floor() + (s * 10.0).floor() * 13.0 + b.k[2]) - 0.35) / 0.65).clamp(0.0, 1.0);
+        lum *= face * plaque;
+        if lum < 0.02 {
+            return None;
         }
-        let p = vec3(phi.cos() * rho, cote * z, phi.sin() * rho);
-        let taille = l * (0.018 + 0.024 * (1.0 - f.finesse)) * (0.4 + s);
-        // Fine, la paroi concentre son éclat sur ses plaques : plus vive.
-        let eclat = 0.6 + 0.6 * f.finesse;
-        v.push((p, taille, vec3(1.0, 0.85, 0.65), f.parois * eclat * lum));
     }
+    let p = vec3(phi.cos() * rho, b.cote * z, phi.sin() * rho);
+    let taille = l * (0.018 + 0.024 * (1.0 - f.finesse)) * (0.4 + s);
+    // Fine, la paroi concentre son éclat sur ses plaques : plus vive.
+    let eclat = 0.6 + 0.6 * f.finesse;
+    Some((p, taille, vec3(1.0, 0.85, 0.65), f.parois * eclat * lum))
 }
 
 #[cfg(test)]

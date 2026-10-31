@@ -552,3 +552,35 @@ des bras 0,3 — mesure du remplissage ~0,2 (trace temporaire, retirée).
 
 Image contre O7a : écart moyen 0,2 à 2/255, contre 7 à 8 d'une image à la
 suivante.
+
+**O7c — les jets sur le GPU.** Des bras qui restaient (~1,2 ms), le flot
+bipolaire pesait 1,0 ms à lui seul (5 384 boules, T Tauri comme Herbig) ;
+spirales 0,14 ms, entonnoirs 0,09 à 0,22 ms — laissés au CPU.
+
+- `flot.rs` est scindé, sans changer un bit (empreinte de toutes les boules
+  avant/après, quatre instants, trois flots) : `boules_fixes` (part, côté,
+  phase de départ, tirages) et `animer` — `boules` en est la composition,
+  si bien que les tests du flot éprouvent `animer`. Le shader
+  `flot.vert.glsl` en est la copie.
+- ⚠️ **Le tirage des plaques des parois a changé** : `h` y prenait le sinus
+  de ~650 000, qui ne vaut pas la même chose d'un GPU à l'autre ni sur le
+  CPU. `hache_plaque`, sans sinus, les tire pareil des deux côtés ; le
+  motif des plaques est tiré autrement, même allure.
+- `nuages_gpu` devient générique : buffers de quads, un pipeline par shader
+  (nuages, flot), même fragment shader. Le côté du plan d'une boule de flot
+  est son lobe.
+- Test `le_flot_fige_se_range_par_lobe` (rouge vérifié).
+
+| machine de dev, PROFIL | O7b | O7c |
+|---|---|---|
+| T Tauri | ~513 fps (1,95 ms) | ~895 fps (1,1 ms) |
+| Herbig | 492 fps | 886 fps |
+
+Image contre O7b, cinq cadrages en rendu Net : écart moyen 0,9 à 2,9/255
+contre 1,8 à 8 d'une image à la suivante, luminosité +0,2 à +0,7/255
+(couleurs en flottant). Tour `DIAG=tour` complet, 76 cas, sans erreur.
+
+**Bilan d'O7** (machine de dev, en jeu) : T Tauri **158 → ~895 fps**
+(6,3 → 1,1 ms), dont O7a ×2, O7b ×1,5, O7c ×1,7. Restent sur le CPU :
+spirales et entonnoirs (~0,3 ms), l'empilement échantillonné (~0,15 ms).
+Le gain sur la cible se lira au banc d'essai de fin de chantier.

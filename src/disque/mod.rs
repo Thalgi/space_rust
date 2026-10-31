@@ -215,6 +215,9 @@ pub struct Disque {
     /// calcul, sur le GPU au premier dessin (`nuages_gpu`).
     fixes: Option<nuages_gpu::Fixes>,
     tampons: Option<nuages_gpu::Tampons>,
+    /// **Le flot bipolaire, figé** (O7c) : de même.
+    flot_fixe: Option<nuages_gpu::FlotFixe>,
+    flot_tampons: Option<nuages_gpu::Tampons>,
     /// L'amorti de l'image, `attenuation_globale` de l'empilement.
     amorti: f32,
     /// Les boules de l'image pour l'empilement (position monde, rayon,
@@ -267,6 +270,8 @@ impl Disque {
             nuages_cle: None,
             fixes: None,
             tampons: None,
+            flot_fixe: None,
+            flot_tampons: None,
             amorti: 1.0,
             positions: Vec::new(),
             quads: (Vec::new(), Vec::new()),
@@ -520,12 +525,13 @@ impl Disque {
                 draw_sphere(cam.rel(p), self.rayon_central, None, BLACK);
             }
             let temps = self.temps_nuages();
+            let v3 = |v: Vec3| [v.x, v.y, v.z];
+            let (passe, taille) = retour.cible();
             if let Some(fixes) = &self.fixes {
-                let tampons = self.tampons.get_or_insert_with(|| nuages_gpu::Tampons::new(fixes));
+                let tampons = self.tampons.get_or_insert_with(|| nuages_gpu::Tampons::nuages(fixes));
                 let cote_cam = self.axe_n.dot(cam.pos - p);
                 let basse = crate::reglages::qualite() == crate::reglages::Qualite::Basse;
                 let tranche = fixes.tranche((cote_cam >= 0.0) == cote_camera, basse);
-                let v3 = |v: Vec3| [v.x, v.y, v.z];
                 let u = nuages_gpu::Uniformes {
                     mvp: retour.matrice(),
                     centre: v3(cam.rel(p)),
@@ -537,8 +543,31 @@ impl Disque {
                     temps,
                     amorti: self.amorti,
                 };
-                let (passe, taille) = retour.cible();
-                tampons.dessiner(passe, taille, &u, tranche);
+                tampons.dessiner(nuages_gpu::pipeline_nuages(), passe, taille, &u, tranche);
+            }
+            if self.cfg.flot.longueur > 0.0 {
+                let f = &self.cfg.flot;
+                let fixe = self.flot_fixe.get_or_insert_with(|| nuages_gpu::FlotFixe::new(f));
+                let tampons = self.flot_tampons.get_or_insert_with(|| nuages_gpu::Tampons::flot(fixe));
+                let cote_cam = self.axe_n.dot(cam.pos - p);
+                let (lobe_haut, lobe_bas, parois, flot, longueur) = nuages_gpu::UniformesFlot::lobes(f);
+                let u = nuages_gpu::UniformesFlot {
+                    mvp: retour.matrice(),
+                    centre: v3(cam.rel(p)),
+                    axe_u: v3(self.axe_u),
+                    axe_n: v3(self.axe_n),
+                    axe_v: v3(self.axe_v),
+                    cam_right: v3(cam.right),
+                    cam_up: v3(cam.up),
+                    temps,
+                    lobe_haut,
+                    lobe_bas,
+                    parois,
+                    flot,
+                    longueur,
+                };
+                let tranche = fixe.tranche((cote_cam >= 0.0) == cote_camera);
+                tampons.dessiner(nuages_gpu::pipeline_flot(), passe, taille, &u, tranche);
             }
             gl_use_material(&crate::soleil::materiau_ruban_lumineux());
             let (v, i) = &mut self.quads;
@@ -621,8 +650,7 @@ impl Disque {
                 .chain(bras::spirales(&self.cfg, t))
                 .chain(bras::bord_brulant(&self.cfg, t))
                 .chain(bras::pluie(&self.cfg, t))
-                .chain(bras::fragments(&self.cfg, t))
-                .chain(flot::boules(&self.cfg.flot, t));
+                .chain(bras::fragments(&self.cfg, t));
             for (loc, t_b, c, a) in flots {
                 let rel = self.axe_u * loc.x + self.axe_n * loc.y + self.axe_v * loc.z;
                 let cote = du_cote_camera(rel, self.axe_n, cote_cam);
@@ -633,7 +661,11 @@ impl Disque {
             return;
         }
         let aspect = screen_width() / screen_height().max(1.0);
-        let quads = self.positions.iter().map(|b| (b.0, b.1)).chain(self.nuages.iter().map(|n| (n.0, n.1)));
+        // Le flot est dessiné par le GPU (O7c) : la mesure le recompte ici.
+        let (axe_u, axe_n, axe_v) = (self.axe_u, self.axe_n, self.axe_v);
+        let flot = flot::boules(&self.cfg.flot, self.temps_nuages());
+        let flot = flot.iter().map(|b| (p + axe_u * b.0.x + axe_n * b.0.y + axe_v * b.0.z, b.1));
+        let quads = self.positions.iter().map(|b| (b.0, b.1)).chain(self.nuages.iter().map(|n| (n.0, n.1))).chain(flot);
         let r = remplissage(quads.map(|(q, t)| (q - cam.pos, t)), cam, aspect);
         // En pixels de pleine résolution : la cible réduite en paie k² de moins.
         let k = basse_res::REDUCTION as f32;
@@ -1255,6 +1287,24 @@ mod tests_prototypes {
             assert!((a - b).abs() < 0.005, "yaw {yaw} pitch {pitch} dist {dist} : {a} contre {b}");
         }
         assert!(fort, "aucune vue n'amortit : le test n'éprouverait rien");
+    }
+
+    /// **Le flot figé se range par lobe** (Opti-v2 O7c) : le dessus
+    /// d'abord, chaque tranche d'un seul côté, et ses boules, animées, sont
+    /// celles du flot calculé par image.
+    #[test]
+    fn le_flot_fige_se_range_par_lobe() {
+        let c = habillage::jeune_etoile(DisqueConfig::protosolaire(0, 0.9 * 5.0, 0.9 * 48.0, 1.0), 0.9, 0.37, false);
+        let f = nuages_gpu::FlotFixe::new(&c.flot);
+        let (h0, hn) = f.tranche(true);
+        let (b0, bn) = f.tranche(false);
+        assert!(hn > 1000 && bn > 1000, "{hn} dessus, {bn} dessous");
+        assert_eq!((h0, b0, h0 + hn + bn), (0, hn, f.boules.len()));
+        assert!(f.boules[..hn].iter().all(|b| b.cote > 0.0) && f.boules[hn..].iter().all(|b| b.cote < 0.0));
+        for t in [0.0, 7.5, 120.0] {
+            let animees: Vec<_> = f.boules.iter().filter_map(|b| flot::animer(b, &c.flot, t)).collect();
+            assert_eq!(animees, flot::boules(&c.flot, t));
+        }
     }
 
     /// **Les boules figées sont là où le calcul par image les mettait**
