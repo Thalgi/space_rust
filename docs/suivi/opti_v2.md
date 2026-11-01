@@ -584,3 +584,31 @@ contre 1,8 à 8 d'une image à la suivante, luminosité +0,2 à +0,7/255
 (6,3 → 1,1 ms), dont O7a ×2, O7b ×1,5, O7c ×1,7. Restent sur le CPU :
 spirales et entonnoirs (~0,3 ms), l'empilement échantillonné (~0,15 ms).
 Le gain sur la cible se lira au banc d'essai de fin de chantier.
+
+## O5 : la résolution de rendu et le plafond d'images (2026-11-01)
+
+Deux réglages de plus dans l'écran des paramètres (`reglages.json`, relu
+sans perte depuis les fichiers d'avant) :
+
+- **RÉSOLUTION 3D** — 100 / 75 / 50 %, en **rendu Net** seulement (grisé
+  sinon) : les astres passent par une cible réduite, agrandie avec lissage
+  (`rendu.rs`, la même passe que le rendu Pixel). Le rendu Pixel garde sa
+  taille de pixel, qui fait son style. Les galeries, outils de travail,
+  restent à pleine résolution. Machine de dev, T Tauri, 2560 × 1440,
+  PROFIL : **547 → 894 fps** à 50 %.
+- **IMAGES** — libre / 60 / 30 par seconde : le jeu attend l'échéance avant
+  de présenter l'image (`attente_plafond`, échéances sur une grille fixe,
+  sans dérive ; un gros retard repart d'ici au lieu de rattraper en
+  rafale). Mesuré : **30,0 et 60,0 fps** pile. Ignoré sous `PROFIL` et
+  `DIAG`, qui mesurent ce que la machine tient.
+- La **qualité** reste Haute / Basse : un niveau Moyen n'aurait rien à
+  régler aujourd'hui. Le **nombre d'objets** attend la construction de
+  Genèse G1, comme prévu.
+- Le menu passe à dix lignes : resserré (départ à 24 % de la hauteur,
+  écart 8 px) — le test de chevauchement l'avait signalé à 700 px de haut.
+- DIAG : une phase « tout, Net a 50 % » pour le banc d'essai ; les phases
+  qui imposent le rendu Net le prennent à 100 %.
+- Tests : `le_plafond_tient_sa_cadence_sans_deriver` (il a trouvé une
+  dérive dans la première version : une image un peu en retard décalait
+  toute la grille), `la_resolution_3d_ne_se_regle_qu_en_rendu_net` — rouges
+  vérifiés.

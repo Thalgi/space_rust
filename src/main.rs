@@ -165,6 +165,8 @@ async fn main() {
         reglages::regler_rendu(reglages::ModeRendu::Net);
     }
     let mut frames_capture = 0u32;
+    let mut echeance = get_time();
+    let sans_plafond = std::env::var("PROFIL").is_ok() || std::env::var("DIAG").is_ok();
 
     loop {
         let debut_image = get_time();
@@ -327,6 +329,14 @@ async fn main() {
             }
         }
 
+        // **Le plafond d'images** (Opti-v2 O5) : attendre l'échéance.
+        // Pas sous `PROFIL` ni `DIAG` : ils mesurent ce que la machine tient.
+        let plafond = if sans_plafond { reglages::Plafond::Libre } else { reglages::plafond() };
+        let (attente, suivante) = reglages::attente_plafond(plafond, echeance, get_time());
+        echeance = suivante;
+        if attente > 0.0 {
+            std::thread::sleep(std::time::Duration::from_secs_f64(attente));
+        }
         next_frame().await;
     }
 }
@@ -348,6 +358,7 @@ struct Diagnostic {
     lignes: Vec<String>,
     mode_initial: reglages::ModeRendu,
     qualite_initiale: reglages::Qualite,
+    echelle_initiale: reglages::Echelle,
 }
 
 impl Diagnostic {
@@ -357,18 +368,21 @@ impl Diagnostic {
     /// répète la première phase : l'écart entre les deux est la dérive de la
     /// machine pendant la mesure (chauffe, fréquence). « voile seul, rendu
     /// Net » : le voile à pleine résolution, sans les nuages qui dominent le
-    /// CPU — la phase qui juge O3 sur la machine de dev.
-    const PHASES: [(&'static str, bool, bool, Option<reglages::ModeRendu>, bool); 10] = [
-        ("tout", true, true, None, false),
-        ("sans voile", false, true, None, false),
-        ("sans nuages ni bras", true, false, None, false),
-        ("ni voile ni nuages", false, false, None, false),
-        ("tout, rendu Net", true, true, Some(reglages::ModeRendu::Net), false),
-        ("tout, rendu Pixel", true, true, Some(reglages::ModeRendu::Pixel), false),
-        ("sans voile, rendu Pixel", false, true, Some(reglages::ModeRendu::Pixel), false),
-        ("voile seul, rendu Net", true, false, Some(reglages::ModeRendu::Net), false),
-        ("tout, qualite basse", true, true, None, true),
-        ("tout (bis)", true, true, None, false),
+    /// CPU — la phase qui juge O3 sur la machine de dev. Dernier champ : la
+    /// résolution de rendu à 50 % (O5, rendu Net).
+    #[allow(clippy::type_complexity)]
+    const PHASES: [(&'static str, bool, bool, Option<reglages::ModeRendu>, bool, bool); 11] = [
+        ("tout", true, true, None, false, false),
+        ("sans voile", false, true, None, false, false),
+        ("sans nuages ni bras", true, false, None, false, false),
+        ("ni voile ni nuages", false, false, None, false, false),
+        ("tout, rendu Net", true, true, Some(reglages::ModeRendu::Net), false, false),
+        ("tout, rendu Pixel", true, true, Some(reglages::ModeRendu::Pixel), false, false),
+        ("sans voile, rendu Pixel", false, true, Some(reglages::ModeRendu::Pixel), false, false),
+        ("voile seul, rendu Net", true, false, Some(reglages::ModeRendu::Net), false, false),
+        ("tout, qualite basse", true, true, None, true, false),
+        ("tout, Net a 50 %", true, true, Some(reglages::ModeRendu::Net), false, true),
+        ("tout (bis)", true, true, None, false, false),
     ];
 
     fn new() -> Self {
@@ -381,6 +395,7 @@ impl Diagnostic {
             lignes: Vec::new(),
             mode_initial: reglages::mode_rendu(),
             qualite_initiale: reglages::qualite(),
+            echelle_initiale: reglages::echelle(),
         };
         disque::mesurer_remplissage(true);
         d.appliquer();
@@ -388,7 +403,13 @@ impl Diagnostic {
     }
 
     fn appliquer(&self) {
-        let (_, voile, nuages, rendu, basse) = Self::PHASES[self.phase];
+        let (_, voile, nuages, rendu, basse, moitie) = Self::PHASES[self.phase];
+        // Une phase qui impose le rendu Net le prend à 100 %, sauf « à 50 % ».
+        reglages::regler_echelle(match (moitie, rendu) {
+            (true, _) => reglages::Echelle::Moitie,
+            (false, Some(reglages::ModeRendu::Net)) => reglages::Echelle::Pleine,
+            _ => self.echelle_initiale,
+        });
         disque::set_voiles(voile);
         disque::set_nuages(nuages);
         reglages::regler_qualite(if basse { reglages::Qualite::Basse } else { self.qualite_initiale });

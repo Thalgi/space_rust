@@ -29,6 +29,10 @@ pub enum Action {
     CyclerSaturation,
     /// Bascule la qualité du dessin (Opti-v2 O5).
     CyclerQualite,
+    /// Passe au plafond d'images suivant (Opti-v2 O5).
+    CyclerPlafond,
+    /// Passe à la résolution de rendu suivante. Sans objet hors du rendu net.
+    CyclerEchelle,
     /// Revient à l'accueil.
     Retour,
 }
@@ -45,7 +49,7 @@ pub struct Ligne {
 /// Largeur des lignes du menu.
 const LARGEUR: f32 = 520.0;
 const HAUTEUR: f32 = 42.0;
-const ECART: f32 = 14.0;
+const ECART: f32 = 8.0;
 
 /// La ligne PALETTE est-elle réglable ?
 ///
@@ -108,6 +112,17 @@ pub fn lignes(r: &Reglages) -> Vec<Ligne> {
             action: Action::CyclerQualite,
             active: true,
         },
+        Ligne {
+            libelle: format!("RESOLUTION 3D : {}", r.echelle.nom()),
+            action: Action::CyclerEchelle,
+            // Le rendu Pixel a sa propre taille de pixel : c'est son style.
+            active: r.rendu == ModeRendu::Net,
+        },
+        Ligne {
+            libelle: format!("IMAGES : {}", r.plafond.nom()),
+            action: Action::CyclerPlafond,
+            active: true,
+        },
         Ligne { libelle: "RETOUR".to_string(), action: Action::Retour, active: true },
     ]
 }
@@ -167,7 +182,7 @@ pub fn x_depuis_gamma(ligne: Rect, gamma: f32) -> f32 {
 /// Rectangle de la ligne `i`, pour un écran donné.
 pub fn rectangle(ecran: Vec2, i: usize) -> Rect {
     let x = ecran.x * 0.5 - LARGEUR * 0.5;
-    let y0 = ecran.y * 0.30;
+    let y0 = ecran.y * 0.24;
     Rect::new(x, y0 + i as f32 * (HAUTEUR + ECART), LARGEUR, HAUTEUR)
 }
 
@@ -315,6 +330,16 @@ impl Parametres {
             }
             Some(Action::CyclerQualite) => {
                 reglages.qualite = reglages.qualite.suivant();
+                reglages.appliquer();
+                false
+            }
+            Some(Action::CyclerPlafond) => {
+                reglages.plafond = reglages.plafond.suivant();
+                reglages.appliquer();
+                false
+            }
+            Some(Action::CyclerEchelle) => {
+                reglages.echelle = reglages.echelle.suivant();
                 reglages.appliquer();
                 false
             }
@@ -635,6 +660,17 @@ mod tests {
         }
     }
 
+    // **La résolution 3D ne se règle qu'en rendu net** : le rendu Pixel a sa
+    // taille de pixel, qui fait son style (Opti-v2 O5).
+    #[test]
+    fn la_resolution_3d_ne_se_regle_qu_en_rendu_net() {
+        for rendu in ModeRendu::TOUS {
+            let r = Reglages { rendu, ..Default::default() };
+            let l = lignes(&r).into_iter().find(|l| l.action == Action::CyclerEchelle).unwrap();
+            assert_eq!(l.active, rendu == ModeRendu::Net, "{rendu:?}");
+        }
+    }
+
     // Chaque action est **atteignable** : une action qu'aucune ligne ne porte
     // serait du code mort, et l'inverse une ligne sans effet.
     #[test]
@@ -653,6 +689,8 @@ mod tests {
             Action::GlisserGamma,
             Action::CyclerSaturation,
             Action::CyclerQualite,
+            Action::CyclerPlafond,
+            Action::CyclerEchelle,
             Action::Retour,
         ] {
             assert!(portees.contains(&a), "{a:?} n'est portée par aucune ligne");

@@ -151,8 +151,116 @@ impl Qualite {
     }
 }
 
+/// **Le plafond d'images** (Opti-v2 O5) : au-delà, le jeu attend au lieu de
+/// dessiner une image de plus — pour ne pas chauffer une machine portable.
+/// **Libre** : comme avant, la synchro de l'écran décide.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum Plafond {
+    #[default]
+    Libre,
+    Soixante,
+    Trente,
+}
+
+impl Plafond {
+    pub fn nom(self) -> &'static str {
+        match self {
+            Plafond::Libre => "LIBRE",
+            Plafond::Soixante => "60 / S",
+            Plafond::Trente => "30 / S",
+        }
+    }
+
+    pub fn suivant(self) -> Self {
+        match self {
+            Plafond::Libre => Plafond::Soixante,
+            Plafond::Soixante => Plafond::Trente,
+            Plafond::Trente => Plafond::Libre,
+        }
+    }
+
+    /// La durée d'une image, en secondes ; `None` : pas de plafond.
+    pub fn duree(self) -> Option<f64> {
+        match self {
+            Plafond::Libre => None,
+            Plafond::Soixante => Some(1.0 / 60.0),
+            Plafond::Trente => Some(1.0 / 30.0),
+        }
+    }
+}
+
+/// **Combien attendre avant de présenter l'image**, pour tenir le plafond :
+/// `(attente, échéance suivante)`. Les échéances se suivent d'une durée
+/// d'image pile — pas de dérive, une image en retard n'en décale pas dix. En
+/// retard de plus d'une image, on repart de `maintenant` plutôt que de
+/// rattraper en rafale.
+pub fn attente_plafond(plafond: Plafond, echeance: f64, maintenant: f64) -> (f64, f64) {
+    let Some(d) = plafond.duree() else {
+        return (0.0, maintenant);
+    };
+    if echeance < maintenant - d {
+        return (0.0, maintenant + d);
+    }
+    ((echeance - maintenant).max(0.0), echeance + d)
+}
+
+/// **La résolution de rendu** (Opti-v2 O5) : en rendu Net, les astres se
+/// dessinent dans une cible réduite, agrandie avec lissage. Le premier levier
+/// sur un iGPU — le rendu Pixel le tire déjà, à sa taille de pixel, qui fait
+/// son style et ne se règle pas ici.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum Echelle {
+    #[default]
+    Pleine,
+    TroisQuarts,
+    Moitie,
+}
+
+impl Echelle {
+    pub fn nom(self) -> &'static str {
+        match self {
+            Echelle::Pleine => "100 %",
+            Echelle::TroisQuarts => "75 %",
+            Echelle::Moitie => "50 %",
+        }
+    }
+
+    pub fn suivant(self) -> Self {
+        match self {
+            Echelle::Pleine => Echelle::TroisQuarts,
+            Echelle::TroisQuarts => Echelle::Moitie,
+            Echelle::Moitie => Echelle::Pleine,
+        }
+    }
+
+    pub fn facteur(self) -> f32 {
+        match self {
+            Echelle::Pleine => 1.0,
+            Echelle::TroisQuarts => 0.75,
+            Echelle::Moitie => 0.5,
+        }
+    }
+}
+
 thread_local! {
     static QUALITE: Cell<Qualite> = const { Cell::new(Qualite::Haute) };
+    static PLAFOND: Cell<Plafond> = const { Cell::new(Plafond::Libre) };
+    static ECHELLE: Cell<Echelle> = const { Cell::new(Echelle::Pleine) };
+}
+
+/// Le plafond d'images courant.
+pub fn plafond() -> Plafond {
+    PLAFOND.with(|p| p.get())
+}
+
+/// La résolution de rendu courante.
+pub fn echelle() -> Echelle {
+    ECHELLE.with(|e| e.get())
+}
+
+/// Change la résolution de rendu, sans rien écrire (le diagnostic `DIAG`).
+pub fn regler_echelle(e: Echelle) {
+    ECHELLE.with(|c| c.set(e));
 }
 
 /// La qualité courante — ce que lit le code de dessin.
@@ -339,6 +447,11 @@ pub struct Reglages {
     /// plutôt que de perdre tous leurs réglages (`charger`).
     #[serde(default)]
     pub qualite: Qualite,
+    /// Absents des fichiers d'avant O5 (2026-11-01) : libre, pleine.
+    #[serde(default)]
+    pub plafond: Plafond,
+    #[serde(default)]
+    pub echelle: Echelle,
 }
 
 impl Default for Reglages {
@@ -354,6 +467,8 @@ impl Default for Reglages {
             saturation: RENDU_INITIAL.saturation,
             gamma: RENDU_INITIAL.gamma,
             qualite: Qualite::Haute,
+            plafond: Plafond::Libre,
+            echelle: Echelle::Pleine,
         }
     }
 }
@@ -426,6 +541,8 @@ impl Reglages {
             gamma: self.gamma,
         });
         regler_qualite(self.qualite);
+        PLAFOND.with(|p| p.set(self.plafond));
+        regler_echelle(self.echelle);
         match self.mode {
             ModeAffichage::Fenetre => {
                 set_fullscreen(false);
@@ -550,6 +667,8 @@ mod tests {
             // Pas la valeur par defaut : sinon un champ ignore a la lecture
             // passerait quand meme.
             qualite: Qualite::Basse,
+            plafond: Plafond::Trente,
+            echelle: Echelle::TroisQuarts,
         };
         let txt = serde_json::to_string(&r).expect("serialisation");
         let relu: Reglages = serde_json::from_str(&txt).expect("deserialisation");
@@ -566,6 +685,34 @@ mod tests {
         let r: Reglages = serde_json::from_str(ancien).expect("un fichier d'avant la qualite se relit");
         assert_eq!(r.rendu, ModeRendu::Palette);
         assert_eq!(r.qualite, Qualite::Haute);
+        assert_eq!((r.plafond, r.echelle), (Plafond::Libre, Echelle::Pleine));
+    }
+
+    // **Le plafond tient sa cadence sans dériver** : à 30 / s, les échéances
+    // se suivent d'un trentième pile ; une image plus rapide attend ce qui
+    // manque ; une image en retard n'attend pas, et un gros retard ne se
+    // rattrape pas en rafale. Libre, jamais d'attente.
+    #[test]
+    fn le_plafond_tient_sa_cadence_sans_deriver() {
+        let d = 1.0 / 30.0;
+        let (mut echeance, mut t) = (0.0, 0.0);
+        for k in 1..=100 {
+            t += 0.005; // une image de 5 ms
+            let (att, suivante) = attente_plafond(Plafond::Trente, echeance, t);
+            assert!(att >= 0.0);
+            t += att;
+            echeance = suivante;
+            // La première part de l'échéance initiale, les suivantes d'un
+            // trentième chacune.
+            assert!(k == 1 || (t - (k - 1) as f64 * d).abs() < 1e-9, "image {k} à {t}");
+        }
+        // Une image un peu en retard : pas d'attente, et la grille tient.
+        let (att, suivante) = attente_plafond(Plafond::Trente, 1.0, 1.01);
+        assert_eq!((att, suivante), (0.0, 1.0 + d));
+        // Très en retard : on repart d'ici, pas de rafale.
+        let (att, suivante) = attente_plafond(Plafond::Trente, 1.0, 2.0);
+        assert_eq!((att, suivante), (0.0, 2.0 + d));
+        assert_eq!(attente_plafond(Plafond::Libre, 5.0, 1.0).0, 0.0);
     }
 
     // **Un fichier abime ne casse pas le jeu.** Il est editable a la main et

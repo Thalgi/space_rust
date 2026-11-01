@@ -69,18 +69,30 @@ impl Rendu for RenduStandard {
         sys.draw_orbites(calques, cam);
         set_default_camera();
 
-        if self.pixelise() {
+        // **La résolution de rendu** (Opti-v2 O5) : en rendu net, les corps
+        // peuvent aussi passer par une cible réduite, agrandie avec lissage.
+        let echelle = crate::reglages::echelle().facteur();
+        let reduit = !self.pixelise() && echelle < 1.0;
+        if self.pixelise() || reduit {
             // --- Couche PIXEL : corps célestes seuls, en basse résolution ---
-            let (w, h) = pixel::dimensions();
+            let (w, h) = if reduit {
+                (((screen_width() * echelle) as u32).max(2), ((screen_height() * echelle) as u32).max(2))
+            } else {
+                pixel::dimensions()
+            };
             if (w, h) != self.rt {
                 self.cible = pixel::nouvelle_cible(w, h);
                 self.rt = (w, h);
             }
+            // Réduit, le rendu net reste net : agrandi avec lissage, pas en
+            // gros pixels. (Pixel et 50 % ont la même taille de cible : le
+            // filtre se repose à chaque image.)
+            self.cible.texture.set_filter(if reduit { FilterMode::Linear } else { FilterMode::Nearest });
             cam3d.render_target = Some(self.cible.clone());
             // Clamp sub-pixel des champs de débris : la cible est en demi-
             // résolution, et le plus petit débris = 1 pixel de la grille.
             crate::disque::set_viewport_h(h as f32);
-            crate::disque::set_px_min(1.0);
+            crate::disque::set_px_min(if reduit { 0.0 } else { 1.0 });
             // **Même correction pour les planètes.** `px_rayon` (le LOD du
             // shader) retombe sur `screen_height()` quand rien n'est réglé :
             // sans cette ligne, la planète est ombrée avec le détail d'un plein

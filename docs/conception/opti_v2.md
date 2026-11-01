@@ -160,7 +160,7 @@ là ») ; les rémanents du lot 13 et les naines des lots 14-15 sont légers.
 | O2 | Empilement réparé (médiane, grille bornée) | D2, D9 | → ~150 fps |
 | O3 | Voile en une passe, couches selon la taille écran ✅ | D5 | voile de la T Tauri ÷5 (dev) ; les voiles à une couche (anneaux, ceintures) ne changent pas |
 | O4 | Remplissage borné ✅ — les nuages et les bras dans une cible à 1/2 par axe (le remplissage était réparti sur toutes les tailles de boules, pas sur quelques géantes) | D6 | petit PC : T Tauri 70 → 49 ms (défaut), 78 → 56 ms (de près) ; remplissage ~100 → ~25 écrans. Reste un plancher de 35 à 50 ms : calcul et envoi des boules — O7 |
-| O5 | Réglage de qualité, résolution de rendu, plafond d'images — la part « nombre d'objets » s'accroche à la construction de Genèse G1 | transverse | la marge sur la cible |
+| O5 | Réglage de qualité, résolution de rendu, plafond d'images ✅ (2026-11-01 : RÉSOLUTION 3D 100/75/50 % en rendu Net, IMAGES libre/60/30 ; qualité Haute/Basse, déjà là) — la part « nombre d'objets » attend la construction de Genèse G1 | transverse | la marge sur la cible ; Net à 50 % : 547 → 894 fps sur la machine de dev en 2560 × 1440 |
 | O6 | LOD du shader de l'étoile | D7 | de près, sur la cible |
 | O7 | Nuages figés sur le GPU ✅ — boules des nuages (O7a) et jets (O7c) dans des buffers GPU construits une fois, animés par le shader ; empilement sur un échantillon (O7b) | D3, D4 | T Tauri 158 → ~895 fps en jeu sur la machine de dev (6,3 → 1,1 ms) ; la cible se jugera au banc de fin de chantier |
 | O8 | **Mesure sur la vraie machine** (ou la plus proche disponible) | — | la seule preuve de l'objectif |
