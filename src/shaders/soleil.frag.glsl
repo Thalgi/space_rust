@@ -368,9 +368,12 @@ void main() {
             // entonnoirs s'écrasent (`Disque::axe_magnetique`).
             float lat = dot(axe_magnetique, axe_magnetique) > 0.5 ? abs(dot(n, axe_magnetique)) : abs(d.y);
             float calotte = smoothstep(0.76, 0.86, lat) * (1.0 - 0.5 * smoothstep(0.95, 1.0, lat));
-            float grumeaux = fbm(d * 7.0 + dec + vec3(time * 0.4, 0.0, time * 0.3));
-            float choc = calotte * smoothstep(0.42, 0.68, grumeaux);
-            col = mix(col, vec3(1.0, 0.96, 0.92), clamp(accretion_pol * choc, 0.0, 1.0));
+            // Hors des calottes, `choc` vaut 0 : pas de bruit à tirer (O6).
+            if (calotte > 0.0) {
+                float grumeaux = fbm(d * 7.0 + dec + vec3(time * 0.4, 0.0, time * 0.3));
+                float choc = calotte * smoothstep(0.42, 0.68, grumeaux);
+                col = mix(col, vec3(1.0, 0.96, 0.92), clamp(accretion_pol * choc, 0.0, 1.0));
+            }
         }
 
         if (coeur > 0.0) {
@@ -403,6 +406,12 @@ void main() {
             if (rayon <= 0.0) { continue; }
             float ang = acos(clamp(dot(d, s.xyz), -1.0, 1.0));
             if (s.w > 0.0) {
+                // Au-delà de `rayon × 1,12`, la tache n'apporte rien —
+                // exactement : `bord` ne dépasse pas 0,78 + 0,34 × 0,97
+                // (le maximum de `fbm`) = 1,11, les deux `smoothstep` y
+                // valent 1. On s'épargne alors son bruit (Opti-v2 O6) : un `fbm` par
+                // tache et par pixel, sur toute l'étoile, pour rien.
+                if (ang >= rayon * 1.12) { continue; }
                 // ⚠️ Un seuil sur l'angle seul donne un **disque parfait** —
                 // c'est ce qu'on voyait, et aucune tache réelle n'est ronde.
                 // On module donc le rayon par un bruit pris AUTOUR de la

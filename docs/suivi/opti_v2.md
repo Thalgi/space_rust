@@ -612,3 +612,44 @@ sans perte depuis les fichiers d'avant) :
   dérive dans la première version : une image un peu en retard décalait
   toute la grille), `la_resolution_3d_ne_se_regle_qu_en_rendu_net` — rouges
   vérifiés.
+
+## O6 : le shader de l'étoile (2026-11-01)
+
+**Où il coûte.** Au cadrage par défaut, aucune étoile seule ne dépasse
+~1 ms par image sur la machine de dev. Plein écran (rayon ~1 200 px,
+2560 × 1440, rendu Net), l'étoile ajoute de 1,2 ms (G) à 3 ms (Mira).
+Par pixel du disque : 5 `fbm` de 5 octaves (gauchissement ×3, grain,
+points brillants), un `fbm` **par tache active** (jusqu'à 8), et sur les
+géantes qui bouillonnent deux couches de cellules de 27 voisines.
+
+**Le niveau de détail selon la taille, prévu au plan, est écarté** :
+petite, l'étoile ne coûte déjà rien ; de près, tous les octaves se voient,
+les retirer changerait l'image. Le levier de près est la résolution de
+rendu (O5).
+
+**Deux calculs inutiles retirés, à image identique** (leur contribution
+est exactement nulle là où on les saute) :
+- le bruit du contour d'une tache, calculé sur toute l'étoile pour chaque
+  tache : sauté au-delà de 1,12 fois son rayon (`bord` ne dépasse pas
+  1,11) ;
+- le bruit des taches d'accrétion (T Tauri, Herbig) : sauté hors des
+  calottes polaires, où `choc` vaut 0.
+
+| de près, machine de dev, PROFIL | avant | après |
+|---|---|---|
+| G (jaune) | 630 fps | 727 fps |
+| Supergéante rouge | 360 fps | 409 fps |
+| Mira | 252 fps | 269 fps |
+| T Tauri, sans nuages | 506 fps | 544 fps |
+| Herbig, sans nuages | 472 fps | 514 fps |
+
+**Essayé et retiré** : sauter, dans la recherche des cellules, les
+voisines trop loin pour compter (exact aussi) — plus lent (409 → 384 fps
+sur la supergéante rouge) : le branchement coûte plus que les sinus
+épargnés.
+
+**L'image** : captures avant/après de près (G, T Tauri : identiques, au
+compteur de fps près ; supergéante rouge, Mira : l'écart est celui de
+deux lancements de la même version, 15 à 45 % des pixels — les éruptions
+et l'ébullition ne sont pas rejouées à l'identique d'un lancement à
+l'autre).
