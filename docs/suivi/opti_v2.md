@@ -701,3 +701,59 @@ La Herbig suit la T Tauri à 10 % près. Le tour (`DIAG=tour`, 76 cas) :
   T Tauri et la Herbig l'ont été), le tour en rendu Net, les systèmes zoomés
   (`FOCUS` n'existe que pour le système solaire). Le banc complémentaire
   couvre les deux premiers.
+
+### Le banc complémentaire : le code contre le matériel
+
+La version d'avant O4 (`2244df5`, O1 à O3 compris) rejouée sur le PC
+modifié sépare les deux gains. T Tauri, image en ms :
+
+| | ancien PC, avant O4 | PC modifié, avant O4 | PC modifié, aujourd'hui |
+|---|---|---|---|
+| défaut, tout | 70,1 | 18,5 | **7,3** |
+| défaut, rendu Net | 86,1 | 33,9 | 10,4 |
+| de près, tout | 78,4 | 23,7 | **9,2** |
+| de près, rendu Net | 91,5 | 50,1 | 20,2 |
+
+- **Le matériel** (mémoire en double canal, pilote, alimentation) : ×1,8 à
+  ×3,8. **Le code** (O4 à O7) : **×2,5 à ×3,3** sur le même PC. Les deux se
+  multiplient.
+- Avant O4, la colonne CPU colle à l'image (19,1 ms sur 19,5) : c'était le
+  calcul des nuages, que O7 a sorti du processeur (0,5 ms aujourd'hui).
+- Estimation grossière, en divisant par le gain matériel : le code
+  d'aujourd'hui sur l'**ancien** PC ferait ~28 ms au cadrage par défaut et
+  ~30 ms de près en Palette — juste à la cible ; ~37 ms en Net de près.
+
+**Les étoiles lourdes de près** (Palette / Net / Net à 50 %, image en ms) :
+
+| | Palette | Net | Net à 50 % | l'étoile seule, en Net |
+|---|---|---|---|---|
+| supergéante rouge (`DIST=14`) | 7,5 | 21,6 | 7,4 | 22,1 |
+| G (`DIST=3`) | 5,1 | 11,8 | 4,9 | 12,1 |
+
+Plein écran en Net à 1080p, l'ébullition de la supergéante rouge coûte
+~22 ms de GPU : 46 fps, au-dessus de la cible. Net à 50 % la ramène au coût
+de la Palette.
+
+**Le tour en rendu Net** : le gros des cas tient 2 à 9 ms ; T Tauri et
+Herbig isolées 16,7 et 17,6 ms (le plein écran, comme ci-dessus) ; la
+galerie des planètes 30 ms. Mais les pires cas **ne sont pas les mêmes d'un
+tour à l'autre**, et ils sont du côté du processeur :
+
+| Cas | tour Palette | tour Net |
+|---|---|---|
+| graine 2 | 15,9 ms (CPU 11,1) | 2,1 (1,6) |
+| système supergéante rouge | 4,1 (2,2) | **38,2 (16,1)** |
+| systèmes A et B | 4,4 et 4,3 | 13,9 et 15,0 (CPU 10) |
+| starmap | 2,3 (1,6) | 14,4 (11,8) |
+
+Le mode de rendu ne change pas le travail du processeur : ce sont des
+**à-coups**, pas des coûts réguliers. Le tour fait la **moyenne** de 2,5 s
+d'images, qui ne dit pas si un cas coûte 38 ms à chaque image ou se fige une
+seconde une fois. Or c'est l'à-coup que le joueur voit, et le critère du
+chantier était le 1 % bas. Candidats, **non vérifiés** : la génération
+asynchrone du relief des telluriques (que le tour n'attend pas), la
+compilation d'un shader au premier usage, la construction du système.
+
+**Bilan d'O8** : 30 fps tenus en moyenne partout, en Palette comme en Net,
+sur le petit PC modifié. Ce qui reste ouvert pour la suite : **les à-coups**
+— à mesurer d'abord (pire image et 1 % bas dans le tour), puis à attribuer.

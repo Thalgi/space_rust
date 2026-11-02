@@ -380,8 +380,10 @@ C'est la **première interface de jeu** du projet : tout ce qui existait avant
 Conception : [`conception/opti_v2.md`](../conception/opti_v2.md). Journal :
 [`opti_v2.md`](opti_v2.md).
 
-- [x] **30 fps sur le petit PC** (premier APU Ryzen portable) : le pire cas du tour de
-      diagnostic tient 63 fps (banc du 2026-11-02, matériel modifié entre-temps).
+- [x] **30 fps sur le petit PC** (premier APU Ryzen portable), en moyenne sur tout le tour
+      de diagnostic, en Palette et en Net (banc du 2026-11-02, matériel modifié entre-temps).
+- [ ] **Les à-coups** : des images figées côté processeur, qui changent de cas d'un tour à
+      l'autre. À mesurer (pire image, 1 % bas), puis à attribuer.
 - [x] **Diagnostic** sur la machine cible : `DIAG=1` (le coût décomposé), `DIAG=tour`
       (76 cas, du pire au meilleur).
 - [ ] **Le nombre d'objets** réglé par la qualité : attend la construction de Genèse G1.

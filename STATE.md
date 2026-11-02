@@ -43,18 +43,19 @@ tirer un patch (`git diff`), les remettre à l'état commité, `git merge
 | **O7** | boules des nuages et jets figés dans des buffers GPU, animés par le shader ; empilement sur un échantillon — T Tauri 158 → ~895 fps (dev) | idem |
 | **O5** | RÉSOLUTION 3D (100/75/50 %, rendu Net) et IMAGES (libre/60/30) dans les paramètres | idem |
 | **O6** | deux calculs inutiles retirés du shader de l'étoile, à image identique | idem |
-| **O8**, premier banc | petit PC modifié (16 Go, pilote à jour) : T Tauri 70 → 7,3 ms par image, pire cas du tour 63 fps (graine 2) | idem, « O8 » |
+| **O8**, le banc du petit PC | 30 fps tenus partout en moyenne, Palette et Net ; T Tauri 70 → 7,3 ms par image — ×2,5 à ×3,3 du code, ×1,8 à ×3,8 du matériel (16 Go, pilote) ; des **à-coups** côté processeur, qui changent de cas d'un tour à l'autre | idem, « O8 » |
 
 ### À faire ensuite, par ordre
 
-1. **Clore Opti-v2** : dépouiller le banc complémentaire du petit PC (étoiles
-   de près, tour en rendu Net, la version d'avant O4 sur le PC modifié pour
-   séparer le gain du code de celui du matériel), écrire le bilan d'O8 dans le
-   journal, puis **fusionner vers `main`** (procédure ci-dessus) — décision de
+1. **Clore Opti-v2** : le banc est dépouillé (journal, « O8 ») ; reste à
+   **fusionner vers `main`** (procédure ci-dessus) — décision de
    l'utilisateur.
-2. **Choisir le chantier suivant** sur ce banc. Pistes relevées : la graine 2
-   (limitée par le processeur, 11 ms), le rendu Net plein écran de près
-   (l'étoile seule ~12 ms de GPU sur le petit PC), la galerie des planètes.
+2. **Choisir le chantier suivant** sur ce banc. Le premier sujet : **les
+   à-coups** — le tour ne donne que des moyennes ; y ajouter la pire image et
+   le 1 % bas, puis attribuer (relief des telluriques, shaders au premier
+   usage, construction du système : candidats non vérifiés). Ensuite : le rendu
+   Net plein écran de près (supergéante rouge ~22 ms de GPU), la galerie des
+   planètes.
 3. **Genèse V2** : trancher les décisions de G0
    ([`conception/genese_v2.md`](docs/conception/genese_v2.md)), puis G1 — qui
    débloque aussi la part « nombre d'objets » de la qualité (O5).
@@ -106,7 +107,7 @@ sur un fichier contenant du travail non commité (`docs/suivi/stations.md`
 
 | Chantier | Où on en est | Journal · conception |
 |---|---|---|
-| **Opti-v2** | O1 à O7, O9, O10 livrés ; O8 (banc du petit PC) en cours | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) · [`conception/opti_v2.md`](docs/conception/opti_v2.md) |
+| **Opti-v2** | O1 à O10 livrés ; reste la fusion vers `main` | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) · [`conception/opti_v2.md`](docs/conception/opti_v2.md) |
 | **Genèse V2** | carte faite (lots G0 à G8), rien de codé ; G0 = décisions à trancher | — · [`conception/genese_v2.md`](docs/conception/genese_v2.md) |
 | **Planètes** (type, habitabilité) | P1 à P3 livrés, habitabilité des presets ajustée à la main ; réglage fin avec la genèse | [`suivi/planetes.md`](docs/suivi/planetes.md) · [`conception/planetes.md`](docs/conception/planetes.md) |
 | **Astres V2** | **clos** (2026-10-26) : lots 0 à 15 livrés et validés, le 8 abandonné ; reste la passe de relecture | [`suivi/astres_v2.md`](docs/suivi/astres_v2.md) · [`conception/astres_v2.md`](docs/conception/astres_v2.md) |

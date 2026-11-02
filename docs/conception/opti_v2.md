@@ -165,7 +165,7 @@ là ») ; les rémanents du lot 13 et les naines des lots 14-15 sont légers.
 | O5 | Réglage de qualité, résolution de rendu, plafond d'images ✅ — la part « nombre d'objets » attend la construction de Genèse G1 | transverse | la marge sur la cible |
 | O6 | LOD du shader de l'étoile ✅ — tranché à la mesure : deux calculs inutiles retirés ; le niveau de détail selon la taille, écarté | D7 | de près seulement |
 | O7 | Nuages figés sur le GPU ✅ | D3, D4 | le calcul et l'envoi des boules, ~11 + ~9 ms sur la cible |
-| O8 | **Mesure sur la vraie machine** (ou la plus proche disponible) — en cours | — | la seule preuve de l'objectif |
+| O8 | **Mesure sur la vraie machine** (ou la plus proche disponible) ✅ — tenu en moyenne ; les à-coups restent à mesurer | — | la seule preuve de l'objectif |
 | O9 | Engins (ISS, Starship) en point sous 2 px — ajouté en route, trouvé par `DIAG=tour` ✅ | — | — |
 | O10 | Quantification de palette en table précalculée — ajouté en route ✅ | — | — |
 
