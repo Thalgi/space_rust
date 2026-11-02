@@ -67,7 +67,7 @@ que **d'autres systèmes consommeront**, dont certains ne sont pas conçus.
 | **Starmap** | `construire_systeme_autour(graine, type)` : un système par étoile du voisinage | fait |
 | **Sauvegarde** | une graine qui rejoue le système **à l'identique, d'une version à l'autre** | fragile (flux global) |
 | **Interface** | noms : presets seulement, numérotation sinon (décision 2026-08-04) | fait |
-| **Performance** (Opti-v2) | un budget d'objets par système (disques, comètes, lunes) | lots O1–O8 à faire |
+| **Performance** (Opti-v2) | un budget d'objets par système (disques, comètes, lunes) | O1 à O7, O9, O10 livrés ; la part « nombre d'objets » d'O5 attend G1 |
 
 **La conséquence** : la genèse V2 ne peut pas attendre l'économie, et ne doit
 pas la deviner. Elle doit produire **la vérité physique** de chaque corps

@@ -4,7 +4,9 @@
 > l'intégralité de la dette du chantier Astres V2 sur l'optimisation, dans le but
 > de faire tourner le jeu à 30 fps minimum sur un PC low-end (premier APU Ryzen
 > portable) »*. Ce document est la **carte** : ce qui coûte, combien, pourquoi,
-> et dans quel ordre s'y prendre. Rien n'est encore optimisé.
+> et dans quel ordre s'y prendre — écrite avant le premier lot, et gardée
+> telle quelle ; seuls les états (✅) suivent. Ce que chaque lot a donné,
+> mesures comprises : le journal, [`suivi/opti_v2.md`](../suivi/opti_v2.md).
 
 ## 1. La cible, et ce qu'elle veut dire sur la machine de développement
 
@@ -93,15 +95,15 @@ Classée par gravité **sur la cible**. CPU = processeur, GPU = carte graphique.
 
 | # | Dette | Où | Coût mesuré (dev) | Sur la cible (estimé) | Gravité |
 |---|---|---|---|---|---|
-| D1 | **Les nuages calculés deux fois par image** : `dessiner_nuages_3d` est appelé pour chaque moitié du disque, refait **toutes** les boules et l'empilement, et n'en garde que la moitié | CPU — `disque/mod.rs` | ×2 sur tout D2-D4 | ×2 | 🔴 |
-| D2 | **L'empilement dégénéré** : la taille des cases est la *moyenne* des rayons apparents ; caméra **dans** le disque, les boules proches (z → 0) la font exploser → **une seule case** (`cote` 1), et 7 ms quand même (chaque boule balaie son voisinage de cases). En vue système, l'inverse : grille 512² (262 000 cases) remise à zéro à chaque appel | CPU — `Empilement` | 7,2 ms / 0,37 ms par appel | ~32 ms / ~1,6 ms par image | 🔴 |
+| D1 | **Les nuages calculés deux fois par image** : `dessiner_nuages_3d` est appelé pour chaque moitié du disque, refait **toutes** les boules et l'empilement, et n'en garde que la moitié | CPU — `disque/mod.rs` | ×2 sur tout D2-D4 | ×2 | ✅ O1 |
+| D2 | **L'empilement dégénéré** : la taille des cases est la *moyenne* des rayons apparents ; caméra **dans** le disque, les boules proches (z → 0) la font exploser → **une seule case** (`cote` 1), et 7 ms quand même (chaque boule balaie son voisinage de cases). En vue système, l'inverse : grille 512² (262 000 cases) remise à zéro à chaque appel | CPU — `Empilement` | 7,2 ms / 0,37 ms par appel | ~32 ms / ~1,6 ms par image | ✅ O2 |
 | D3 | **Les boules reconstruites à chaque image** : position (`hache`, sinus, grappe), taille, teinte, éclairement — alors que tout sauf l'angle orbital est fixe | CPU — `nuage_3d`, `boule_de_grappe` | 2,4 ms par appel | ~11 ms par image | ✅ O7 |
 | D4 | **Les quads envoyés depuis le CPU** à chaque image (`push_quad`, lots de 800) — 28 800 boules + jet (~5 000 par côté) + bras | CPU — `dessiner_nuages_3d` | 2,0 ms par appel | ~9 ms par image | ✅ O7 (restent spirales et entonnoirs, ~0,3 ms) |
-| D5 | **Le voile en couches** : 7 couches (T Tauri, Herbig ; 3 pour la Be) × 2 moitiés = **14 passes** de l'annulus plein, shader de bruit à chaque fois, sur un disque qui remplit l'écran de près | **GPU** — `disque_voile.frag`, `couche_voile` | ~1,4 ms par image | **~35-40 ms** par image | 🔴 |
+| D5 | **Le voile en couches** : 7 couches (T Tauri, Herbig ; 3 pour la Be) × 2 moitiés = **14 passes** de l'annulus plein, shader de bruit à chaque fois, sur un disque qui remplit l'écran de près | **GPU** — `disque_voile.frag`, `couche_voile` | ~1,4 ms par image | **~35-40 ms** par image | ✅ O3 |
 | D6 | **Le remplissage additif des nuages de près** : des milliers de grosses boules transparentes superposées couvrent l'écran — la chute sous 40 fps signalée en jeu, tout près d'un disque | **GPU** — nuages, jet, bras | ~100 écrans repeints par image dès le cadrage par défaut (O4) | ~21 ms sur la cible | ✅ O4 |
 | D7 | **Le shader de l'étoile s'est alourdi** au fil d'Astres V2 : ébullition (bulles, cellules), surface par type, champ magnétique, taches d'accrétion, cœur, aplatissement — calculés sur tout le quad de l'étoile et de sa couronne. Négligeable ici (G : 2 000 fps), mais plein écran de près sur un iGPU | GPU — `soleil.frag.glsl` | < 0,5 ms | 5-15 ms de près | ✅ O6 (en partie) |
-| D8 | **Allocations par image** : `Vec` de 28 800 boules, `Vec` des bras, du jet, des fragments… recréés à chaque appel | CPU | inclus dans D3-D4 | — | 🟡 |
-| D9 | **Le grand disque en vue système** : 3 000 boules + empilement 512², deux fois | CPU | ~1,2 ms par image | ~3 ms | 🟡 |
+| D8 | **Allocations par image** : `Vec` de 28 800 boules, `Vec` des bras, du jet, des fragments… recréés à chaque appel | CPU | inclus dans D3-D4 | — | ✅ O1, O7 |
+| D9 | **Le grand disque en vue système** : 3 000 boules + empilement 512², deux fois | CPU | ~1,2 ms par image | ~3 ms | 🟡 en partie (O2, O7) : reste la grille de 512² |
 | D10 | **Les rubans recalculés par image** : arches (`le_long`), faisceaux du pulsar, boucles du magnétar | CPU | négligeable (pulsar 2 159 fps) | faible | 🟢 |
 | D11 | **Non mesurés** : queues de comète (`comete::nuage`, `fluctuer`), galeries (dizaines de cases animées à la fois), fond étoilé | CPU / GPU | — | ? | ❔ |
 
@@ -156,16 +158,16 @@ là ») ; les rémanents du lot 13 et les naines des lots 14-15 sont légers.
 
 | Lot | Contenu | Dette | Gain attendu (T Tauri, vue isolée, dev) |
 |---|---|---|---|
-| O1 | Calcul unique par image, buffers réutilisés | D1, D8 | 38 → ~75 fps |
-| O2 | Empilement réparé (médiane, grille bornée) | D2, D9 | → ~150 fps |
-| O3 | Voile en une passe, couches selon la taille écran ✅ | D5 | voile de la T Tauri ÷5 (dev) ; les voiles à une couche (anneaux, ceintures) ne changent pas |
-| O4 | Remplissage borné ✅ — les nuages et les bras dans une cible à 1/2 par axe (le remplissage était réparti sur toutes les tailles de boules, pas sur quelques géantes) | D6 | petit PC : T Tauri 70 → 49 ms (défaut), 78 → 56 ms (de près) ; remplissage ~100 → ~25 écrans. Reste un plancher de 35 à 50 ms : calcul et envoi des boules — O7 |
-| O5 | Réglage de qualité, résolution de rendu, plafond d'images ✅ (2026-11-01 : RÉSOLUTION 3D 100/75/50 % en rendu Net, IMAGES libre/60/30 ; qualité Haute/Basse, déjà là) — la part « nombre d'objets » attend la construction de Genèse G1 | transverse | la marge sur la cible ; Net à 50 % : 547 → 894 fps sur la machine de dev en 2560 × 1440 |
-| O6 | LOD du shader de l'étoile ✅ (2026-11-01) — deux calculs inutiles retirés, à image identique : le bruit des taches loin d'elles, celui des taches d'accrétion hors des calottes. Le niveau de détail selon la taille, écarté : petite, l'étoile ne coûte déjà rien ; de près, tout le détail se voit | D7 | de près, machine de dev, 2560 × 1440 : G 630 → 727 fps, supergéante rouge 360 → 409, T Tauri 506 → 544 |
-| O7 | Nuages figés sur le GPU ✅ — boules des nuages (O7a) et jets (O7c) dans des buffers GPU construits une fois, animés par le shader ; empilement sur un échantillon (O7b) | D3, D4 | T Tauri 158 → ~895 fps en jeu sur la machine de dev (6,3 → 1,1 ms) ; la cible se jugera au banc de fin de chantier |
-| O8 | **Mesure sur la vraie machine** (ou la plus proche disponible) | — | la seule preuve de l'objectif |
-| O9 | Engins (ISS, Starship) en point sous 2 px — trouvé par `DIAG=tour` ✅ | — | système solaire 169 → 484 fps (dev) |
-| O10 | Quantification de palette en table précalculée ✅ | — | passe Palette ~0,5 ms sur la cible ; les « ~8 ms » étaient un biais de chauffe du DIAG |
+| O1 | Calcul unique par image, buffers réutilisés ✅ | D1, D8 | 38 → ~75 fps |
+| O2 | Empilement réparé (médiane, grille bornée) ✅ | D2, D9 | → ~150 fps |
+| O3 | Voile en une passe, couches selon la taille écran ✅ | D5 | le voile ÷ 5 environ |
+| O4 | Remplissage borné ✅ — tranché à la mesure : les nuages et les bras dans une cible à 1/2 par axe | D6 | ~20 ms sur la cible |
+| O5 | Réglage de qualité, résolution de rendu, plafond d'images ✅ — la part « nombre d'objets » attend la construction de Genèse G1 | transverse | la marge sur la cible |
+| O6 | LOD du shader de l'étoile ✅ — tranché à la mesure : deux calculs inutiles retirés ; le niveau de détail selon la taille, écarté | D7 | de près seulement |
+| O7 | Nuages figés sur le GPU ✅ | D3, D4 | le calcul et l'envoi des boules, ~11 + ~9 ms sur la cible |
+| O8 | **Mesure sur la vraie machine** (ou la plus proche disponible) — en cours | — | la seule preuve de l'objectif |
+| O9 | Engins (ISS, Starship) en point sous 2 px — ajouté en route, trouvé par `DIAG=tour` ✅ | — | — |
+| O10 | Quantification de palette en table précalculée — ajouté en route ✅ | — | — |
 
 Après O1 et O2, le calcul des nuages de la T Tauri tomberait de ~23 ms à ~5 ms
 par image sur la machine de dev — soit ~11 ms sur la cible, dans le budget

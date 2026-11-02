@@ -653,3 +653,51 @@ compteur de fps près ; supergéante rouge, Mira : l'écart est celui de
 deux lancements de la même version, 15 à 45 % des pixels — les éruptions
 et l'ébullition ne sont pas rejouées à l'identique d'un lancement à
 l'autre).
+
+## O8 : le banc du petit PC (2026-11-02)
+
+**Le petit PC a changé le 2026-10-30**, entre O4 et O7 : mémoire 8 → 16 Go,
+pilote Adrenalin à jour, Windows en mode performance. Si les 16 Go sont
+passés en double canal, la bande passante de l'iGPU a doublé. Les écarts
+ci-dessous mêlent donc **le code et le matériel** ; le banc complémentaire
+rejoue la version d'avant O4 (`2244df5`) sur le PC modifié pour les séparer.
+
+Premier banc, tous les lots livrés, 1920 × 1080, rendu Palette, `DIAG=1`,
+image en ms (la phase « tout » prise dans sa reprise « bis ») :
+
+| T Tauri | avant O4, ancien PC | aujourd'hui |
+|---|---|---|
+| défaut, tout | 70,1 | **7,3** |
+| défaut, rendu Net | 86,1 | 10,4 |
+| de près (1,5), tout | 78,4 | **9,2** |
+| de près, rendu Net | 91,5 | 20,2 |
+| de près, Net à 50 % | — | 9,0 |
+| de près, voile seul en Net | 21 | 12,0 |
+
+La Herbig suit la T Tauri à 10 % près. Le tour (`DIAG=tour`, 76 cas) :
+
+| Cas | 2026-10-28 (1536 × 864) | aujourd'hui (1920 × 1080) |
+|---|---|---|
+| isolée T Tauri | 70,9 ms | 7,6 ms |
+| système solaire | 63,8 | 9,6 |
+| système T Tauri | 32,2 | 5,2 |
+| starmap | 8,5 | 2,3 |
+| galerie des planètes | 11,4 | 12,1 |
+
+- **L'objectif du chantier est atteint sur ce banc** : 30 fps au moins
+  partout ; le pire cas du tour, la **graine 2**, tient 63 fps.
+- **Ce qui reste lourd** : la graine 2, limitée par le processeur (11,1 ms
+  de CPU sur 15,9) ; la galerie des planètes (12,1 ms, GPU : 2,4 de CPU) ;
+  le **rendu Net plein écran de près**, 49 fps, dont 12 ms pour l'étoile
+  seule — Net à 50 % le ramène à 111.
+- **La colonne CPU ne suit plus l'image** (voile seul en Net : 0,8 ms de CPU
+  pour 12 ms d'image) : avec le nouveau pilote, le processeur n'attend plus
+  dans les dessins. L'écart image/CPU redevient lisible sur la cible.
+- ⚠️ La toute première phase du premier lancement a fait 36,3 ms contre 7,3
+  pour sa reprise : la chauffe de 4 s ne suffit pas au **premier lancement
+  après compilation** (le pilote compile ses shaders). Les lancements
+  suivants n'en souffrent pas.
+- **Le banc ne couvrait pas** : les étoiles lourdes de près (seules la
+  T Tauri et la Herbig l'ont été), le tour en rendu Net, les systèmes zoomés
+  (`FOCUS` n'existe que pour le système solaire). Le banc complémentaire
+  couvre les deux premiers.

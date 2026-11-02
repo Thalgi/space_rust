@@ -22,7 +22,10 @@ Constat d'une revue de code sans complaisance sur l'état actuel du dépôt
    `0.318_309_9` au lieu de `std::f32::consts::FRAC_1_PI` — le commit
    « cargo clippy fix » (`136c7e1`) a réduit les avertissements (63 → ~45)
    mais **pas** corrigé cette erreur bloquante ni le point 5. Toujours
-   trivial, toujours pas fait.
+   trivial, toujours pas fait. ✅ **Soldé le 2026-08-02/05** : constante
+   nommée + `allow` expliqué (suivre clippy aurait changé le bruit, voir
+   [`planetes.md`](planetes.md) §7), puis la revue du 2026-08-05 a ramené
+   clippy à zéro ([`revues.md`](revues.md)).
 3. ✅ **`composant.rs` découpé (Partie E.2)** — fait le 2026-07-29.
    `src/vaisseau/composant.rs` (3 316 lignes) est devenu
    `src/vaisseau/composant/`, **15 fichiers** dont aucun ne dépasse 475
@@ -65,7 +68,8 @@ Constat d'une revue de code sans complaisance sur l'état actuel du dépôt
 5. **Fichiers morts** : `src/ecran/briques.rs` (107 lignes) et
    `src/ecran/vaisseaux.rs` (93 lignes) ne sont plus déclarés dans
    `ecran/mod.rs` depuis la réorganisation du menu — ne compilent plus dans
-   le binaire, jamais supprimés. Suppression triviale, toujours pas faite.
+   le binaire, jamais supprimés. Suppression triviale, toujours pas faite
+   (toujours vrai le 2026-11-02, dette inscrite dans `STATE.md`).
 6. **`astre::Astre` a une variante trop grosse** (`clippy::large_enum_variant`,
    `Planete { app: Apparence, .. }` → 376 octets pour tout l'enum). Hors
    sujet stations, toujours pas corrigé.

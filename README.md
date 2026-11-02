@@ -8,33 +8,40 @@ cargo run
 ```
 
 Première compilation un peu longue (macroquad récupère ses dépendances), ensuite
-c'est rapide. Aucun asset externe n'est requis — tout est procédural.
+c'est rapide. Les astres et les vaisseaux sont procéduraux ; les quelques assets
+(sprites de l'interface, logo, réglages JSON, palettes) sont dans le dépôt.
 
 ---
 
 ## Ce qu'il y a dedans
 
-Le jeu s'ouvre sur un **accueil** qui aiguille vers treize écrans, en deux
-familles.
+Le jeu s'ouvre sur un **accueil** qui aiguille vers seize écrans, en deux
+familles, plus PARAMETRES et QUITTER.
 
 ### Astres
 
 | Écran | Ce qu'on y voit |
 |---|---|
-| **Skymap** | Un système complet : étoile(s), planètes, lunes, ceintures, zone habitable. Orbites képlériennes, jusqu'à 4 sources de lumière (binaires, trinaires, quadruples). |
-| **Objet céleste** | Un corps isolé, pour travailler son rendu. |
+| **Skymap** | Un système complet : étoile(s), planètes, lunes, ceintures, comètes, zone habitable. Orbites képlériennes, jusqu'à 4 sources de lumière (binaires, trinaires, quadruples). |
+| **Skymap V2** | La même, avec des marqueurs pour les corps trop petits à l'écran, la fiche d'astre (type et habitabilité des planètes) et le menu CHOISIR ASTRE. |
+| **Objet céleste** | Un corps isolé, pour travailler son rendu ; touche 3 : le défilé de tous les types d'astres, touche 4 : les prototypes en cours. |
 | **Starmap** | Le voisinage stellaire, en projection oblique ; on zoome vers un système. |
-| **Galeries** | Quatre catalogues côte à côte : telluriques (~130 presets), géantes gazeuses, ceintures & disques, étoiles. |
+| **Galeries** | Cinq catalogues côte à côte : telluriques (~130 presets), géantes gazeuses, ceintures & disques, étoiles, comètes. |
+| **Tableur** | Le type de base des planètes rocheuses, réglé à la main (`assets/planetes.json`). |
 
 Les planètes telluriques sont construites par un pipeline complet — grille
 cube-sphere, érosion, hydrologie D8, biomes, calottes — puis rendues en impostor
 avec atmosphère en coquille, couche de nuages en repère propre, ombre d'anneau et
 reflet spéculaire de l'océan. Les géantes ont leur profil zonal, leurs vortex et
-leurs pôles. Les étoiles ont taches, granulation, boucles d'éruption et trois
-types de couronne (halo, jets de pulsar, vent de Wolf-Rayet).
+leurs pôles. Les étoiles — 29 types au tirage, des naines rouges aux trous
+noirs, quasi-étoiles et jeunes étoiles à disque — ont taches nées d'un champ
+magnétique, arches, éruptions, une surface par type, et leurs effets propres
+(disques d'accrétion, jets, pulsation, faisceaux de pulsar).
 
-Un **filtre pixel art** optionnel (touche **X**) sous-échantillonne et quantifie
-vers une palette de 64 couleurs.
+Trois **rendus** (PARAMETRES → RENDU, ou touche **P** dans les vues) : net,
+pixel art, ou pixel art quantifié vers une palette (Lospec 2000 embarquée, plus
+tout `.hex` déposé dans `assets/palettes/`). Les PARAMETRES règlent aussi la
+qualité, la résolution 3D du rendu net et un plafond d'images.
 
 ### Vaisseaux et stations
 
@@ -97,15 +104,15 @@ Les vaisseaux sauvegardés vont dans `vaisseaux/` (ignoré par git).
   devient testable.
 - `cargo clippy --all-targets` doit rester à **zéro avertissement**.
 
-État vérifié : **622 tests verts**, 0 avertissement clippy.
+État vérifié : **992 tests verts**, 0 avertissement clippy (2026-11-01).
 
 ---
 
 ## Documentation
 
-`STATE.md` à la racine est le **journal de bord** : ce qui a été fait, pourquoi,
-et ce que chaque bug a appris. C'est le premier fichier à lire pour reprendre le
-travail.
+`STATE.md` à la racine est le **point de reprise** : où on en est et quoi faire
+ensuite, en deux cents lignes. C'est le premier fichier à lire pour reprendre le
+travail ; le récit de chaque chantier vit dans son journal, sous `docs/suivi/`.
 
 `docs/` contient le reste, en trois familles — voir
 [`docs/README.md`](docs/README.md) :
@@ -113,4 +120,5 @@ travail.
 - **`conception/`** — le *pourquoi* : intentions, architecture, décisions ;
 - **`suivi/`** — le *où on en est* : journaux, catalogues, bilans d'étape ;
 - **`reference/`** — des fichiers **générés**, reconstruits et comparés par un
-  test, jamais édités à la main.
+  test, jamais édités à la main ;
+- **`methode.md`** — la discipline : red-check, pièges de tests.

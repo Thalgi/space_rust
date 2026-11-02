@@ -5,19 +5,20 @@ toute la génération est **déterministe par graine (seed)** → un même nombr
 exactement le même système (reproductible, partageable).
 
 > Légende : `[x]` fait, `[ ]` à faire, `[~]` **partiellement** fait (le détail suit
-> sur la ligne). Relu et recalé le **2026-08-04**.
+> sur la ligne). Relu et recalé le **2026-11-02**.
 
 ---
 
 ## 1. Étoile aléatoire (fondation)
 
 - [x] Tirer un **type spectral** O B A F G K M (poids biaisés pour la variété).
-- [x] Dériver du type : **température**, **rayon**, **luminosité**. (masse grav. encore fixe)
+- [x] Dériver du type : **température**, **rayon**, **luminosité** — et la masse (§ 9).
 - [x] **Température → couleur de corps noir** (RGB) : approx. Tanner Helland.
 - [x] Le shader du soleil prend la **couleur en paramètre** (`teinte`).
-- [x] La **luminosité** pilote l'éclairage (couleur) des planètes. (zone habitable : à venir)
+- [x] La **luminosité** pilote l'éclairage (couleur) des planètes, et la zone habitable (§ 5).
 - [x] **Graine déterministe** (`srand`) + touche **G** pour régénérer un système.
-- [ ] Variantes : naine rouge, géante rouge, naine blanche (tailles très différentes).
+- [x] Variantes : naine rouge, géante rouge, naine blanche — et 29 types au tirage depuis
+      Astres V2 (§ 9).
 
 ## 2. Planètes variées
 
@@ -85,11 +86,9 @@ exactement le même système (reproductible, partageable).
 
 ## 6. Technique / robustesse
 
-- [ ] **RNG à graine** (crate `rand` + `rand_chacha`, ou xorshift maison) pour la reproductibilité.
-- [ ] Trait/méthode commune de **génération** : chaque type d'astre sait se créer aléatoirement.
-- [~] **Infos de l'astre** faites — panneau de droite au clic (nom, type, distance, rayon,
-      habitabilité déduite) : [`conception/interface.md`](../conception/interface.md) §I.3.
-      Champ graine éditable : toujours à faire.
+- RNG à graine, génération commune, infos de l'astre : voir § 7 (ils y figuraient deux fois).
+  Le hasard en flux nommés est repris par Genèse V2
+  ([`conception/genese_v2.md`](../conception/genese_v2.md)).
 - [x] Gestion correcte de la **transparence/profondeur** des anneaux (rendu en 2 passes).
 - [x] **Material partagé** (un seul pipeline par type, cloné) -> corrige « Pipelines amount exceeded », gros gain init/mémoire GPU.
 - [x] **LOD / culling des ceintures** — chantier P.2, **mesuré le 2026-08-08 : sans objet.**
@@ -100,10 +99,10 @@ exactement le même système (reproductible, partageable).
       gros sans avoir jamais été rapporté à ce qu'un GPU avale.
       Chiffres tenus par `budget_de_dessin_des_ceintures_solaires` (`disque/mod.rs`), qui
       appelle les vrais constructeurs de maillage sur les vraies configs.
-- [ ] **Fill rate des voiles d'anneaux** — le seul coût plausible restant. 960 quads,
-      mais potentiellement plein écran, et chaque pixel paie 155 lignes de bruit
-      (`disque_voile.frag.glsl`), deux fois (moitié avant + arrière). ⚠️ **À mesurer à
-      l'écran** : FPS caméra serrée sur Saturne contre caméra au large.
+- [~] **Fill rate des voiles d'anneaux** — **mesuré** par Opti-v2 sur le petit PC :
+      Saturne plein écran, ~12 ms de voile (anneaux, ceintures) ; au cadrage par défaut,
+      rien. Les voiles en couches des jeunes étoiles sont passés en une passe (O3) ; celui
+      des anneaux, à une couche, n'a pas bougé. Journal : [`opti_v2.md`](opti_v2.md).
 
 ## 7. Refacto en cours (objectif : fichiers ≤ ~100 lignes)
 
@@ -281,6 +280,8 @@ et aucun écran pour s'en servir. Détail des lots dans
       retombe sur les défauts — un jeu qui refuse de démarrer pour un fichier de confort
       serait absurde.
 - [x] **GAMMA au curseur** (0,5 → 2,5), appliqué **avant** la quantification.
+- [x] **QUALITE** (Haute / Basse), **RESOLUTION 3D** (100 / 75 / 50 %, rendu net) et
+      **IMAGES** (libre / 60 / 30 par seconde) — chantier Opti-v2, O5 (2026-11-01).
 - [ ] Autres réglages à venir : volume, langue, taille des pixels (dette D-PIX-4 : `PIX = 2`
       est figé).
 
@@ -368,12 +369,26 @@ C'est la **première interface de jeu** du projet : tout ce qui existait avant
       de conception à part entière — les 14 ressources et leurs 3 chaînes de raffinage
       (minerai→métal, minerai rare→métal rare, nourriture brute→transformée) sont déjà
       inscrites dans les sprites.
+- [x] **Type et habitabilité des planètes** (chantier planètes, 2026-10-27) : huit types,
+      chacun son icône, dans la fiche de la Skymap V2 ; habitabilité corrigée par le type
+      d'étoile et la zone (`assets/habitabilite.json`). Journal : [`planetes.md`](planetes.md).
 - [ ] **Pas de monnaie** : décision de conception — l'**énergie** en tient lieu. Rien ne
       s'achète avec un nombre abstrait.
 
+## 12. Performance — ✅ Opti-v2 (2026-10-28 → 11-02)
+
+Conception : [`conception/opti_v2.md`](../conception/opti_v2.md). Journal :
+[`opti_v2.md`](opti_v2.md).
+
+- [x] **30 fps sur le petit PC** (premier APU Ryzen portable) : le pire cas du tour de
+      diagnostic tient 63 fps (banc du 2026-11-02, matériel modifié entre-temps).
+- [x] **Diagnostic** sur la machine cible : `DIAG=1` (le coût décomposé), `DIAG=tour`
+      (76 cas, du pire au meilleur).
+- [ ] **Le nombre d'objets** réglé par la qualité : attend la construction de Genèse G1.
+
 ---
 
-## Ordre conseillé
+## Ordre conseillé (d'origine, juillet 2026)
 
 1. **RNG à graine + étoile aléatoire** (type → couleur). Fondation, gros effet visuel immédiat.
 2. **Planètes telluriques / gazeuses** (shader étendu + génération paramétrée).

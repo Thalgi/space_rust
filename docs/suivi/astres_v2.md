@@ -3,31 +3,20 @@
 Journal du chantier décrit par
 [`conception/astres_v2.md`](../conception/astres_v2.md), lot par lot.
 
-**Où se trouve le travail** : branche `chantier-astres`, dans le worktree
-`.claude/worktrees/astres-v2`. **Fusionnée dans `main` le 2026-10-21**, en
-avance rapide (lots 0 à 11) ; **rien n'est poussé**. Le travail non commité du
-dossier principal — le découpage de `vaisseau/generateur.rs` (chantier de
-dette, `docs/suivi/dette_vaisseau.md`) — a été préservé : deux fichiers de
-docs qu'il modifiait aussi ont été mis de côté en patch puis réappliqués, et
-l'ensemble compile, 923 tests verts. Le lot 12 continue sur la branche.
+**Le chantier est clos** (2026-10-26) : lots 0 à 15 livrés et validés à
+l'écran, le 8 (lentille) abandonné. Branche `chantier-astres`, fusionnée
+dans `main` en avance rapide (le 2026-10-21, le 2026-10-25 et le
+2026-10-26) et poussée. Le chantier suivant, Opti-v2, est
+parti de là (journal : [`opti_v2.md`](opti_v2.md)).
 
-**État au 2026-10-21** : 923 tests verts (936 avec le binaire `mhd`), clippy à
-zéro. **Le lot 5 est clos** (ses sept presets de trou noir sont au tirage), **le
-6 est livré** (supergéante rouge, sous-naine sdB, étoile carbonée, naine brune)
-et **prolongé d'un 6.3** (l'ébullition des géantes rouges), **le 7 aussi** (la
-pulsation : céphéide, Mira, ZZ Ceti), **le 8 abandonné**, **le 9 livré** (les
-comètes, 9.1 à 9.3). **Le lot 6 est clos et validé à l'écran**
-(2026-10-19) : point par point pour la carbonée, l'ébullition, la supergéante
-rouge et la sdB, globalement pour le reste.
+**Reste, hors lot** : la **passe de relecture** demandée (*« observer qu'on
+n'a rien loupé »*), jamais faite ; et la **refonte de la genèse**, devenue le
+chantier Genèse V2 ([`conception/genese_v2.md`](../conception/genese_v2.md)).
 
 ⚠️ **La session du 2026-10-03 a été coupée net** à 17 h 07 par une erreur
 d'accès (« Your organization has disabled Claude subscription access »). Son
 dernier message, *la courbe et la droite de la comète*, n'a été repris que le
 2026-10-19 — voir le lot 9.4.
-
-**Les lots 7, 9, 10 et 11 sont clos** (2026-10-20 et 21), validés à l'écran
-par l'utilisateur. **Tous les lots livrés sont validés** ; reste le 12, puis
-les lots futurs 13 à 15 et la refonte de la genèse (conception §6 undecies).
 
 Deux dettes restent, petites et consignées plus bas : le disque passe sous
 l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de
@@ -81,8 +70,13 @@ silhouette « mince » n'a jamais été essayée.
 | **11** — la quasi-étoile : enveloppe pourpre d'une UA, cœur qui transparaît | **fait, validé** (2026-10-21) | |
 | **11 — clos** | **fait et tranché** (2026-10-21) | |
 | **12.1** — jeunes étoiles : jets 3D sur l'axe du disque, rotation sur cet axe, taches d'accrétion | **fait, validé** (2026-10-22) | |
-| 12 (suite) — Herbig Ae/Be, disques protoplanétaires, Be, hypergéante | à faire | |
-| 13 à 15 — rémanents refaits, étoiles vertes, naine noire | **futurs**, après 11 et 12 (conception §6 undecies) | |
+| **12.2** — disques protoplanétaires : la T Tauri adopte T1B4, la Herbig Ae/Be entre au tirage | **fait, validé** (2026-10-24) | `30a1064` |
+| 12 (suite) — le jet J5 devient le standard | **fait, validé** (2026-10-24) | `8bc2009` |
+| 12 (suite) — l'étoile Be et l'hypergéante au tirage, grand disque posé par la genèse | **fait, validé** (2026-10-25) | `dac69d0` |
+| **12 — clos** | **fait et tranché** (2026-10-25) | `1012ebc` |
+| **13** — rémanents refaits en 3D : pulsar, étoile à neutrons, magnétar | **clos** (2026-10-26) | `cce5364` |
+| **14** — la naine blanche polluée, l'étoile verte | **clos** (2026-10-26) | `be343f9` |
+| **15** — la naine noire | **clos** (2026-10-26) | `f57a891` |
 
 Trois correctifs hors lot : le disque manquant de T Tauri (`3e2eb99`), le
 `crash.log` sorti du dépôt, et la taille de texte non bornée qui tuait le jeu à

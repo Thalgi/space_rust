@@ -7,6 +7,10 @@
 > Contrainte forte : **impact performance minimal** — idéalement meilleur que
 > l'existant. Le disque d'accrétion du trou noir (`soleil`, couronne_type 5)
 > reste hors périmètre mais le modèle doit pouvoir le reprendre plus tard.
+>
+> **Livré** : le modèle unique vit dans `src/disque/` ;
+> `src/ceinture/` et `src/planete/anneau.rs` ont disparu. Journal :
+> [`suivi/ceintures.md`](../suivi/ceintures.md).
 
 ---
 

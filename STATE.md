@@ -1,6 +1,6 @@
 # STATE — où en est le chantier
 
-> Point de reprise, **2026-08-14**. À lire en premier dans une nouvelle session,
+> Point de reprise, **2026-11-02**. À lire en premier dans une nouvelle session,
 > **en entier** : il tient en deux cents lignes, et c'est délibéré.
 >
 > Ce fichier dit **où on en est et quoi faire ensuite**, rien de plus. Le
@@ -9,610 +9,160 @@
 > chaque système dans [`docs/conception/`](docs/conception/) ; la *discipline*
 > dans [`docs/methode.md`](docs/methode.md).
 >
-> ⚠️ **Il avait dérivé** jusqu'à 1 968 lignes en devenant le journal de tous les
-> chantiers à la fois — donc illisible au démarrage, précisément quand on en a
-> besoin. Vidé le 2026-08-10 : rien n'a été perdu, tout a été **déplacé** (voir
-> « Où trouver quoi »). **Ne pas recommencer** : un fait qui se raconte va dans
-> un journal, pas ici.
+> ⚠️ **Il a dérivé deux fois** : 1 968 lignes le 2026-08-10, 670 le 2026-11-02,
+> chaque fois en devenant le journal des chantiers en cours. Vidé les deux
+> fois sans rien perdre : tout est dans les journaux (voir « Où trouver
+> quoi »). **Ne pas recommencer** : un fait qui se raconte va dans un journal ;
+> ici, une ligne et un lien.
 
-## Reprendre ici (état au 2026-10-25)
+## Reprendre ici (état au 2026-11-02)
 
-**Chantier en cours : Astres V2.** Branche `chantier-astres`, worktree
-`.claude/worktrees/astres-v2`. **Fusionnée dans `main` le 2026-10-26** (avance
-rapide, lots 0 à 15 ; avant, le 2026-10-21 et le 2026-10-25), **rien de
-poussé** depuis : `main` porte les lots 12 à 15 de plus que `origin/main`. Le chantier
-continue sur la branche (passe de relecture) ; refusionner à chaque lot clos. ⚠️ Depuis le dossier principal, la
-branche ne se « bascule » pas (`git checkout` refuse, elle est ouverte dans le
-worktree) : on travaille **dans le worktree**.
+**Chantier en cours : Opti-v2**, en clôture. Branche `chantier-opti-v2`,
+worktree `.claude/worktrees/astres-v2` (on y travaille : depuis le dossier
+principal, la branche ne se bascule pas). **Poussée** sur `origin`, à jour.
+`main` (`5af973a`, poussé) est un ancêtre de la branche : la fusion sera une
+avance rapide.
 
-**Vérifié (2026-10-25)** : **964 tests verts**, `cargo clippy --all-targets`
-à **0 avertissement**.
+**Vérifié (2026-11-01, O6)** : **992 tests verts**, `cargo clippy
+--all-targets` à **0 avertissement**.
 
-**Le lot 9 (comètes) est clos** (2026-10-20), validé à l'écran. Le retour du
-3 octobre (« une courbe et une droite ») est soldé :
-les deux queues étaient voulues, mais la queue d'ions était coupée près du
-noyau par la queue de poussière, qui écrivait la profondeur (material par
-défaut de macroquad). Corrigé, puis sur retours écran : des **bouffées** (« effet
-de prout », après un premier jet en ondulations refusé comme « flagelle »), et
-une queue en **chapelet de nuages** face caméra au lieu d'un ruban, qui se
-croisait en rayons vue dans son axe. Le lendemain, queue et bouffées
-**divisées par quatre** (« plus réaliste »), et les trajectoires de comète
-mises à part : teinte assombrie, **bascule RING / COMET** (9.5). Détail au
-journal, lots 9.4 et 9.5 ; pièges du moteur dans `docs/suivi/technique.md`.
+⚠️ **Le dossier principal porte du travail non commité** qui n'est pas à
+nous : le découpage de `src/vaisseau/generateur.rs` en `generateur/`,
+`docs/suivi/dette_vaisseau.md`, et des ajouts à `docs/README.md`,
+`docs/suivi/bucketlist_globale.md`, `docs/suivi/stations.md`. **N'y rien
+toucher.** À la fusion : sauvegarder ces fichiers dans le scratchpad, en
+tirer un patch (`git diff`), les remettre à l'état commité, `git merge
+--ff-only`, réappliquer le patch (`git apply --3way`), puis `git restore
+--staged` pour les laisser non commités.
 
-⚠️ **Crash intermittent** : la texture 32768² (`miniquad gl.rs:181`) est
-revenue une fois le 2026-10-20, puis pas au relancement. Le correctif du
-3 octobre n'en était pas la cause. **À la prochaine occurrence, la pile
-d'appels** (`$env:RUST_BACKTRACE=1; cargo run --release`) — ne rien corriger
-avant. Voir le journal, « Ce qui reste ouvert ».
+### Ce qui a été fait dans la dernière session
 
-**Le lot 6 est clos** (2026-10-19), **validé à l'écran** par l'utilisateur :
-supergéante rouge, sous-naine sdB, étoile carbonée, naines brunes — et un
-**lot 6.3** né de cette validation — les géantes et
-supergéantes rouges **bouillonnent** (grosses cellules de convection), avec un
-aspect stable et un instable tirés de la graine (35 % d'instables) :
-
-| Type | Stable | Instable |
+| Lot | Résultat | Journal |
 |---|---|---|
-| Géante rouge | à plat | contour irrégulier |
-| Supergéante rouge | à plat | relief éclairé |
-| Mira | — | toujours instable (contour), pulsation allégée à 15 % |
-
-Source unique : `etoile::ebullition(nom, instable)`, appliquée par
-`Variante::appliquer`. La **galerie des étoiles** montre les deux aspects côte
-à côte et a gagné le **filtre pixel (touche P)**. La validation a été
-donnée point par point (carbonée, ébullition, supergéante rouge, sdB) puis
-**globalement** pour le reste du lot (naines brunes, naine brune au centre).
-
-**Menu V2 (2026-10-19)** : la sauvegarde des systèmes est **mise de côté** (le
-code reste, la V1 s'en sert) ; le menu garde quatre presets (Solaire, Tau Ceti,
-Alpha Centauri, Proxima), + ALEATOIRE et QUITTER, et gagne **CHOISIR ASTRE >** :
-la liste des 23 types du tirage, un clic = un système autour de ce type. C'est
-**l'outil de mise au point** pour juger un type sans attendre sa chance au
-tirage (`genese::construire_systeme_autour`).
-⚠️ Le bouillonnement tourne en jeu sur toutes les géantes rouges : son coût de
-rendu de près n'a **pas été mesuré**.
-
-**Le lot 5 est clos** (2026-09-30). Ses **sept presets de trou noir sont au
-tirage** : l'utilisateur a préféré garder la variété plutôt que choisir une
-cible unique.
-
-Le 5.5 a séparé deux axes qui étaient confondus — l'**appétit** (`nom` :
-endormi / actif / vorace) et la **cible** (`cible` : chaud / Interstellar /
-braise). Le catalogue est leur **produit**. Le tirage pondère un appétit
-(0,35 / 0,45 / 0,20) puis **partage ce poids entre ses cibles** : ajouter une
-teinte change la variété, jamais la fréquence d'un appétit.
-
-**Le lot 6 est livré**, **à juger à l'écran** : supergéante rouge, sous-naine
-sdB, étoile carbonée et **naine brune** au tirage.
-
-- La carbonée n'était pas de la simple donnée : en corps noir elle serait
-  *moins* rouge qu'une naine M froide, d'où un **filtre d'absorption
-  moléculaire** (`filtre_teinte`).
-- La table du tirage est sortie dans `etoile::ordinaire(p, q)` — elle vivait
-  dans une chaîne de `if` qu'aucun test ne pouvait atteindre, comme le trou noir
-  avant le lot 4.
-- La **naine brune** est le seul type qui n'est **pas une photosphère** : elle
-  se rend en géante gazeuse. `etoile::est_naine_brune` le dit, et **tout
-  bâtisseur de corps doit le consulter** (trois le font).
-- La **vue isolée** (touche `3`) fait maintenant défiler aussi les types
-  ordinaires. ⚠️ Elle ne juge pas les **tailles** — `dist_pour` cadre chaque
-  corps pour remplir l'écran ; le rayon se lit en chiffres dans le debug.
-- La **planche des étoiles** porte les **quatre classes** de naine brune (M, L,
-  T, Y). Ses cellules sont désormais des `Box<dyn Astre>` : le type était plus
-  étroit que l'usage, la boucle n'appelant que `update` et `draw`.
-
-⚠️ Une naine brune au centre d'un système joue un **rôle** stellaire, mais ce
-n'est **pas** la quasi-étoile du lot 11 (enveloppe de milliers de masses
-solaires chauffée par accrétion, large comme une UA). Le lot 11 reste entier.
-
-**Le lot 7 est clos** (2026-10-20), validé à l'écran. Revu ce jour-là : ZZ Ceti
-et la céphéide ont une surface mi-granulation, mi-ébullition ; l'éclat de la
-céphéide atteint enfin l'image (il n'éclairait que les planètes), à la
-puissance 4 du rayon — **la céphéide seule**, les autres clignotaient
-(chantier ultérieur, conception §6 decies). Et le défilement des galeries,
-qui sautait de 5 760 px par cran sous Windows, est corrigé. Historique du
-lot : la **pulsation**, donc céphéide,
-Mira et naine blanche pulsante (ZZ Ceti) d'un coup.
-
-- `etoile::pulsation(nom) -> (amplitude, période)`. La luminosité n'a **pas** de
-  réglage à elle : `L ∝ R²` à température constante, elle suit le carré — donc
-  la variation d'éclat se voit **à toute distance**.
-- ⚠️ La pulsation **n'est pas un mode de couronne** : `Variante::appliquer` prend
-  désormais le **nom** du type en plus du mode, et `Feuille` porte ce nom. Sans
-  ça, il aurait fallu l'écrire dans cinq endroits.
-- Le piège annoncé (la cible de clic) n'en était pas un : la pulsation passe par
-  `rayon_dessine`, donc elle bouge la cible **avec** le disque peint, et les 40 %
-  de marge de `Systeme::pick` absorbent le reste.
-- **Amplitudes réelles** pour la céphéide (10 %) et Mira (20 %) ; ZZ Ceti est
-  exagérée et c'est assumé, comme `PX_MIN`. Les **périodes** sont compressées.
-
-⚠️ **Le lot 8 (lentille gravitationnelle) est ABANDONNÉ** (2026-10-01), et son
-**code retiré** : shader, material, passe, cubemap. Le dépôt est revenu à son
-état d'avant.
-
-**Ne pas le reprendre sans lire**
-[`docs/conception/astres_v2_lentille.md`](docs/conception/astres_v2_lentille.md),
-qui chiffre pourquoi il est difficile — et le journal, qui dit pourquoi il a été
-abandonné : la déviation physiquement correcte **domine** le trou noir au lieu de
-l'habiller. Mes tests garantissaient que l'effet était *contenu* ; aucun ne
-disait qu'il devait rester **discret**.
-
-**Ce qui suit décrit l'état supprimé**, gardé pour qui reprendrait le sujet.
-
-**Le lot 8 est livré, à juger à l'écran.** `Fond` grave son propre ciel en
-cubemap (8.1), et une **passe de lentille dédiée** l'échantillonne dans des
-directions déviées (8.2). Lentille mince `β = θ − θ_E²/θ` : l'anneau d'Einstein
-et l'image secondaire en sortent tout seuls.
-
-- La passe est dessinée **avant tout le reste de l'astre** : elle rend un ciel
-  **opaque** qui doit *remplacer* le fond déjà dessiné. Posée après, elle
-  effacerait l'arc du pli ; en additif, on verrait les deux ciels superposés.
-- **Un material à elle** (12ᵉ pipeline) : une texture déclarée oblige chaque
-  objet du material à la fournir — la coller au soleil aurait imposé une cubemap
-  à toutes les étoiles du jeu.
-- La déviation **s'éteint au bord du quad**, sinon le ciel dévié s'arrêterait net
-  sur une frontière invisible. Effet de bord utile : si la convention de cubemap
-  était fautive, ce bord trancherait — ça se voit d'un coup d'œil.
-- `RAYON_EINSTEIN = 1,35` rayon d'ombre : réglage d'image, facile à bouger.
-
-⚠️ **Une garde a cédé, délibérément** : « le double des pipelines tient sous 32 »
-interdisait tout nouveau shader à partir de 16. Remplacée par « huit emplacements
-libres ». À 17 sur 32 il reste 47 % du budget ; si ça remonte, **mutualiser**,
-pas relever le seuil.
-
-⚠️ Limite de fond, pas de budget : une cubemap encode des directions **à
-l'infini**. Une planète qui passe derrière le trou noir n'est ni déviée ni
-reprise dans l'anneau — elle a de la parallaxe, le champ d'étoiles non.
-
-**Le 9.1 est livré** : les comètes existent, **sur rails** (donc destination de
-vol possible), 1 à 3 par système, et une **GALERIE - COMETES** les montre par
-orbite — une ligne par excentricité, une colonne par phase. ⚠️ Le solveur de
-Kepler décrochait de 6,5° à `e = 0,99` : il itère maintenant jusqu'à
-convergence.
-
-**Le 9.2 est livré** : la queue, à l'opposé de **l'étoile** (pas de la vitesse),
-incurvée vers la traînée comme une queue de poussière, qui naît à l'approche et
-s'efface au loin. Zéro pipeline de plus — `push_ruban` existait déjà.
-⚠️ Le seuil d'activité vient de **l'orbite de la comète**, pas d'une distance en
-UA : les systèmes sont mis à l'échelle de leur étoile.
-
-**Le preset solaire porte 1P/Halley**, éléments réels et **rétrograde** (162°) :
-la skymap n'en montrait autrement qu'au tirage. Elle démarre à son périastre,
-donc en pleine queue.
-
-**Le 9.3 est livré** (2026-10-03) : cinq familles de comètes (glacée/Halley,
-poussiéreuse, carbonée, ionique, verte au C₂), une **queue d'ions** droite,
-fine et plus longue à côté de la queue de poussière, et une galerie refaite qui
-montre des **comètes** au lieu d'orbites. Retour écran en attente (ci-dessus).
-
-**Correctif hors lot** (`ba66d72`) : une taille de texte non bornée faisait
-grossir l'atlas de glyphes jusqu'à 32768², et miniquad tuait le jeu à
-l'ouverture de la galerie des comètes. Le bornage vit désormais dans
-`police::preparer`, là où il ne peut plus être oublié.
-
-**Lots futurs** (demandés le 2026-10-20, **après** 10 à 12) : 13 — refaire
-pulsar, étoile à neutrons et magnétar (peints dans le plan de l'écran, le
-défaut du trou noir d'avant le lot 5) ; 14 — étoiles vertes (n'existent pas :
-fantaisie à trancher) ; 15 — naine noire (écartée le 24 septembre, rouverte).
-Détail en conception §6 undecies. **Et, à la fin de tout : la refonte
-complète de la genèse**, qui a accumulé un cas particulier par lot (même
-section) — la masse bornée et la rareté de la quasi-étoile y seront revues.
-
-**Le lot 10 est clos** (2026-10-20), validé à l'écran : chaque type a sa
-surface (`etoile::surface`) — chaudes presque lisses, grain plus fin pour les
-denses, **bord assombri pour toutes** (le Soleil change d'aspect) ;
-supergéante bleue et Wolf-Rayet mêlent surface lisse et ébullition (WR en
-relief). Les surfaces validées en ébullition gardent leur bord d'origine,
-incohérence assumée.
-
-**Le lot 11 est clos** (2026-10-21), validé à l'écran : la **quasi-étoile**
-est au tirage (~1 système sur 1 000), rayon d'une UA, enveloppe pourpre qui
-bouillonne, couronne serrée, et sa signature — une lueur chaude qui
-transparaît au centre (uniform `coeur`). Masse propre bornée et rareté
-provisoires, à reprendre avec la refonte de la genèse. Exclue des systèmes
-multiples ; pas de planète interne, c'est voulu.
-
-**Section prototypes** (2026-10-22) : les essais visuels vivent à la
-**touche 4 de la vue isolée** (`ecran/prototypes.rs`), plus dans les
-galeries ; un prototype validé en est retiré.
-
-**Lot 12, où on en est (2026-10-24)** : 12.1 (jets 3D des jeunes étoiles)
-validé ; les **habillages du disque protoplanétaire** (B à I, chacun en base,
--F, -R, -M) jugés bons et versés dans la galerie « Ceintures & disques »
-(`disque::habillage`) ; **la T Tauri adopte T1B4** (disque de 5 à 48 rayons
-en nuages cotonneux, bras spiraux puis entonnoirs magnétiques, varié par la
-graine) et **la Herbig Ae/Be entre au tirage** en T1B2 (rideaux) —
-`habillage::jeune_etoile`, avec un niveau de détail (pas de nuages sous
-40 px de rayon apparent). Restent en prototypes, non validés : le bord
-interne brûlant (T1B4-A) et le grand disque 0,9–8 UA (T1B4-G).
-**Les jets polaires sont refaits et validés** (J5 : traînée, sablier fin
-éclairé par plaques, lobes dissymétriques) — le **standard** de tous les
-jets du chantier (`habillage::jet_standard`), porté par la T Tauri et la
-Herbig. Les effets du lot 12 tournent 8 fois moins vite (`RALENTI_NUAGES`).
-**L'étoile Be** (aplatie, disque de décrétion) et **l'hypergéante** (Eta
-Carinae : vent, jupe, lobes en bulbe) sont au tirage (2026-10-25) ; le grand
-disque protoplanétaire est posé par la genèse, un sillon par planète. **Le lot 12 est
-clos** (2026-10-25), validé à l'écran et en jeu : touche 4 vide, 60 FPS
-stables (un peu moins de 40 tout près d'un disque), grand disque jugé bon en
-régénérant. Le plan de référence d'un système (disques désaxés) est noté pour
-la refonte de la genèse.
-
-**Le prochain pas** : **tous les lots livrés sont validés.** Reste à
-construire, **dans l'ordre** : **une passe de relecture** du chantier
-(demandée : *« observer qu'on n'a rien loupé »*), puis la refonte de la
-genèse. **Chantier planètes** (branche `chantier-planetes`, 2026-10-27) : le type et
-l'habitabilité des planètes — huit types, chacun son icône, dans la fiche de
-la skymap V2 et la galerie des planètes (`planete::classe`, journal dans
-`docs/suivi/planetes.md`) ; P1-P2 : le type de base des presets rocheux réglé
-dans `assets/planetes.json` (relu à chaud, nom affiché, retrait) et la vue
-**tableur** qui l'écrit ; P3 : l'habitabilité en contexte — le type de base
-corrigé par chacun des 29 types d'étoile et par la zone
-(`assets/habitabilite.json`, `planete::contexte`), affichée dans la fiche avec
-ses raisons. Le fichier sera réglé finement avec la genèse. **Chantier Genèse V2 cartographié** (2026-10-28) : [`docs/conception/genese_v2.md`](docs/conception/genese_v2.md), lots G0 à G8, rien de codé ; G0 = décisions à trancher. **Chantier-Opti-v2 lancé** (branche `chantier-opti-v2`, 2026-10-28 ; journal `docs/suivi/opti_v2.md`) : **O1 et O2 livrés** (nuages calculés une fois par image ; empilement borné à sa grille, image inchangée) — T Tauri 38,9 → 170 fps, Herbig 36,8 → 168 en vue isolée sur la machine de dev ; petit PC : 10–14 fps encore (GPU) → diagnostic `DIAG=1` et réglage QUALITE (Basse : voile en une couche, un tiers des nuages ; ×1,9 sur la machine de dev) ; palette quantifiée à sa propre taille ; tour `DIAG=tour` (76 cas) ; **système solaire 169 → 484 fps** sur la machine de dev (ISS et Starship en point quand ils tiennent sous 2 px — c'était 16 fps sur le petit PC) ; palette quantifiée par table précalculée (la passe ne coûte plus que ~0,5 ms sur la cible ; les « ~8 ms » mesurés venaient d'une première phase de DIAG mal chauffée, corrigée) ; Jupiter en gros plan ~22–25 ms sur la cible ; **O3 livré** (2026-10-29) : le voile en couches en une seule passe, le shader compose les couches le long du rayon de vue — coût du voile de la T Tauri ÷5 sur la machine de dev, image identique au bruit près ; **O4 livré** (2026-10-30) : les nuages et les bras dessinés dans une cible à 1/2 par axe — remplissage ~100 → ~25 écrans, T Tauri 70 → 49 ms sur la cible ; le plancher qui reste (35 à 50 ms) est le calcul et l'envoi des boules ; **O7 livré** (2026-10-30) : boules des nuages et jets figés dans des buffers GPU, animés par le shader, empilement sur un échantillon — T Tauri 158 → ~895 fps en jeu sur la machine de dev, image identique au bruit près (plaques des parois tirées autrement) ; **O5 livré** (2026-11-01) : RÉSOLUTION 3D (100/75/50 % en rendu Net) et IMAGES (libre/60/30) dans les paramètres ; **O6 livré** (2026-11-01) : deux calculs inutiles retirés du shader de l'étoile, à image identique (G de près 630 → 727 fps sur la machine de dev) ; le niveau de détail selon la taille, écarté. Reste le banc d'essai du petit PC (modifié le 2026-10-30) pour clore le chantier. Carte ouverte le 2026-10-26 : la carte de la dette de
-performance d'Astres V2, pour 30 fps sur un premier APU Ryzen portable —
-[`docs/conception/opti_v2.md`](docs/conception/opti_v2.md). Mesuré : la T Tauri
-et la Herbig tombent à ~40 fps en vue isolée **sur la machine de dev**
-(nuages calculés deux fois, empilement dégénéré ; voile en 14 passes côté
-GPU). Lots O1 à O8 proposés, rien d'optimisé encore. **Le lot 15 est clos** (2026-10-26) : la naine noire au tirage —
-silhouette, braise ou cristallisée, sans éruptions. **Tous les lots du
-chantier Astres V2 sont livrés** (le 8 abandonné). **Le lot 14 est clos** (2026-10-26) : la naine blanche polluée au
-tirage — verte (sodium, WD J1330+6435, la première étoile verte découverte en
-octobre 2026), rose, cyan ou rouge, l'anneau des débris de ses planètes, son
-nom qui dit ce qui la pollue. **Le lot 13 est
-clos** (2026-10-26) : pulsar blanc à faisceaux 3D courbés, étoile à neutrons
-violette (ou turquoise et stable), magnétars à boucles 3D.
-
-Deux dettes du lot 5, petites et non bloquantes : le disque passe sous
-l'horizon dessiné à très longue distance (`PX_MIN`), et la convention de
-silhouette « mince » n'a jamais été essayée.
-
-→ Tout le détail, lot par lot, dans
-[`docs/suivi/astres_v2.md`](docs/suivi/astres_v2.md) — c'est lui qu'il faut
-lire, pas les commits.
-
-**Commits** : un par lot ou sous-lot, sur la branche de chantier, une fois
-les tests verts et clippy à zéro — la consigne a été révisée le 2026-09-26,
-voir « Commits » plus bas. La **fusion** vers `main` reste une décision de
-l'utilisateur.
-
----
-
-## Ce qui précédait (état au 2026-08-16)
-
-**Vérifié** : **734 tests verts**, `cargo clippy --all-targets` à **0
-avertissement**.
-
-**Commité et poussé** (`c53bab2` « Chantier trajectoires : lots A-D, icônes
-du sélecteur (I.6), retrait N-corps », sur `origin/main`) : chantier I.6
-(icônes du sélecteur) et lots A/B/C/D du chantier trajectoires (voir
-ci-dessous) — trente fichiers touchés au total. Détail exact dans le commit
-lui-même (`git show --stat c53bab2`).
-
-### Ce qui a été fait juste avant l'ouverture du chantier trajectoires
-
-⚠️ Malgré le titre d'origine, **ce n'est plus la dernière session** : quatre
-lots du chantier trajectoires (A/B/C/D, voir plus bas) ont été faits depuis.
-Gardé tel quel — travail réel, toujours pertinent — mais pour « qu'est-ce qui
-vient d'être fait », c'est la section trajectoires ci-dessous qu'il faut lire.
-
-| Chantier | Résultat | Journal |
-|---|---|---|
-| **I.6 — Icônes du sélecteur** | Pastille de couleur remplacée par un vrai rendu 3D en cache, fond transparent + contour d'un pixel, gazeuses toutes à la même taille (l'anneau déborde au lieu de s'y comprimer), Pluton toujours en dernier malgré son orbite excentrique. Corrige au passage un bug de cycle de vie GPU (une `RenderTarget` dont on ne gardait que la texture voyait celle-ci supprimée à la frame suivante) et un plan de coupe caméra trop loin pour les petits corps (Pluton tombait hors champ) | [`suivi/interface.md`](docs/suivi/interface.md) I.6 |
-| **I.6 bis — Anneau, tabulation, panneau animé, Terre** | Azimut de caméra d'un astre à anneau aligné sur sa propre inclinaison (plus l'arbitraire de la position orbitale) + `FOVY_GAZEUSE_DEG` recadré sur Saturne réelle plutôt que le maximum théorique — débordement réduit d'~22 %, pas supprimé (borné par « même taille que Jupiter » + « l'anneau doit déborder »). Tabulation des planètes sous leur étoile. Panneau de droite animé (glissement, ease-in-out). Bug trouvé et corrigé : l'icône de la Terre figeait parfois un repli de terrain **pas encore généré** (génération asynchrone, budget limité) — sans rapport avec la fraction d'eau, qu'un premier réglage avait pourtant fait bouger deux fois en vain | [`suivi/interface.md`](docs/suivi/interface.md) I.6 bis |
-| **I.6 ter — Anneau à plat, bouton de repli ×2, colonne « liquide »** | `cadre_camera` (ex-`azimut_et_elevation`) rend `haut` — la projection de la normale de l'anneau sur le plan perpendiculaire à la vue — au lieu de `Vec3::Y` : le grand axe de l'ellipse est désormais **forcé horizontal à l'écran** quel que soit l'astre ou l'instant. Élévation de caméra généralisée en angle paramétrique (`elevation_anneau_rad`, uniforme pour tout astre à anneau, pas un cas Saturne), **mise à zéro** sur demande explicite : l'anneau se réduit à un trait, ouverture nulle. Bouton ◄ doublé (`selecteur::ECHELLE_BOUTON_REPLI = 2.0`), filé dans les trois usages (dessin/clic/réservation d'espace) via des variantes `_bouton` de `liste.rs`. Fond de colonne remplacé par un dégradé de 16 bandes + ménisque haut ; bordure cyan pleine remplacée par du gris 30 % d'opacité (demandé « for testing », pas un réglage final) | [`suivi/interface.md`](docs/suivi/interface.md) I.6 ter |
+| **O4** | nuages et bras dessinés dans une cible à 1/2 par axe | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) |
+| **O7** | boules des nuages et jets figés dans des buffers GPU, animés par le shader ; empilement sur un échantillon — T Tauri 158 → ~895 fps (dev) | idem |
+| **O5** | RÉSOLUTION 3D (100/75/50 %, rendu Net) et IMAGES (libre/60/30) dans les paramètres | idem |
+| **O6** | deux calculs inutiles retirés du shader de l'étoile, à image identique | idem |
+| **O8**, premier banc | petit PC modifié (16 Go, pilote à jour) : T Tauri 70 → 7,3 ms par image, pire cas du tour 63 fps (graine 2) | idem, « O8 » |
 
 ### À faire ensuite, par ordre
 
-1. **Skymap V2** (marqueurs) : faite, à juger à l'œil contre V1 — garder V2,
-   revenir à V1, ou porter les marqueurs dans V1. Journal :
-   `suivi/interface.md`. Spec :
-   `docs/superpowers/specs/2026-09-22-skymap-v2-marqueurs-design.md`.
-2. ⚠️ **Elysium : fps mesuré en jeu, amélioré, encore loin d'être bon.**
-   Harnais de profilage ajouté (`PROFIL=<libellé> ./target/release/solar_game.exe`,
-   voir `suivi/stations.md`) : le gain du correctif de vitrage (session
-   précédente) **mesuré**, pas estimé — insuffisant seul (18,7 fps moyen sur
-   Elysium, contre 59 pour la station à anneau de référence, 28,6 pour
-   Stanford). Cause n°1 identifiée et chiffrée : les six **bras**
-   (`Composant::Charpente`) — 53 928 sommets sur 204 580 (26 %) pour
-   6 pièces, `baies` (densité de treillis) jamais réglé pour l'échelle
-   d'Elysium (2× celle de Stanford).
-   - **Choix fait entre deux corrections** (retoucher la densité des
-     treillis — visuel/structurel, propre à Elysium/Stanford — ou baisser
-     `SEGMENTS`, le curseur global de tessellation des cylindres) :
-     `SEGMENTS` baissé **20 → 12** (`maillage.rs`). Mesuré : 18,7 → **20,0
-     fps**. Réel, mais net en dessous de ce qu'annonçait la réduction de
-     sommets (~38 % de sommets en moins, ~7 % de fps en plus) — le goulot
-     n'est pas surtout le volume de sommets, plutôt un coût **par appel**.
-   - **Piste creusée, pas prise** : des tampons GPU **persistants**
-     (uploader une fois, ne plus recopier chaque frame) sont possibles en
-     principe via `get_internal_gl().quad_context` (accès bas niveau à
-     `miniquad::RenderingBackend`, déjà utilisé ailleurs dans ce projet),
-     mais `Material`/`QuadGl` (le système d'éclairage) n'expose pas son
-     pipeline pour ça — il faudrait un **second chemin de rendu complet**,
-     parallèle à `MaillageStation`. Jugé trop gros et trop risqué (un bug de
-     shader s'y verrait sur tout le jeu, pas seulement Elysium) pour cette
-     session. Détail et refus assumé dans `suivi/stations.md`.
-   - ~~le croisement bras/anneau du second anneau~~ — **tranché** : pas de
-     raccord dédié nécessaire, ni pour Elysium ni pour Stanford ;
-   - la **rotation au bouton** (axe Z) et l'**encadrement du hangar fermé**,
-     tous deux ajoutés ce chantier sans les avoir vus tourner/s'afficher ;
-   - le **sol et la ville restent volontairement provisoires** (vert plat sans
-     texture, parallélépipèdes bruités) — pas un défaut, juste pas habillé.
-3. ~~⚠️ Trois choses à juger à l'œil (Stanford/étoiles)~~ — **les trois
-   tranchées** (2026-08-14, jugées en jeu) :
-   - le **plancher stellaire** : 8 px faisait un Soleil trop gros, ramené à
-     **4 px** (`soleil::PX_MIN`) — occupe désormais 21 % du rayon de l'orbite
-     de Mercure (42 % avant) ;
-   - la **charge du mât polaire** « derrière » le miroir bas et le **mât qui
-     perce les disques** : **pas des défauts** — le miroir est troué en son
-     centre pour le mât (`VarianteMiroir::trou`), tout se voit à travers.
-     `POLE_ECART` inchangé.
-   - Détail dans `suivi/etoiles.md` (P.3 bis, révisé) et `suivi/stations.md`
-     (« Marge de 1,8 sous le miroir bas »).
-4. **Palette : lister les sous-variantes.** `echantillons()` n'en donne qu'une par
-   `Composant`, si bien qu'`ARC SOUTE`, les postes d'amarrage et `HANGAR FERME`
-   sont **inatteignables à l'écran**. Bloque l'étape 5 de l'Endurance.
-5. **Endurance étape 5** : assembler l'anneau à douze avec l'alternance des
-   quatre familles. Puis étape 6 : propulsion et réservoirs arrière.
-6. **Assembleur Lot 8** (décalage) et **Lot 9** (redimensionnement) ; **Lot 6**
-   pour la dette d'enveloppes L1.4, les composites et `PoutreBout`.
-7. **D-INT-2, l'économie** — reporté explicitement trois fois. À ouvrir quand la
-   vue système sera close.
-8. **D-PIX-3/4** (contours Sobel, taille de pixel réglable) et les **comètes**
-   (`Categorie::Comete` n'engendre rien).
-
-### Chantier en cours : trajectoires (Lots A, B, C et D faits, 2026-08-15/16)
-
-Faire voyager un vaisseau assemblé (VAB) ou une station déjà en orbite d'un
-astre à un autre — le Starship est **fini depuis le 2026-08-06** et n'a
-toujours nulle part où aller (§10 bis de la bucket list). Conception :
-[`conception/trajectoires.md`](docs/conception/trajectoires.md) (§4, **onze**
-décisions de gameplay désormais — sept le 2026-08-14/15 : trajet automatisé
-sans plan de manœuvre, statistiques de vol en hybride, rendez-vous avec
-cible mobile dès le premier jet — y compris aux cinq points de Lagrange —,
-logistique manuelle d'abord, minuteur de superstructure et saut
-interstellaire de l'ISV **hors périmètre**, colonisation qui consomme le
-vaisseau ; **quatre de plus le 2026-08-15/16** : un vaisseau non en vol est
-« posté » via `EnginOrbital` — orbite d'une planète/lune ou vol stationnaire
-près d'un habitat/station, résout d'où vient le départ d'un trajet ; coût de
-construction non plat + réutilisabilité du Starship croissant avec la
-recherche ; stations postées **non pilotables** mais dotées de PV
-(dégâts d'éruption solaire/astéroïde, réparation) ; **mode N-corps retiré du
-jeu** comme code de test) et
-[`conception/concept_jeu.md`](docs/conception/concept_jeu.md) (vision RTS
-globale). Journal : [`suivi/trajectoires.md`](docs/suivi/trajectoires.md) —
-y compris une liste consolidée de tous les chiffres encore provisoires.
-
-- ✅ **Lot A — Statistiques de vol** : `src/vaisseau/vol.rs`, nouveau.
-  `ClasseVaisseau::Starship` (seul, volontairement — ISV et Jupitris hors
-  scope, voir le journal), `StatsVol` (vitesse/portée/fret) = base de classe
-  + modificateurs des pièces de propulsion (`Raptor`, `Propulseur` axial) et
-  réservoir. Chiffres de base provisoires, nommés. 5 tests, tous
-  red-checkés.
-- ✅ **Lot B — Mobile** : la prédiction (`Astre::position_future`,
-  `Systeme::position_future_de`, `Systeme::temps`), la géométrie de l'arc
-  (`systeme::trajectoire::Trajectoire`, Bézier quadratique, rendez-vous
-  garanti par construction) et le vaisseau mobile lui-même
-  (`transit::VaisseauEnTransit`, `Astre::suivre_trajectoire`, câblé dans
-  `Systeme::update`). 17 tests, tous red-checkés.
-- ✅ **Mode N-corps retiré** (2026-08-16, confirmé « code de test » par
-  l'utilisateur) : `src/systeme/gravite.rs` supprimé, `ModePhysique` et tout
-  son câblage (`Systeme::mode`/`regler_mode`, `Astre::amorcer_ncorps`, le
-  bouton PHYS du menu) retirés — pas juste désactivés. La bande d'outils
-  passe de 5 à 4 bascules, vérifié à l'écran. Retire du même coup la
-  divergence de prédiction en `NCorps` notée dans le Lot B : il n'y a plus
-  qu'un mode, la prémisse de `trajectoires.md` §5 tient sans condition.
-- ✅ **Lot C — Un premier vaisseau qui vole vraiment** (2026-08-16) : bouton
-  LANCER dans la fiche (`fiche::bouton_lancer`, décision 8) + mode armé
-  dans `skymap.rs` (`Skymap::lancement`, `tenter_lancement`) — clic sur le
-  vaisseau, clic sur LANCER, clic sur une destination, il part. Backend :
-  `Systeme::calculer_trajectoire` (résolution par point fixe du rendez-vous
-  avec une cible mobile — convergence **mesurée**, pas supposée : voir le
-  journal pour le cas défavorable qui a fait remonter `ITERATIONS` de 4 à
-  24), `Systeme::lancer`/`Astre::tenter_lancer` (a remplacé
-  `Systeme::remplacer`, qui s'est révélé être la mauvaise primitive —
-  retiré, pas gardé). Un vrai Starship pilotable posté en orbite terrestre
-  (`genese/presets.rs`). ⚠️ **Le clic réel n'a pas été rejoué à l'écran**
-  (`CAPTURE` ne simule pas de clic) — seule la boucle de mise à jour est
-  vérifiée saine sur 300 frames ; toute la logique qui décide est testée à
-  fond. **716 tests verts**, clippy 0 avertissement.
-- ✅ **Lot D — Aperçu du trajet + caméra qui suit** (2026-08-16) :
-  `Trajectoire::polyligne(n)` (échantillonnage de l'arc, coordonnées monde
-  déjà absolues — pas de `centre` à additionner, contrairement à
-  `Orbite::polyligne`), `dessiner_points_ouvert` dans `systeme/rendu.rs`
-  (même technique de semis à espacement écran constant que les orbites,
-  mais **sans** le `% n` qui boucle une polyligne fermée — un arc à sens
-  unique ne doit pas relier son arrivée à son départ). `Calques` porte
-  maintenant `previsualisation: Option<Vec<Vec3>>`, alimenté par
-  `Skymap::previsualisation_trajectoire` : tant qu'un vaisseau est armé
-  (LANCER cliqué), l'astre **survolé** (pas cliqué — `Systeme::pick`,
-  `&self`, aucun effet de bord, pas `Camera::pick` qui déplace le focus)
-  donne un arc d'essai, dessiné en ambre. **Caméra** : `tenter_lancement`
-  appelle `self.cam.set_focus(idx_vaisseau)` après un lancement réussi —
-  et rien de plus n'était nécessaire, `Camera::cible` relit
-  `Systeme::position(idx)` chaque frame quel que soit ce qui la fait bouger
-  (orbite ou trajet), la mécanique de suivi existait déjà. **719 tests
-  verts**, clippy 0 avertissement. ⚠️ Même limite que le Lot C : le clic/
-  survol réel n'a pas pu être rejoué à l'écran (`CAPTURE` ne simule pas la
-  souris) — vérifié par lecture de code (`Camera::cible`/`Systeme::update`)
-  et par les tests unitaires de `polyligne`, pas par capture visuelle de
-  l'arc lui-même.
-- **Suite : Lot E** — arrivée (amarrage, consommation à la colonisation) :
-  un vaisseau arrivé reste immobile pour toujours aujourd'hui.
+1. **Clore Opti-v2** : dépouiller le banc complémentaire du petit PC (étoiles
+   de près, tour en rendu Net, la version d'avant O4 sur le PC modifié pour
+   séparer le gain du code de celui du matériel), écrire le bilan d'O8 dans le
+   journal, puis **fusionner vers `main`** (procédure ci-dessus) — décision de
+   l'utilisateur.
+2. **Choisir le chantier suivant** sur ce banc. Pistes relevées : la graine 2
+   (limitée par le processeur, 11 ms), le rendu Net plein écran de près
+   (l'étoile seule ~12 ms de GPU sur le petit PC), la galerie des planètes.
+3. **Genèse V2** : trancher les décisions de G0
+   ([`conception/genese_v2.md`](docs/conception/genese_v2.md)), puis G1 — qui
+   débloque aussi la part « nombre d'objets » de la qualité (O5).
+4. **Planètes** : régler finement `assets/habitabilite.json` avec la genèse
+   ([`suivi/planetes.md`](docs/suivi/planetes.md)).
+5. **Astres V2** : la **passe de relecture** demandée (*« observer qu'on n'a
+   rien loupé »*), jamais faite.
+6. **Trajectoires, lot E** : l'arrivée (amarrage, consommation à la
+   colonisation) ; un vaisseau arrivé reste immobile.
+7. Plus ancien, toujours ouvert : **lister les sous-variantes** dans la palette
+   (bloque l'Endurance, étape 5) ; **assembleur** lots 6, 8 et 9 ; **D-INT-2,
+   l'économie** ; **D-PIX-3/4** (contours, taille de pixel).
 
 ### Dettes ouvertes repérées en chemin
 
-- Le **défilement** n'est câblé que dans la vue des composants ; `galerie_disques`
-  et `skymap` partagent la même colonne et ont le même défaut.
+- ⚠️ **Crash intermittent** (texture 32768², `miniquad gl.rs:181`), vu le
+  2026-10-03 et le 2026-10-20. **À la prochaine occurrence, la pile
+  d'appels** (`$env:RUST_BACKTRACE=1; cargo run --release`) — ne rien corriger
+  avant. [`suivi/astres_v2.md`](docs/suivi/astres_v2.md), « Ce qui reste
+  ouvert ».
+- Un engin vu de près (ISS, Starship) repasse par `draw_mesh`, qui recopie ses
+  sommets à chaque image. Elysium : 20 fps en vue dédiée. Même remède, des
+  tampons GPU persistants ([`suivi/stations.md`](docs/suivi/stations.md)).
+- Le GLSL ne se compile qu'au lancement : aucun test ne le vérifie au-delà de
+  `verif::usage_avant_declaration`.
+- Le **défilement** n'est câblé que dans la vue des composants ; la colonne de
+  la skymap a le même défaut.
 - `src/ecran/briques.rs` et `src/ecran/vaisseaux.rs` sont commités mais non
-  déclarés : ils ne compilent pas.
+  déclarés : ils ne compilent pas. À supprimer ou à rebrancher.
+- Lot 5 d'Astres V2 : le disque passe sous l'horizon dessiné à très longue
+  distance (`PX_MIN`) ; la convention de silhouette « mince » jamais essayée.
 
 ## Commits
 
-Dernier commit : `c53bab2` « Chantier trajectoires : lots A-D, icônes du
-sélecteur (I.6), retrait N-corps » — **poussé sur `origin/main`**. Avant
-lui : `a0ebb58` « torus & elysium complex base complete », `73fb924`
-« torus », `fb7d589` « fix » (2026-08-10), `dc0d7bf` « torus ok », `2a042e6`
-« P4 ok », `7278aa1` « P.1 a P.3 ok, plus fix ui ».
+Dernier commit : `453ee73` « Opti-v2 O6 : le shader de l'etoile, deux calculs
+inutiles retires ». `git log` fait foi pour le reste.
 
-⚠️ **Périmé depuis.** Skymap V2 a été **fusionné dans `main`**
-(`f3a32b8`), et la branche courante est maintenant `chantier-astres`
-(worktree `.claude/worktrees/astres-v2`), 32 commits d'avance sur `main`,
-**non fusionnée et non poussée**. Les deux lignes ci-dessus décrivent un
-`main` déjà dépassé.
-
-**Consigne debout (révisée le 2026-09-26) : commiter à chaque lot, sur la
-branche de chantier.**
-
-⚠️ **Elle remplace l'ancienne**, *« no commit i'll say when commit is
-needed »*, qui interdisait de commiter de soi-même. Cette règle-là datait
-d'une époque où l'on travaillait **directement sur `main`** : un commit y
-était un engagement, et l'utilisateur voulait le prononcer lui-même.
-
-Depuis, le travail se fait sur une **branche de chantier dans un worktree**
-(`.claude/worktrees/…`). Le raisonnement s'inverse : un commit n'engage plus
-rien — il **crée un point de repli**. Si un lot tourne mal, on revient au
-commit précédent au lieu de perdre le travail. C'est exactement ce que
-cherchait à éviter l'incident d'origine, un `git checkout --` qui avait
-détruit du travail non commité (`docs/suivi/stations.md` §F.8) : la réponse
-n'était pas de commiter *moins*, c'était de commiter *plus tôt*.
-
-En pratique : **un commit par lot ou sous-lot**, une fois les tests verts et
-clippy à zéro. La fusion vers `main`, elle, reste une décision de
-l'utilisateur — c'est là qu'est passé l'engagement.
+**Consigne debout (révisée le 2026-09-26) : un commit par lot ou sous-lot**,
+sur la branche de chantier, une fois les tests verts et clippy à zéro. Un
+commit n'engage rien, il crée un point de repli. La **fusion** vers `main` et
+le **push** restent des décisions de l'utilisateur.
 
 ⚠️ **Ne jamais employer `git checkout --`, `git restore` ou `git reset --hard`**
-sur un fichier contenant du travail non commité. Pour annuler ses propres
-modifications : ré-éditer les lignes, ou sauvegarder le fichier dans le
-scratchpad **avant** de le toucher (red-checks compris).
+sur un fichier contenant du travail non commité (`docs/suivi/stations.md`
+§F.8). Sauvegarder dans le scratchpad **avant** de toucher. ⚠️ **Jamais de
+`git stash` nu** : la pile est partagée entre les worktrees.
 
-État vérifié au 2026-09-26 : **838 tests verts** (850 avec `mhd`), **`cargo
-clippy --all-targets` : 0 avertissement** (branche `chantier-astres`).
+## Les chantiers
 
-Ancien relevé : **734 tests verts** (746 avec le binaire `mhd`), **`cargo clippy
---all-targets` : 0 avertissement** (branche `worktree-skymap-v2-marqueurs`,
-voir la ligne « Branche courante » ci-dessus ; 719 était le compte au moment
-du Lot D, laissé tel quel dans le récit qui suit).
-
-## Chantier courant : finir les planètes et la vue système
-
-**Décidé le 2026-08-06, avant D-INT-2** : l'économie attendra que la vue système
-soit finie. On ne conçoit pas une économie par-dessus un décor qu'on va encore
-remuer.
-
-| # | Chantier | Nature | État |
-|---|---|---|---|
-| **P.1** | **Atmosphère planétaire** | vrai manque, confirmé dans le code | ✅ code fait (teinte/densité séparées le 2026-08-09), **rendu à valider à l'œil** |
-| **P.2** | **Ceintures : finition + optimisation** | mesurer d'abord | ✅ pour l'essentiel — reste l'instrument de fill rate (touche **V**), jamais relevé |
-| **P.3** | **Étoiles : éjections et motifs de surface** | ⚠️ **existent déjà** — enquête avant travaux | ✅ tranché : plancher à 8 px, **à valider à l'œil** |
-| **P.4** | Finitions planétaires (rotation propre, nuages, ombres d'anneaux) | liste ancienne | ✅ |
-
-
-Le **détail** de chacun — ce qui a été trouvé, les mesures, les red-checks — est
-sorti d'ici le 2026-08-10 : voir « Où trouver quoi » juste dessous.
+| Chantier | Où on en est | Journal · conception |
+|---|---|---|
+| **Opti-v2** | O1 à O7, O9, O10 livrés ; O8 (banc du petit PC) en cours | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) · [`conception/opti_v2.md`](docs/conception/opti_v2.md) |
+| **Genèse V2** | carte faite (lots G0 à G8), rien de codé ; G0 = décisions à trancher | — · [`conception/genese_v2.md`](docs/conception/genese_v2.md) |
+| **Planètes** (type, habitabilité) | P1 à P3 livrés, habitabilité des presets ajustée à la main ; réglage fin avec la genèse | [`suivi/planetes.md`](docs/suivi/planetes.md) · [`conception/planetes.md`](docs/conception/planetes.md) |
+| **Astres V2** | **clos** (2026-10-26) : lots 0 à 15 livrés et validés, le 8 abandonné ; reste la passe de relecture | [`suivi/astres_v2.md`](docs/suivi/astres_v2.md) · [`conception/astres_v2.md`](docs/conception/astres_v2.md) |
+| **Trajectoires** | lots A à D faits (un Starship vole en jeu) ; lot E à faire | [`suivi/trajectoires.md`](docs/suivi/trajectoires.md) · [`conception/trajectoires.md`](docs/conception/trajectoires.md) |
+| **Interface de jeu** | I.0 à I.6 faites ; Skymap V2 (marqueurs) fusionnée, à côté de la V1 — choix entre les deux jamais tranché | [`suivi/interface.md`](docs/suivi/interface.md) · [`conception/interface.md`](docs/conception/interface.md) |
+| **Assembleur (VAB)** | lots 1 à 5 clos, rotation faite ; restent 6, 8, 9 | [`suivi/assembleur.md`](docs/suivi/assembleur.md) · [`conception/assembleur.md`](docs/conception/assembleur.md) |
+| **Stations et vaisseaux** | ISV, Starship, Stanford, Elysium (chantier initial) clos — d'Elysium, la rotation au bouton et le hangar fermé jamais vus à l'écran ; **Endurance bloquée** par la palette | [`suivi/stations.md`](docs/suivi/stations.md) · [`conception/stations.md`](docs/conception/stations.md) |
+| **Dette de `vaisseau/`** | chantier 1 (découpage de `generateur.rs`) fait **dans le dossier principal, non commité** ; chantiers 2 et 3 à faire | `docs/suivi/dette_vaisseau.md` (dossier principal) |
+| **Planètes et vue système** (P.1 à P.4) | ✅ clos (2026-08) ; le voile des anneaux de près, mesuré par Opti-v2 (~12 ms sur le petit PC, Saturne plein écran), pas réduit | [`suivi/planetes.md`](docs/suivi/planetes.md), [`suivi/ceintures.md`](docs/suivi/ceintures.md), [`suivi/etoiles.md`](docs/suivi/etoiles.md) |
 
 ## Où trouver quoi
-
-⚠️ **Ce fichier ne raconte plus rien.** Il dit l'état et la suite ; chaque
-chantier a son journal. C'est la correction du travers qui l'avait porté à
-1 968 lignes.
 
 | Vous cherchez | C'est dans |
 |---|---|
 | **La discipline** : red-check, pièges de tests, règles apprises | [`docs/methode.md`](docs/methode.md) |
-| Atmosphères (P.1), rotation propre, nuages, ombres d'anneaux (P.4), cohérence du catalogue | [`docs/suivi/planetes.md`](docs/suivi/planetes.md) |
-| Ceintures, anneaux, débris, galerie des disques (tout P.2) | [`docs/suivi/ceintures.md`](docs/suivi/ceintures.md) |
-| Étoiles : éruptions, échelle, plancher à 8 px (P.3) | [`docs/suivi/etoiles.md`](docs/suivi/etoiles.md) |
-| Interface : calques, trajectoires, police, paramètres, échelle | [`docs/suivi/interface.md`](docs/suivi/interface.md) |
-| Assembleur (VAB) : lots 1 à 5, rotation, sauvegarde | [`docs/suivi/assembleur.md`](docs/suivi/assembleur.md) |
-| Stations, vaisseaux, composants, mégastructures | [`docs/suivi/stations.md`](docs/suivi/stations.md) |
+| L'index commenté de toute la documentation | [`docs/README.md`](docs/README.md) |
 | Pièges moteur : pipelines, materials partagés, GPU | [`docs/suivi/technique.md`](docs/suivi/technique.md) |
 | Revues de code | [`docs/suivi/revues.md`](docs/suivi/revues.md) |
-| Géantes gazeuses | [`docs/suivi/geantes_gazeuses.md`](docs/suivi/geantes_gazeuses.md) |
 | La liste globale des fonctionnalités | [`docs/suivi/bucketlist_globale.md`](docs/suivi/bucketlist_globale.md) |
-| Le **pourquoi** de chaque système | [`docs/conception/`](docs/conception/) |
-| **Trajectoires** (vaisseaux/stations mobiles) — Lots A/B/C faits, journal | [`docs/suivi/trajectoires.md`](docs/suivi/trajectoires.md) (conception : [`docs/conception/trajectoires.md`](docs/conception/trajectoires.md)) |
-| **La vision RTS globale** (isolement des ressources, tuiles, recherche, habitats, superstructures, vaisseaux) | [`docs/conception/concept_jeu.md`](docs/conception/concept_jeu.md) |
-
-## Chantiers en pause
-
-| Chantier | Où on en est | Reprendre par |
-|---|---|---|
-| **Assembleur** | Lots 4–5 clos ; **rotation (R) faite** sans attendre le gizmo | Lot 8 (décalage) et Lot 9 (redimensionnement) |
-| **Starship** ✅ **5/5** | Coque, 6 Raptor, jupe, 4 volets droits, bardage de tuiles (fût **et** ogive) et 2 hublots. Exposé **debout**, moteurs en bas. | Vaisseau **mobile** (transferts entre astres) |
-| **Endurance** | **Module en coin d'arc fait** (brique seule, §D.5 étape 4) | ⚠️ **bloqué** : la palette ne liste qu'une sous-variante par composant, donc les quatre familles d'arc sont inatteignables à l'écran. Débloquer `echantillons()` d'abord, puis §D.5 étape 5 |
-| **Tore de Stanford** | Miroirs, pilier polaire, moitiés fixe/tournante, charge du mât bas — les trois points à juger à l'œil sont **tranchés** (2026-08-14) | rien de connu ; reprendre si un nouveau défaut se signale |
-| **Complexe Elysium** | Chantier **initial clos** 2026-08-14 (anneau complet, sol/ville, second anneau, face à Z + rotation, hangar, rendu optimisé) | ⚠️ points à **juger à l'œil** — voir « Reprendre ici » ; sol/ville restent délibérément provisoires |
-
-## L'assembleur, en résumé
-
-L'ISV est **clos** (`docs/suivi/stations.md` §C.29), Elysium aussi pour son
-chantier initial (même fichier, Partie F). Les mégastructures et le
-Starship sont journalisés en **Partie F** du même fichier.
-
-| Lot | Contenu | État |
-|---|---|---|
-| **Lot 1** (L1.1–L1.8) | Fondations : catalogue à source unique, balayage des variantes, déterminisme, rayons déclarés, **capsules**, overlays, mesureur | ✅ |
-| **§9** « le boudin » | Enveloppe **rectangle** pour les plaques, distances exactes | ✅ |
-| **Lot 2** (L2.1–L2.5) | Modèle du `Chantier` : identifiants stables, `retirer`, undo/redo, palette, sérialisation | ✅ |
-| **Lot 3** (L3.1–L3.3) | `pose_prevue` (fantôme), `sous_arbre`, désignation port/pièce | ✅ |
-| **Lot 4** (L4.1–L4.6) | **L'écran d'assemblage**, déplacement compris | ✅ |
-| **Lot 5** | Sauvegarde disque (L5.1), overlay §8.5 (L5.2) | ✅ |
-| **Lot 6** | Arbitrage L1.4 (L6.1), composites `figer` (L6.2), `PoutreBout` (L6.3) | à faire |
-
-Le modèle répond aux quatre questions de §8, et **un écran le consomme enfin** :
-`ecran::assembleur::VueAssembleur`. `Chantier` est réexporté, et
-`Chantier::apercu` lui donne une station sans le consommer (voir
-`suivi/assembleur.md` § L4.1).
-
-**Arbitrage §10.7 (b) rendu** (2026-08-09) : quitter l'écran détruit le
-chantier, et on l'assume jusqu'à la sauvegarde du Lot 5. Échap repose d'abord la
-pièce en main, et ne quitte qu'au repos.
-
-⚠️ Le Lot 4 est le **premier lot majoritairement non testé** (§6.6 : pas de test
-de rendu) — comme l'interface de jeu. La discipline change de forme : pousser
-hors du code de dessin tout ce qui **se décide**, vers des requêtes
-red-checkables. Ce qui reste non testé ne doit être que *où le rectangle se
-pose*, jamais *ce qu'il signifie*.
-
-Régénérer le catalogue de fils : `FILS=1 cargo test --release le_catalogue_des_fils`.
-
-Mesurer le fps réel d'un item des Mégastructures (pas une estimation en
-triangles) : `PROFIL="<libellé exact>" ./target/release/solar_game.exe` —
-10 s d'échantillonnage, la fenêtre se ferme d'elle-même et imprime le
-résultat (`suivi/stations.md`, « Le vrai fps, mesuré en jeu »).
+| La vision RTS globale | [`docs/conception/concept_jeu.md`](docs/conception/concept_jeu.md) |
+| Les mesures de performance (`PROFIL`, `DIAG`, `DIAG=tour`, `DEFILE`, `SYSTEME`, `FOCUS`) | [`docs/suivi/opti_v2.md`](docs/suivi/opti_v2.md), « Méthode de mesure » et « Le tour de diagnostic » |
+| Régénérer le catalogue de fils : `FILS=1 cargo test --release le_catalogue_des_fils` | [`docs/reference/fils.md`](docs/reference/fils.md) |
 
 ## Décisions prises (ne pas les rouvrir sans raison)
 
-- **Pièce d'abord** (façon KSP) : palette permanente à gauche, ports compatibles
-  qui s'allument. Pas « port d'abord ».
-- **Bac à sable libre** : pas de plafond de coût.
-- **Capsules** (et rectangles pour les plaques) plutôt que sphères — et **pas**
-  d'AABB/OBB.
-- **`SousEnsemble` se sérialise en pièces cuites**, pas en recette rejouée.
-- **Pas de roulis libre** autour du port (§10.6).
-- **Les centres de Stanford et d'Elysium sont séparés** : ils ne sont pas
-  destinés à se ressembler (§F.4).
-- **`Composant::nom()` rend la famille**, pas famille + variante : la colonne
-  fait 100 px, et la vitrine fait déjà défiler les variantes.
+- **Assembleur** : pièce d'abord, bac à sable sans plafond de coût, capsules
+  plutôt que sphères, `SousEnsemble` sérialisé en pièces cuites, pas de roulis
+  libre autour du port ([`conception/assembleur.md`](docs/conception/assembleur.md)).
+- Les centres de **Stanford et d'Elysium** sont séparés (§F.4).
+- **`Composant::nom()` rend la famille**, pas famille + variante.
+- **Tout sur rails** : le mode N-corps a été retiré du jeu (2026-08-16).
+- **Menu V2** : la sauvegarde des systèmes est mise de côté (le code reste,
+  la V1 s'en sert) ; CHOISIR ASTRE bâtit un système autour du type choisi.
+- **Prototypes** : les essais visuels vivent à la touche 4 de la vue isolée
+  (`ecran/prototypes.rs`), pas dans les galeries ; retirés une fois validés.
+- **Lentille gravitationnelle abandonnée** (lot 8) : ne pas la reprendre sans
+  lire [`conception/astres_v2_lentille.md`](docs/conception/astres_v2_lentille.md).
+- **Nuages des disques à 1/2 par axe** (O4) ; le niveau de détail du shader
+  d'étoile selon la taille écarté (O6).
 
 ## Questions ouvertes
 
-- ~~**Sortir de l'assembleur perd le vaisseau**~~ (§10.7b) — **tranchée le
-  2026-08-09** : on l'assume, et le Lot 5 (sauvegarde disque) l'a rendue
-  inoffensive. Échap repose d'abord la pièce en main.
-- **Les mégastructures à taille réelle** : ~2,85 pièces et ~2 850 sommets par
-  unité de rayon d'anneau, soit ~1 140 pièces pour l'Elysium de 1,8 km contre 45
-  pour l'ISV (§F.3). L'assemblage pièce à pièce ne passera pas à l'échelle.
-- **Membrures à axe courbe** : aucune primitive du projet n'en trace, et les
-  bras des mégastructures en ont besoin pour être reliés entre eux (§F.1).
-
+- **Les mégastructures à taille réelle** : ~1 140 pièces pour l'Elysium de
+  1,8 km contre 45 pour l'ISV (§F.3). L'assemblage pièce à pièce ne passera
+  pas à l'échelle.
+- **Membrures à axe courbe** : aucune primitive n'en trace, les bras des
+  mégastructures en ont besoin (§F.1).
+- **Étoiles variables à l'œil**, type par type : seul l'éclat de la céphéide
+  atteint l'image (conception astres §6 decies).
+- **Fins de ligne** : `core.autocrlf=true` contre des fichiers stockés en
+  CRLF ; un `.gitattributes` trancherait (décision de l'utilisateur).
 
 ## Méthode
 
-Déplacée dans **[`docs/methode.md`](docs/methode.md)** — trop importante pour
-rester noyée. Les quatre règles qu'on oublie le plus souvent :
+Dans **[`docs/methode.md`](docs/methode.md)**. Les quatre règles qu'on oublie
+le plus souvent :
 
 - **Red-check systématique** : casser volontairement ce que le test garde,
   vérifier qu'il rougit, rétablir. **Sauvegarder le fichier dans le scratchpad
@@ -626,44 +176,20 @@ rester noyée. Les quatre règles qu'on oublie le plus souvent :
 ## Dette des bouche-trous de l'interface
 
 Consigne de l'utilisateur (2026-08-04) : **poser un bouche-trou** pour ce qui
-n'est pas encore fait, et **inscrire ici** ce qu'il reste à faire. Un
-bouche-trou non listé est un mensonge à l'écran — il a l'air fini.
-
-**Quatre sur cinq sont soldés.** Il ne reste que D-INT-2, l'économie, qui est un
-chantier de conception à part entière.
+n'est pas encore fait, et **l'inscrire ici**. Un bouche-trou non listé est un
+mensonge à l'écran — il a l'air fini. Les quatre soldés (D-INT-1, 3, 4, 5) sont
+racontés dans [`suivi/interface.md`](docs/suivi/interface.md).
 
 | # | Bouche-trou | Où | Ce qu'il faut à la place |
 |---|---|---|---|
-| **D-INT-1** | ~~Pastille de catégorie~~ — **soldée** : la pastille prend la **teinte réelle** du corps (`Astre::teinte`, tirée de l'apparence), relevée pour rester visible sur fond nuit. Une retouche d'apparence se voit aussitôt dans la colonne. Reste un disque, et c'est voulu : à 6–14 px de diamètre, un rendu de planète serait de la bouillie. | — | — |
-| **D-INT-2** | **`Tresorerie` figée** : les quatorze quantités sont écrites à la main, rien ne les fait bouger. | `ecran/bandeau.rs::Tresorerie` | L'économie : production, consommation, coûts, recherche. Chantier de **conception** à part entière ; la barre a été écrite pour pouvoir l'attendre (`conception/interface.md` §2.2b). |
-| **D-INT-3** | ~~Vignette du panneau~~ — **soldée** : l'astre est **réellement rendu** (`ecran/vignette.rs`) dans une cible 192×192 avec son propre tampon de profondeur, sous l'éclairage du système, caméra placée du côté éclairé et reculée pour laisser tenir un anneau. | — | — |
-| **D-INT-4** | ~~Nom du système~~ — **soldée** : dérivé de l'étoile hôte (`Systeme::nom_systeme`). Repli sur le libellé de génération pour un système engendré, dont les étoiles n'ont pas de nom propre. | — | — |
-| **D-INT-5** | ~~Noms de presets non gardés~~ — **soldée** : `ajouter_planete`/`ajouter_planete_autour` exigent un `Option<&'static str>`, comme `ajouter_lune_preset`. Chaque appelant doit dire `Some("Terre")` ou `None`. Deux tests lisent la **source** pour interdire le retour du `sys.nommer` après coup — seul moyen, faute de pouvoir bâtir un système en test. | — | — |
+| **D-INT-2** | **`Tresorerie` figée** : les quatorze quantités sont écrites à la main. | `ecran/bandeau.rs::Tresorerie` | L'économie : production, consommation, coûts, recherche. Chantier de **conception** à part entière (`conception/interface.md` §2.2b). |
 
 ## Dettes préexistantes
 
-- **Le hash CPU/GPU** (traité le 2026-08-02) : `cargo clippy` ne compilait pas à
-  cause d'`approx_constant` sur le multiplicateur du hash de `terrain.rs`.
-  **Suivre le conseil de clippy aurait introduit un défaut** — `FRAC_1_PI`
-  décale la valeur d'**1 ULP**, et le `fract` final amplifie ça en un bruit
-  entièrement différent : la géographie CPU cesserait de correspondre au shader,
-  sans aucun signal. Constante nommée + `allow` avec l'explication.
-  **Dette restante** : la même valeur vit dans 4 fichiers (1 Rust + 3 GLSL) et
-  rien ne les tient d'accord → `docs/suivi/planetes.md` §7.
-- ⚠️ **Cette entrée disait « les 86 avertissements clippy ne contiennent aucun
-  défaut réel ». C'était faux**, et la revue P1 (2026-08-05) l'a montré :
-  `MASSES_TERRESTRES` se documentait comme la source unique des masses
-  planétaires et **personne ne la lisait** — les masses étaient recopiées à trois
-  endroits, et le test de Kepler vérifiait *sa propre copie*. Le défaut était
-  visible depuis le début, noyé dans le bruit. **`clippy` est à 0 aujourd'hui**,
-  et c'est ce qui rend le prochain visible.
-- **`src/ecran/briques.rs` et `src/ecran/vaisseaux.rs` sont commités mais pas
-  déclarés** dans `ecran/mod.rs` : ils ne compilent pas. À supprimer ou à
-  rebrancher.
-- Dette de **L1.4** : ~19 variantes sous-déclarent leur `rayon_local` (cadrage
-  caméra ; 2 vues sur 35 bougeraient, de 1 % et 2 %). `MARGE_RAYON = 1.40`
-  marque la dette dans le code. **Se solde en Lot 6.**
+- **Le hash CPU/GPU** : la même constante vit dans 4 fichiers (1 Rust + 3
+  GLSL), rien ne les tient d'accord → [`suivi/planetes.md`](docs/suivi/planetes.md) §7.
+- Dette de **L1.4** : ~19 variantes sous-déclarent leur `rayon_local`
+  (`MARGE_RAYON = 1.40` la marque). **Se solde au lot 6** de l'assembleur.
 - Dette de **L1.6** : `peut_poser` n'a aucun test dédié, faute de consommateur.
-  Son vrai consommateur est le code couleur de §8.4 — donc **Lot 4**.
 - `GenrePort::PoutreBout` n'est posé sur aucun composant — variante morte,
-  **Lot 6**.
+  lot 6.

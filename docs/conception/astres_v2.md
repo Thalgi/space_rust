@@ -938,8 +938,9 @@ jugés à l'écran un par un. La mécanique est faite ; manquent les décisions.
 ## 6 undecies. Lots futurs, demandés le 2026-10-20 — après les lots 10 à 12
 
 *« Pour moi les pulsar, étoiles à neutrons et magnétar doivent être refaits,
-plus j'aimerais qu'on ajoute les étoiles vertes + naine noire. »* — **à faire
-dans l'ordre, après les lots 10 à 12.** Aucun lot existant ne les couvre.
+plus j'aimerais qu'on ajoute les étoiles vertes + naine noire. »* — à faire
+dans l'ordre, après les lots 10 à 12. **Les trois sont clos le 2026-10-26**
+(journal, lots 13 à 15) ; le tableau garde ce qu'il fallait savoir avant.
 
 | # | Sujet | Ce qu'il faut savoir avant de commencer |
 |---|---|---|
@@ -948,6 +949,9 @@ dans l'ordre, après les lots 10 à 12.** Aucun lot existant ne les couvre.
 | 15 | **Naine noire** — **lot clos le 2026-10-26** (silhouette, braise ou cristallisée) | ⚠️ **Écartée le 2026-09-24** (§3 bis : « par définition invisible ») — et l'univers est trop jeune pour en contenir une. **Rouverte par l'utilisateur**, qui a posé la règle. Il lui faut une représentation distincte : silhouette qui masque le fond, faible lueur infrarouge, ou centre froid d'un système comme la naine brune. |
 
 ### Chantier futur : la refonte de la genèse (noté le 2026-10-21)
+
+> Devenu le **chantier Genèse V2**, cartographié le 2026-10-28 :
+> [`genese_v2.md`](genese_v2.md).
 
 *« À la fin de nos travaux, genèse va devoir avoir une refonte complète pour
 gérer tous nos nouveaux cas correctement, et possiblement être refaite

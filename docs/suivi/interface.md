@@ -789,7 +789,7 @@ s'ajoutent en mode palette, grisés sinon : **palette**, **gamma** et
 dettes : [`../conception/pixel_art.md`](../conception/pixel_art.md).
 
 **Ajouter une palette** : déposer un `.hex` (format Lospec, un hexa par ligne)
-dans [`assets/palettes/`](assets/palettes/) — ramassé au démarrage, aucun code à
+dans [`assets/palettes/`](../../assets/palettes/) — ramassé au démarrage, aucun code à
 toucher. **Une seule embarquée : Lospec 2000** — les trois premières (Resurrect 64,
 Sweetie 16, PICO-8) ont été retirées le 2026-08-05.
 

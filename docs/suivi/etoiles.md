@@ -27,8 +27,9 @@ Légende : `[ ]` à faire · `[x]` fait · `[~]` partiel
 - [x] **Couronne** : décroissance radiale + **spicules** (`couronne_irreg`), large/irrégulière si lumineuse.
 - [x] **Éruptions/boucles** (plasma additif), taille/forme de couronne selon le type.
 
-Paramètres actuels : `teinte` (couleur), `couronne`, `couronne_irreg`, `spots[8]`. Pas de
-notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
+Paramètres d'origine (juillet 2026) : `teinte` (couleur), `couronne`, `couronne_irreg`,
+`spots[8]`, sans notion de « type » dans `Soleil`. Depuis Astres V2, le type est porté
+(`Feuille` a son nom) et `Variante::appliquer` habille chaque étoile selon lui.
 
 ---
 
@@ -78,10 +79,11 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
   (2026-09-30). Céphéide 10 %, Mira **15 %** (20 % jusqu'au 2026-10-19). **Mira bouillonne**
   en plus, toujours dans l'aspect instable des géantes rouges (contour). La sinusoïde de la
   céphéide reste jugée « trop sage » : dette V3.
-- [~] **Étoile à flares** (naine M active) : preset galerie présent ; sursauts/CME pas encore (cf. recherche).
+- [x] **Étoile à flares** (naine M active) : preset galerie ; sursauts et éjections visibles
+  depuis les lots 2 et 3 d'Astres V2, activité réglée par type (`etoile::activite_type`).
 - [x] **Naine blanche pulsante (ZZ Ceti)** : oscillation rapide de luminosité, lot 7 (amplitude
   exagérée à 4 %, assumé).
-- [~] **Trou noir** (accrétion) : preset galerie présent (`couronne_type 5` = horizon noir + anneau
+- [x] **Trou noir** (accrétion) : preset galerie présent (`couronne_type 5` = horizon noir + anneau
   de photons + disque d'accrétion incliné, Doppler + spirale, **stylisé**). Reste : lentille
   gravitationnelle (arc du disque au-dessus de l'horizon) — le vrai gros morceau. *(2026-07-04)*
   - **2026-09-26** : il est désormais **rencontrable en explorant** (lot 4) — il n'était
@@ -91,10 +93,11 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
   - Le disque d'accrétion est devenu un **vrai `Disque`** avec son plan (lot 5), puis son
     **shader dédié** et son **pli** (5.1-5.3) — la moitié arrière relevée par-dessus et
     par-dessous l'astre, qui imite l'arc lentillé sans dévier un seul rayon. L'arc *du fond
-    stellaire*, lui, reste à faire (lot 8) — et la recherche a montré qu'il est **accessible**
-    sans copie d'écran, les cubemaps étant core en GLSL ES 100 ([`technique.md`](technique.md)).
-  - ⚠️ Aspect **non validé à l'écran** au moment de l'arrêt. Journal :
-    [`astres_v2.md`](astres_v2.md).
+    stellaire* (lot 8, la lentille) a été **abandonné** le 2026-10-01 : la déviation correcte
+    dominait le trou noir au lieu de l'habiller
+    ([`conception/astres_v2_lentille.md`](../conception/astres_v2_lentille.md)).
+  - Aspect **validé à l'écran** (5.3) ; **sept presets au tirage** (lot 5, clos le
+    2026-09-30). Journal : [`astres_v2.md`](astres_v2.md).
 - [x] **Magnétar** : refait au lot 13 — boucles de champ fermées en 3D, droites ou
   torsadées, avec ou sans sursauts selon la graine. Il était peint dans l'écran
   (`couronne_type 4`).
@@ -107,7 +110,9 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
       de l'axe (cônes évasés + turbulence fbm advectée vers l'extérieur). Mode `couronne_type`
       (0 = halo, 1 = jets fixes, 2 = vent WR, 3 = jets tournants pulsar, 4 = arcs magnétar).
       Builders `avec_jets()` / `avec_vent()` / `avec_pulsar()` / `avec_magnetar()`.
-- [ ] **Éruptions solaires (flares / CME)** — RECHERCHE À FAIRE : aujourd'hui on a des
+- [x] **Éruptions solaires (flares / CME)** — **faites** aux lots 2, 3 et 3.1-3.5 d'Astres V2
+      (taches et arches nées d'un champ magnétique, éjections visibles). Le constat d'origine :
+      on avait des
       proéminences en arches (`Boucle`) + taches. Manque le **flare** proprement dit : sursaut
       lumineux soudain (pic d'éclat localisé près d'une tache) et **éjection de masse coronale**
       (bulle de plasma qui se détache et s'éloigne). À rechercher : déclenchement (reconnexion
@@ -118,13 +123,14 @@ notion de « type » stocké dans `Soleil` (juste couleur/lumi/rayon).
       (> ~7 000 K) sont presque lisses, les denses ont le grain plus fin ; les géantes rouges,
       Mira, la céphéide et ZZ Ceti ont leur ébullition, la supergéante bleue et la
       Wolf-Rayet un mélange des deux.
-- [ ] **Pulsation** : rayon et luminosité modulés par le temps (`pulse_amp`, `pulse_freq`).
-- [ ] **Taux d'activité** : densité de taches/éruptions selon le type (naines M & jeunes = +).
+- [x] **Pulsation** : rayon et luminosité modulés par le temps — lot 7 (`etoile::pulsation`).
+- [x] **Taux d'activité** : densité de taches/éruptions selon le type — lot 3
+      (`etoile::activite_type`).
 - [x] **Vent stellaire** (WR/supergéantes bleues) : couronne épaisse turbulente colorée (`couronne_type 2`).
 - [x] **Arcs magnétiques** (magnétar) : boucles de champ dipolaire brillantes (violet) autour de
       l'étoile, scintillantes (`couronne_type 4`).
 - [x] **Faisceau de pulsar** : 2 cônes lumineux qui tournent + flash (`couronne_type 3`).
-- [ ] **Limb darkening** vrai (vs brightening actuel) pour certaines (atmosphères étendues).
+- [x] **Limb darkening** vrai — lot 10, pour toutes (voir plus haut).
 
 ## Recherche — patterns/noise (réf. ci-dessous)
 

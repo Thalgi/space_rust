@@ -68,5 +68,13 @@
   par une sonde qui imprime des positions : six pièces du pilier entièrement
   enfouies, et la palette qui filtrait par catégorie au lieu de filtrer par port.
   Aucun des deux n'était visible en relisant le code.
+- ⚠️ **Une mesure de performance se compare à configuration égale** (Opti-v2) :
+  même phase chauffée (la première phase du `DIAG` gonflait de ~6 ms tout ce
+  qu'on lui comparait), même résolution, même machine. Si la machine change en
+  cours de chantier, rejouer l'ancienne version sur la nouvelle machine avant
+  d'attribuer un gain au code.
 - **Mettre à jour les `.md`** à chaque étape — consigne debout de l'utilisateur.
+  **`STATE.md` ne raconte pas** : il a dérivé deux fois en journal (1 968
+  lignes en août, 670 en novembre). Un fait qui se raconte va dans le journal du
+  chantier ; dans `STATE.md`, une ligne et un lien.
 

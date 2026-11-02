@@ -11,6 +11,11 @@
 > raccordées » à la Kepler Space Program). Le multi-étoiles devient une simple conséquence
 > (une étoile = un nœud de plus).
 >
+> ⚠️ **Le mode N-corps a été retiré du jeu le 2026-08-16** (« code de test »,
+> confirmé par l'utilisateur ; `src/systeme/gravite.rs` supprimé) — voir
+> [`suivi/trajectoires.md`](../suivi/trajectoires.md). Tout est sur rails, sans
+> exception. Ce qui suit sur le mode optionnel (§4bis) est l'état d'avant.
+>
 > **Le N-corps n'est pas supprimé** : il devient un **mode optionnel** (bac à sable émergent)
 > activable par un **bouton** dans les options, qui n'affecte **que les planètes** (les étoiles
 > et lunes restent toujours analytiques). Voir §4bis.
