@@ -375,7 +375,7 @@ C'est la **première interface de jeu** du projet : tout ce qui existait avant
 - [ ] **Pas de monnaie** : décision de conception — l'**énergie** en tient lieu. Rien ne
       s'achète avec un nombre abstrait.
 
-## 12. Performance — ✅ Opti-v2 (2026-10-28 → 11-02)
+## 12. Performance — ✅ Opti-v2, clos (2026-10-28 → 11-02)
 
 Conception : [`conception/opti_v2.md`](../conception/opti_v2.md). Journal :
 [`opti_v2.md`](opti_v2.md).

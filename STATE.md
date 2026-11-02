@@ -17,20 +17,20 @@
 
 ## Reprendre ici (état au 2026-11-02)
 
-**Chantier en cours : Opti-v2**, en clôture. Branche `chantier-opti-v2`,
-worktree `.claude/worktrees/astres-v2` (on y travaille : depuis le dossier
-principal, la branche ne se bascule pas). **Poussée** sur `origin`, à jour.
-`main` (`5af973a`, poussé) est un ancêtre de la branche : la fusion sera une
-avance rapide.
+**Aucun chantier en cours.** Opti-v2 est **clos** et **fusionné dans
+`main`** (avance rapide, 2026-11-02) ; `main` n'est **pas poussé** depuis
+(`origin/main` est à `5af973a`). Le worktree `.claude/worktrees/astres-v2`
+porte la branche `chantier-opti-v2`, au même point que `main` : un nouveau
+chantier y part d'une nouvelle branche.
 
-**Vérifié (2026-11-01, O6)** : **992 tests verts**, `cargo clippy
---all-targets` à **0 avertissement**.
+**Vérifié (2026-11-02, à la clôture)** : **992 tests verts** (+ 13 du
+binaire `mhd`), `cargo clippy --all-targets` à **0 avertissement**.
 
 ⚠️ **Le dossier principal porte du travail non commité** qui n'est pas à
 nous : le découpage de `src/vaisseau/generateur.rs` en `generateur/`,
 `docs/suivi/dette_vaisseau.md`, et des ajouts à `docs/README.md`,
 `docs/suivi/bucketlist_globale.md`, `docs/suivi/stations.md`. **N'y rien
-toucher.** À la fusion : sauvegarder ces fichiers dans le scratchpad, en
+toucher.** À chaque fusion : sauvegarder ces fichiers dans le scratchpad, en
 tirer un patch (`git diff`), les remettre à l'état commité, `git merge
 --ff-only`, réappliquer le patch (`git apply --3way`), puis `git restore
 --staged` pour les laisser non commités.
@@ -47,25 +47,22 @@ tirer un patch (`git diff`), les remettre à l'état commité, `git merge
 
 ### À faire ensuite, par ordre
 
-1. **Clore Opti-v2** : le banc est dépouillé (journal, « O8 ») ; reste à
-   **fusionner vers `main`** (procédure ci-dessus) — décision de
-   l'utilisateur.
-2. **Choisir le chantier suivant** sur ce banc. Le premier sujet : **les
+1. **Choisir le chantier suivant**, sur le banc d'O8. Le premier sujet : **les
    à-coups** — le tour ne donne que des moyennes ; y ajouter la pire image et
    le 1 % bas, puis attribuer (relief des telluriques, shaders au premier
    usage, construction du système : candidats non vérifiés). Ensuite : le rendu
    Net plein écran de près (supergéante rouge ~22 ms de GPU), la galerie des
    planètes.
-3. **Genèse V2** : trancher les décisions de G0
+2. **Genèse V2** : trancher les décisions de G0
    ([`conception/genese_v2.md`](docs/conception/genese_v2.md)), puis G1 — qui
    débloque aussi la part « nombre d'objets » de la qualité (O5).
-4. **Planètes** : régler finement `assets/habitabilite.json` avec la genèse
+3. **Planètes** : régler finement `assets/habitabilite.json` avec la genèse
    ([`suivi/planetes.md`](docs/suivi/planetes.md)).
-5. **Astres V2** : la **passe de relecture** demandée (*« observer qu'on n'a
+4. **Astres V2** : la **passe de relecture** demandée (*« observer qu'on n'a
    rien loupé »*), jamais faite.
-6. **Trajectoires, lot E** : l'arrivée (amarrage, consommation à la
+5. **Trajectoires, lot E** : l'arrivée (amarrage, consommation à la
    colonisation) ; un vaisseau arrivé reste immobile.
-7. Plus ancien, toujours ouvert : **lister les sous-variantes** dans la palette
+6. Plus ancien, toujours ouvert : **lister les sous-variantes** dans la palette
    (bloque l'Endurance, étape 5) ; **assembleur** lots 6, 8 et 9 ; **D-INT-2,
    l'économie** ; **D-PIX-3/4** (contours, taille de pixel).
 
@@ -90,8 +87,8 @@ tirer un patch (`git diff`), les remettre à l'état commité, `git merge
 
 ## Commits
 
-Dernier commit : `453ee73` « Opti-v2 O6 : le shader de l'etoile, deux calculs
-inutiles retires ». `git log` fait foi pour le reste.
+Dernier commit : « Opti-v2 clos : le chantier fusionne dans main »
+(2026-11-02). `git log` fait foi pour le reste.
 
 **Consigne debout (révisée le 2026-09-26) : un commit par lot ou sous-lot**,
 sur la branche de chantier, une fois les tests verts et clippy à zéro. Un
@@ -107,7 +104,7 @@ sur un fichier contenant du travail non commité (`docs/suivi/stations.md`
 
 | Chantier | Où on en est | Journal · conception |
 |---|---|---|
-| **Opti-v2** | O1 à O10 livrés ; reste la fusion vers `main` | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) · [`conception/opti_v2.md`](docs/conception/opti_v2.md) |
+| **Opti-v2** | **clos** (2026-11-02), fusionné : O1 à O10 ; les à-coups passent au chantier suivant | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) · [`conception/opti_v2.md`](docs/conception/opti_v2.md) |
 | **Genèse V2** | carte faite (lots G0 à G8), rien de codé ; G0 = décisions à trancher | — · [`conception/genese_v2.md`](docs/conception/genese_v2.md) |
 | **Planètes** (type, habitabilité) | P1 à P3 livrés, habitabilité des presets ajustée à la main ; réglage fin avec la genèse | [`suivi/planetes.md`](docs/suivi/planetes.md) · [`conception/planetes.md`](docs/conception/planetes.md) |
 | **Astres V2** | **clos** (2026-10-26) : lots 0 à 15 livrés et validés, le 8 abandonné ; reste la passe de relecture | [`suivi/astres_v2.md`](docs/suivi/astres_v2.md) · [`conception/astres_v2.md`](docs/conception/astres_v2.md) |

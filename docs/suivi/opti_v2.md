@@ -757,3 +757,20 @@ compilation d'un shader au premier usage, la construction du système.
 **Bilan d'O8** : 30 fps tenus en moyenne partout, en Palette comme en Net,
 sur le petit PC modifié. Ce qui reste ouvert pour la suite : **les à-coups**
 — à mesurer d'abord (pire image et 1 % bas dans le tour), puis à attribuer.
+
+## Clôture (2026-11-02)
+
+**Le chantier est clos**, fusionné dans `main` en avance rapide le
+2026-11-02. Dix lots : O1 à O7 du plan, O8 le banc de la cible, O9 et O10
+trouvés en route.
+
+Ce qui en sort, porté ailleurs :
+
+- **Les à-coups** côté processeur (O8) : le premier sujet du chantier
+  suivant — mesurer d'abord (pire image, 1 % bas dans le tour).
+- **Le nombre d'objets** réglé par la qualité (O5) : attend la construction
+  de Genèse G1.
+- **La grille de 512²** de l'empilement en vue système (reste de D9, ~0,6 ms
+  sur la machine de dev).
+- **Un engin vu de près** (ISS, Starship) repasse par `draw_mesh` : des
+  tampons GPU persistants si une vue rapprochée rame.

@@ -1,6 +1,6 @@
 # Chantier-Opti-v2 — la dette de performance d'Astres V2
 
-> **Ouvert le 2026-10-26**, à la clôture du chantier Astres V2 : *« cartographier
+> **Ouvert le 2026-10-26, clos le 2026-11-02**, à la clôture du chantier Astres V2 : *« cartographier
 > l'intégralité de la dette du chantier Astres V2 sur l'optimisation, dans le but
 > de faire tourner le jeu à 30 fps minimum sur un PC low-end (premier APU Ryzen
 > portable) »*. Ce document est la **carte** : ce qui coûte, combien, pourquoi,
