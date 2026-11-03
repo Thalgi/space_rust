@@ -116,6 +116,11 @@ exactement le même système (reproductible, partageable).
 - [x] **Table déclarative des uniforms planète** : source unique (nom + type + lecture `Apparence`) -> descripteurs ET setters. Ajouter un paramètre visuel = une ligne.
 - [x] **Hot-reload des shaders** : lecture des `.glsl` au runtime (CARGO_MANIFEST_DIR, fallback `include_str!`), touche **R** = vide le cache de materials + reconstruit le système courant. Édition GLSL sans recompiler.
 - [x] **Deux modes** (`ecran/` : accueil, skymap, objet) : écran d'accueil à 2 boutons, vue système complète, et vue d'un astre isolé (soleil/planète aléatoire) pour travailler le rendu d'un seul corps. `main` = aiguilleur.
+- [x] **`vaisseau/` rejoint la discipline** (Chantier 1, `docs/suivi/dette_vaisseau.md`) :
+      `generateur.rs` (6626 lignes) éclaté en `generateur/{moteur.rs, presets/*.rs,
+      tests.rs}` — le moteur procédural, ~60 presets par famille de station, la
+      suite de tests groupée. `composant/mod.rs` et `chantier.rs` restent à faire
+      (Chantiers 2 et 3 du même document).
 - [ ] **Trait commun de génération** : chaque type d'astre sait se créer aléatoirement (`Genere`).
 - [ ] **RNG à graine dédié** (`rand`/`rand_chacha`) plutôt que la RNG globale de macroquad.
 - [~] **Infos de l'astre** faites (panneau de droite, étape I.3). Champ graine éditable :

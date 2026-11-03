@@ -4576,3 +4576,17 @@ session. **Mis de côté, documenté, pas oublié** — voir `STATE.md`.
 **644 tests**, 0 avertissement clippy. `docs/reference/fils.md` inchangé
 (aucun composant neuf, `SEGMENTS` est un paramètre de cuisson, pas de
 géométrie de référence).
+
+## `vaisseau/` rejoint la discipline « fichiers courts » (2026-08-31)
+
+`generateur.rs` (6626 lignes : moteur procédural, ~60 `preset_*`/`demo_*` sans
+rapport entre eux, 3 blocs `#[cfg(test)]` interleavés) éclaté en
+`generateur/moteur.rs` (le point d'entrée [`generer`] et son call-graph réel)
+et `generateur/presets/{iss,mir_tiangong,starship,elysium,stanford,isv,demos,
+commun}.rs` (un fichier par famille de station, `commun.rs` pour ce qui s'est
+avéré réellement partagé entre familles — vérifié par référence, pas supposé
+sur la position dans l'ancien fichier). La grosse suite de tests reste groupée
+dans `generateur/tests.rs` plutôt qu'éclatée par preset — le judgment call est
+consigné dans `docs/suivi/dette_vaisseau.md`. Cut/paste pur : **719 tests
+verts** (identique à l'avant-chantier), 0 avertissement clippy. `composant/
+mod.rs` et `chantier.rs` restent à traiter (Chantiers 2 et 3 du même document).
