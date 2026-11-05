@@ -479,6 +479,9 @@ fiche une fois découvertes. Extensible sans rouvrir la genèse.
 - **Coût** : faible, G1 rend déjà le plan sérialisable (§5.4). Les flux nommés
   restent utiles (tests, systèmes pas encore découverts).
 - Aujourd'hui `presets.json` ne garde qu'un nom et une graine (§7.12).
+- **Précisé le 2026-11-05** : G1 rend le plan sérialisable, sans l'écrire sur
+  disque. L'écriture viendra avec la **sauvegarde de partie**, qui n'existe pas
+  encore ; la sauvegarde de systèmes reste hors du menu (retirée le 2026-10-19).
 
 ### 7.12 Comparer la Skymap V2 et la V3 — tranché le 2026-11-05
 
@@ -560,8 +563,8 @@ la **Skymap V3**, à côté de la V2, sauf G1.
 | Lot | Contenu | Sections | Taille | Dépend de |
 |---|---|---|---|---|
 | **G0** ✅ | Les décisions | §7 | — | — |
-| **G1** | Module à part ; flux de hasard nommés ; `planifier` → plan sérialisable, `instancier` sans tirage ; identifiants = place dans le plan ; plan sauvegardé ; écran Skymap V3 (copie de la V2) et catégorie SKYMAP de l'accueil. Reprend d'abord les règles actuelles : **rien ne change à l'écran** | §5.4, §7.11, §7.12 | L | G0 |
-| **G2** | Banc statistique sur N graines, des deux genèses ; coût par image V2 / V3 sur le petit PC | §5.3, §7.7, §7.12 | M | G1 |
+| **G1** | Module à part ; flux de hasard nommés ; `planifier` → plan sérialisable, `instancier` sans tirage ; identifiants = place dans le plan ; plan sérialisable ; écran Skymap V3 (copie de la V2) et catégorie SKYMAP de l'accueil. Reprend d'abord les règles actuelles : **rien ne change à l'écran** | §5.4, §7.11, §7.12 | L | G0 |
+| **G2** | Banc statistique sur N graines, des deux genèses ; coût par image V2 / V3 sur le petit PC ; outils de mesure rebranchés dans la V3 | §5.3, §7.7, §7.12 | M | G1 |
 | **G3** | **L'échelle** : vérité physique dans le plan (luminosité physique par type d'étoile, tailles et distances vraies), luminosité de rendu à part ; réglage d'affichage en JSON (grossissement, orbites des lunes liées, compression des distances) ; contrôles de précision et de durée des trajets | §7.1 | L | G1 |
 | **G4** | Un seul modèle de température ; habitabilité graduée par bandes | §5.2 | S | G3 |
 | **G5** | **Les étoiles** : âge du système tiré en premier, types compatibles, anomalies ; table de rareté en JSON (fréquences, types) ; séparations plafonnées ; plan de référence ; grand disque et pollution en multiple | §7.9, §7.10 | M | G1 |

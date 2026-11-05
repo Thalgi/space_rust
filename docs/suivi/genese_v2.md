@@ -23,8 +23,8 @@ sur la V2 (conception §7.12, §7.13).
 | Lot | Contenu | État |
 |---|---|---|
 | G0 | Les décisions | ✅ 2026-11-05 (conception §7) |
-| **G1** | **Les fondations : hasard, plan, planifier, instancier, Skymap V3** | **en cours** |
-| G2 | Banc statistique, coût par image V2 / V3 | |
+| G1 | Les fondations : hasard, plan, planifier, instancier, Skymap V3 | ✅ 2026-11-05 |
+| **G2** | **Banc statistique, coût par image V2 / V3** | **prochain** |
 | G3 | L'échelle vraie et le réglage d'affichage | |
 | G4 | Un seul modèle de température, habitabilité par bandes | |
 | G5 | Les étoiles : âge, anomalies, table de rareté | |
@@ -36,11 +36,11 @@ sur la V2 (conception §7.12, §7.13).
 | G11 | Étalonnage, la V3 devient principale | |
 
 **Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), `7b166f1`
-(G1.3), `c054c6f` (G1.4), G1.5 (ce lot).
+(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), clôture de G1 (dernier commit).
 
 ---
 
-## G1 — les fondations (ouvert le 2026-11-05)
+## G1 — les fondations (ouvert et clos le 2026-11-05)
 
 **Fond.** Avant toute règle nouvelle, la genèse change de **forme** : un
 **plan** de données pures, tiré de flux de hasard indépendants, puis sa
@@ -70,8 +70,8 @@ V1. Ce qu'on y gagne : une genèse **testable** sans fenêtre, un plan
 | **G1.2** | Le plan : types sérialisables, identifiant = place dans le plan | ✅ `c812051` |
 | **G1.3** | `planifier(graine)` : les règles de la V1 relues dans les flux nommés, apparences comprises | ✅ `7b166f1` |
 | **G1.4** | `instancier(&plan)` : construit le `Systeme` ; constructeurs qui tirent en interne amorcés par la graine de leur objet ; nombres de rendu décidés ici | ✅ `c054c6f` |
-| **G1.5** | Skymap V3 (copie de la V2), catégorie SKYMAP de l'accueil (V1 gelée, V2, V3) | ✅ |
-| **G1.6** | La sauvegarde du plan : sauver et recharger un système dans la V3 | |
+| **G1.5** | Skymap V3 (copie de la V2), catégorie SKYMAP de l'accueil (V1 gelée, V2, V3) | ✅ `abc7366` |
+| ~~G1.6~~ | L'écriture du plan sur disque | **reporté** à la sauvegarde de partie (voir le bilan) |
 
 ---
 
@@ -311,7 +311,7 @@ la Skymap V3 (G1.5).
 
 ---
 
-### G1.5 — la Skymap V3 (2026-11-05)
+### G1.5 — la Skymap V3 (2026-11-05, `abc7366`)
 
 **Fond.** La genèse V2 devient **visible** : un écran la montre, à côté des
 Skymaps V1 et V2, pour comparer (§7.12, §7.13). C'est aussi la première
@@ -332,16 +332,16 @@ fenêtre.
   dans la fenêtre de 1 000.
 - `main.rs` : `Cible::SkymapV3`, `Etat::SkymapV3`.
 - `genese_v2` : l'`#![allow(dead_code)]` du module **tombe** ; reste un
-  `allow` ciblé sur `PlanSysteme::corps` (lu par les tests, puis par G1.6 et
-  G9).
+  `allow` ciblé sur `PlanSysteme::corps` (lu par les tests, puis par la
+  sauvegarde de partie et G9).
 
 **Écarts.**
 
 - **Les outils de mesure de la V2 ne sont pas recopiés** (`sur_astre`,
   `cadrer`, `sur_graine` : `SYSTEME`, `FOCUS`, `DIAG=tour`) : rien ne les
   appelait en V3. **G2 les rebranchera** pour mesurer la V3 contre la V2.
-- **La sauvegarde du plan passe en G1.6** : elle demande une interface
-  (sauver, recharger) que la V2 n'a pas, et G1.5 se limite à voir la V3.
+- **La sauvegarde du plan n'est pas dans ce lot** : elle demande une interface
+  (sauver, recharger) que la V2 n'a pas (voir le bilan de G1).
 - La V3 s'ouvre, comme la V2, sur le système solaire (preset V1) : un système
   de la genèse V2 s'obtient par ALEATOIRE ou CHOISIR ASTRE.
 
@@ -363,8 +363,35 @@ police estimée à 12 px par caractère : elle refusait un libellé existant
 de la police, qui ne se mesure qu'avec une fenêtre : elle se juge à l'œil,
 plutôt que contre une valeur supposée.
 
-**À vérifier à l'écran** (par l'utilisateur) : les libellés de la colonne
-SKYMAP tiennent dans leurs boutons ; la V3 montre des systèmes de la genèse
-V2 (`[V3]` dans le bandeau) comparables à ceux de la V2.
+**Jugé à l'écran par l'utilisateur** : *« je vois des vues comparables »* —
+la V3 montre des systèmes de la genèse V2 comparables à ceux de la V2, ce que
+G1 devait garantir. Pas de remarque sur les libellés de la colonne SKYMAP.
 
 **Vérifié** : 1 011 tests verts (+ 13 de `mhd`), clippy 0.
+
+---
+
+### Bilan de G1 (clos le 2026-11-05)
+
+**Livré.** La genèse a changé de forme sans changer ce qu'on voit :
+`planifier(graine)` rend un plan de données pures, `instancier(&plan)` le
+construit, la Skymap V3 le montre à côté des V1 et V2. L'utilisateur juge les
+vues comparables. 1 011 tests verts, dont 19 nouveaux, plus l'essai de fumée.
+
+**Reporté : l'écriture du plan sur disque (G1.6, décision de l'utilisateur).**
+La sauvegarde de systèmes avait été retirée du menu le 2026-10-19 ; la remettre
+n'aurait servi qu'à sauver des plans à refaire après G3 (les unités changent).
+Le plan reste **sérialisable**, gardé par `le_plan_revient_intact_de_json`.
+L'écriture viendra avec la sauvegarde de partie.
+
+**Dettes laissées, assumées** :
+
+| Dette | Où | Se solde |
+|---|---|---|
+| `Soleil::new` et `Disque::new` tirent dans le flux global, amorcé avant l'appel | `instancier.rs` (`ponytail:`) | si ces objets reçoivent leur `Alea` |
+| Apparences copiées de la V1 | `genese_v2/apparences.rs` | G4, G6 (catalogue) |
+| Écran copié de la V2 (934 lignes) | `ecran/skymap_v3.rs` | jamais tant que la V2 reste gardée (§7.13) |
+| Systèmes écrits à la main encore ceux de la V1 | `skymap_v3.rs` | G10 |
+| Outils de mesure absents de la V3 | `skymap_v3.rs` | G2 |
+| Particules divisées par deux en qualité basse, sans mesure | `instancier.rs` | G2 |
+| L'assemblage d'`instancier` sans test automatique : il lui faut une fenêtre | `instancier.rs` | essai de fumée à rejouer à chaque lot qui y touche |
