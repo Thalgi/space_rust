@@ -8,6 +8,7 @@ mod engin;
 mod etoile;
 mod fond;
 mod genese;
+mod genese_v2;
 mod impostor;
 mod menu;
 mod orbite;
