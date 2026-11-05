@@ -77,6 +77,12 @@
   le 2026-11-05 (G1.4) : un script d'édition en échec (`SyntaxError`) n'avait
   rien écrit, et le commit, sur une ligne à part, est parti sans le journal.
   Enchaîner pour qu'un échec bloque le commit, puis relire `git show --stat`.
+- ⚠️ **Une différence de performance sans cause est un défaut de protocole
+  jusqu'à preuve du contraire** (Genèse V2, G2.2). La V3 ressortait 15 à 20 %
+  plus rapide que la V2 pour des systèmes statistiquement identiques : ses lignes
+  partageaient toutes une graine, ce n'étaient pas des échantillons. Puis la même
+  version relancée a varié de 23 % : **alterner les versions et répéter**, l'erreur
+  type d'un tour ne voit pas la dérive de la machine.
 - **Mettre à jour les `.md`** à chaque étape — consigne debout de l'utilisateur.
   **`STATE.md` ne raconte pas** : il a dérivé deux fois en journal (1 968
   lignes en août, 670 en novembre). Un fait qui se raconte va dans le journal du

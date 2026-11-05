@@ -36,7 +36,7 @@ sur la V2 (conception §7.12, §7.13).
 | G11 | Étalonnage, la V3 devient principale | |
 
 **Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), `7b166f1`
-(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), G2.1 (dernier commit).
+(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), G2.2 (dernier commit).
 
 ---
 
@@ -389,8 +389,8 @@ L'écriture viendra avec la sauvegarde de partie.
 | Apparences copiées de la V1 | `genese_v2/apparences.rs` | G4, G6 (catalogue) |
 | Écran copié de la V2 (934 lignes) | `ecran/skymap_v3.rs` | jamais tant que la V2 reste gardée (§7.13) |
 | Systèmes écrits à la main encore ceux de la V1 | `skymap_v3.rs` | G10 |
-| Outils de mesure absents de la V3 | `skymap_v3.rs` | G2 |
-| Particules divisées par deux en qualité basse, sans mesure | `instancier.rs` | G2 |
+| Outils de mesure absents de la V3 | `skymap_v3.rs` | ✅ soldée en G2.2 |
+| Particules divisées par deux en qualité basse, sans mesure | `instancier.rs` | G2.3 (petit PC) |
 | L'assemblage d'`instancier` sans test automatique : il lui faut une fenêtre | `instancier.rs` | essai de fumée à rejouer à chaque lot qui y touche |
 
 ---
@@ -403,13 +403,13 @@ coût par image (critère du §7.7) avant que G3 ne change l'échelle.
 
 | Sous-lot | Contenu | État |
 |---|---|---|
-| **G2.1** | Le banc statistique : les deux genèses sur des milliers de graines (`BANC=<n>`) | ✅ |
-| **G2.2** | Les outils de mesure dans la V3 : un réglage choisit la Skymap mesurée par `SYSTEME`, `FOCUS`, `DIAG=tour` ; mesure sur la machine de dev | |
+| **G2.1** | Le banc statistique : les deux genèses sur des milliers de graines (`BANC=<n>`) | ✅ `2b6ef58` |
+| **G2.2** | Les outils de mesure dans la V3 : un réglage choisit la Skymap mesurée par `SYSTEME`, `FOCUS`, `DIAG=tour` ; mesure sur la machine de dev | ✅ |
 | **G2.3** | Le coût par image V3 contre V2 sur le petit PC (à lancer par l'utilisateur) | |
 
 ---
 
-### G2.1 — le banc statistique (2026-11-05)
+### G2.1 — le banc statistique (2026-11-05, `2b6ef58`)
 
 **Fond.** Comparer deux genèses dont les graines ne donnent pas les mêmes
 systèmes ne peut se faire qu'en statistiques (§7.12).
@@ -470,3 +470,72 @@ un tiers des gazeuses sans lune, c'est la règle de la V1, que §7.3 remplacera.
 | `les_comptes_…` (borne corrigée) | au plus 12 planètes en multiple | cinq à huit planètes par zone |
 
 **Vérifié** : 1 014 tests verts (+ 13 de `mhd`), clippy 0.
+
+---
+
+### G2.2 — les outils de mesure dans la V3 (2026-11-05)
+
+**Fond.** Le critère du §7.7 (la V3 ne coûte pas plus cher que la V2) demande de
+mesurer les deux dans les mêmes conditions. Les outils de mesure ne visaient
+que la V2.
+
+**Forme.** `main.rs` et `ecran/skymap_v3.rs` (`sur_astre`, `cadrer`, `sur_graine`
+recopiés de la V2) :
+
+| Réglage | Effet |
+|---|---|
+| `SKYMAP=v3` | `SYSTEME`, `FOCUS`, `DIAG=tour`, `DIAG=systemes` visent la V3 |
+| `DIAG=systemes` | le tour réduit : **60 graines réparties** et le système solaire, ~214 s |
+| `QUALITE=basse` | la qualité posée **avant** la construction : les particules de la V3 s'y décident, et les phases de `DIAG` changent la qualité trop tard |
+
+Le tour imprime `moyenne des graines : image, erreur type, CPU`.
+
+**Le premier protocole était faux, et il flattait la V3.** Le premier passage
+(moyenne de toutes les lignes « systeme X » et de 8 graines) donnait la V3 **15 à
+20 % plus rapide**, sans cause possible puisque le banc voit les mêmes systèmes
+(G2.1). Deux défauts :
+
+- les 28 lignes « systeme X » partagent **la graine 1**, donc en V3 presque le
+  même tirage de planètes : ce n'étaient pas 28 échantillons, mais à peu près un ;
+- les graines 1 à 8 sont toutes à une étoile en V1 (`graine % 100`), pas en V3.
+
+D'où les 60 graines réparties (`graines_du_tour`), qui couvrent les genres de la
+V1, et une moyenne limitée aux graines.
+
+**Mesures, machine de dev, 2 560 × 1 440, dans l'ordre où elles ont tourné** :
+
+| # | Skymap | Qualité | Image (ms) | Erreur type | CPU (ms) |
+|---:|---|---|---:|---:|---:|
+| 1 | V2 | haute | 1,305 | 0,036 | 0,636 |
+| 2 | V3 | haute | 1,311 | 0,031 | 0,631 |
+| 3 | V3 | basse | 1,148 | 0,028 | 0,550 |
+| 4 | V2 | haute | 0,999 | 0,035 | 0,486 |
+| 5 | V3 | haute | 0,935 | 0,024 | 0,412 |
+| 6 | V3 | basse | 1,261 | 0,031 | 0,814 |
+
+**Ce qu'on peut en dire** :
+
+- **La dérive de la machine domine.** La même V2 sur les mêmes graines passe de
+  1,305 à 0,999 ms (médiane 0,72 par graine). Elle varie même dans un tour : le
+  dernier tiers du tour 4 remonte à 1,10 ms contre 0,95 au début. Cause non
+  établie (état de la machine). Elle dépasse largement l'erreur type, qui ne
+  mesure que la dispersion entre graines.
+- **La V3 ne coûte pas plus cher que la V2 ici** : tours voisins, 1,305 / 1,311
+  et 0,999 / 0,935.
+- **Le gain de la qualité basse n'est pas mesuré** : une fois plus bas que son
+  voisin (1,148 contre 1,311), une fois plus haut (1,261 contre 0,935). À ~1 ms
+  par image, la machine de dev ne tranche pas. Le petit PC le dira.
+
+**Tests** :
+
+| Test | Ce qu'il garde | Sabotage qui le fait rougir |
+|---|---|---|
+| `le_tour_des_systemes_ne_garde_que_les_systemes` | les graines et le système solaire, rien d'autre | la starmap dans le tour réduit |
+| `les_graines_du_tour_couvrent_les_genres_de_la_v1` | parts proches de 55 / 28 / 11 / 6 % | graines qui se suivent (1 à 60) |
+| `la_moyenne_ne_compte_que_les_graines` | ni les lignes « systeme X » ni les autres ; l'erreur type | lignes « systeme » comptées ; écart-type au lieu de l'erreur type |
+
+**Reste.** `SKYMAP`, `DIAG=systemes` et `QUALITE` ne se testent qu'en lançant le jeu
+(ils ont servi aux six tours ci-dessus). G2.3 : le même protocole, alterné, sur le
+petit PC.
+
+**Vérifié** : 1 017 tests verts (+ 13 de `mhd`), clippy 0.

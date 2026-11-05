@@ -147,9 +147,45 @@ impl SkymapV3 {
         }
     }
 
-    // Les entrées des outils de mesure de la V2 (`sur_astre`, `cadrer`,
-    // `sur_graine` : `SYSTEME`, `FOCUS`, `DIAG=tour`) ne sont pas recopiées :
-    // G2 les rebranchera, pour mesurer la V3 contre la V2.
+    /// La vue système ouverte sur un système de ce type d'étoile, graine 1 —
+    /// pour le profilage (`SYSTEME=<type>`, Chantier-Opti-v2).
+    pub fn sur_astre(nom: &'static str) -> Self {
+        let mut v = Self::new();
+        if let Some((s, i)) = construire_systeme_autour(v.seed, nom) {
+            v.sys = s;
+            v.info = i;
+            v.source = Source::Astre(v.seed, nom);
+            v.appliquer_vue();
+            if std::env::var("PROFIL").is_ok() { eprintln!("SYSTEME {}", v.info); }
+            // `FICHE=<rang>` : la fiche de cet astre ouverte (captures).
+            if let Some(i) = std::env::var("FICHE").ok().and_then(|i| i.parse().ok()) {
+                v.fiche_ouverte = Some(i);
+            }
+        }
+        v
+    }
+
+    /// Cadre l'astre nommé `nom`, la caméra à `rayons` rayons de son centre
+    /// (`FOCUS`, avec `PROFIL` ou `DIAG`). Sans effet si le nom est inconnu.
+    pub fn cadrer(&mut self, nom: &str, rayons: f32) {
+        if let Some(idx) = (0..self.sys.nb_astres()).find(|&i| self.sys.designation(i) == nom) {
+            self.cam.set_focus(idx);
+            self.cam.set_dist(self.sys.rayon_de(idx).unwrap_or(1.0) * rayons);
+        }
+    }
+
+    /// La vue système sur le système engendré par `seed` (le tour du
+    /// diagnostic, `DIAG=tour`).
+    pub fn sur_graine(seed: u64) -> Self {
+        let mut v = Self::new();
+        let (s, i) = construire_systeme(seed);
+        v.seed = seed;
+        v.sys = s;
+        v.info = i;
+        v.source = Source::Graine(seed);
+        v.appliquer_vue();
+        v
+    }
 
     /// Une frame. Renvoie `true` pour revenir à l'accueil (Échap).
     pub fn frame(&mut self) -> bool {

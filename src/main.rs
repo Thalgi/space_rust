@@ -59,6 +59,41 @@ fn window_conf() -> Conf {
     }
 }
 
+/// `SKYMAP=v3` : les outils de mesure (`SYSTEME`, `FOCUS`, `DIAG=tour`,
+/// `DIAG=systemes`) visent la Skymap V3 au lieu de la V2 (Genèse V2, G2.2).
+fn mesure_v3() -> bool {
+    std::env::var("SKYMAP").is_ok_and(|s| s == "v3")
+}
+
+/// La vue système mesurée, sur un système de ce type d'étoile.
+fn vue_sur_astre(t: &'static str) -> Etat {
+    if mesure_v3() {
+        Etat::SkymapV3(Box::new(SkymapV3::sur_astre(t)))
+    } else {
+        Etat::SkymapV2(Box::new(SkymapV2::sur_astre(t)))
+    }
+}
+
+/// **Les graines du tour des systèmes** (`DIAG=systemes`) : réparties, et non
+/// 1, 2, 3… En V1 le genre vient de `graine % 100`, et les graines 1 à 54 sont
+/// toutes à une étoile : une suite ne mesurerait jamais un multiple.
+fn graines_du_tour() -> Vec<u64> {
+    (0..60).map(|i| 1 + i * 7919).collect()
+}
+
+/// **Moyenne `(image, CPU, erreur type de l'image)` sur les graines d'un tour.**
+/// Seules les lignes « graine » comptent : les lignes « systeme X » partagent
+/// toutes la graine 1, donc presque le même tirage de planètes. Elles ne sont
+/// pas des échantillons, et la V3 ressortait 18 % plus rapide à leur seule faveur
+/// (mesuré le 2026-11-05, G2.2).
+fn moyenne_des_graines(resultats: &[(String, f32, f32)]) -> (f32, f32, f32) {
+    let v: Vec<_> = resultats.iter().filter(|(nom, ..)| nom.starts_with("graine ")).collect();
+    let n = v.len().max(1) as f32;
+    let (i, c) = (v.iter().map(|r| r.1).sum::<f32>() / n, v.iter().map(|r| r.2).sum::<f32>() / n);
+    let variance = v.iter().map(|r| (r.1 - i).powi(2)).sum::<f32>() / (n - 1.0).max(1.0);
+    (i, c, (variance / n).sqrt())
+}
+
 /// Écran actif. Les vues lourdes sont boxées pour garder l'enum compact.
 enum Etat {
     Accueil(Accueil),
@@ -109,8 +144,19 @@ async fn main() {
     let debut = get_time();
     // `DIAG` (Opti-v2) : la décomposition du coût sur la machine cible, en
     // un lancement — voir `Diagnostic`.
-    let mut diag = std::env::var("DIAG").is_ok_and(|d| d != "tour").then(Diagnostic::new);
-    let mut tour = (std::env::var("DIAG").as_deref() == Ok("tour")).then(Tour::new);
+    // `QUALITE=basse` : avant tout le reste, car la genèse V2 décide de ses
+    // particules à la construction d'un système (G2.2).
+    if std::env::var("QUALITE").is_ok_and(|q| q == "basse") {
+        reglages::regler_qualite(reglages::Qualite::Basse);
+    }
+    let mode_diag = std::env::var("DIAG").ok();
+    let mut tour = match mode_diag.as_deref() {
+        Some("tour") => Some(Tour::new(false)),
+        // Les systèmes seuls : ce que la genèse fait varier (G2.2).
+        Some("systemes") => Some(Tour::new(true)),
+        _ => None,
+    };
+    let mut diag = (mode_diag.is_some() && tour.is_none()).then(Diagnostic::new);
     if let Some(t) = &tour {
         etat = t.etat();
     }
@@ -143,13 +189,23 @@ async fn main() {
     if let Ok(nom) = std::env::var("SYSTEME") {
         if nom == "solaire" {
             // `FOCUS=<astre>` : cadré de près (`FOCUS_RAYONS`, 4 par défaut).
-            let mut v = SkymapV2::new();
-            if let Ok(f) = std::env::var("FOCUS") {
-                v.cadrer(&f, std::env::var("FOCUS_RAYONS").ok().and_then(|r| r.parse().ok()).unwrap_or(4.0));
-            }
-            etat = Etat::SkymapV2(Box::new(v));
+            let rayons = || std::env::var("FOCUS_RAYONS").ok().and_then(|r| r.parse().ok()).unwrap_or(4.0);
+            let focus = std::env::var("FOCUS").ok();
+            etat = if mesure_v3() {
+                let mut v = SkymapV3::new();
+                if let Some(f) = &focus {
+                    v.cadrer(f, rayons());
+                }
+                Etat::SkymapV3(Box::new(v))
+            } else {
+                let mut v = SkymapV2::new();
+                if let Some(f) = &focus {
+                    v.cadrer(f, rayons());
+                }
+                Etat::SkymapV2(Box::new(v))
+            };
         } else if let Some(n) =crate::etoile::types_du_tirage().into_iter().find(|t| *t == nom) {
-            etat = Etat::SkymapV2(Box::new(SkymapV2::sur_astre(n)));
+            etat = vue_sur_astre(n);
         }
     }
     // `TABLEUR` : le tableur d'habitabilité (captures).
@@ -509,12 +565,30 @@ impl Tour {
     const CHAUFFE: f64 = 1.0;
     const DUREE: f64 = 3.5;
 
-    fn new() -> Self {
-        let mut cas: Vec<(String, Cas)> = Objet::noms_du_defile()
-            .into_iter()
-            .enumerate()
-            .map(|(i, nom)| (format!("isolee  {nom}"), Cas::Defile(i)))
-            .collect();
+    /// `seulement_systemes` : ni vues isolées ni galerie ni starmap, que la
+    /// genèse ne touche pas (`DIAG=systemes`).
+    fn new(seulement_systemes: bool) -> Self {
+        let cas = Self::cas(seulement_systemes);
+        let skymap = if mesure_v3() { "V3" } else { "V2" };
+        println!("TOUR : {} cas, ~{:.0} s, skymap {skymap}, qualite {:?}", cas.len(), cas.len() as f64 * Self::DUREE, reglages::qualite());
+        Self { cas, i: 0, debut: get_time(), images: Vec::new(), cpu: Vec::new(), resultats: Vec::new() }
+    }
+
+    fn cas(seulement_systemes: bool) -> Vec<(String, Cas)> {
+        let mut cas: Vec<(String, Cas)> = if seulement_systemes {
+            Vec::new()
+        } else {
+            Objet::noms_du_defile()
+                .into_iter()
+                .enumerate()
+                .map(|(i, nom)| (format!("isolee  {nom}"), Cas::Defile(i)))
+                .collect()
+        };
+        if seulement_systemes {
+            cas.extend(graines_du_tour().into_iter().map(|g| (format!("graine  {g}"), Cas::Graine(g))));
+            cas.push(("systeme solaire".into(), Cas::Solaire));
+            return cas;
+        }
         for t in etoile::types_du_tirage() {
             cas.push((format!("systeme {t}"), Cas::Systeme(t)));
         }
@@ -524,17 +598,28 @@ impl Tour {
         cas.push(("systeme solaire".into(), Cas::Solaire));
         cas.push(("galerie des planetes".into(), Cas::Galerie));
         cas.push(("starmap".into(), Cas::Starmap));
-        println!("TOUR : {} cas, ~{:.0} s", cas.len(), cas.len() as f64 * Self::DUREE);
-        Self { cas, i: 0, debut: get_time(), images: Vec::new(), cpu: Vec::new(), resultats: Vec::new() }
+        cas
     }
 
     /// L'écran du cas courant.
     fn etat(&self) -> Etat {
         match self.cas[self.i].1 {
             Cas::Defile(r) => Etat::Objet(Box::new(Objet::sur_defile(r))),
-            Cas::Systeme(t) => Etat::SkymapV2(Box::new(SkymapV2::sur_astre(t))),
-            Cas::Graine(g) => Etat::SkymapV2(Box::new(SkymapV2::sur_graine(g))),
-            Cas::Solaire => Etat::SkymapV2(Box::new(SkymapV2::new())),
+            Cas::Systeme(t) => vue_sur_astre(t),
+            Cas::Graine(g) => {
+                if mesure_v3() {
+                    Etat::SkymapV3(Box::new(SkymapV3::sur_graine(g)))
+                } else {
+                    Etat::SkymapV2(Box::new(SkymapV2::sur_graine(g)))
+                }
+            }
+            Cas::Solaire => {
+                if mesure_v3() {
+                    Etat::SkymapV3(Box::new(SkymapV3::new()))
+                } else {
+                    Etat::SkymapV2(Box::new(SkymapV2::new()))
+                }
+            }
             Cas::Galerie => Etat::Galerie(Box::new(Galerie::new(false))),
             Cas::Starmap => Etat::Starmap(Box::new(Starmap::new())),
         }
@@ -564,6 +649,8 @@ impl Tour {
             for (nom, i, c) in &self.resultats {
                 println!("  {:<44} {:>7.1} fps  image {:>6.1} ms  CPU {:>6.1} ms", nom, 1000.0 / i.max(1e-3), i, c);
             }
+            let (i, c, e) = moyenne_des_graines(&self.resultats);
+            println!("TOUR, moyenne des graines : image {i:.3} ms (erreur type {e:.3})  CPU {c:.3} ms");
             return Suite::Fin;
         }
         Suite::Changer(self.etat())
@@ -589,4 +676,48 @@ fn imprimer_profil(libelle: &str, echantillons: &mut [f32]) {
         1.0 / p99,
         1.0 / pire
     );
+}
+
+#[cfg(test)]
+mod tests_tour {
+    use super::*;
+
+    /// `DIAG=systemes` ne garde que les systèmes : les graines réparties, et le
+    /// système solaire pour repère.
+    #[test]
+    fn le_tour_des_systemes_ne_garde_que_les_systemes() {
+        let noms = |seuls| Tour::cas(seuls).into_iter().map(|(n, _)| n).collect::<Vec<_>>();
+        let (seuls, tous) = (noms(true), noms(false));
+        assert_eq!(seuls.len(), graines_du_tour().len() + 1);
+        for n in &seuls {
+            assert!(n.starts_with("graine ") || n == "systeme solaire", "« {n} » n'a pas sa place");
+        }
+        assert!(tous.iter().any(|n| n.starts_with("isolee")) && tous.iter().any(|n| n == "starmap"));
+    }
+
+    /// **Les graines couvrent les genres de la V1**, tirés de `graine % 100`
+    /// (`genese::construire_systeme`) : à une, deux, trois et quatre étoiles,
+    /// dans des parts proches de 55 / 28 / 11 / 6 %.
+    #[test]
+    fn les_graines_du_tour_couvrent_les_genres_de_la_v1() {
+        let g = graines_du_tour();
+        let part = |lo: u64, hi: u64| g.iter().filter(|&&x| (lo..=hi).contains(&(x % 100))).count() as f32 / g.len() as f32;
+        let parts = [part(0, 54), part(55, 82), part(83, 93), part(94, 99)];
+        for (p, attendu) in parts.iter().zip([0.55, 0.28, 0.11, 0.06]) {
+            assert!((p - attendu).abs() < 0.1, "parts des genres : {parts:?}");
+        }
+        assert!(parts[3] > 0.0, "aucun quadruple : {parts:?}");
+    }
+
+    /// La moyenne ne compte que les graines : les lignes « systeme X » partagent
+    /// une seule graine, et les vues sans genèse n'ont rien à y faire.
+    #[test]
+    fn la_moyenne_ne_compte_que_les_graines() {
+        let r = |n: &str, i, c| (n.to_string(), i, c);
+        let v = [r("graine  1", 10.0, 1.0), r("graine  2", 20.0, 3.0), r("systeme G", 900.0, 900.0), r("systeme solaire", 900.0, 900.0), r("starmap", 900.0, 900.0)];
+        let (i, c, e) = moyenne_des_graines(&v);
+        assert_eq!((i, c), (15.0, 2.0));
+        // Écart-type 7,07 sur deux échantillons : erreur type 5.
+        assert!((e - 5.0).abs() < 1e-4, "erreur type {e}");
+    }
 }

@@ -20,15 +20,16 @@
 **Chantier en cours : Genèse V2**, branche `chantier-genese-v2` dans le
 worktree `.claude/worktrees/astres-v2`. G0 (les décisions) tranché ; **G1 clos**
 (hasard en flux nommés, plan, planifier, instancier, **Skymap V3 visible**,
-jugée comparable à la V2) ; **G2 en cours, G2.1 fait** (banc statistique :
-aucun écart entre les genèses sur 5 000 graines) — journal
+jugée comparable à la V2) ; **G2 en cours, G2.1 et G2.2 faits** (banc statistique :
+aucun écart entre les genèses ; la V3 ne coûte pas plus cher que la V2 sur la
+machine de dev) ; **reste G2.3, le petit PC** — journal
 [`suivi/genese_v2.md`](docs/suivi/genese_v2.md). Les décisions et le
 découpage révisé (G0 à G11) : [`conception/genese_v2.md`](docs/conception/genese_v2.md)
 §7 et §8.
 
 `main` n'est **pas poussé** (`origin/main` est à `5af973a`).
 
-**Vérifié (2026-11-05, G2.1)** : **1 014 tests verts** (+ 13 du binaire `mhd`),
+**Vérifié (2026-11-05, G2.2)** : **1 017 tests verts** (+ 13 du binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
 ### Ce qui a été fait dans la dernière session
@@ -42,8 +43,8 @@ découpage révisé (G0 à G11) : [`conception/genese_v2.md`](docs/conception/ge
 
 ### À faire ensuite, par ordre
 
-1. **Genèse V2, G2.2** : les outils de mesure dans la V3, puis **G2.3**, le
-   coût par image V3 contre V2 sur le petit PC
+1. **Genèse V2, G2.3** : le coût par image V3 contre V2 sur le **petit PC**,
+   en tours alternés (à lancer par l'utilisateur), puis **G3**, l'échelle
    ([`suivi/genese_v2.md`](docs/suivi/genese_v2.md)). Bilan et dettes de G1 :
    même journal. G1 débloque aussi la part « nombre d'objets » de la
    qualité (O5).
@@ -83,7 +84,7 @@ découpage révisé (G0 à G11) : [`conception/genese_v2.md`](docs/conception/ge
 
 ## Commits
 
-Dernier commit : « Genèse V2, G2.1 : le banc statistique »
+Dernier commit : « Genèse V2, G2.2 : les outils de mesure dans la V3 »
 (2026-11-05). `git log` fait foi pour le reste.
 
 **Consigne debout (révisée le 2026-09-26) : un commit par lot ou sous-lot**,
@@ -101,7 +102,7 @@ sur un fichier contenant du travail non commité (`docs/suivi/stations.md`
 | Chantier | Où on en est | Journal · conception |
 |---|---|---|
 | **Opti-v2** | **clos** (2026-11-02), fusionné : O1 à O10 ; les à-coups passent au chantier suivant | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) · [`conception/opti_v2.md`](docs/conception/opti_v2.md) |
-| **Genèse V2** | **en cours** : G0 tranché (2026-11-05), découpage révisé G0 à G11 ; **G1 clos**, Skymap V3 visible ; G2 en cours, G2.1 fait | [`suivi/genese_v2.md`](docs/suivi/genese_v2.md) · [`conception/genese_v2.md`](docs/conception/genese_v2.md) |
+| **Genèse V2** | **en cours** : G0 tranché (2026-11-05), découpage révisé G0 à G11 ; **G1 clos**, Skymap V3 visible ; G2 en cours, G2.1 et G2.2 faits | [`suivi/genese_v2.md`](docs/suivi/genese_v2.md) · [`conception/genese_v2.md`](docs/conception/genese_v2.md) |
 | **Planètes** (type, habitabilité) | P1 à P3 livrés, habitabilité des presets ajustée à la main ; réglage fin avec la genèse | [`suivi/planetes.md`](docs/suivi/planetes.md) · [`conception/planetes.md`](docs/conception/planetes.md) |
 | **Astres V2** | **clos** (2026-10-26) : lots 0 à 15 livrés et validés, le 8 abandonné ; reste la passe de relecture | [`suivi/astres_v2.md`](docs/suivi/astres_v2.md) · [`conception/astres_v2.md`](docs/conception/astres_v2.md) |
 | **Trajectoires** | lots A à D faits (un Starship vole en jeu) ; lot E à faire | [`suivi/trajectoires.md`](docs/suivi/trajectoires.md) · [`conception/trajectoires.md`](docs/conception/trajectoires.md) |
@@ -123,6 +124,7 @@ sur un fichier contenant du travail non commité (`docs/suivi/stations.md`
 | La vision RTS globale | [`docs/conception/concept_jeu.md`](docs/conception/concept_jeu.md) |
 | Le banc statistique des genèses (`BANC=<n>`) | [`docs/suivi/genese_v2.md`](docs/suivi/genese_v2.md), G2.1 |
 | Les mesures de performance (`PROFIL`, `DIAG`, `DIAG=tour`, `DEFILE`, `SYSTEME`, `FOCUS`) | [`docs/suivi/opti_v2.md`](docs/suivi/opti_v2.md), « Méthode de mesure » et « Le tour de diagnostic » |
+| Mesurer la V3 contre la V2 (`SKYMAP=v3`, `DIAG=systemes`, `QUALITE=basse`) | [`docs/suivi/genese_v2.md`](docs/suivi/genese_v2.md), G2.2 |
 | Régénérer le catalogue de fils : `FILS=1 cargo test --release le_catalogue_des_fils` | [`docs/reference/fils.md`](docs/reference/fils.md) |
 
 ## Décisions prises (ne pas les rouvrir sans raison)
