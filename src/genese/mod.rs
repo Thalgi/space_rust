@@ -1,7 +1,7 @@
 mod apparences;
 mod persistance;
 pub(crate) mod presets;
-mod taille;
+pub(crate) mod taille;
 
 pub use taille::ClasseTaille;
 

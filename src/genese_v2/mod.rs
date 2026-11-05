@@ -10,4 +10,6 @@
 #![allow(dead_code)]
 
 pub mod alea;
+pub mod apparences;
 pub mod plan;
+pub mod planifier;

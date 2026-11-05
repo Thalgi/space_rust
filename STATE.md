@@ -19,14 +19,14 @@
 
 **Chantier en cours : Genèse V2**, branche `chantier-genese-v2` dans le
 worktree `.claude/worktrees/astres-v2`. G0 (les décisions) tranché ; **G1 en
-cours, G1.1 et G1.2 faits** (le hasard en flux nommés, le plan) — journal
+cours, G1.1 à G1.3 faits** (le hasard en flux nommés, le plan, planifier) — journal
 [`suivi/genese_v2.md`](docs/suivi/genese_v2.md). Les décisions et le
 découpage révisé (G0 à G11) : [`conception/genese_v2.md`](docs/conception/genese_v2.md)
 §7 et §8.
 
 `main` n'est **pas poussé** (`origin/main` est à `5af973a`).
 
-**Vérifié (2026-11-05, G1.2)** : **1 000 tests verts** (+ 13 du binaire `mhd`),
+**Vérifié (2026-11-05, G1.3)** : **1 007 tests verts** (+ 13 du binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
 ### Ce qui a été fait dans la dernière session
@@ -35,14 +35,14 @@ découpage révisé (G0 à G11) : [`conception/genese_v2.md`](docs/conception/ge
 |---|---|---|
 | **Opti-v2** | clos et fusionné dans `main` (O8 : le banc du petit PC) | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) |
 | **Dette de `vaisseau/`, chantier 1** | découpage de `generateur.rs` commité (`77f6cfb`) après revérification ligne à ligne ; c'est un découpage, pas une refonte | [`suivi/dette_vaisseau.md`](docs/suivi/dette_vaisseau.md) |
+| **Genèse V2, G1.1 à G1.3** | flux de hasard nommés, plan sérialisable, `planifier` pur et testé sur des milliers de graines ; journal réécrit pour la revue (fond, forme, écarts, tests, reste) | [`suivi/genese_v2.md`](docs/suivi/genese_v2.md) |
 | **Genèse V2, G0** | 12 points tranchés : échelle vraie + réglage d'affichage, Lagrange, ceintures-sites, 3 ressources, entretien à la place des PV, noms, plan sauvegardé, Skymap V3 | [`conception/genese_v2.md`](docs/conception/genese_v2.md) §7, [`concept_jeu.md`](docs/conception/concept_jeu.md) §5, §6 bis |
 
 ### À faire ensuite, par ordre
 
-1. **Genèse V2, G1.3** : `planifier(graine)`, les règles de la V1 relues dans
-   les flux nommés ([`suivi/genese_v2.md`](docs/suivi/genese_v2.md),
-   découpage de G1). Puis G1.4 et G1.5 : instancier, Skymap V3 et catégorie
-   SKYMAP. G1 débloque aussi la part « nombre d'objets » de la
+1. **Genèse V2, G1.4** : `instancier(&plan)`, construire le `Systeme` depuis
+   le plan ([`suivi/genese_v2.md`](docs/suivi/genese_v2.md), découpage de
+   G1). Puis G1.5 : Skymap V3 et catégorie SKYMAP. G1 débloque aussi la part « nombre d'objets » de la
    qualité (O5).
 2. **Les à-coups**, sur le banc d'O8 : le tour ne donne que des moyennes ; y
    ajouter la pire image et le 1 % bas, puis attribuer (relief des
@@ -80,7 +80,7 @@ découpage révisé (G0 à G11) : [`conception/genese_v2.md`](docs/conception/ge
 
 ## Commits
 
-Dernier commit : « Genèse V2, G1.2 : le plan, des données pures »
+Dernier commit : « Genèse V2, G1.3 : planifier, la genèse devient une fonction pure »
 (2026-11-05). `git log` fait foi pour le reste.
 
 **Consigne debout (révisée le 2026-09-26) : un commit par lot ou sous-lot**,
@@ -98,7 +98,7 @@ sur un fichier contenant du travail non commité (`docs/suivi/stations.md`
 | Chantier | Où on en est | Journal · conception |
 |---|---|---|
 | **Opti-v2** | **clos** (2026-11-02), fusionné : O1 à O10 ; les à-coups passent au chantier suivant | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) · [`conception/opti_v2.md`](docs/conception/opti_v2.md) |
-| **Genèse V2** | **en cours** : G0 tranché (2026-11-05), découpage révisé G0 à G11 ; G1.1 et G1.2 faits | [`suivi/genese_v2.md`](docs/suivi/genese_v2.md) · [`conception/genese_v2.md`](docs/conception/genese_v2.md) |
+| **Genèse V2** | **en cours** : G0 tranché (2026-11-05), découpage révisé G0 à G11 ; G1.1 à G1.3 faits | [`suivi/genese_v2.md`](docs/suivi/genese_v2.md) · [`conception/genese_v2.md`](docs/conception/genese_v2.md) |
 | **Planètes** (type, habitabilité) | P1 à P3 livrés, habitabilité des presets ajustée à la main ; réglage fin avec la genèse | [`suivi/planetes.md`](docs/suivi/planetes.md) · [`conception/planetes.md`](docs/conception/planetes.md) |
 | **Astres V2** | **clos** (2026-10-26) : lots 0 à 15 livrés et validés, le 8 abandonné ; reste la passe de relecture | [`suivi/astres_v2.md`](docs/suivi/astres_v2.md) · [`conception/astres_v2.md`](docs/conception/astres_v2.md) |
 | **Trajectoires** | lots A à D faits (un Starship vole en jeu) ; lot E à faire | [`suivi/trajectoires.md`](docs/suivi/trajectoires.md) · [`conception/trajectoires.md`](docs/conception/trajectoires.md) |

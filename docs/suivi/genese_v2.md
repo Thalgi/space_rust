@@ -1,107 +1,245 @@
 # Suivi — Chantier Genèse V2
 
-> Journal du chantier, lot par lot. Conception (le pourquoi, les décisions de
-> G0, le découpage G0 à G11) : [`../conception/genese_v2.md`](../conception/genese_v2.md).
+> Journal du chantier, écrit pour **une revue globale** : chaque lot se lit
+> seul, sur le même gabarit — **le fond** (pourquoi, ce que ça change), **la
+> forme** (fichiers, structure, choix), **les écarts** (avec la V1 ou la
+> conception), **les tests** (et le sabotage qui fait rougir chacun),
+> **ce qui reste**. Conception — décisions de G0 et découpage G0 à G11 :
+> [`../conception/genese_v2.md`](../conception/genese_v2.md).
+>
 > Branche `chantier-genese-v2`, worktree `.claude/worktrees/astres-v2`.
+
+---
+
+## Vue d'ensemble
+
+**Le but du chantier** : une genèse qui produit des systèmes à l'**échelle
+vraie**, cohérents (âge, ceintures, lunes espacées, Lagrange), dont chaque
+corps porte une **fiche** que l'économie lira, et dont le **plan** se
+sauvegarde. Elle vit dans `src/genese_v2/`, à côté de la genèse V1
+(`src/genese/`), **gelée** : les Skymaps V1 et V2 tournent sur la V1, la V3
+sur la V2 (conception §7.12, §7.13).
+
+| Lot | Contenu | État |
+|---|---|---|
+| G0 | Les décisions | ✅ 2026-11-05 (conception §7) |
+| **G1** | **Les fondations : hasard, plan, planifier, instancier, Skymap V3** | **en cours** |
+| G2 | Banc statistique, coût par image V2 / V3 | |
+| G3 | L'échelle vraie et le réglage d'affichage | |
+| G4 | Un seul modèle de température, habitabilité par bandes | |
+| G5 | Les étoiles : âge, anomalies, table de rareté | |
+| G6 | Planètes et lunes : catalogue, espacement, naines, noms | |
+| G7 | Ceintures | |
+| G8 | La fiche, les ressources | |
+| G9 | Lagrange, Grecs et Troyens | |
+| G10 | Les étoiles proches | |
+| G11 | Étalonnage, la V3 devient principale | |
+
+**Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), G1.3 (ce
+lot).
 
 ---
 
 ## G1 — les fondations (ouvert le 2026-11-05)
 
-Rien ne doit changer à l'écran : G1 refait les règles de la genèse V1 sous une
-autre forme, un plan de données pures puis sa construction.
+**Fond.** Avant toute règle nouvelle, la genèse change de **forme** : un
+**plan** de données pures, tiré de flux de hasard indépendants, puis sa
+**construction**. Rien ne doit changer à l'écran — G1 refait les règles de la
+V1. Ce qu'on y gagne : une genèse **testable** sans fenêtre, un plan
+**sauvegardable** (§7.11), et le point d'accroche du réglage de qualité
+(Opti-v2 O5 : la construction décide combien on dessine).
 
-**Inventaire préalable** (ce que G1 doit maîtriser) :
+**Inventaire préalable** — ce que G1 doit maîtriser :
 
 - Tout tire dans le **flux global de macroquad** (`gen_range`) : 55 tirages
   dans `genese/mod.rs`, 95 dans `genese/apparences.rs`, plus le tirage de
   l'étoile (`etoile.rs`). Rien ne se teste sans contexte graphique.
 - **Deux constructeurs tirent en interne** : `Disque::new` (les particules) et
   `Soleil::new` (graine et minuteries des taches, éruptions, flares).
+- **Des tirages ont lieu pendant la construction** : l'orientation de chaque
+  orbite (`poser_sur_rails`, `deployer_noeud`), la place d'une lune (qui lit
+  la position de sa planète).
 - **`Apparence` n'est pas sérialisable** (`Copy`, un `&'static str` de
-  preset) : le plan stockera de quoi la refaire (type, température, graine),
-  pas l'apparence elle-même.
+  preset) ; et ses fonctions de tirage rendent aussi le **rayon** et la
+  **masse**, dont dépend le placement (garde-fou anti-collision).
 - `glam` a déjà sa feature `serde` : les `Vec3` du plan se sérialisent.
-
-**Découpage de G1** :
 
 | Sous-lot | Contenu | État |
 |---|---|---|
-| **G1.1** | Le hasard en flux nommés (`genese_v2::alea`) | ✅ |
-| **G1.2** | Le plan : types sérialisables (étoiles en arbre, planètes, lunes, ceintures, comètes, grand disque), identifiant = place dans le plan, aller-retour JSON | ✅ |
-| **G1.3** | `planifier(graine)` : les règles de la V1 relues dans les flux nommés, apparences comprises ; testable sans contexte graphique | |
-| **G1.4** | `instancier(&plan)` : construit le `Systeme` ; les constructeurs qui tirent en interne sont amorcés par la graine de leur objet ; les nombres de rendu (particules) décidés ici, jamais dans le plan | |
-| **G1.5** | Skymap V3 (copie de la V2) et catégorie SKYMAP de l'accueil (V1 gelée, V2, V3) ; sauvegarde du plan | |
+| **G1.1** | Le hasard en flux nommés (`genese_v2::alea`) | ✅ `da0a091` |
+| **G1.2** | Le plan : types sérialisables, identifiant = place dans le plan | ✅ `c812051` |
+| **G1.3** | `planifier(graine)` : les règles de la V1 relues dans les flux nommés, apparences comprises | ✅ |
+| **G1.4** | `instancier(&plan)` : construit le `Systeme` ; constructeurs qui tirent en interne amorcés par la graine de leur objet ; nombres de rendu décidés ici | |
+| **G1.5** | Skymap V3 (copie de la V2), catégorie SKYMAP de l'accueil (V1 gelée, V2, V3), sauvegarde du plan | |
 
-### G1.1 — le hasard en flux nommés (2026-11-05)
+---
 
-`src/genese_v2/alea.rs` : `Alea::flux(graine, nom, rang)` dérive un flux de
-la graine, d'un nom et d'un rang, sans aucun état partagé ; `enfant` en dérive
-un sous-flux (une lune dans celui de sa planète) sans consommer le parent.
-Générateur SplitMix64, sans dépendance. Tirages : `unite`, `entre`, `entier`
-(`[a, b[` comme `gen_range`), `chance`.
+### G1.1 — le hasard en flux nommés (2026-11-05, `da0a091`)
 
-**Cinq tests**, chacun cassé par sabotage avant d'être admis :
+**Fond.** La V1 tire tout dans **une seule file** de hasard : un tirage
+ajouté n'importe où décale tout ce qui suit (le lot 12 a dû poser son grand
+disque *sans tirage* pour cette raison), et cette file n'existe qu'avec une
+fenêtre ouverte, donc rien ne se teste. Ici, chaque partie d'un système a
+**sa propre file**, dérivée de la graine, d'un nom et d'un rang : tirer dans
+les comètes ne déplace plus les planètes.
 
-| Test | Sabotage qui le fait rougir |
-|---|---|
-| `le_flux_rejoue_des_valeurs_figees` | hachage du nom modifié |
-| `la_graine_le_nom_et_le_rang_donnent_chacun_un_autre_flux` | rang ignoré |
-| `tirer_dans_un_flux_ne_deplace_pas_les_autres` | un compteur global mêlé à la dérivation |
-| `un_enfant_ne_consomme_pas_son_parent` | rang de l'enfant ignoré |
-| `les_tirages_sont_bornes_et_uniformes` | `unite` sur `[0, 0,5[` ; `entier` qui déborde |
+**Forme.** `src/genese_v2/alea.rs`, une structure `Alea` :
 
-Les **valeurs figées** sont celles du générateur au premier lancement : elles
-gardent la reproductibilité d'une version à l'autre, pas la justesse du
-mélange — c'est le test d'uniformité qui juge celui-ci.
+- `Alea::flux(graine, nom, rang)` : la graine mélangée, puis chaque octet du
+  nom, puis le rang — aucun état partagé entre flux ;
+- `enfant(nom, rang)` : un sous-flux (une lune dans sa planète) **sans
+  consommer** de tirage du parent ;
+- tirages `suivant` (64 bits), `unite` ([0, 1[, 24 bits), `entre`, `entier`
+  (`[a, b[`, comme `gen_range`), `chance`.
 
-Le module porte un `#![allow(dead_code)]` : rien ne le consomme encore hors des
-tests. Il tombe en G1.5.
+Générateur **SplitMix64** : une vingtaine de lignes, sans dépendance, calcul
+entier pur, donc identique sur toutes les machines.
+
+**Écarts / limites.** `entier` passe par un modulo : biais de l'ordre de
+10⁻¹⁸ sur de petits intervalles, sans effet. Deux flux de même nom et rang
+sont identiques — les noms sont tenus dans un tableau en tête de
+`planifier.rs` (G1.3).
+
+**Tests** :
+
+| Test | Ce qu'il garde | Sabotage qui le fait rougir |
+|---|---|---|
+| `le_flux_rejoue_des_valeurs_figees` | les sorties ne changent jamais d'une version à l'autre | hachage du nom modifié |
+| `la_graine_le_nom_et_le_rang_donnent_chacun_un_autre_flux` | chaque ingrédient compte | rang ignoré |
+| `tirer_dans_un_flux_ne_deplace_pas_les_autres` | l'indépendance, cœur du lot | un compteur global mêlé à la dérivation |
+| `un_enfant_ne_consomme_pas_son_parent` | ajouter une lune ne touche pas sa planète | rang de l'enfant ignoré |
+| `les_tirages_sont_bornes_et_uniformes` | bornes, moyenne, histogramme sur 20 000 tirages | `unite` sur [0 ; 0,5[ ; `entier` qui déborde |
+
+Les valeurs figées sont celles du premier lancement : elles gardent la
+reproductibilité, pas la qualité du mélange — c'est le test d'uniformité qui
+juge celle-ci.
+
+**Reste.** `#![allow(dead_code)]` sur le module tant que rien ne le consomme
+hors des tests : tombe en G1.5.
 
 **Vérifié** : 997 tests verts (+ 13 de `mhd`), clippy 0.
 
-### G1.2 — le plan, des données pures (2026-11-05)
+---
 
-`src/genese_v2/plan.rs` : tout ce que la genèse V1 produit, en données
-sérialisables (`serde`), sans objet graphique.
+### G1.2 — le plan, des données pures (2026-11-05, `c812051`)
+
+**Fond.** Le plan est **ce que la genèse décide**, séparé de **ce qu'on
+dessine** : il se sauvegarde (un système découvert ne change plus, §7.11), se
+lit sans rien construire (la starmap, §5.4), et ne contient aucun nombre de
+rendu (la qualité ne change pas le système).
+
+**Forme.** `src/genese_v2/plan.rs` (réalisé par un agent, revérifié) :
 
 | Type | Ce qu'il porte |
 |---|---|
 | `PlanSysteme` | la graine, l'arbre des étoiles, les corps, les disques |
-| `NoeudEtoiles` | une étoile, ou une paire (séparation, excentricité, inclinaison, phase, **azimut** du périastre — tiré au déploiement par la V1) |
+| `NoeudEtoiles` | une étoile, ou une paire (séparation, excentricité, inclinaison, phase, **azimut** du périastre) |
 | `EtoilePlan` | nom du type, température, rayon, luminosité, mode de couronne, masse |
 | `CorpsPlan` | nature, orbite, rayon, masse |
 | `Nature` | planète ou lune (avec leur `RecetteApparence`), comète |
 | `RecetteApparence` | type de corps, température d'entrée, graine |
-| `OrbitePlan` | sur rails autour d'un foyer (UA) ; ou lune autour d'un `IdCorps` (unités du monde) |
+| `OrbitePlan` | sur rails autour d'un foyer (UA, avec azimut) ; ou lune autour d'un `IdCorps` (unités du monde) |
 | `DisquePlan` | ceinture, Kuiper ou grand disque : rayons, masse centrale, graine |
-| `IdCorps` | la place du corps dans `PlanSysteme::corps` |
+| `IdCorps` | la place du corps dans `PlanSysteme::corps` — l'identifiant définitif |
 
-**Choix faits** :
+**Choix.**
 
-- **Une source par fait** : la couleur d'une étoile, sa variante, le rémanent,
-  le cas de la naine brune se **déduisent** du type ; ils ne sont pas stockés.
-  Les sillons du grand disque se relisent sur les orbites des planètes.
-- **L'apparence n'est pas stockée** (non sérialisable, 95 tirages) : une
-  recette de trois valeurs la refait. La température qu'elle porte est
-  l'**entrée de la recette**, figée au tirage ; la température d'équilibre que
-  lit le jeu se recalcule (§7.4).
-- **Miroirs plutôt que `serde` partout** : `TypeCorps` pour `TypePlanete`,
-  `FoyerPlan` pour `Foyer` ; les types de la V1 gelée ne bougent pas.
-- **Les étoiles n'ont pas d'`IdCorps`** : un foyer les désigne par leur rang de
-  feuille dans l'ordre de déploiement, comme la V1. À revoir si Lagrange (G9)
-  veut un identifiant commun.
-- **Unités reprises de la V1** : UA autour d'un foyer, unités du monde pour
-  l'orbite d'une lune. G3 refera ces conventions.
-- **Pas de nom propre** : les systèmes générés n'en ont pas ; les systèmes
-  écrits à la main (G10) l'ajouteront.
+- **Une source par fait** : couleur, variante, rémanent et cas de la naine
+  brune se **déduisent** du type ; les sillons du grand disque se relisent
+  sur les orbites des planètes.
+- **L'apparence n'est pas stockée** : une recette de trois valeurs la refait.
+  Sa température est l'**entrée de la recette**, figée au tirage ; la
+  température d'équilibre que lit le jeu se recalcule (§7.4).
+- **Miroirs plutôt que `serde` partout** : `TypeCorps`, `FoyerPlan` ; les
+  types de la V1 gelée ne bougent pas.
 
-**Trois tests**, chacun cassé par sabotage :
+**Écarts / limites.**
 
-| Test | Sabotage qui le fait rougir |
-|---|---|
-| `le_plan_revient_intact_de_json` | `#[serde(skip)]` sur l'azimut d'une orbite |
-| `un_identifiant_designe_toujours_le_meme_corps` | un corps ajouté en tête de liste |
-| `aucun_nombre_de_rendu_dans_le_plan` | un champ `nb_particules` dans `DisquePlan` (ajouté aussi au test pour compiler : la garde seule devait juger) |
+- Les étoiles n'ont pas d'`IdCorps` : un foyer les désigne par leur rang de
+  feuille. À revoir si Lagrange (G9) veut un identifiant commun.
+- Unités de la V1 (UA autour d'un foyer, unités du monde pour une lune) : G3
+  les refera.
+- Pas de nom propre : les systèmes écrits à la main (G10) l'ajouteront.
+
+**Tests** :
+
+| Test | Ce qu'il garde | Sabotage qui le fait rougir |
+|---|---|---|
+| `le_plan_revient_intact_de_json` | aucun champ perdu à la sauvegarde | `#[serde(skip)]` sur l'azimut d'une orbite |
+| `un_identifiant_designe_toujours_le_meme_corps` | un ajout ne déplace pas les identifiants | un corps ajouté en tête de liste |
+| `aucun_nombre_de_rendu_dans_le_plan` | §5.4 | un champ `nb_particules` dans `DisquePlan` (ajouté aussi au test pour compiler : la garde seule devait juger) |
 
 **Vérifié** : 1 000 tests verts (+ 13 de `mhd`), clippy 0.
+
+---
+
+### G1.3 — planifier (2026-11-05)
+
+**Fond.** La genèse devient une **fonction pure** : `planifier(graine)` rend
+le plan d'un système, sans fenêtre, sans état global. Pour la première fois
+dans le projet, on peut **bâtir des milliers de systèmes dans un test** et
+vérifier leurs règles. Les règles restent celles de la V1, tirage pour
+tirage ; seule la source du hasard change.
+
+**Forme.**
+
+- `src/genese_v2/planifier.rs` :
+  - `planifier(graine)` : le genre (55 % simple, puis binaire, trinaire,
+    quadruple), puis `simple` ou `multiple` ;
+  - `planifier_autour(graine, type)` : une étoile d'un type choisi (menu
+    « choisir astre », starmap) ;
+  - `simple` : étoile, échelle, Titius-Bode avec garde-fou anti-collision,
+    lunes, ceinture, grand disque (étoile jeune), Kuiper, comètes ;
+  - `multiple` : l'arbre stellaire et ses zones stables (Holman-Wiegert),
+    puis `peupler_zone` ;
+  - un **tableau des noms de flux** en tête du fichier (`genre`, `etoile`,
+    `arbre`, `echelle`, `zone` ↳ `planete` ↳ `lune`, `ceinture`, `kuiper`,
+    `grand_disque`, `cometes` ↳ `comete`).
+- `src/genese_v2/apparences.rs` : **copie** de `genese::apparences` avec un
+  `Alea` à la place de `gen_range` (la V1 est gelée, et G4/G6 remplaceront ces
+  apparences par le catalogue). `planete(recette)` rend `(rayon, masse,
+  apparence)` ; `lune(recette)` l'apparence d'une lune.
+- Réutilisé de la V1, sans le modifier : `echelle_systeme`, `premiere_orbite`,
+  `masse_luminosite`, `orbite_comete`, les masses des cas particuliers,
+  `stabilite`. Deux visibilités élargies pour y accéder : `genese::taille` et
+  `etoile::PART_PARTICULIERES` passent `pub(crate)`.
+
+**Choix.**
+
+- **Le rayon et la masse sont tirés dans le flux de la recette**, puis
+  stockés : la construction refera l'apparence avec la même graine et
+  retrouvera le même corps (`la_recette_refait_le_meme_corps`).
+- **Les tirages de construction remontent dans le plan** : l'azimut de chaque
+  orbite et de chaque paire, la place et le sens de chaque lune.
+- **Chaque disque a son flux** (`ceinture`, `kuiper`, `grand_disque`) : le
+  grand disque, qui n'existe que pour les étoiles jeunes, ne décale plus
+  Kuiper — le piège du lot 12 disparaît.
+
+**Écarts avec la V1** (voulus, à juger en G1.5 à l'écran) :
+
+- **Les mêmes graines ne donnent pas les mêmes systèmes** : le hasard est
+  autre. On compare à type d'étoile égal et en statistiques (§7.12).
+- **Le genre se tire** dans un flux (`genre`) au lieu de `graine % 100`.
+- **La place d'une lune** se calcule sur la distance de sa planète **à son
+  foyer**, `a·(1−e)`. La V1 mesurait la distance au **centre du repère** : pour
+  une planète autour d'une étoile d'un multiple, cette distance comptait
+  l'écart de l'étoile, et ses lunes partaient trop loin. Les systèmes simples
+  ne changent pas.
+- **Le cadrage par défaut d'un multiple** (`definir_vue`) n'est pas dans le
+  plan : c'est de l'affichage, G1.4 le déduira des planètes.
+
+**Tests** :
+
+| Test | Ce qu'il garde | Sabotage qui le fait rougir |
+|---|---|---|
+| `la_meme_graine_rejoue_le_meme_plan` | déterminisme | un compteur caché dans le flux d'échelle |
+| `la_recette_refait_le_meme_corps` | le corps construit sera le corps tiré | recette stockée et corps tirés de graines différentes |
+| `les_comptes_suivent_les_regles_de_la_v1` | 3–6 planètes, 1–3 comètes, deux ceintures (simple) ; rien de tout ça en multiple ; ≤ 3 lunes, ≤ 1 hors géante | jusqu'à 7 planètes |
+| `les_planetes_voisines_ne_se_chevauchent_pas` | le garde-fou, et qu'il **mord** vraiment | garde-fou retiré ; garde-fou élargi (il ne mord plus jamais au plus juste) |
+| `les_lunes_restent_dans_le_domaine_de_leur_planete` | entre Roche et ~14 % de la distance à l'étoile | lunes repoussées d'une demi-bande |
+| `un_systeme_sur_deux_environ_a_plusieurs_etoiles` | 40–50 % de multiples sur 2 000 graines | seuil des simples à 35 % |
+| `planifier_autour_impose_le_type` | le type demandé est le type tiré ; type inconnu → `None` | type ignoré |
+
+**Reste.** Le plan existe, rien ne le construit : G1.4.
+
+**Vérifié** : 1 007 tests verts (+ 13 de `mhd`), clippy 0.

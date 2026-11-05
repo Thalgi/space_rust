@@ -15,7 +15,7 @@ pub struct ProfilEtoile {
 pub(crate) type Gabarit = (f32, f32, f32, f32, &'static str, f32);
 
 /// Part du tirage réservée aux étoiles **particulières**.
-const PART_PARTICULIERES: f32 = 0.05;
+pub(crate) const PART_PARTICULIERES: f32 = 0.05;
 
 /// **Quelle étoile particulière**, pour un tirage `p` dans `[0 ; 1]`.
 ///
