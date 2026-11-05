@@ -11,5 +11,6 @@
 
 pub mod alea;
 pub mod apparences;
+pub mod instancier;
 pub mod plan;
 pub mod planifier;

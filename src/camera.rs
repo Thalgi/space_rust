@@ -66,7 +66,7 @@ pub fn base_camera(forward: Vec3) -> (Vec3, Vec3, Vec3) {
 /// projection sont inverses l'une de l'autre *à condition* de parler du même
 /// tronc. Deux copies de cette valeur qui divergeraient donneraient un curseur
 /// qui désigne à côté de ce qu'il montre, sans que rien ne le signale.
-const DEMI_FOV: f32 = 45.0 * std::f32::consts::PI / 360.0;
+pub(crate) const DEMI_FOV: f32 = 45.0 * std::f32::consts::PI / 360.0;
 
 /// Direction **unitaire** du rayon partant de l'œil et passant par le point
 /// écran `souris` (en pixels, `ecran` étant la taille de la fenêtre).

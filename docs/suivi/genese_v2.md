@@ -35,8 +35,8 @@ sur la V2 (conception §7.12, §7.13).
 | G10 | Les étoiles proches | |
 | G11 | Étalonnage, la V3 devient principale | |
 
-**Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), G1.3 (ce
-lot).
+**Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), `7b166f1`
+(G1.3), G1.4 (ce lot).
 
 ---
 
@@ -68,8 +68,8 @@ V1. Ce qu'on y gagne : une genèse **testable** sans fenêtre, un plan
 |---|---|---|
 | **G1.1** | Le hasard en flux nommés (`genese_v2::alea`) | ✅ `da0a091` |
 | **G1.2** | Le plan : types sérialisables, identifiant = place dans le plan | ✅ `c812051` |
-| **G1.3** | `planifier(graine)` : les règles de la V1 relues dans les flux nommés, apparences comprises | ✅ |
-| **G1.4** | `instancier(&plan)` : construit le `Systeme` ; constructeurs qui tirent en interne amorcés par la graine de leur objet ; nombres de rendu décidés ici | |
+| **G1.3** | `planifier(graine)` : les règles de la V1 relues dans les flux nommés, apparences comprises | ✅ `7b166f1` |
+| **G1.4** | `instancier(&plan)` : construit le `Systeme` ; constructeurs qui tirent en interne amorcés par la graine de leur objet ; nombres de rendu décidés ici | ✅ |
 | **G1.5** | Skymap V3 (copie de la V2), catégorie SKYMAP de l'accueil (V1 gelée, V2, V3), sauvegarde du plan | |
 
 ---
@@ -173,7 +173,7 @@ rendu (la qualité ne change pas le système).
 
 ---
 
-### G1.3 — planifier (2026-11-05)
+### G1.3 — planifier (2026-11-05, `7b166f1`)
 
 **Fond.** La genèse devient une **fonction pure** : `planifier(graine)` rend
 le plan d'un système, sans fenêtre, sans état global. Pour la première fois
@@ -243,3 +243,67 @@ tirage ; seule la source du hasard change.
 **Reste.** Le plan existe, rien ne le construit : G1.4.
 
 **Vérifié** : 1 007 tests verts (+ 13 de `mhd`), clippy 0.
+
+---
+
+### G1.4 — instancier (2026-11-05)
+
+**Fond.** Le plan devient un `Systeme` que l'écran sait dessiner. La règle
+de §5.4 tient : **aucun tirage de genèse à la construction** — tout ce qui
+fait le système est dans le plan — et **les nombres de rendu se décident
+ici**, pas dans le plan. C'est le point d'accroche que la part « nombre
+d'objets » d'Opti-v2 O5 attendait.
+
+**Forme.** `src/genese_v2/instancier.rs`, `instancier(&plan) -> (Systeme,
+String)` (le libellé, comme la V1) :
+
+- **calculs purs, testés** : `orbite_rails` (Kepler, départ au périastre dans
+  la direction de l'azimut), `config_disque` (les particules selon la
+  qualité), `vue` (le cadrage d'un multiple) ;
+- **assemblage** : l'étoile seule (ou la naine brune en géante au centre),
+  l'arbre stellaire déployé avec l'azimut du plan, puis planètes et lunes,
+  disques, comètes — l'ordre de la V1.
+
+**Choix.**
+
+- **Les constructeurs qui tirent en interne sont amorcés** (`srand`) :
+  `Soleil::new` par une graine dérivée du plan (flux `soleil`, k),
+  `Disque::new` par la graine du disque. Déterministe, donc rejoué à
+  l'identique ; marqué `ponytail:` — disparaît si ces objets reçoivent un
+  jour leur `Alea`.
+- **Le profil d'une étoile se refait depuis son type** : nom statique et
+  couleur relus dans le catalogue d'`etoile.rs` (une source par fait).
+- **Particules selon la qualité** : 900 (ceinture) et 1 400 (Kuiper) en
+  haute, **la moitié en basse** ; le grand disque aussi. Le disque, lui, ne
+  change pas. Changer la qualité en cours de partie ne reconstruit pas un
+  système déjà ouvert.
+
+**Écarts avec la V1.**
+
+- **Le cadrage d'un multiple** se déduit des planètes du plan (l'apoastre le
+  plus lointain autour de la première étoile qui en porte), là où la V1
+  lisait la borne de la zone stable, absente du plan.
+- **La qualité basse divise les particules par deux** : nouveau, à mesurer
+  en G2 (coût par image sur le petit PC).
+- `camera::DEMI_FOV` passe `pub(crate)` : le test du cadrage lit le champ de
+  la caméra à sa source.
+
+**Tests** :
+
+| Test | Ce qu'il garde | Sabotage qui le fait rougir |
+|---|---|---|
+| `un_corps_part_de_son_periastre_dans_la_direction_de_son_azimut` | distance `a(1−e)`, direction de l'azimut, pente de l'inclinaison | azimut décalé ; inclinaison ignorée |
+| `la_qualite_change_les_particules_pas_le_disque` | rayons identiques, particules divisées en basse | qualité sans effet |
+| `le_cadrage_vise_l_etoile_qui_porte_des_planetes` | l'apoastre le plus lointain tient dans le champ de la caméra | cadrage six fois trop serré |
+
+⚠️ **Un test trop faible, renforcé.** La première version du test de cadrage
+vérifiait seulement que les planètes étaient plus près que la caméra : le
+sabotage « cadrage six fois trop serré » restait vert, le plancher de 150
+unités suffisant à le satisfaire. Il vérifie maintenant que l'apoastre tient
+dans le **champ de vision** — et il rougit.
+
+**Ce qui ne se teste pas ici.** L'assemblage crée des objets qui chargent des
+matériaux GPU : il ne tourne pas sans fenêtre. Il se vérifie à l'écran, dans
+la Skymap V3 (G1.5).
+
+**Vérifié** : 1 010 tests verts (+ 13 de `mhd`), clippy 0.
