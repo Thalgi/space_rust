@@ -453,7 +453,7 @@ se déduit se **calcule** au besoin.
 | Étoiles d'un multiple | Sirius-A, Sirius-B |
 | Planète d'une des étoiles / du couple | Sirius-B-I / Sirius-AB-I |
 | Ceinture | Sirius-Ceinture-I |
-| Troyens | Sirius-III-Troyens4 |
+| Grecs (L4) / Troyens (L5) | Sirius-III-Grecs / Sirius-III-Troyens |
 | Nom à plusieurs mots | Epsilon-Eridani-II |
 | **Point de Lagrange** | **aucun nom** |
 
@@ -496,7 +496,59 @@ fiche une fois découvertes. Extensible sans rouvrir la genèse.
 - **IKDAR et ZATURA** (`presets.json`, graine seule) : **on accepte qu'ils
   changent**. Certains systèmes de la starmap évolueront en aspect de toute
   façon (§7.8).
-- **Ouvert** : le sort de la Skymap V1 (la retirer, ou la geler).
+- **La Skymap V1 est gelée**, gardée pour comparer (§7.13) ; reste ouvert le
+  sort de l'ancienne genèse qu'elle utilise, et celui de la V2.
+
+### 7.13 Les clarifications de la relecture — tranché le 2026-11-05
+
+Les cinq points du §8.2.
+
+**1. Un seul modèle de température, qui cohabite avec le type.**
+Aujourd'hui l'habitabilité se calcule en trois temps : un **type de base**
+lu sur la planète (`planetes.json`, sinon son aspect : les 8 niveaux), des
+**crans** selon le type d'étoile (UV, éruptions : `habitabilite.json`), et
+une **zone** binaire (−1 cran hors de 260–320 K). La genèse, elle, choisit
+l'aspect avec d'autres seuils (tempérée 255–350 K) : d'où des planètes
+« habitables mais trop chaudes ». Désormais **une seule température** —
+d'équilibre, sommée sur toutes les étoiles, avec la luminosité physique
+(G3) — décide de tout :
+
+1. elle **filtre le catalogue** : chaque modèle de `planetes.json` reçoit sa
+   plage de température, la genèse ne tire que des modèles compatibles ;
+2. le **type de base** reste lu sur le modèle (les 8 niveaux, inchangés,
+   `planetes.json` maître) ;
+3. les **crans de l'étoile** restent tels quels ;
+4. la **zone binaire** est remplacée par les **bandes** du §5.2 (crans et
+   plafonds par température), dans `habitabilite.json`.
+
+Le type dit *ce qu'est* la planète, la température *ce qu'elle endure*. Comme
+l'aspect est tiré compatible avec la température, ils ne se contredisent
+plus. La galerie, sans étoile, ne garde que le type de base.
+
+**2. Deux étalons.** Le **système solaire** (le plus observé) dans la
+distribution des étoiles G ; **Alpha Centauri** pour les systèmes doubles.
+(G11)
+
+**3. Les valeurs physiques des étoiles** viennent des **tables
+d'astrophysique**. Le réglage d'échelle d'affichage reste une **couche
+parallèle** du rendu. L'éclairement : une étoile peut ne pas éclairer
+pleinement une planète, **mais les teintes doivent ressortir** — une
+planète colorée reste lisiblement colorée, quelle que soit son étoile. (G3)
+
+**4. Grecs et Troyens, autour des géantes gazeuses seulement**, si le coût
+par image le permet (critère du §7.7). Les deux camps : **Grecs en L4,
+Troyens en L5** (convention de Jupiter). **Deux variantes**, tirées par
+géante : des **débris** qui apparaissent quand on zoome, ou seulement
+quelques **gros corps**. (G9)
+
+**5. La Skymap V1 est gelée**, pas retirée. L'accueil gagne une **catégorie
+SKYMAP** à gauche (V1, V2, V3), et la V1 garde son bouton pour comparer
+les évolutions du moteur. (G1)
+
+**Point nouveau, à trancher** : la V1 et la V2 tournent sur l'**ancienne
+genèse**. La V1 gelée oblige donc à **garder l'ancienne genèse** en code figé,
+au lieu de la retirer en G11 (§7.12). Et la V2 : retirée en G11, ou gelée
+comme la V1 ?
 
 ## 8. Découpage révisé (2026-11-05)
 
@@ -507,7 +559,7 @@ la **Skymap V3**, à côté de la V2, sauf G1.
 | Lot | Contenu | Sections | Taille | Dépend de |
 |---|---|---|---|---|
 | **G0** ✅ | Les décisions | §7 | — | — |
-| **G1** | Module à part ; flux de hasard nommés ; `planifier` → plan sérialisable, `instancier` sans tirage ; identifiants = place dans le plan ; plan sauvegardé ; écran Skymap V3 (copie de la V2). Reprend d'abord les règles actuelles : **rien ne change à l'écran** | §5.4, §7.11, §7.12 | L | G0 |
+| **G1** | Module à part ; flux de hasard nommés ; `planifier` → plan sérialisable, `instancier` sans tirage ; identifiants = place dans le plan ; plan sauvegardé ; écran Skymap V3 (copie de la V2) et catégorie SKYMAP de l'accueil. Reprend d'abord les règles actuelles : **rien ne change à l'écran** | §5.4, §7.11, §7.12 | L | G0 |
 | **G2** | Banc statistique sur N graines, des deux genèses ; coût par image V2 / V3 sur le petit PC | §5.3, §7.7, §7.12 | M | G1 |
 | **G3** | **L'échelle** : vérité physique dans le plan (luminosité physique par type d'étoile, tailles et distances vraies), luminosité de rendu à part ; réglage d'affichage en JSON (grossissement, orbites des lunes liées, compression des distances) ; contrôles de précision et de durée des trajets | §7.1 | L | G1 |
 | **G4** | Un seul modèle de température ; habitabilité graduée par bandes | §5.2 | S | G3 |
@@ -515,7 +567,7 @@ la **Skymap V3**, à côté de la V2, sauf G1.
 | **G6** | **Planètes et lunes** : tirage pondéré dans le catalogue (lunes comprises), 2–5 lunes espacées par géante, planètes naines avec leur indicateur ; désignations (Sirius-I-A), noms de catalogue des systèmes | §7.2, §7.3, §7.10 | M | G3, G4 |
 | **G7** | **Ceintures** : placées d'après les planètes (ligne des glaces sans géante), ceintures supplémentaires, ceintures en multiple, densité, couleur par zone ; anneaux marqués « station de recherche » | §7.2 | M | G3, G6 |
 | **G8** | **La fiche** : stocké / calculé, proportions des trois ressources, sources de danger ; résumé pour la starmap, configurable | §7.4, §7.6, §7.8 | S–M | G6, G7 |
-| **G9** | **Lagrange et Troyens** : points calculés par le parent dans l'arbre, mode de placement, marqueur (logo à venir) ; Troyens en arcs de ceinture, prototype à la touche 4 | §7.1, §7.7 | M | G3, G6 |
+| **G9** | **Lagrange, Grecs et Troyens** : points calculés par le parent dans l'arbre, mode de placement, marqueur (logo à venir) ; essaims des géantes en deux variantes, prototype à la touche 4 | §7.1, §7.7, §7.13 | M | G3, G6 |
 | **G10** | **Les étoiles proches** : recherche documentaire, puis systèmes réécrits au format du plan (Soleil, Tau Ceti, Alpha Centauri et Pandora, Proxima, les six de la starmap) | §7.8 | M–L | G8 |
 | **G11** | **Étalonnage et bascule** : le Soleil dans la distribution des G, réglage des JSON, critère de coût ; puis retrait de la V2 et de l'ancienne genèse | §4.5, §7.7, §7.12 | M | tous |
 | *G1 bis* | Construction à la demande — **obligatoire** si la V3 dépasse le coût de la V2 | §5.4, §7.7 | M | G2 |
@@ -538,6 +590,9 @@ PV des vaisseaux ; le lot E des trajectoires.
 - **G1** porte en plus la sauvegarde du plan et l'écran Skymap V3.
 
 ### 8.2 À clarifier, repéré à la relecture
+
+> **Résolus le 2026-11-05 → §7.13**, sauf un point nouveau qu'ils ont fait
+> apparaître (§7.13, à la fin).
 
 1. **Un seul modèle de température (§4.2)** : jamais confirmé explicitement,
    alors que §7.3 et §7.4 s'appuient dessus. Il remplacerait aussi la
