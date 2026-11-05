@@ -55,10 +55,7 @@ compris.
    rien loupé »*), jamais faite.
 5. **Trajectoires, lot E** : l'arrivée (amarrage, consommation à la
    colonisation) ; un vaisseau arrivé reste immobile.
-6. **Deux worktrees à supprimer**, avec l'accord de l'utilisateur :
-   `agent-a0a5f13e…` (premier jet du découpage du vaisseau, remplacé par
-   `77f6cfb`) et `skymap-v2-marqueurs` (fusionné).
-7. Plus ancien, toujours ouvert : **lister les sous-variantes** dans la palette
+6. Plus ancien, toujours ouvert : **lister les sous-variantes** dans la palette
    (bloque l'Endurance, étape 5) ; **assembleur** lots 6, 8 et 9 ; **D-INT-2,
    l'économie** ; **D-PIX-3/4** (contours, taille de pixel).
 
