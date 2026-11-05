@@ -1,6 +1,6 @@
 # STATE — où en est le chantier
 
-> Point de reprise, **2026-11-02**. À lire en premier dans une nouvelle session,
+> Point de reprise, **2026-11-05**. À lire en premier dans une nouvelle session,
 > **en entier** : il tient en deux cents lignes, et c'est délibéré.
 >
 > Ce fichier dit **où on en est et quoi faire ensuite**, rien de plus. Le
@@ -15,54 +15,51 @@
 > quoi »). **Ne pas recommencer** : un fait qui se raconte va dans un journal ;
 > ici, une ligne et un lien.
 
-## Reprendre ici (état au 2026-11-02)
+## Reprendre ici (état au 2026-11-05)
 
-**Aucun chantier en cours.** Opti-v2 est **clos** et **fusionné dans
-`main`** (avance rapide, 2026-11-02) ; `main` n'est **pas poussé** depuis
-(`origin/main` est à `5af973a`). Le worktree `.claude/worktrees/astres-v2`
-porte la branche `chantier-opti-v2`, au même point que `main` : un nouveau
-chantier y part d'une nouvelle branche.
+**Chantier en cours : Genèse V2, lot G0 (les décisions) tranché, rien de
+codé.** Les décisions, point par point, et le découpage révisé (G0 à G11) :
+[`conception/genese_v2.md`](docs/conception/genese_v2.md) §7 et §8. Avant
+G1, cinq points à clarifier (§8.2).
 
-**Vérifié (2026-11-02, à la clôture)** : **992 tests verts** (+ 13 du
-binaire `mhd`), `cargo clippy --all-targets` à **0 avertissement**.
+`main` n'est **pas poussé** (`origin/main` est à `5af973a`). Le worktree
+`.claude/worktrees/astres-v2` porte `chantier-opti-v2`, en retard sur `main` :
+un nouveau chantier y part d'une nouvelle branche.
 
-⚠️ **Le dossier principal porte du travail non commité** qui n'est pas à
-nous : le découpage de `src/vaisseau/generateur.rs` en `generateur/`,
-`docs/suivi/dette_vaisseau.md`, et des ajouts à `docs/README.md`,
-`docs/suivi/bucketlist_globale.md`, `docs/suivi/stations.md`. **N'y rien
-toucher.** À chaque fusion : sauvegarder ces fichiers dans le scratchpad, en
-tirer un patch (`git diff`), les remettre à l'état commité, `git merge
---ff-only`, réappliquer le patch (`git apply --3way`), puis `git restore
---staged` pour les laisser non commités.
+**Vérifié (2026-11-03)** : **992 tests verts** (+ 13 du binaire `mhd`),
+`cargo clippy --all-targets` à **0 avertissement**, découpage du vaisseau
+compris.
 
 ### Ce qui a été fait dans la dernière session
 
-| Lot | Résultat | Journal |
+| Quoi | Résultat | Où |
 |---|---|---|
-| **O4** | nuages et bras dessinés dans une cible à 1/2 par axe | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) |
-| **O7** | boules des nuages et jets figés dans des buffers GPU, animés par le shader ; empilement sur un échantillon — T Tauri 158 → ~895 fps (dev) | idem |
-| **O5** | RÉSOLUTION 3D (100/75/50 %, rendu Net) et IMAGES (libre/60/30) dans les paramètres | idem |
-| **O6** | deux calculs inutiles retirés du shader de l'étoile, à image identique | idem |
-| **O8**, le banc du petit PC | 30 fps tenus partout en moyenne, Palette et Net ; T Tauri 70 → 7,3 ms par image — ×2,5 à ×3,3 du code, ×1,8 à ×3,8 du matériel (16 Go, pilote) ; des **à-coups** côté processeur, qui changent de cas d'un tour à l'autre | idem, « O8 » |
+| **Opti-v2** | clos et fusionné dans `main` (O8 : le banc du petit PC) | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) |
+| **Dette de `vaisseau/`, chantier 1** | découpage de `generateur.rs` commité (`77f6cfb`) après revérification ligne à ligne ; c'est un découpage, pas une refonte | [`suivi/dette_vaisseau.md`](docs/suivi/dette_vaisseau.md) |
+| **Genèse V2, G0** | 12 points tranchés : échelle vraie + réglage d'affichage, Lagrange, ceintures-sites, 3 ressources, entretien à la place des PV, noms, plan sauvegardé, Skymap V3 | [`conception/genese_v2.md`](docs/conception/genese_v2.md) §7, [`concept_jeu.md`](docs/conception/concept_jeu.md) §5, §6 bis |
 
 ### À faire ensuite, par ordre
 
-1. **Choisir le chantier suivant**, sur le banc d'O8. Le premier sujet : **les
-   à-coups** — le tour ne donne que des moyennes ; y ajouter la pire image et
-   le 1 % bas, puis attribuer (relief des telluriques, shaders au premier
-   usage, construction du système : candidats non vérifiés). Ensuite : le rendu
-   Net plein écran de près (supergéante rouge ~22 ms de GPU), la galerie des
-   planètes.
-2. **Genèse V2** : trancher les décisions de G0
-   ([`conception/genese_v2.md`](docs/conception/genese_v2.md)), puis G1 — qui
-   débloque aussi la part « nombre d'objets » de la qualité (O5).
-3. **Planètes** : régler finement `assets/habitabilite.json` avec la genèse
-   ([`suivi/planetes.md`](docs/suivi/planetes.md)).
+1. **Genèse V2** : clarifier les cinq points du §8.2 de
+   [`conception/genese_v2.md`](docs/conception/genese_v2.md), puis **G1**
+   (module à part, flux nommés, plan sauvegardé, écran Skymap V3) sur une
+   branche de chantier. G1 débloque aussi la part « nombre d'objets » de la
+   qualité (O5).
+2. **Les à-coups**, sur le banc d'O8 : le tour ne donne que des moyennes ; y
+   ajouter la pire image et le 1 % bas, puis attribuer (relief des
+   telluriques, shaders au premier usage, construction du système : candidats
+   non vérifiés). Ensuite : le rendu Net plein écran de près (supergéante rouge
+   ~22 ms de GPU), la galerie des planètes.
+3. **Planètes** : le réglage fin de `assets/habitabilite.json` passe dans le
+   lot G4 de la genèse ([`suivi/planetes.md`](docs/suivi/planetes.md)).
 4. **Astres V2** : la **passe de relecture** demandée (*« observer qu'on n'a
    rien loupé »*), jamais faite.
 5. **Trajectoires, lot E** : l'arrivée (amarrage, consommation à la
    colonisation) ; un vaisseau arrivé reste immobile.
-6. Plus ancien, toujours ouvert : **lister les sous-variantes** dans la palette
+6. **Deux worktrees à supprimer**, avec l'accord de l'utilisateur :
+   `agent-a0a5f13e…` (premier jet du découpage du vaisseau, remplacé par
+   `77f6cfb`) et `skymap-v2-marqueurs` (fusionné).
+7. Plus ancien, toujours ouvert : **lister les sous-variantes** dans la palette
    (bloque l'Endurance, étape 5) ; **assembleur** lots 6, 8 et 9 ; **D-INT-2,
    l'économie** ; **D-PIX-3/4** (contours, taille de pixel).
 
@@ -87,8 +84,8 @@ tirer un patch (`git diff`), les remettre à l'état commité, `git merge
 
 ## Commits
 
-Dernier commit : « Opti-v2 clos : le chantier fusionne dans main »
-(2026-11-02). `git log` fait foi pour le reste.
+Dernier commit : « Genèse V2, G0 : les décisions et le découpage révisé »
+(2026-11-05). `git log` fait foi pour le reste.
 
 **Consigne debout (révisée le 2026-09-26) : un commit par lot ou sous-lot**,
 sur la branche de chantier, une fois les tests verts et clippy à zéro. Un
@@ -105,14 +102,14 @@ sur un fichier contenant du travail non commité (`docs/suivi/stations.md`
 | Chantier | Où on en est | Journal · conception |
 |---|---|---|
 | **Opti-v2** | **clos** (2026-11-02), fusionné : O1 à O10 ; les à-coups passent au chantier suivant | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) · [`conception/opti_v2.md`](docs/conception/opti_v2.md) |
-| **Genèse V2** | carte faite (lots G0 à G8), rien de codé ; G0 = décisions à trancher | — · [`conception/genese_v2.md`](docs/conception/genese_v2.md) |
+| **Genèse V2** | **en cours** : G0 tranché (2026-11-05), découpage révisé G0 à G11, rien de codé ; cinq points à clarifier avant G1 | — · [`conception/genese_v2.md`](docs/conception/genese_v2.md) |
 | **Planètes** (type, habitabilité) | P1 à P3 livrés, habitabilité des presets ajustée à la main ; réglage fin avec la genèse | [`suivi/planetes.md`](docs/suivi/planetes.md) · [`conception/planetes.md`](docs/conception/planetes.md) |
 | **Astres V2** | **clos** (2026-10-26) : lots 0 à 15 livrés et validés, le 8 abandonné ; reste la passe de relecture | [`suivi/astres_v2.md`](docs/suivi/astres_v2.md) · [`conception/astres_v2.md`](docs/conception/astres_v2.md) |
 | **Trajectoires** | lots A à D faits (un Starship vole en jeu) ; lot E à faire | [`suivi/trajectoires.md`](docs/suivi/trajectoires.md) · [`conception/trajectoires.md`](docs/conception/trajectoires.md) |
-| **Interface de jeu** | I.0 à I.6 faites ; Skymap V2 (marqueurs) fusionnée, à côté de la V1 — choix entre les deux jamais tranché | [`suivi/interface.md`](docs/suivi/interface.md) · [`conception/interface.md`](docs/conception/interface.md) |
+| **Interface de jeu** | I.0 à I.6 faites ; Skymap V2 (marqueurs) fusionnée, à côté de la V1 ; la Skymap V3 naîtra de la genèse (G1), le sort de la V1 est à trancher | [`suivi/interface.md`](docs/suivi/interface.md) · [`conception/interface.md`](docs/conception/interface.md) |
 | **Assembleur (VAB)** | lots 1 à 5 clos, rotation faite ; restent 6, 8, 9 | [`suivi/assembleur.md`](docs/suivi/assembleur.md) · [`conception/assembleur.md`](docs/conception/assembleur.md) |
 | **Stations et vaisseaux** | ISV, Starship, Stanford, Elysium (chantier initial) clos — d'Elysium, la rotation au bouton et le hangar fermé jamais vus à l'écran ; **Endurance bloquée** par la palette | [`suivi/stations.md`](docs/suivi/stations.md) · [`conception/stations.md`](docs/conception/stations.md) |
-| **Dette de `vaisseau/`** | chantier 1 (découpage de `generateur.rs`) fait **dans le dossier principal, non commité** ; chantiers 2 et 3 à faire | `docs/suivi/dette_vaisseau.md` (dossier principal) |
+| **Dette de `vaisseau/`** | chantier 1 (découpage de `generateur.rs`) commité (`77f6cfb`) ; chantiers 2 et 3 **en attente de la refonte** du générateur et des composants, pas prioritaires | [`suivi/dette_vaisseau.md`](docs/suivi/dette_vaisseau.md) |
 | **Planètes et vue système** (P.1 à P.4) | ✅ clos (2026-08) ; le voile des anneaux de près, mesuré par Opti-v2 (~12 ms sur le petit PC, Saturne plein écran), pas réduit | [`suivi/planetes.md`](docs/suivi/planetes.md), [`suivi/ceintures.md`](docs/suivi/ceintures.md), [`suivi/etoiles.md`](docs/suivi/etoiles.md) |
 
 ## Où trouver quoi

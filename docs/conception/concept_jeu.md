@@ -84,6 +84,33 @@ C'est aussi **là** que se construisent les **méga-vaisseaux** : l'ISV
 (fait), le futur **Jupitris**, et un **vaisseau cargo sans nom** (les deux
 derniers restent à concevoir).
 
+**Précisé le 2026-11-04 — où se pose chaque structure** (conception de la
+genèse, [`genese_v2.md`](genese_v2.md) §7.3) :
+
+| Taille | Classe ([`stations.md`](stations.md) partie D) | Où |
+|---|---|---|
+| Petite | A (comsat, sonde) | orbite directe |
+| Moyenne | B (ISS, Mir, Tiangong) | orbite directe |
+| Grande | C sans habitants (station à anneau) | orbite directe |
+| **Habitat** | tore de Stanford, Elysium (C), O'Neill (D) | points de Lagrange (étoile–planète **ou** planète–lune) ; **seul le tore de Stanford** peut aussi orbiter directement une planète |
+
+L'ISV et les méga-vaisseaux se construisent aux points de Lagrange (ci-dessus).
+L'orbite directe vaut autour des planètes, des lunes et des planètes naines.
+Les anneaux d'une géante n'accueillent qu'une station de recherche.
+
+- **La distance d'orbite** obéit d'abord aux contraintes physiques : au-dessus
+  de l'atmosphère, hors des anneaux, hors de la zone d'une lune. **Dans** cette
+  zone permise, chaque classe a **sa bande d'altitude**, pour que des objets de
+  tailles différentes ne volent pas tous à la même distance.
+- **Deux objets autour du même corps ne partagent jamais un rayon** : un écart
+  minimal selon leur taille. Les orbites postées étant circulaires, des rayons
+  distincts ne se croisent jamais.
+- **Chaque capacité de construction se désactive facilement** (une table de
+  données : quelle classe se pose où), pour la phase d'équilibrage.
+- Ces règles se vérifient **au moment de construire**, à partir de la position
+  des lunes. La genèse ne garantit qu'une chose : l'espacement des lunes, pour
+  qu'une bande libre existe toujours.
+
 ⚠️ Écart avec le modèle actuel : un habitat est aujourd'hui un
 `Categorie::Engin` comme l'ISS (`src/engin.rs`) — un objet en orbite
 analytique autour d'un parent, pas un site producteur au même titre qu'une
@@ -108,7 +135,29 @@ Trois comportements distincts en cas de manque d'énergie :
 (`Categorie` : `Etoile`, `Planete`, `Lune`, `Asteroide`, `Comete`, `Engin` —
 `src/astre.rs`) : à ajouter le jour où le filet à antimatière sera conçu.
 
-## 6 bis. Durabilité : dégâts et réparation (précisé le 2026-08-15)
+## 6 bis. Durabilité : l'entretien (révisé le 2026-11-04)
+
+**Révisé le 2026-11-04 (conception de la genèse, [`genese_v2.md`](genese_v2.md)
+§7.6) : plus de barre de PV sur les stations.** À la place, **l'entretien** :
+
+- chaque structure **consomme des ressources** par mois ou par an, selon son
+  **type** et sa **position** ;
+- si une ressource n'est plus fournie pendant un **délai défini**, la
+  structure subit son comportement de manque — les trois du §6 (arrêt,
+  destruction, aucun risque) s'étendent de l'énergie à toutes les ressources.
+  Exemple : un collecteur d'hydrogène autour d'une géante se détruit ;
+- les **dangers** de l'environnement (activité de l'étoile, densité d'une
+  ceinture…) ne font pas de dégâts : ils **majorent le coût d'entretien** par
+  un coefficient. **Contraignant, pas punitif** ;
+- une **éruption très puissante** peut toucher aussi les colonies au sol —
+  source de jeu émergent, à concevoir.
+
+Ce qui reste à concevoir : les consommations par type, les délais, la table
+« quelle étoile émet des éruptions, à quelle fréquence, avec quelle
+puissance » et le coefficient qui en découle. Les vaisseaux (en vol ou postés)
+avaient aussi des PV ; leur sort n'est pas tranché.
+
+*Texte d'origine (2026-08-15), remplacé par ce qui précède :*
 
 **Les stations postées ne sont pas pilotables** — tranché
 ([`trajectoires.md`](trajectoires.md) §4 décision 10), pas une supposition

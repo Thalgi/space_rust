@@ -183,7 +183,9 @@ consigne que les décisions actées de `STATE.md`) :
     impact d'astéroïde, réparation nécessaire comme toute autre structure
     spatiale. Mécanique de **durabilité**, distincte du minuteur de
     superstructure (décision 5, qui ne concerne que l'absence d'énergie) —
-    détail dans `concept_jeu.md`.
+    détail dans `concept_jeu.md`. ⚠️ **Révisé le 2026-11-04** : plus de PV
+    sur les stations, remplacés par un **entretien** en ressources majoré
+    par les dangers (`concept_jeu.md` §6 bis). Le « pas pilotables » tient.
 11. **Le mode `NCorps` était un test, retiré du jeu** (2026-08-16,
     `systeme/mod.rs`, `menu/`) : `ModePhysique` n'existe plus, il n'y a plus
     qu'un seul mode de propagation. Ça **retire** l'entrée découverte plus

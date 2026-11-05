@@ -78,6 +78,11 @@ viendra s'y brancher sans rouvrir la genèse.
 
 ## 4. Les décisions à trancher avant de coder
 
+> **État au 2026-11-05** (G0, §7) : 1 tranché à l'inverse de la
+> recommandation — une luminosité **physique** pour les calculs, une de rendu
+> (§7.1) ; 3, 4, 6, 7 tranchés (§7.6–§7.11) ; **2 et 5 jamais confirmés
+> explicitement** (§8.2).
+
 1. **L'échelle et la luminosité.** Les luminosités du jeu sont **comprimées**
    (une O vaut 4 Soleils au lieu de ~100 000 ; Proxima relevée de 0,0017 à
    0,06 pour être visible) ; les presets sont à **distances réelles** avec des
@@ -180,6 +185,9 @@ O5 sans rouvrir la genèse.
 
 ## 6. Découpage proposé
 
+> **Remplacé le 2026-11-05 par le §8**, après les décisions de G0. Gardé
+> pour mémoire.
+
 | Lot | Contenu | Taille | Dépend de |
 |---|---|---|---|
 | **G0** | Trancher §4 (échelle, température, catalogue, hasard, Soleil, rareté, garanties) | décisions | — |
@@ -201,3 +209,344 @@ d'Astres V2. Le gros risque n'est pas le volume de code, c'est **G0** et la
 **Hors genèse, mais à ne pas oublier** : le lot E des trajectoires
 (amarrage), l'habitat comme site, l'économie (tuiles, ressources, recherche),
 Opti-v2.
+
+## 7. G0 : les décisions, point par point
+
+Ouvert le 2026-11-03 : avant de trancher §4, un tour complet de ce que la
+genèse doit porter, en croisant `concept_jeu.md`, `ceintures.md`,
+`trajectoires.md`, `starmap.md` et le code. Douze points, traités dans
+l'ordre :
+
+1. Les points de Lagrange, et l'échelle des systèmes
+2. Les ceintures comme sites (minage)
+3. L'orbite des géantes gazeuses (habitats, collecte de gaz)
+4. La fiche de sortie (G8, §8) : ce que l'économie lira
+5. Les lunes et les comètes comme sites
+6. Les dangers (activité stellaire, impacts)
+7. La cohérence visuelle (budget d'objets, marqueurs, taille des stations)
+8. La starmap et le système de départ
+9. Les systèmes multiples (fenêtres de stabilité)
+10. Les noms, une fois le catalogue tiré
+11. Les identifiants stables des corps (sauvegarde)
+12. La comparaison Skymap V2 / V3 (deux genèses côte à côte, graines sauvées)
+
+### 7.1 Lagrange et l'échelle — tranché le 2026-11-03
+
+- **Couples** : étoile–planète et planète–lune.
+- **Systèmes multiples** : les points d'un corps se calculent par rapport à
+  son **parent dans l'arbre**, avec la masse totale de ce parent (une étoile,
+  ou le centre de masse d'un couple pour une planète circumbinaire).
+  Approximatif, cohérent avec « tous les points sont stables ». Aucun point
+  entre deux étoiles.
+- **Affichage** : un point n'apparaît que s'il porte une construction, ou en
+  mode construction pour choisir l'emplacement.
+- **Point saturé** (bloqué par l'encombrement) : facultatif, hors genèse.
+  Porte ouverte : un champ « encombrement » dans la fiche (G8), le jour venu.
+- **Troyens** : intéressants si peu coûteux. Pas de prototype ; le modèle de
+  ceinture en est proche (deux arcs à ±60° tournant avec la planète : il
+  manque une plage d'angle et une rotation en bloc). Prototype à la touche 4
+  au moment du lot.
+- **L'échelle : la vérité dans le plan, une échelle d'affichage réglable par
+  système.** Le plan porte les distances et tailles vraies ; `instancier`
+  applique des réglages (grossissement des corps, orbites des lunes liées,
+  compression des distances au Soleil par une puissance), lus dans un JSON.
+  Réduire toutes les distances du même facteur ne change rien à l'image
+  (c'est un zoom) : seuls les **rapports** comptent. Ce réglage remplace les
+  trois régimes actuels (corps ×5 des presets, distances vraies des presets,
+  `√L` comprimé des systèmes générés).
+- **Cohérence** : ce qui se place par rapport à un parent prend l'échelle des
+  satellites de ce parent (L1/L2 avec les lunes ; L3–L5 et ceintures avec les
+  distances au Soleil). Les calculs (température, Kepler, habitabilité)
+  restent sur les valeurs vraies.
+- **Conséquence sur §4.1** : la recommandation s'inverse — une luminosité
+  **physique** pour les calculs, une de **rendu** pour l'écran. Coût par image
+  nul (calculée une fois, à la genèse).
+- **Grossissement selon le recul** : second mécanisme, facultatif ; à juger en
+  comparant V2 / V3, les marqueurs suffisent peut-être.
+- **À vérifier en G1** (contrôles, pas décisions) : précision des positions à
+  30 UA hors affichage ; durée des trajets à l'échelle vraie ; un vaisseau
+  vole dans le monde affiché avec des durées du monde vrai.
+
+### 7.2 Les ceintures comme sites — tranché le 2026-11-04
+
+- **Trois ressources au maximum, dans tout le jeu** : minerai, minerai rare,
+  H2. Chaque site en porte des **proportions raisonnables** ; la zone les fait
+  varier un peu, jamais beaucoup. Pas de composition détaillée.
+- **Une station s'accroche à une ceinture** : (a) en orbite dans la ceinture,
+  à l'endroit choisi (orbite circulaire au rayon de la ceinture, même vitesse
+  que ses particules) ; (b) sur un corps — **planète naine ou lune, pas une
+  comète** ; (c) sur les Troyens (§7.1).
+- **Planètes naines** : 0–1 dans la ceinture principale, 0–2 dans Kuiper,
+  400–1 200 km de rayon, posées **dans** leur ceinture sans gêner les orbites
+  voisines. Une planète **ordinaire** (rendu des rocheuses/glacées) avec un
+  **indicateur « naine »** ; habitabilité selon son environnement, comme
+  toute planète.
+- **Couleur des ceintures** : peut varier avec la zone, **pour la diversité
+  visuelle seulement** ; elle ne décide pas des ressources.
+- **Placement lié aux planètes** : la ceinture principale juste à l'intérieur
+  de la première géante ; Kuiper au-delà de la dernière planète. **Sans
+  géante**, la ceinture principale se pose à la **ligne des glaces**.
+  Diversité gardée : une ceinture **supplémentaire** peut naître dans un grand
+  écart entre deux planètes, d'où des systèmes à plus de deux ceintures.
+  Aujourd'hui, elle est tirée à `2–3 × ech` sans regarder les planètes.
+- **Systèmes multiples** : ont des ceintures, dans les fenêtres stables (§7.9).
+- **Densité** : une valeur physique dans le plan (rendement, risque
+  d'impacts) ; le nombre de particules dessinées en dépend, **et** du réglage
+  de qualité.
+- **Anneaux des géantes** : pas une source de ressource ; on peut y installer
+  une **station de recherche**.
+- **Piste hors décisions** : une « Gazeuses V3 » pour des proto-géantes en
+  aspect (systèmes jeunes, ligne des glaces sans géante formée).
+
+### 7.3 Autour des géantes — tranché le 2026-11-04
+
+- **2 à 5 grandes lunes** par géante ; pas de petites lunes irrégulières (pas
+  de prototype, budget d'objets). Aujourd'hui : 1 à 3.
+- **Lunes espacées** : chacune assez près de sa géante pour lui rester liée,
+  un écart minimal entre voisines. Corrige un défaut actuel (tirage entre la
+  limite de Roche et 14 % de la distance à l'étoile, sans écart) ; c'est aussi
+  ce qui permet de plafonner le grossissement d'affichage (§7.1) et de laisser
+  des orbites libres aux stations.
+- **Les lunes suivent les règles des planètes** : aspect par la température,
+  tiré du catalogue (G6), habitabilité. Une lune prend la température de sa
+  géante : une géante en zone tempérée peut porter une lune habitable
+  (Pandora). Aujourd'hui : roche grise ou glace, à pile ou face.
+- **H2** : géantes gazeuses, géantes de glace, naines brunes (ces dernières
+  après une recherche).
+- **Placement des stations et habitats** : règle de jeu, consignée dans
+  [`concept_jeu.md`](concept_jeu.md) §5 (classes, bandes d'altitude, rayons
+  distincts, capacités désactivables). La genèse ne garantit que l'espacement
+  des lunes.
+- **Ouvert** : une lune très proche de sa géante, volcanique par effet de
+  marée (Io) quelle que soit sa température — proposé, pas tranché.
+
+### 7.4 La fiche de chaque corps (G8) — tranché le 2026-11-04
+
+**Une source par fait** : la fiche ne **stocke** que ce qui est tiré ; ce qui
+se déduit se **calcule** au besoin.
+
+| Bloc | Contenu | Stocké ou calculé |
+|---|---|---|
+| Identité | identifiant stable (§7.11), parent, catégorie, type, indicateur « naine », nom ou numéro | stocké |
+| Physique | masse, rayon, orbite | stocké |
+| | température d'équilibre, étoiles exposées | calculé |
+| Aspect | modèle du catalogue + petite variation | stocké |
+| Habitabilité | les 8 niveaux | calculé |
+| Ressources | proportions minerai / minerai rare / H2 | stocké |
+| Dangers | §7.6 | — |
+| Places | points de Lagrange, bandes d'orbite libres | calculé |
+| Encombrement | porte ouverte (§7.1) | plus tard |
+
+- **Les ressources ne s'épuisent pas** (cette itération) : la genèse ne tire
+  que des proportions. Une quantité de départ pourra s'ajouter plus tard,
+  déduite de la taille et des proportions, sans rouvrir la genèse.
+- **Proportions**, avec une petite variation tirée par site :
+
+| Site | Minerai | Minerai rare | H2 |
+|---|---|---|---|
+| Planète, lune, naine rocheuses | dominant | faible | aucun |
+| Ceinture intérieure (avant la ligne des glaces) | dominant | un peu plus qu'ailleurs | aucun |
+| Corps glacés, ceinture extérieure, Kuiper | moyen | faible | moyen (glace) |
+| Géantes gazeuses et de glace | aucun | aucun | dominant |
+| Naines brunes | aucun | aucun | dominant (après recherche) |
+
+- **Découverte** : la genèse fixe toutes les ressources dès la création ; le
+  joueur les découvre en explorant. Le « connu / inconnu » appartient au jeu,
+  pas à la genèse.
+
+### 7.5 Lunes et comètes — tranché le 2026-11-04
+
+- **Les lunes sont des sites** (§7.2, §7.3).
+- **Les comètes sont du décor** : ni station, ni ressource, ni cible
+  d'exploration.
+
+### 7.6 Les dangers — tranché le 2026-11-04
+
+- **Plus de points de vie sur les stations** : un **entretien** en ressources
+  selon le type et la position ; un manque prolongé déclenche le comportement
+  de la structure (arrêt, destruction, rien). Règle de jeu, consignée dans
+  [`concept_jeu.md`](concept_jeu.md) §6 bis.
+- **Les dangers majorent l'entretien** par un coefficient — contraignant, pas
+  punitif. Ils n'infligent pas de dégâts.
+- **Une éruption très puissante** peut toucher les colonies au sol (jeu
+  émergent).
+- **Ce que la genèse fournit** : la **source** de chaque danger — l'activité
+  de l'étoile (déjà là : `activite_type`, et les éruptions sont simulées comme
+  des événements dans `soleil/eruptions.rs`), la densité des ceintures.
+  L'**exposition** d'un site se calcule depuis sa distance.
+- **Chantier levé, hors genèse** : définir quelle étoile émet des éruptions
+  ou des émissions violentes, à quelle fréquence, avec quelle puissance, et
+  le coefficient d'entretien qui en découle.
+
+### 7.7 La cohérence visuelle — tranché le 2026-11-04
+
+- **Marqueurs par famille** : ▲ corps (planète, lune, naine), ◆ structure
+  (station, habitat), et les **points de Lagrange** avec leur propre **logo
+  16 × 16** (fourni plus tard ; un cercle en attendant). D'abord prévus
+  « Lagrange1 à Lagrange5 », ils ne portent finalement **aucun nom**
+  (§7.10).
+- **Taille des stations** : leur vraie taille, le marqueur quand elles font
+  moins de quelques pixels. **Mais** quand l'échelle d'affichage (§7.1)
+  grossit les corps, les stations suivent le même réglage, comme tout ce qui
+  orbite un parent.
+- **Budget d'objets** : un système V3 ne coûte pas plus cher par image qu'un
+  système V2 du même type d'étoile, **sur le petit PC**. S'il dépasse, G1 bis
+  (construction à la demande) devient obligatoire. Un autre chantier d'opti
+  viendra de toute façon.
+
+### 7.8 La starmap et le départ — tranché le 2026-11-04
+
+- **Départ** : le système solaire pour la **V1 de Star Settler** ; un départ
+  procédural pour la **V1.1**. La genèse doit donc savoir produire un système
+  de départ viable.
+- **Garanties, minimales** : toujours du minerai (au moins une ceinture,
+  §7.2). Pas de planète habitable garantie. Un site colonisable reste
+  presque toujours possible sans contrainte de plus — une lune, une naine, ou
+  un habitat à un point de Lagrange — mais **la garantie n'est pas poussée**.
+- **Les étoiles proches de la starmap** : une **recherche documentaire
+  étendue** sur ce qu'on sait de chacune, pour bâtir des systèmes **réalistes
+  et intéressants** (comme Alpha Centauri, qui porte Pandora), puis les mettre
+  en forme dans le format du plan. Travail à part entière (lot à ajouter au
+  découpage).
+- **Ce que la starmap montre** : l'étoile seule avant exploration, un résumé
+  tiré du plan après. **La liste des informations affichées doit être facile
+  à modifier** (ajouter, retirer).
+- **Hors genèse** : le nombre d'étoiles de la carte et le système propre de
+  Proxima appartiennent au chantier starmap.
+
+### 7.9 Les systèmes multiples — tranché le 2026-11-04
+
+- **Déjà fait** : fenêtres de stabilité de Holman-Wiegert (module
+  `stabilite`), séparations log-uniformes (Raghavan 2010).
+- **Fréquences gardées** (55 % simple, 28 % binaire, 11 % trinaire, 6 %
+  quadruple), déplacées dans la table de rareté en JSON. Aujourd'hui elles
+  dépendent de `seed % 100`.
+- **L'âge du système, tiré en premier** : **jeune** (étoiles naissantes,
+  disques, grand disque), **mûr**, **vieux** (géantes rouges, naines
+  blanches, rémanents) ; les étoiles et le grand disque doivent lui être
+  compatibles — aujourd'hui chaque étoile est tirée seule (une T Tauri peut
+  avoir une naine blanche pour compagne). Vaut aussi pour les systèmes
+  simples.
+- **Une quatrième catégorie, les anomalies** : rares, elles enfreignent
+  l'âge à dessein (une Herbig qui a capturé une naine blanche…). Liste de
+  départ et rareté : §7.10, à la fin.
+- **Séparations plafonnées** à quelques centaines d'UA dans un système ;
+  au-delà, deux systèmes distincts sur la starmap (Proxima / Alpha Centauri).
+  L'échelle d'affichage (§7.1) compresse le reste.
+- **Aussi** : ceintures (§7.2), Lagrange par le parent (§7.1), grand disque
+  et pollution étendus aux multiples (G5).
+
+### 7.10 Les noms — tranché le 2026-11-05
+
+- **Le nom du modèle tiré du catalogue reste caché** (« Fjord », « Mars »…) :
+  le joueur ne voit que la désignation.
+- **Un corps sans nom propre se nomme d'après son étoile**, par segments
+  séparés de tirets : **Sirius-I** pour la première planète, **Sirius-I-A**
+  pour sa première lune. Remplace la numérotation seule (I, II-1) de la
+  décision du 2026-08-04 ; les noms propres (Terre, Lune) l'emportent
+  toujours.
+
+| Cas | Désignation |
+|---|---|
+| Planète, planète naine (numérotées ensemble, par distance) | Sirius-I, Sirius-IV |
+| Lune | Sirius-I-A |
+| Étoiles d'un multiple | Sirius-A, Sirius-B |
+| Planète d'une des étoiles / du couple | Sirius-B-I / Sirius-AB-I |
+| Ceinture | Sirius-Ceinture-I |
+| Troyens | Sirius-III-Troyens4 |
+| Nom à plusieurs mots | Epsilon-Eridani-II |
+| **Point de Lagrange** | **aucun nom** |
+
+- **Systèmes procéduraux** : une **désignation de catalogue générée**, avec
+  de la variation (plusieurs styles de préfixes), **10 caractères au plus**
+  pour le nom du système.
+- **Renommer** : le joueur peut renommer un système **sans nom propre** ; un
+  système qui en a un (Sirius, Tau Ceti…) ne se renomme pas.
+
+**Anomalies (§7.9)** — liste de départ validée, à enrichir avec le temps : capture
+stellaire (âges incompatibles), planètes de pulsar, planète capturée (orbite
+inclinée, rétrograde ou très excentrique), étoile en fuite (ni ceinture ni
+comète), Jupiter chaud. Rares (~1–2 %, table de rareté), signalées dans la
+fiche une fois découvertes. Extensible sans rouvrir la genèse.
+
+### 7.11 Les identifiants stables — tranché le 2026-11-05
+
+- **Une sauvegarde garde le plan entier** du système (quelques Ko), pas la
+  seule graine. Un système découvert ne change plus jamais ; une mise à jour
+  de la genèse ne touche que les nouveaux.
+- **L'identifiant d'un corps est sa place dans le plan sauvegardé** : il ne
+  bouge plus, et porte stations et points de Lagrange occupés.
+- **Coût** : faible, G1 rend déjà le plan sérialisable (§5.4). Les flux nommés
+  restent utiles (tests, systèmes pas encore découverts).
+- Aujourd'hui `presets.json` ne garde qu'un nom et une graine (§7.12).
+
+### 7.12 Comparer la Skymap V2 et la V3 — tranché le 2026-11-05
+
+- **Deux genèses côte à côte** : la nouvelle dans un module à part,
+  l'ancienne intacte jusqu'à la validation de la V3. La **Skymap V3** est un
+  nouvel écran copié de la V2 ; une fois validée, la V2 et l'ancienne genèse
+  partent ensemble.
+- **Les systèmes écrits à la main ne sont pas communs** : ils sont réécrits au
+  format du plan pour la V3 (§7.1, §7.8). La référence commune est le
+  **réglage d'échelle** : la V3 réglée pour imiter la V2, puis à l'échelle
+  vraie.
+- **Comparer** : à type d'étoile égal, à l'œil ; sur des milliers de graines
+  avec le banc (G2) ; au coût par image sur le petit PC (§7.7).
+- **G1 ne se voit pas** : validé par les tests.
+- **IKDAR et ZATURA** (`presets.json`, graine seule) : **on accepte qu'ils
+  changent**. Certains systèmes de la starmap évolueront en aspect de toute
+  façon (§7.8).
+- **Ouvert** : le sort de la Skymap V1 (la retirer, ou la geler).
+
+## 8. Découpage révisé (2026-11-05)
+
+Tiré du §7. Le §6 prévoyait 10 lots ; les décisions en ajoutent (l'échelle,
+les ceintures, les étoiles proches) et en regroupent. Chaque lot se voit dans
+la **Skymap V3**, à côté de la V2, sauf G1.
+
+| Lot | Contenu | Sections | Taille | Dépend de |
+|---|---|---|---|---|
+| **G0** ✅ | Les décisions | §7 | — | — |
+| **G1** | Module à part ; flux de hasard nommés ; `planifier` → plan sérialisable, `instancier` sans tirage ; identifiants = place dans le plan ; plan sauvegardé ; écran Skymap V3 (copie de la V2). Reprend d'abord les règles actuelles : **rien ne change à l'écran** | §5.4, §7.11, §7.12 | L | G0 |
+| **G2** | Banc statistique sur N graines, des deux genèses ; coût par image V2 / V3 sur le petit PC | §5.3, §7.7, §7.12 | M | G1 |
+| **G3** | **L'échelle** : vérité physique dans le plan (luminosité physique par type d'étoile, tailles et distances vraies), luminosité de rendu à part ; réglage d'affichage en JSON (grossissement, orbites des lunes liées, compression des distances) ; contrôles de précision et de durée des trajets | §7.1 | L | G1 |
+| **G4** | Un seul modèle de température ; habitabilité graduée par bandes | §5.2 | S | G3 |
+| **G5** | **Les étoiles** : âge du système tiré en premier, types compatibles, anomalies ; table de rareté en JSON (fréquences, types) ; séparations plafonnées ; plan de référence ; grand disque et pollution en multiple | §7.9, §7.10 | M | G1 |
+| **G6** | **Planètes et lunes** : tirage pondéré dans le catalogue (lunes comprises), 2–5 lunes espacées par géante, planètes naines avec leur indicateur ; désignations (Sirius-I-A), noms de catalogue des systèmes | §7.2, §7.3, §7.10 | M | G3, G4 |
+| **G7** | **Ceintures** : placées d'après les planètes (ligne des glaces sans géante), ceintures supplémentaires, ceintures en multiple, densité, couleur par zone ; anneaux marqués « station de recherche » | §7.2 | M | G3, G6 |
+| **G8** | **La fiche** : stocké / calculé, proportions des trois ressources, sources de danger ; résumé pour la starmap, configurable | §7.4, §7.6, §7.8 | S–M | G6, G7 |
+| **G9** | **Lagrange et Troyens** : points calculés par le parent dans l'arbre, mode de placement, marqueur (logo à venir) ; Troyens en arcs de ceinture, prototype à la touche 4 | §7.1, §7.7 | M | G3, G6 |
+| **G10** | **Les étoiles proches** : recherche documentaire, puis systèmes réécrits au format du plan (Soleil, Tau Ceti, Alpha Centauri et Pandora, Proxima, les six de la starmap) | §7.8 | M–L | G8 |
+| **G11** | **Étalonnage et bascule** : le Soleil dans la distribution des G, réglage des JSON, critère de coût ; puis retrait de la V2 et de l'ancienne genèse | §4.5, §7.7, §7.12 | M | tous |
+| *G1 bis* | Construction à la demande — **obligatoire** si la V3 dépasse le coût de la V2 | §5.4, §7.7 | M | G2 |
+
+Ordre conseillé : G1, G2, G3, G4, G5, G6, G7, G8, G9, G10, G11 (G5 peut
+passer avant G3 : il ne dépend que de G1).
+
+**Hors genèse, levés par G0** : le chantier des éruptions et de l'entretien
+(§7.6, `concept_jeu.md` §6 bis) ; les règles de pose des structures et leur
+table de capacités (`concept_jeu.md` §5) ; le marqueur ◆ des structures ;
+une « Gazeuses V3 » (proto-géantes) ; l'étendue de la starmap ; le sort des
+PV des vaisseaux ; le lot E des trajectoires.
+
+### 8.1 Ce qui grossit par rapport au §6
+
+- **L'échelle** devient un lot entier (G3), le plus risqué après G1 : il
+  touche les 29 types d'étoile (une luminosité physique à poser pour chacun)
+  et tous les systèmes écrits à la main.
+- **Deux lots nouveaux** : les ceintures (G7) et les étoiles proches (G10).
+- **G1** porte en plus la sauvegarde du plan et l'écran Skymap V3.
+
+### 8.2 À clarifier, repéré à la relecture
+
+1. **Un seul modèle de température (§4.2)** : jamais confirmé explicitement,
+   alors que §7.3 et §7.4 s'appuient dessus. Il remplacerait aussi la
+   classification par l'aspect (les 8 niveaux du chantier planètes) par les
+   bandes du §5.2, ou les ferait cohabiter.
+2. **Le Soleil comme étalon (§4.5)** : non abordé. G11 en dépend.
+3. **Les valeurs physiques des étoiles** : d'où viennent les luminosités et
+   rayons vrais des 29 types (tables d'astrophysique), et que devient le
+   rendu actuel, réglé sur les valeurs comprimées ?
+4. **Les Troyens** : seulement pour les géantes, ou aussi les planètes
+   rocheuses (la Terre et Mars en ont quelques-uns) ?
+5. **La Skymap V1** : la retirer, ou la geler (§7.12).
