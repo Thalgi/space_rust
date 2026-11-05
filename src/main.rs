@@ -132,6 +132,12 @@ async fn main() {
     if let Some(case) = std::env::var("DISQUES").ok().and_then(|r| r.parse().ok()) {
         etat = Etat::GalerieDisques(Box::new(GalerieDisques::sur_case(case)));
     }
+    // `BANC=<n>` : les deux genèses comparées sur n graines, puis on quitte
+    // (Genèse V2, G2.1).
+    if let Some(n) = std::env::var("BANC").ok().and_then(|n| n.parse().ok()) {
+        genese_v2::banc::lancer(n);
+        return;
+    }
     // `SYSTEME=<type d'étoile>` : la vue système sur un système de ce type
     // (Chantier-Opti-v2, avec `PROFIL`) ; `SYSTEME=solaire` : le système solaire.
     if let Ok(nom) = std::env::var("SYSTEME") {

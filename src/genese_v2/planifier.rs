@@ -449,7 +449,8 @@ fn type_planete(t: TypeCorps) -> crate::planete::TypePlanete {
                 assert!((1..=3).contains(&n_co), "graine {g} : {n_co} comètes");
                 assert_eq!((genre(GenreDisque::Ceinture), genre(GenreDisque::Kuiper)), (1, 1), "graine {g}");
             } else {
-                assert!((1..=8).contains(&n_pl), "graine {g} : {n_pl} planètes en multiple");
+                // Au plus trois zones (S, S, P) de quatre planètes.
+                assert!((1..=12).contains(&n_pl), "graine {g} : {n_pl} planètes en multiple");
                 assert_eq!((n_co, plan.disques.len()), (0, 0), "graine {g}");
             }
             for (i, c) in plan.corps.iter().enumerate() {

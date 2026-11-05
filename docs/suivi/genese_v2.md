@@ -36,7 +36,7 @@ sur la V2 (conception §7.12, §7.13).
 | G11 | Étalonnage, la V3 devient principale | |
 
 **Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), `7b166f1`
-(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), clôture de G1 (dernier commit).
+(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), G2.1 (dernier commit).
 
 ---
 
@@ -221,11 +221,8 @@ tirage ; seule la source du hasard change.
 - **Les mêmes graines ne donnent pas les mêmes systèmes** : le hasard est
   autre. On compare à type d'étoile égal et en statistiques (§7.12).
 - **Le genre se tire** dans un flux (`genre`) au lieu de `graine % 100`.
-- **La place d'une lune** se calcule sur la distance de sa planète **à son
-  foyer**, `a·(1−e)`. La V1 mesurait la distance au **centre du repère** : pour
-  une planète autour d'une étoile d'un multiple, cette distance comptait
-  l'écart de l'étoile, et ses lunes partaient trop loin. Les systèmes simples
-  ne changent pas.
+- ~~La place d'une lune corrigée par rapport à la V1~~ : **affirmation fausse**,
+  corrigée en G2.1. Le calcul est le même que celui de la V1.
 - **Le cadrage par défaut d'un multiple** (`definir_vue`) n'est pas dans le
   plan : c'est de l'affichage, G1.4 le déduira des planètes.
 
@@ -395,3 +392,81 @@ L'écriture viendra avec la sauvegarde de partie.
 | Outils de mesure absents de la V3 | `skymap_v3.rs` | G2 |
 | Particules divisées par deux en qualité basse, sans mesure | `instancier.rs` | G2 |
 | L'assemblage d'`instancier` sans test automatique : il lui faut une fenêtre | `instancier.rs` | essai de fumée à rejouer à chaque lot qui y touche |
+
+---
+
+## G2 — le banc et la mesure (ouvert le 2026-11-05)
+
+**Fond.** G1 affirme que la genèse V2 reprend les règles de la V1, et
+l'utilisateur juge les vues comparables à l'œil. G2 le **mesure**, et fixe le
+coût par image (critère du §7.7) avant que G3 ne change l'échelle.
+
+| Sous-lot | Contenu | État |
+|---|---|---|
+| **G2.1** | Le banc statistique : les deux genèses sur des milliers de graines (`BANC=<n>`) | ✅ |
+| **G2.2** | Les outils de mesure dans la V3 : un réglage choisit la Skymap mesurée par `SYSTEME`, `FOCUS`, `DIAG=tour` ; mesure sur la machine de dev | |
+| **G2.3** | Le coût par image V3 contre V2 sur le petit PC (à lancer par l'utilisateur) | |
+
+---
+
+### G2.1 — le banc statistique (2026-11-05)
+
+**Fond.** Comparer deux genèses dont les graines ne donnent pas les mêmes
+systèmes ne peut se faire qu'en statistiques (§7.12).
+
+**Forme.** `src/genese_v2/banc.rs`, lancé par `BANC=<n> cargo run --release`
+(`main.rs`), qui imprime le rapport et quitte :
+
+- **le même code mesure les deux genèses, sur les systèmes construits** : un
+  écart au rapport vient des genèses, pas de la mesure. D'où un banc jeu lancé :
+  construire un système charge des matériaux GPU ;
+- `Bilan` compte par section (étoiles par système, type d'étoile, classe des
+  planètes et des lunes, lunes par planète, comètes, disques) et fait des
+  moyennes (rayons, périastres, orbites des lunes) ;
+- `rapport` met les deux côte à côte, sur l'**union** des valeurs vues, et marque
+  `*` un écart à plus de 3 écarts-types (test de deux proportions).
+
+**Résultat, 5 000 graines par genèse** : **aucun écart significatif** sur toutes
+les parts. Quelques lignes (V1 / V2) :
+
+| Grandeur | V1 | V2 |
+|---|---:|---:|
+| Systèmes à 1 / 2 / 3 / 4 étoiles | 55,0 / 28,0 / 11,0 / 6,0 % | 55,1 / 28,1 / 10,8 / 6,0 % |
+| Planètes habitables | 18,5 % | 18,4 % |
+| Gazeuses sans lune | 34,5 % | 34,8 % |
+| Périastre de la 1re planète | 0,635 UA | 0,633 UA |
+| Périastre de la dernière planète | 4,463 UA | 4,479 UA |
+| Orbite d'une lune, simples | 6,63 | 6,55 |
+| Orbite d'une lune, multiples | 5,04 | 4,94 |
+
+**Le banc sait voir** : deux règles de la V2 sabotées (lunes des gazeuses 1–2 au
+lieu de 1–3 ; seuil de type 0,72 au lieu de 0,80), il marque sept lignes, dont
+les classes de planètes décalées de moins de 2 points. Sans ce contrôle, son
+« aucun écart » ne prouvait rien.
+
+**Ce que le banc a corrigé** :
+
+- ⚠️ **Une affirmation fausse de G1.3.** J'y annonçais une correction de la V1 :
+  elle aurait mesuré la place des lunes depuis le centre du repère. **C'est faux** :
+  `Systeme::ajouter` ne déplace rien, la planète est encore à `a(1−e)` de son
+  foyer quand la V1 pose ses lunes. Les deux calculs sont identiques, et le banc
+  le confirme (5,04 contre 4,94). Lu dans le code sans être mesuré.
+- **Une borne de test fausse** : `les_comptes_suivent_les_regles_de_la_v1` bornait
+  les multiples à 8 planètes, le banc en voit 9. Le test passait par chance sur
+  ses 2 000 graines. Le maximum réel est de 12 (trois zones de quatre planètes).
+
+**Limites.** Les **moyennes** ne passent pas au test d'écart : elles se lisent à
+l'œil. Le banc compare les parts, pas les distributions de distance. Il ne juge
+pas si une règle est bonne, seulement si les deux genèses l'appliquent pareil :
+un tiers des gazeuses sans lune, c'est la règle de la V1, que §7.3 remplacera.
+
+**Tests** :
+
+| Test | Ce qu'il garde | Sabotage qui le fait rougir |
+|---|---|---|
+| `le_type_se_lit_dans_le_libelle` | le type sans sa pollution ; `None` en multiple | pollution gardée |
+| `seul_un_vrai_ecart_est_signale` | le bruit ne marque pas, un vrai écart si | seuil à 0,1 σ ; seuil à 100 σ |
+| `une_valeur_d_une_seule_genese_se_voit_au_rapport` | l'union des valeurs | valeurs lues d'un seul côté |
+| `les_comptes_…` (borne corrigée) | au plus 12 planètes en multiple | cinq à huit planètes par zone |
+
+**Vérifié** : 1 014 tests verts (+ 13 de `mhd`), clippy 0.
