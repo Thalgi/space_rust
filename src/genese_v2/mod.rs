@@ -10,3 +10,4 @@
 #![allow(dead_code)]
 
 pub mod alea;
+pub mod plan;
