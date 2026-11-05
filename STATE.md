@@ -20,8 +20,7 @@
 **Chantier en cours : Genèse V2, lot G0 (les décisions) tranché, rien de
 codé.** Les décisions, point par point, et le découpage révisé (G0 à G11) :
 [`conception/genese_v2.md`](docs/conception/genese_v2.md) §7 et §8. Avant
-G1, un point à trancher : garder l'ancienne genèse figée pour la Skymap V1
-gelée, et le sort de la V2 (§7.13, à la fin).
+G1 : **plus rien à trancher**, G0 est clos (§7.13).
 
 `main` n'est **pas poussé** (`origin/main` est à `5af973a`). Le worktree
 `.claude/worktrees/astres-v2` porte `chantier-opti-v2`, en retard sur `main` :
@@ -41,10 +40,9 @@ compris.
 
 ### À faire ensuite, par ordre
 
-1. **Genèse V2** : trancher le dernier point du §7.13 de
-   [`conception/genese_v2.md`](docs/conception/genese_v2.md), puis **G1**
-   (module à part, flux nommés, plan sauvegardé, écran Skymap V3) sur une
-   branche de chantier. G1 débloque aussi la part « nombre d'objets » de la
+1. **Genèse V2, G1** ([`conception/genese_v2.md`](docs/conception/genese_v2.md)
+   §8) : module à part, flux nommés, plan sauvegardé, écran Skymap V3 et
+   catégorie SKYMAP, sur une branche de chantier. G1 débloque aussi la part « nombre d'objets » de la
    qualité (O5).
 2. **Les à-coups**, sur le banc d'O8 : le tour ne donne que des moyennes ; y
    ajouter la pire image et le 1 % bas, puis attribuer (relief des
@@ -103,11 +101,11 @@ sur un fichier contenant du travail non commité (`docs/suivi/stations.md`
 | Chantier | Où on en est | Journal · conception |
 |---|---|---|
 | **Opti-v2** | **clos** (2026-11-02), fusionné : O1 à O10 ; les à-coups passent au chantier suivant | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) · [`conception/opti_v2.md`](docs/conception/opti_v2.md) |
-| **Genèse V2** | **en cours** : G0 tranché (2026-11-05), découpage révisé G0 à G11, rien de codé ; un point à trancher avant G1 (§7.13) | — · [`conception/genese_v2.md`](docs/conception/genese_v2.md) |
+| **Genèse V2** | **en cours** : G0 tranché (2026-11-05), découpage révisé G0 à G11, rien de codé ; prochain lot : G1 | — · [`conception/genese_v2.md`](docs/conception/genese_v2.md) |
 | **Planètes** (type, habitabilité) | P1 à P3 livrés, habitabilité des presets ajustée à la main ; réglage fin avec la genèse | [`suivi/planetes.md`](docs/suivi/planetes.md) · [`conception/planetes.md`](docs/conception/planetes.md) |
 | **Astres V2** | **clos** (2026-10-26) : lots 0 à 15 livrés et validés, le 8 abandonné ; reste la passe de relecture | [`suivi/astres_v2.md`](docs/suivi/astres_v2.md) · [`conception/astres_v2.md`](docs/conception/astres_v2.md) |
 | **Trajectoires** | lots A à D faits (un Starship vole en jeu) ; lot E à faire | [`suivi/trajectoires.md`](docs/suivi/trajectoires.md) · [`conception/trajectoires.md`](docs/conception/trajectoires.md) |
-| **Interface de jeu** | I.0 à I.6 faites ; Skymap V2 (marqueurs) fusionnée, à côté de la V1 ; la Skymap V3 naîtra de la genèse (G1), le sort de la V1 est à trancher | [`suivi/interface.md`](docs/suivi/interface.md) · [`conception/interface.md`](docs/conception/interface.md) |
+| **Interface de jeu** | I.0 à I.6 faites ; Skymap V2 (marqueurs) fusionnée, à côté de la V1 ; la Skymap V3 naîtra de la genèse (G1) ; V1 et V2 gardées, sur la genèse V1 gelée | [`suivi/interface.md`](docs/suivi/interface.md) · [`conception/interface.md`](docs/conception/interface.md) |
 | **Assembleur (VAB)** | lots 1 à 5 clos, rotation faite ; restent 6, 8, 9 | [`suivi/assembleur.md`](docs/suivi/assembleur.md) · [`conception/assembleur.md`](docs/conception/assembleur.md) |
 | **Stations et vaisseaux** | ISV, Starship, Stanford, Elysium (chantier initial) clos — d'Elysium, la rotation au bouton et le hangar fermé jamais vus à l'écran ; **Endurance bloquée** par la palette | [`suivi/stations.md`](docs/suivi/stations.md) · [`conception/stations.md`](docs/conception/stations.md) |
 | **Dette de `vaisseau/`** | chantier 1 (découpage de `generateur.rs`) commité (`77f6cfb`) ; chantiers 2 et 3 **en attente de la refonte** du générateur et des composants, pas prioritaires | [`suivi/dette_vaisseau.md`](docs/suivi/dette_vaisseau.md) |

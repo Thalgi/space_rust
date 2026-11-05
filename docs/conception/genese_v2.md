@@ -483,9 +483,9 @@ fiche une fois découvertes. Extensible sans rouvrir la genèse.
 ### 7.12 Comparer la Skymap V2 et la V3 — tranché le 2026-11-05
 
 - **Deux genèses côte à côte** : la nouvelle dans un module à part,
-  l'ancienne intacte jusqu'à la validation de la V3. La **Skymap V3** est un
-  nouvel écran copié de la V2 ; une fois validée, la V2 et l'ancienne genèse
-  partent ensemble.
+  l'ancienne intacte. La **Skymap V3** est un nouvel écran copié de la V2.
+  ~~Une fois validée, la V2 et l'ancienne genèse partent ensemble~~ :
+  **révisé (§7.13)**, la V1 et la V2 restent, sur la genèse V1 gelée.
 - **Les systèmes écrits à la main ne sont pas communs** : ils sont réécrits au
   format du plan pour la V3 (§7.1, §7.8). La référence commune est le
   **réglage d'échelle** : la V3 réglée pour imiter la V2, puis à l'échelle
@@ -496,8 +496,7 @@ fiche une fois découvertes. Extensible sans rouvrir la genèse.
 - **IKDAR et ZATURA** (`presets.json`, graine seule) : **on accepte qu'ils
   changent**. Certains systèmes de la starmap évolueront en aspect de toute
   façon (§7.8).
-- **La Skymap V1 est gelée**, gardée pour comparer (§7.13) ; reste ouvert le
-  sort de l'ancienne genèse qu'elle utilise, et celui de la V2.
+- **Les Skymaps V1 et V2 sont gardées**, sur la genèse V1 gelée (§7.13).
 
 ### 7.13 Les clarifications de la relecture — tranché le 2026-11-05
 
@@ -545,10 +544,12 @@ quelques **gros corps**. (G9)
 SKYMAP** à gauche (V1, V2, V3), et la V1 garde son bouton pour comparer
 les évolutions du moteur. (G1)
 
-**Point nouveau, à trancher** : la V1 et la V2 tournent sur l'**ancienne
-genèse**. La V1 gelée oblige donc à **garder l'ancienne genèse** en code figé,
-au lieu de la retirer en G11 (§7.12). Et la V2 : retirée en G11, ou gelée
-comme la V1 ?
+**6. La genèse V1 est gelée, la V1 et la V2 sont gardées.** Les deux
+skymaps tournent sur l'ancienne genèse, désormais appelée **genèse V1** :
+elle reste en code figé (plus aucune règle nouvelle, seulement de quoi
+compiler quand le reste bouge) au lieu d'être retirée en G11. La V3 tourne
+seule sur la genèse V2. Coût assumé : ~4 000 lignes qui doivent suivre les
+changements d'API (`Systeme`, `Planete`…) et dont les tests restent.
 
 ## 8. Découpage révisé (2026-11-05)
 
@@ -569,7 +570,7 @@ la **Skymap V3**, à côté de la V2, sauf G1.
 | **G8** | **La fiche** : stocké / calculé, proportions des trois ressources, sources de danger ; résumé pour la starmap, configurable | §7.4, §7.6, §7.8 | S–M | G6, G7 |
 | **G9** | **Lagrange, Grecs et Troyens** : points calculés par le parent dans l'arbre, mode de placement, marqueur (logo à venir) ; essaims des géantes en deux variantes, prototype à la touche 4 | §7.1, §7.7, §7.13 | M | G3, G6 |
 | **G10** | **Les étoiles proches** : recherche documentaire, puis systèmes réécrits au format du plan (Soleil, Tau Ceti, Alpha Centauri et Pandora, Proxima, les six de la starmap) | §7.8 | M–L | G8 |
-| **G11** | **Étalonnage et bascule** : le Soleil dans la distribution des G, réglage des JSON, critère de coût ; puis retrait de la V2 et de l'ancienne genèse | §4.5, §7.7, §7.12 | M | tous |
+| **G11** | **Étalonnage et bascule** : le Soleil dans la distribution des G, réglage des JSON, critère de coût ; puis la V3 devient la vue principale ; V1, V2 et la genèse V1 restent, gelées | §4.5, §7.7, §7.12 | M | tous |
 | *G1 bis* | Construction à la demande — **obligatoire** si la V3 dépasse le coût de la V2 | §5.4, §7.7 | M | G2 |
 
 Ordre conseillé : G1, G2, G3, G4, G5, G6, G7, G8, G9, G10, G11 (G5 peut
@@ -591,8 +592,8 @@ PV des vaisseaux ; le lot E des trajectoires.
 
 ### 8.2 À clarifier, repéré à la relecture
 
-> **Résolus le 2026-11-05 → §7.13**, sauf un point nouveau qu'ils ont fait
-> apparaître (§7.13, à la fin).
+> **Résolus le 2026-11-05 → §7.13**, avec le point qu'ils ont fait
+> apparaître (§7.13, point 6). G0 est clos.
 
 1. **Un seul modèle de température (§4.2)** : jamais confirmé explicitement,
    alors que §7.3 et §7.4 s'appuient dessus. Il remplacerait aussi la
