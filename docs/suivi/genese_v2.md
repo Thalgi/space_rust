@@ -24,8 +24,8 @@ sur la V2 (conception §7.12, §7.13).
 |---|---|---|
 | G0 | Les décisions | ✅ 2026-11-05 (conception §7) |
 | G1 | Les fondations : hasard, plan, planifier, instancier, Skymap V3 | ✅ 2026-11-05 |
-| **G2** | **Banc statistique, coût par image V2 / V3** | **prochain** |
-| G3 | L'échelle vraie et le réglage d'affichage | |
+| G2 | Banc statistique, outils de mesure, coût par image V2 / V3 | ✅ 2026-11-05, petit PC reporté |
+| **G3** | **L'échelle vraie et le réglage d'affichage** | **en cours** |
 | G4 | Un seul modèle de température, habitabilité par bandes | |
 | G5 | Les étoiles : âge, anomalies, table de rareté | |
 | G6 | Planètes et lunes : catalogue, espacement, naines, noms | |
@@ -36,7 +36,7 @@ sur la V2 (conception §7.12, §7.13).
 | G11 | Étalonnage, la V3 devient principale | |
 
 **Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), `7b166f1`
-(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), G2.2 (dernier commit).
+(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), `ffd19fa` (G2.2).
 
 ---
 
@@ -395,7 +395,7 @@ L'écriture viendra avec la sauvegarde de partie.
 
 ---
 
-## G2 — le banc et la mesure (ouvert le 2026-11-05)
+## G2 — le banc et la mesure (ouvert et clos le 2026-11-05)
 
 **Fond.** G1 affirme que la genèse V2 reprend les règles de la V1, et
 l'utilisateur juge les vues comparables à l'œil. G2 le **mesure**, et fixe le
@@ -404,8 +404,8 @@ coût par image (critère du §7.7) avant que G3 ne change l'échelle.
 | Sous-lot | Contenu | État |
 |---|---|---|
 | **G2.1** | Le banc statistique : les deux genèses sur des milliers de graines (`BANC=<n>`) | ✅ `2b6ef58` |
-| **G2.2** | Les outils de mesure dans la V3 : un réglage choisit la Skymap mesurée par `SYSTEME`, `FOCUS`, `DIAG=tour` ; mesure sur la machine de dev | ✅ |
-| **G2.3** | Le coût par image V3 contre V2 sur le petit PC (à lancer par l'utilisateur) | |
+| **G2.2** | Les outils de mesure dans la V3 : un réglage choisit la Skymap mesurée par `SYSTEME`, `FOCUS`, `DIAG=tour` ; mesure sur la machine de dev | ✅ `ffd19fa` |
+| ~~G2.3~~ | Le coût par image V3 contre V2 sur le petit PC | **reporté** : un passage après G3, un après G7 |
 
 ---
 
@@ -473,7 +473,7 @@ un tiers des gazeuses sans lune, c'est la règle de la V1, que §7.3 remplacera.
 
 ---
 
-### G2.2 — les outils de mesure dans la V3 (2026-11-05)
+### G2.2 — les outils de mesure dans la V3 (2026-11-05, `ffd19fa`)
 
 **Fond.** Le critère du §7.7 (la V3 ne coûte pas plus cher que la V2) demande de
 mesurer les deux dans les mêmes conditions. Les outils de mesure ne visaient
@@ -535,7 +535,29 @@ V1, et une moyenne limitée aux graines.
 | `la_moyenne_ne_compte_que_les_graines` | ni les lignes « systeme X » ni les autres ; l'erreur type | lignes « systeme » comptées ; écart-type au lieu de l'erreur type |
 
 **Reste.** `SKYMAP`, `DIAG=systemes` et `QUALITE` ne se testent qu'en lançant le jeu
-(ils ont servi aux six tours ci-dessus). G2.3 : le même protocole, alterné, sur le
-petit PC.
+(ils ont servi aux six tours ci-dessus).
 
 **Vérifié** : 1 017 tests verts (+ 13 de `mhd`), clippy 0.
+
+### Clôture de G2 (2026-11-05)
+
+**La mesure sur le petit PC est reportée, décision de l'utilisateur.** G1 présente
+peu de risque (mêmes systèmes au banc, pas de surcoût sur la machine de dev) ; le
+critère du §7.7 porte sur la V3 finale, et le vrai risque de coût arrive avec les
+lots qui ajoutent des objets. **Deux passages prévus : après G3, après G7.**
+
+**Le protocole, à lancer à la racine du projet** (six tours alternés, ~22 min) :
+
+```powershell
+cargo build --release
+foreach ($t in 'v2','v3','v3b','v2','v3','v3b') {
+    $env:DIAG = 'systemes'
+    $env:SKYMAP = $t.Substring(0,2)
+    if ($t -eq 'v3b') { $env:QUALITE = 'basse' } else { Remove-Item Env:QUALITE -ErrorAction SilentlyContinue }
+    .\target\release\solar_game.exe | Select-String 'TOUR :|moyenne des graines' | Tee-Object -FilePath g23.txt -Append
+}
+```
+
+**Contrepartie acceptée** : si la V3 dépasse la V2 après G3, mesurer aussi `ffd19fa`
+pour séparer G1 de G3. D'ici là, l'absence de surcoût n'est établie que sur la
+machine de dev, et le gain de la qualité basse reste sans mesure.
