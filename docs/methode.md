@@ -73,6 +73,10 @@
   qu'on lui comparait), même résolution, même machine. Si la machine change en
   cours de chantier, rejouer l'ancienne version sur la nouvelle machine avant
   d'attribuer un gain au code.
+- ⚠️ **Une modification de la doc et son commit s'enchaînent par `&&`.** Vu
+  le 2026-11-05 (G1.4) : un script d'édition en échec (`SyntaxError`) n'avait
+  rien écrit, et le commit, sur une ligne à part, est parti sans le journal.
+  Enchaîner pour qu'un échec bloque le commit, puis relire `git show --stat`.
 - **Mettre à jour les `.md`** à chaque étape — consigne debout de l'utilisateur.
   **`STATE.md` ne raconte pas** : il a dérivé deux fois en journal (1 968
   lignes en août, 670 en novembre). Un fait qui se raconte va dans le journal du

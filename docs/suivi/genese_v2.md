@@ -36,7 +36,7 @@ sur la V2 (conception §7.12, §7.13).
 | G11 | Étalonnage, la V3 devient principale | |
 
 **Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), `7b166f1`
-(G1.3), G1.4 (ce lot).
+(G1.3), `c054c6f` (G1.4), G1.5 (ce lot).
 
 ---
 
@@ -69,8 +69,9 @@ V1. Ce qu'on y gagne : une genèse **testable** sans fenêtre, un plan
 | **G1.1** | Le hasard en flux nommés (`genese_v2::alea`) | ✅ `da0a091` |
 | **G1.2** | Le plan : types sérialisables, identifiant = place dans le plan | ✅ `c812051` |
 | **G1.3** | `planifier(graine)` : les règles de la V1 relues dans les flux nommés, apparences comprises | ✅ `7b166f1` |
-| **G1.4** | `instancier(&plan)` : construit le `Systeme` ; constructeurs qui tirent en interne amorcés par la graine de leur objet ; nombres de rendu décidés ici | ✅ |
-| **G1.5** | Skymap V3 (copie de la V2), catégorie SKYMAP de l'accueil (V1 gelée, V2, V3), sauvegarde du plan | |
+| **G1.4** | `instancier(&plan)` : construit le `Systeme` ; constructeurs qui tirent en interne amorcés par la graine de leur objet ; nombres de rendu décidés ici | ✅ `c054c6f` |
+| **G1.5** | Skymap V3 (copie de la V2), catégorie SKYMAP de l'accueil (V1 gelée, V2, V3) | ✅ |
+| **G1.6** | La sauvegarde du plan : sauver et recharger un système dans la V3 | |
 
 ---
 
@@ -246,7 +247,7 @@ tirage ; seule la source du hasard change.
 
 ---
 
-### G1.4 — instancier (2026-11-05)
+### G1.4 — instancier (2026-11-05, `c054c6f`)
 
 **Fond.** Le plan devient un `Systeme` que l'écran sait dessiner. La règle
 de §5.4 tient : **aucun tirage de genèse à la construction** — tout ce qui
@@ -307,3 +308,63 @@ matériaux GPU : il ne tourne pas sans fenêtre. Il se vérifie à l'écran, dan
 la Skymap V3 (G1.5).
 
 **Vérifié** : 1 010 tests verts (+ 13 de `mhd`), clippy 0.
+
+---
+
+### G1.5 — la Skymap V3 (2026-11-05)
+
+**Fond.** La genèse V2 devient **visible** : un écran la montre, à côté des
+Skymaps V1 et V2, pour comparer (§7.12, §7.13). C'est aussi la première
+vérification de l'assemblage d'`instancier`, qui ne tourne qu'avec une
+fenêtre.
+
+**Forme.**
+
+- `src/ecran/skymap_v3.rs` : **copie** de `skymap_v2.rs`. Deux fonctions
+  locales, `construire_systeme` et `construire_systeme_autour`, passent par
+  la genèse V2 (planifier puis instancier) sous les mêmes noms que la V1 : le
+  reste de l'écran est celui de la V2, ligne pour ligne. Le libellé des
+  systèmes générés porte **`[V3]`**. Les systèmes écrits à la main (Soleil,
+  Tau Ceti, Alpha Centauri…) restent ceux de la V1 jusqu'à G10.
+- **Accueil** : une colonne **[ SKYMAP ]** à gauche, étroite (180 px) — **V1
+  GELEE**, **V2 MARQUEURS**, **V3 GENESE V2** —, les deux entrées Skymap
+  retirées du bloc des astres ; trois colonnes centrées (`colonnes`), 980 px
+  dans la fenêtre de 1 000.
+- `main.rs` : `Cible::SkymapV3`, `Etat::SkymapV3`.
+- `genese_v2` : l'`#![allow(dead_code)]` du module **tombe** ; reste un
+  `allow` ciblé sur `PlanSysteme::corps` (lu par les tests, puis par G1.6 et
+  G9).
+
+**Écarts.**
+
+- **Les outils de mesure de la V2 ne sont pas recopiés** (`sur_astre`,
+  `cadrer`, `sur_graine` : `SYSTEME`, `FOCUS`, `DIAG=tour`) : rien ne les
+  appelait en V3. **G2 les rebranchera** pour mesurer la V3 contre la V2.
+- **La sauvegarde du plan passe en G1.6** : elle demande une interface
+  (sauver, recharger) que la V2 n'a pas, et G1.5 se limite à voir la V3.
+- La V3 s'ouvre, comme la V2, sur le système solaire (preset V1) : un système
+  de la genèse V2 s'obtient par ALEATOIRE ou CHOISIR ASTRE.
+
+**Essai de fumée** (temporaire, non commité) : le jeu lancé avec un drapeau
+qui construit **400 systèmes de la genèse V2 dans la vraie fenêtre**, puis
+les cinq types particuliers (géante rouge, naine blanche, pulsar, naine brune
+au centre, trou noir) : **aucune erreur**, 4 226 astres en 0,57 s.
+`main.rs` restauré par copie, vérifié identique.
+
+**Tests** :
+
+| Test | Ce qu'il garde | Sabotage qui le fait rougir |
+|---|---|---|
+| `les_trois_colonnes_tiennent_dans_la_fenetre_par_defaut` | trois colonnes dans 1 000 px, sans chevauchement | écart de 120 px ; écart négatif |
+
+⚠️ **Une première version vérifiait aussi la largeur des libellés**, avec une
+police estimée à 12 px par caractère : elle refusait un libellé existant
+(« PETITES STATIONS… ») qui tient pourtant. La largeur d'un libellé dépend
+de la police, qui ne se mesure qu'avec une fenêtre : elle se juge à l'œil,
+plutôt que contre une valeur supposée.
+
+**À vérifier à l'écran** (par l'utilisateur) : les libellés de la colonne
+SKYMAP tiennent dans leurs boutons ; la V3 montre des systèmes de la genèse
+V2 (`[V3]` dans le bandeau) comparables à ceux de la V2.
+
+**Vérifié** : 1 011 tests verts (+ 13 de `mhd`), clippy 0.

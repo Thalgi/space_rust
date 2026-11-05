@@ -5,10 +5,6 @@
 //! La genèse V1 (`crate::genese`) reste en place, **gelée** : les Skymaps V1
 //! et V2 tournent dessus, la V3 tourne sur celle-ci.
 
-// ponytail: rien ne consomme encore ce module hors des tests ; l'allow tombe
-// quand la Skymap V3 le branche (G1.5).
-#![allow(dead_code)]
-
 pub mod alea;
 pub mod apparences;
 pub mod instancier;

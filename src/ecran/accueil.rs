@@ -8,6 +8,8 @@ pub enum Cible {
     Skymap,
     /// Skymap V2 : marqueurs de planètes et de lunes (fork de `Skymap`).
     SkymapV2,
+    /// Skymap V3 : la V2 sur la genèse V2 (`genese_v2`).
+    SkymapV3,
     Objet,
     Galerie,
     GalerieGaz,
@@ -66,7 +68,7 @@ const BLEU_MINITEL: Color = Color::new(0.0, 0.85, 0.85, 1.0);
 /// et plus dès qu'elle est assez haute — sans jamais repousser QUITTER hors
 /// de l'écran. Choisi par l'utilisateur plutôt qu'agrandir la fenêtre.
 fn mise_en_page(ecran: Vec2) -> (f32, Rect, f32) {
-    let hauteur_bloc = BLOC_ASTRES.len().max(BLOC_STATIONS.len()) as f32 * PAS_BOUTON;
+    let hauteur_bloc = BLOC_SKYMAP.len().max(BLOC_ASTRES.len()).max(BLOC_STATIONS.len()) as f32 * PAS_BOUTON;
     // Tout ce qui vient sous le logo, plus 3 px de marge au bas.
     let dessous = PLACE_TITRE_BLOC + hauteur_bloc + ECART_PARAMETRES + 2.0 * HAUTEUR_BOUTON + ECART_BOUTON + 3.0;
     let dispo_h = ecran.y - MARGE_HAUT - 2.0 * BORD_LOGO - dessous;
@@ -88,13 +90,34 @@ fn mise_en_page(ecran: Vec2) -> (f32, Rect, f32) {
 /// Le logo, à la place du titre, en demandait plus encore. Gardé désormais par
 /// `le_logo_grandit_sans_jamais_deborder`, qui recompte les blocs.
 const HAUTEUR_BOUTON: f32 = 34.0;
+
+/// Largeur d'un bouton de bloc, et de la colonne étroite des Skymaps.
+const LARGEUR_BLOC: f32 = 380.0;
+const LARGEUR_SKYMAP: f32 = 180.0;
+const ECART_COLONNES: f32 = 20.0;
+
+/// **Les trois colonnes** `(x, largeur)` : SKYMAP, ASTRES, STATIONS, centrées.
+/// Gardé par `les_trois_colonnes_tiennent_dans_la_fenetre_par_defaut`.
+fn colonnes(largeur_ecran: f32) -> [(f32, f32); 3] {
+    let total = LARGEUR_SKYMAP + 2.0 * LARGEUR_BLOC + 2.0 * ECART_COLONNES;
+    let x0 = (largeur_ecran - total) * 0.5;
+    let x1 = x0 + LARGEUR_SKYMAP + ECART_COLONNES;
+    [(x0, LARGEUR_SKYMAP), (x1, LARGEUR_BLOC), (x1 + LARGEUR_BLOC + ECART_COLONNES, LARGEUR_BLOC)]
+}
 const ECART_BOUTON: f32 = 8.0;
 const PAS_BOUTON: f32 = HAUTEUR_BOUTON + ECART_BOUTON;
 
-/// Bloc de gauche : exploration et galeries d'astres.
+/// **Bloc de gauche : les Skymaps** (2026-11-05, conception de la genèse
+/// §7.13). La V1 est gelée mais gardée pour comparer les évolutions du
+/// moteur ; la V2 et la V1 tournent sur la genèse V1, la V3 sur la V2.
+const BLOC_SKYMAP: &[(&str, Cible)] = &[
+    ("V1 GELEE", Cible::Skymap),
+    ("V2 MARQUEURS", Cible::SkymapV2),
+    ("V3 GENESE V2", Cible::SkymapV3),
+];
+
+/// Bloc du milieu : exploration et galeries d'astres.
 const BLOC_ASTRES: &[(&str, Cible)] = &[
-    ("SKYMAP - SYSTEME COMPLET", Cible::Skymap),
-    ("SKYMAP V2 - MARQUEURS", Cible::SkymapV2),
     ("OBJET CELESTE - VUE ISOLEE", Cible::Objet),
     ("STARMAP - VOISINAGE STELLAIRE", Cible::Starmap),
     ("GALERIE - TYPES TELLURIQUES", Cible::Galerie),
@@ -127,12 +150,11 @@ impl Accueil {
     fn bloc(
         titre: &str,
         entrees: &'static [(&str, Cible)],
-        x: f32,
+        (x, bw): (f32, f32),
         y0: f32,
         m: Vec2,
         clic: bool,
     ) -> Option<&'static Cible> {
-        let bw = 380.0;
         let bh = HAUTEUR_BOUTON;
         crate::police::texte(titre, x + 4.0, y0 - 10.0, 20.0, Color::new(0.5, 0.9, 0.7, 1.0));
         let mut choix = None;
@@ -172,13 +194,10 @@ impl Accueil {
             BLEU_MINITEL,
         );
 
-        let bw = 380.0;
-        let ecart = 48.0;
-        let xg = cx - bw - ecart * 0.5;
-        let xd = cx + ecart * 0.5;
-
-        let choix = Self::bloc("[ ASTRES & GALERIES ]", BLOC_ASTRES, xg, y0, m, clic)
-            .or_else(|| Self::bloc("[ STATIONS & MEGASTRUCTURES ]", BLOC_STATIONS, xd, y0, m, clic));
+        let [sky, astres, stations] = colonnes(screen_width());
+        let choix = Self::bloc("[ SKYMAP ]", BLOC_SKYMAP, sky, y0, m, clic)
+            .or_else(|| Self::bloc("[ ASTRES & GALERIES ]", BLOC_ASTRES, astres, y0, m, clic))
+            .or_else(|| Self::bloc("[ STATIONS & MEGASTRUCTURES ]", BLOC_STATIONS, stations, y0, m, clic));
 
         // Les paramètres valent pour **tout le jeu**, pas pour une famille de
         // vues : ils se posent donc à part, sous les deux blocs, et non dans
@@ -188,7 +207,7 @@ impl Accueil {
         // compris, vit dans `mise_en_page` ; c'est sa garde qui vérifie que
         // QUITTER tient dans la fenêtre — un commentaire chiffré ici avait
         // cessé d'être vrai à la première entrée ajoutée.
-        let hauteur_bloc = BLOC_ASTRES.len().max(BLOC_STATIONS.len()) as f32 * PAS_BOUTON;
+        let hauteur_bloc = BLOC_SKYMAP.len().max(BLOC_ASTRES.len()).max(BLOC_STATIONS.len()) as f32 * PAS_BOUTON;
         let r = Rect::new(cx - 190.0, y0 + hauteur_bloc + ECART_PARAMETRES, 380.0, HAUTEUR_BOUTON);
         minitel_ligne(r, "PARAMETRES", m);
         if clic && r.contains(m) {
@@ -227,7 +246,7 @@ mod tests_logo {
     /// fenêtre par défaut, au moins ×2 (512 px) dès qu'elle est assez haute.
     #[test]
     fn le_logo_grandit_sans_jamais_deborder() {
-        let hauteur_bloc = BLOC_ASTRES.len().max(BLOC_STATIONS.len()) as f32 * PAS_BOUTON;
+        let hauteur_bloc = BLOC_SKYMAP.len().max(BLOC_ASTRES.len()).max(BLOC_STATIONS.len()) as f32 * PAS_BOUTON;
         for (l, h) in [(1000.0_f32, 700.0_f32), (1280.0, 800.0), (1000.0, 830.0), (1920.0, 1080.0), (2560.0, 1440.0)] {
             let (k, r, y0) = mise_en_page(vec2(l, h));
             assert_eq!(k, k.floor(), "{l}x{h} : échelle {k} non entière, le pixel art serait déformé");
@@ -238,5 +257,15 @@ mod tests_logo {
         }
         assert_eq!(mise_en_page(vec2(1000.0, 700.0)).0, 1.0, "fenêtre par défaut : ×1 attendu");
         assert!(mise_en_page(vec2(1920.0, 1080.0)).0 >= 2.0, "plein écran 1080p : au moins 512 px attendus");
+    }
+
+    /// **Les trois colonnes tiennent dans la fenêtre par défaut** (1 000 px),
+    /// sans se chevaucher. La largeur des libellés dépend de la police, qui
+    /// ne se mesure qu'avec une fenêtre : elle se juge à l'œil.
+    #[test]
+    fn les_trois_colonnes_tiennent_dans_la_fenetre_par_defaut() {
+        let c = colonnes(1000.0);
+        assert!(c[0].0 >= 0.0 && c[2].0 + c[2].1 <= 1000.0, "colonnes hors de la fenêtre : {c:?}");
+        assert!(c[0].0 + c[0].1 < c[1].0 && c[1].0 + c[1].1 < c[2].0, "colonnes qui se chevauchent : {c:?}");
     }
 }

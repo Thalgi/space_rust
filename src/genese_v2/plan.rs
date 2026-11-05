@@ -180,6 +180,7 @@ impl PlanSysteme {
         IdCorps(self.corps.len() as u32 - 1)
     }
 
+    #[allow(dead_code)] // Lu par les tests ; le jeu le lira avec les identifiants (G1.6, G9).
     pub fn corps(&self, id: IdCorps) -> Option<&CorpsPlan> {
         self.corps.get(id.0 as usize)
     }

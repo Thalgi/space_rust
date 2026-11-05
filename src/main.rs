@@ -30,7 +30,7 @@ mod vaisseau;
 use ecran::{
     Parametres,
     Accueil, Categorie, Cible, Galerie, GalerieCometes, GalerieDisques, GalerieEtoiles, Objet, Skymap, Tableur,
-    SkymapV2,
+    SkymapV2, SkymapV3,
     SortieStarmap, Starmap, VueAssembleur, VueStation,
 };
 use macroquad::prelude::*;
@@ -65,6 +65,7 @@ enum Etat {
     Starmap(Box<Starmap>),
     Skymap(Box<Skymap>),
     SkymapV2(Box<SkymapV2>),
+    SkymapV3(Box<SkymapV3>),
     Objet(Box<Objet>),
     Galerie(Box<Galerie>),
     GalerieDisques(Box<GalerieDisques>),
@@ -178,6 +179,7 @@ async fn main() {
                         Cible::Starmap => Etat::Starmap(Box::new(Starmap::new())),
                         Cible::Skymap => Etat::Skymap(Box::new(Skymap::new())),
                         Cible::SkymapV2 => Etat::SkymapV2(Box::new(SkymapV2::new())),
+                        Cible::SkymapV3 => Etat::SkymapV3(Box::new(SkymapV3::new())),
                         Cible::Objet => Etat::Objet(Box::new(Objet::new())),
                         Cible::Galerie => Etat::Galerie(Box::new(Galerie::new(false))),
                         Cible::GalerieGaz => Etat::Galerie(Box::new(Galerie::new(true))),
@@ -235,6 +237,11 @@ async fn main() {
                 }
             }
             Etat::SkymapV2(s) => {
+                if s.frame() {
+                    etat = Etat::Accueil(Accueil::new());
+                }
+            }
+            Etat::SkymapV3(s) => {
                 if s.frame() {
                     etat = Etat::Accueil(Accueil::new());
                 }
