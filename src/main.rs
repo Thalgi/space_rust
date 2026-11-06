@@ -102,6 +102,22 @@ fn moyenne_des_graines(resultats: &[(String, f32, f32)]) -> (f32, f32, f32) {
     (i, c, (variance / n).sqrt())
 }
 
+/// **Médiane `(image, CPU)` sur les graines d'un tour** : une graine figée ne la déplace pas.
+fn mediane_des_graines(resultats: &[(String, f32, f32)]) -> (f32, f32) {
+    let mediane = |colonne: fn(&(String, f32, f32)) -> f32| {
+        let mut v: Vec<f32> = resultats.iter().filter(|r| r.0.starts_with("graine ")).map(colonne).collect();
+        v.sort_by(f32::total_cmp);
+        centile(&v, 0.5)
+    };
+    (mediane(|r| r.1), mediane(|r| r.2))
+}
+
+/// La valeur au centile `p` (0 à 1) d'une liste triée ; 0 si elle est vide.
+fn centile(tries: &[f32], p: f32) -> f32 {
+    let i = ((tries.len() as f32 * p) as usize).min(tries.len().saturating_sub(1));
+    tries.get(i).copied().unwrap_or(0.0)
+}
+
 /// Écran actif. Les vues lourdes sont boxées pour garder l'enum compact.
 enum Etat {
     Accueil(Accueil),
@@ -165,8 +181,8 @@ async fn main() {
         _ => None,
     };
     let mut diag = (mode_diag.is_some() && tour.is_none()).then(Diagnostic::new);
-    if let Some(t) = &tour {
-        etat = t.etat();
+    if let Some(t) = &mut tour {
+        etat = t.construire();
     }
 
     // Capture d'écran ponctuelle (facultative) : `CAPTURE=<chemin.png>` ouvre
@@ -563,7 +579,7 @@ enum Suite {
 /// mêmes chez l'utilisateur et sur la machine de dev), le système solaire,
 /// la galerie des planètes et la starmap —, 3,5 s chacun (1 s de chauffe
 /// écartée), dans la qualité et le rendu du joueur. Chaque cas s'imprime à
-/// sa fin, puis le tout, du pire au meilleur.
+/// sa fin, chaque à-coup sur le moment, puis le tout, du pire au meilleur.
 struct Tour {
     cas: Vec<(String, Cas)>,
     i: usize,
@@ -571,11 +587,15 @@ struct Tour {
     images: Vec<f32>,
     cpu: Vec<f32>,
     resultats: Vec<(String, f32, f32)>,
+    construction_ms: f32,
+    astres: usize,
 }
 
 impl Tour {
     const CHAUFFE: f64 = 1.0;
     const DUREE: f64 = 3.5;
+    /// Au-delà (en s), une image est signalée à part, chauffe comprise.
+    const A_COUP: f32 = 0.05;
 
     /// `seulement_systemes` : ni vues isolées ni galerie ni starmap, que la
     /// genèse ne touche pas (`DIAG=systemes`).
@@ -583,7 +603,21 @@ impl Tour {
         let cas = Self::cas(seulement_systemes);
         let skymap = if mesure_v3() { "V3" } else { "V2" };
         println!("TOUR : {} cas, ~{:.0} s, skymap {skymap}, qualite {:?}", cas.len(), cas.len() as f64 * Self::DUREE, reglages::qualite());
-        Self { cas, i: 0, debut: get_time(), images: Vec::new(), cpu: Vec::new(), resultats: Vec::new() }
+        Self { cas, i: 0, debut: get_time(), images: Vec::new(), cpu: Vec::new(), resultats: Vec::new(), construction_ms: 0.0, astres: 0 }
+    }
+
+    /// L'écran du cas courant, chronométré ; sa chauffe ne part qu'une fois construit.
+    fn construire(&mut self) -> Etat {
+        let debut = get_time();
+        let e = self.etat();
+        self.construction_ms = ((get_time() - debut) * 1000.0) as f32;
+        self.astres = match &e {
+            Etat::SkymapV2(s) => s.nb_astres(),
+            Etat::SkymapV3(s) => s.nb_astres(),
+            _ => 0,
+        };
+        self.debut = get_time();
+        e
     }
 
     fn cas(seulement_systemes: bool) -> Vec<(String, Cas)> {
@@ -639,6 +673,9 @@ impl Tour {
 
     fn image(&mut self, image: f32, cpu: f32) -> Suite {
         let t = get_time() - self.debut;
+        if image > Self::A_COUP {
+            println!("TOUR a-coup  {:<44} t {t:>5.2} s  image {:>7.1} ms  CPU {:>7.1} ms", self.cas[self.i].0, image * 1000.0, cpu * 1000.0);
+        }
         if t > Self::CHAUFFE {
             self.images.push(image);
             self.cpu.push(cpu);
@@ -649,12 +686,30 @@ impl Tour {
         let moy = |v: &[f32]| v.iter().sum::<f32>() / v.len().max(1) as f32 * 1000.0;
         let (i, c) = (moy(&self.images), moy(&self.cpu));
         let nom = self.cas[self.i].0.clone();
-        println!("TOUR {:>3}/{}  {:<44} {:>7.1} fps  image {:>6.1} ms  CPU {:>6.1} ms", self.i + 1, self.cas.len(), nom, 1000.0 / i.max(1e-3), i, c);
+        let n = self.images.len();
+        self.images.sort_by(f32::total_cmp);
+        self.cpu.sort_by(f32::total_cmp);
+        let ms = |v: &[f32], p| centile(v, p) * 1000.0;
+        println!(
+            "TOUR {:>3}/{}  {:<44} {:>7.1} fps  image {:>6.1} ms  mediane {:>6.1}  1% {:>6.1}  pire {:>7.1}  CPU {:>6.1} ms  mediane {:>6.1}  pire {:>7.1}  {n:>5} images  construit {:>7.1} ms  {:>3} astres",
+            self.i + 1,
+            self.cas.len(),
+            nom,
+            1000.0 / i.max(1e-3),
+            i,
+            ms(&self.images, 0.5),
+            ms(&self.images, 0.99),
+            ms(&self.images, 1.0),
+            c,
+            ms(&self.cpu, 0.5),
+            ms(&self.cpu, 1.0),
+            self.construction_ms,
+            self.astres,
+        );
         self.resultats.push((nom, i, c));
         self.images.clear();
         self.cpu.clear();
         self.i += 1;
-        self.debut = get_time();
         if self.i == self.cas.len() {
             self.resultats.sort_by(|a, b| b.1.total_cmp(&a.1));
             println!("TOUR, du pire au meilleur ({} x {}, rendu {:?}, qualite {:?}) :", screen_width(), screen_height(), reglages::mode_rendu(), reglages::qualite());
@@ -663,9 +718,11 @@ impl Tour {
             }
             let (i, c, e) = moyenne_des_graines(&self.resultats);
             println!("TOUR, moyenne des graines : image {i:.3} ms (erreur type {e:.3})  CPU {c:.3} ms");
+            let (i, c) = mediane_des_graines(&self.resultats);
+            println!("TOUR, mediane des graines : image {i:.3} ms  CPU {c:.3} ms");
             return Suite::Fin;
         }
-        Suite::Changer(self.etat())
+        Suite::Changer(self.construire())
     }
 }
 
@@ -680,7 +737,7 @@ fn imprimer_profil(libelle: &str, echantillons: &mut [f32]) {
     echantillons.sort_by(f32::total_cmp);
     let n = echantillons.len();
     let moyenne = echantillons.iter().sum::<f32>() / n as f32;
-    let p99 = echantillons[(((n as f32) * 0.99) as usize).min(n - 1)];
+    let p99 = centile(echantillons, 0.99);
     let pire = *echantillons.last().unwrap();
     println!(
         "PROFIL {libelle} : {n} frames | moyenne {:.1} fps | 1% bas {:.1} fps | pire frame {:.1} fps",
@@ -731,5 +788,20 @@ mod tests_tour {
         assert_eq!((i, c), (15.0, 2.0));
         // Écart-type 7,07 sur deux échantillons : erreur type 5.
         assert!((e - 5.0).abs() < 1e-4, "erreur type {e}");
+    }
+
+    /// Une graine figée n'emporte pas la médiane, et seules les graines y comptent.
+    #[test]
+    fn la_mediane_ignore_une_graine_figee_et_les_autres_vues() {
+        let r = |n: &str, i, c| (n.to_string(), i, c);
+        let v = [r("graine  1", 5.0, 2.0), r("graine  2", 1900.0, 1700.0), r("graine  3", 4.0, 1.0), r("graine  4", 6.0, 3.0), r("systeme G", 900.0, 900.0), r("starmap", 900.0, 900.0)];
+        assert_eq!(mediane_des_graines(&v), (6.0, 3.0));
+    }
+
+    #[test]
+    fn le_centile_lit_la_bonne_case() {
+        let v: Vec<f32> = (1..=100).map(|x| x as f32).collect();
+        assert_eq!((centile(&v, 0.5), centile(&v, 0.99), centile(&v, 1.0)), (51.0, 100.0, 100.0));
+        assert_eq!(centile(&[], 0.5), 0.0);
     }
 }

@@ -174,6 +174,10 @@ impl SkymapV3 {
         }
     }
 
+    pub fn nb_astres(&self) -> usize {
+        self.sys.nb_astres()
+    }
+
     /// La vue système sur le système engendré par `seed` (le tour du
     /// diagnostic, `DIAG=tour`).
     pub fn sur_graine(seed: u64) -> Self {

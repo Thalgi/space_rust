@@ -36,7 +36,7 @@ sur la V2 (conception §7.12, §7.13).
 | G11 | Étalonnage, la V3 devient principale | |
 
 **Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), `7b166f1`
-(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), `ffd19fa` (G2.2), `19646a3` (clôture de G2), `c49fe15` (G3.1), `5d46e36` (précisions de G0), `a4f35c2` (G3.2), `c525165` (G3.3), `bed6b65` (G3.4, clôture de G3), retour de l'utilisateur (dernier commit).
+(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), `ffd19fa` (G2.2), `19646a3` (clôture de G2), `c49fe15` (G3.1), `5d46e36` (précisions de G0), `a4f35c2` (G3.2), `c525165` (G3.3), `bed6b65` (G3.4, clôture de G3), `1458fb8` (retour de l'utilisateur), le tour plus bavard (dernier commit).
 
 ---
 
@@ -546,16 +546,20 @@ peu de risque (mêmes systèmes au banc, pas de surcoût sur la machine de dev) 
 critère du §7.7 porte sur la V3 finale, et le vrai risque de coût arrive avec les
 lots qui ajoutent des objets. **Deux passages prévus : après G3, après G7.**
 
-**Le protocole, à lancer à la racine du projet** (six tours alternés, ~22 min) :
+**Le protocole, à lancer à la racine du projet** (dix tours, ~36 min ; **le premier ne compte pas**,
+il chauffe les shaders après compilation). Corrigé après le premier passage : plus aucun filtre sur la
+sortie, les lignes par graine sont celles qui expliquent un écart.
 
 ```powershell
 cargo build --release
-foreach ($t in 'v2','v3','v3b','v2','v3','v3b') {
+foreach ($t in 'v3','v2','v3','v3b','v2','v3','v3b','v2','v3','v3b') {
     $env:DIAG = 'systemes'
     $env:SKYMAP = $t.Substring(0,2)
     if ($t -eq 'v3b') { $env:QUALITE = 'basse' } else { Remove-Item Env:QUALITE -ErrorAction SilentlyContinue }
-    .\target\release\solar_game.exe | Select-String 'TOUR :|moyenne des graines' | Tee-Object -FilePath g23.txt -Append
+    .\target\release\solar_game.exe | Tee-Object -FilePath g3_detail.txt -Append
 }
+Remove-Item Env:DIAG, Env:SKYMAP, Env:QUALITE -ErrorAction SilentlyContinue
+git checkout -- reglages.json
 ```
 
 **Contrepartie acceptée** : si la V3 dépasse la V2 après G3, mesurer aussi `ffd19fa`
@@ -961,3 +965,63 @@ PC reste à faire.**
 
 **Vérifié** : 1 041 tests verts (+ 13 de `mhd`), clippy 0, captures de la naine polluée (de près et au
 cadrage par défaut) et d'une étoile Be.
+
+### Le premier passage sur le petit PC, et un tour plus bavard (2026-11-06)
+
+**Les six tours, moyenne des graines (image, erreur type, CPU, en ms) :**
+
+| Ordre | Version | Image | Erreur type | CPU |
+|---|---|---:|---:|---:|
+| 1 | V2 | 7,453 | 1,211 | 4,359 |
+| 2 | V3 | **38,066** | **32,063** | 31,579 |
+| 3 | V3 basse | 4,424 | 0,343 | 2,333 |
+| 4 | V2 | 4,322 | 0,241 | 2,243 |
+| 5 | V3 | 5,222 | 0,479 | 2,872 |
+| 6 | V3 basse | 4,905 | 0,513 | 2,594 |
+
+**Ce qu'on en tire, et ce qu'on n'en tire pas.**
+
+- **Le critère du §7.7 n'est pas tranché.** Une seule paire V2 / V3 est propre (tours 4 et 5) : +0,90 ms
+  (+21 %), ±0,54 en erreurs types cumulées, CPU +28 %. La même version varie de 11 % d'un tour à l'autre
+  (V3 basse). **Un soupçon de surcoût, pas une mesure**, et il décide de G1 bis : à refaire.
+- **Le tour 2 contient une graine figée, déduit et non observé.** Si une seule graine s'écarte,
+  moyenne − erreur type donne le niveau des autres : 6,0 ms, et l'écart donne ~1 930 ms pour elle. Sur
+  une fenêtre de 2,5 s, cela fait une ou deux images : le jeu a quasiment cessé de dessiner, et surtout
+  côté processeur (~1,7 s de CPU). Le tour 5 passe sur les mêmes graines sans rien de tel : **ce n'est
+  pas un coût fixe de cette graine**. La cause reste inconnue.
+- **Les tours 1 et 2 sont plus lents dans leur ensemble** (niveau ~6 ms, contre ~4,5 ensuite). O8 notait
+  déjà que le premier lancement après compilation paie ses shaders ; cela n'explique pas le tour 2 à
+  coup sûr. Le protocole écarte désormais un premier tour.
+- **Le gain de la qualité basse reste sans mesure** : 4,905 contre 5,222 dans la seule série propre.
+- **Tout tient très largement** : ~5 ms par image, là où le critère est relatif à la V2.
+
+**Pourquoi on ne sait pas quelle graine : le filtre du protocole.** Le `Select-String` jetait les lignes
+par graine, celles qui auraient répondu. Il est retiré : tout va dans le fichier.
+
+**Le tour plus bavard** (`src/main.rs`), à la demande de l'utilisateur, comme le demandait la fin d'O8
+(« pire image et 1 % bas dans le tour ») :
+
+- par cas : médiane, 1 % bas et pire image ; médiane et pire CPU ; nombre d'images ; temps de
+  construction ; nombre d'astres ;
+- **une ligne `TOUR a-coup` par image de plus de 50 ms, sur le moment**, chauffe comprise, datée dans
+  le cas ;
+- **la médiane des graines** en fin de tour, qu'une graine figée ne déplace pas.
+
+**Un défaut de mesure corrigé au passage** : la chauffe partait avant la construction du système. Une
+construction de plus d'une seconde mangeait toute la chauffe, et sa longue première image entrait dans
+la moyenne. La chauffe part désormais une fois le système construit. Sans effet attendu sur la machine
+de dev (construction de ~10 à 40 ms) ; à vérifier sur le petit PC, où ce temps est maintenant imprimé.
+
+**Tests** :
+
+| Test | Ce qu'il garde | Sabotage qui le fait rougir |
+|---|---|---|
+| `la_mediane_ignore_une_graine_figee_et_les_autres_vues` | la graine figée et les vues sans genèse restent hors de la médiane | toutes les vues comptées ; pas de tri |
+| `le_centile_lit_la_bonne_case` | la bonne case, 100 % et la liste vide | `p` ignoré ; débordement à 100 % ; plantage sur le vide |
+
+**Vérifié** : 1 043 tests verts (+ 13 de `mhd`), clippy 0, un tour V3 complet sur la machine de dev,
+dont la sortie contient les nouvelles colonnes, les à-coups de démarrage et la médiane. **Le câblage des
+lignes de sortie n'a pas de test** : il lui faut une fenêtre, d'où ce tour.
+
+**Suite** : refaire le passage sur le petit PC (protocole : clôture de G2). Si la V3 dépasse encore la
+V2, mesurer `ffd19fa` pour séparer G1 de G3, comme prévu.
