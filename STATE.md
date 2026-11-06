@@ -44,10 +44,9 @@ découpage révisé (G0 à G11) : [`conception/genese_v2.md`](docs/conception/ge
 
 ### À faire ensuite, par ordre
 
-1. **Genèse V2, G3.2** : `planifier` sur les vraies valeurs. **Attend la réponse à Q1**
-   ([`conception/genese_v2.md`](docs/conception/genese_v2.md) §7.14 : plafonner
-   l'étalement des étoiles brillantes ?) ; journal
-   [`suivi/genese_v2.md`](docs/suivi/genese_v2.md). **Petit PC à passer après G3
+1. **Genèse V2, G3.2** : `planifier` sur les vraies valeurs, étalement plafonné
+   ([`conception/genese_v2.md`](docs/conception/genese_v2.md) §7.14, §7.15 ; journal
+   [`suivi/genese_v2.md`](docs/suivi/genese_v2.md)). **Petit PC à passer après G3
    et après G7** (protocole : même journal, clôture de G2). G1 débloque aussi la part « nombre d'objets » de la
    qualité (O5).
 2. **Les à-coups**, sur le banc d'O8 : le tour ne donne que des moyennes ; y

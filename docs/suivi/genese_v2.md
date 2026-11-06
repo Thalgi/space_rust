@@ -585,7 +585,7 @@ joueur.
 | Sous-lot | Contenu | État |
 |---|---|---|
 | **G3.1** | La table physique des 29 types, avec ses sources | ✅ |
-| **G3.2** | `planifier` sur les vraies valeurs ; le banc doit montrer des écarts voulus | attend Q1 (§7.14) |
+| **G3.2** | `planifier` sur les vraies valeurs ; le banc doit montrer des écarts voulus | en cours |
 | **G3.3** | `echelle.json` et `instancier` : la vérité dans le plan, grossissement et compression à l'affichage | |
 | **G3.4** | Les contrôles : précision des positions, durée des trajets, cadrage, jugement à l'écran ; passage sur le petit PC | |
 

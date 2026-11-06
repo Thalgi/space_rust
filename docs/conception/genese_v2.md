@@ -568,12 +568,37 @@ changements d'API (`Systeme`, `Planete`…) et dont les tests restent.
   (`couleur × luminosité`), les teintes ressortent comme aujourd'hui.
 - **Abandon d'un point du §7.12** : la « V3 réglée pour imiter la V2 » ne tient plus, les
   températures et les distances changeant réellement.
-- **Ouvert, Q1 : où vont les planètes d'une étoile très brillante ?** Avec `√L` vraie,
-  Kuiper partirait à 68 000 unités pour une B, 675 000 pour une O (caméra : 30 000).
-  Recommandé : un **plafond** de l'étalement (~5, Kuiper vers 220 UA), la température
-  restant vraie — une O n'a que des mondes brûlés. Sinon : étalement vrai, très compressé.
+- **Où vont les planètes d'une étoile très brillante** (tranché) : un **plafond** de
+  l'étalement (~5, Kuiper vers 220 UA), la température restant vraie. Avec `√L` vraie,
+  Kuiper partirait à 68 000 unités pour une B, 675 000 pour une O (caméra : 30 000). Une
+  O n'a donc que des mondes brûlés : du minerai et des habitats en Lagrange, jamais de
+  planète tempérée.
 - **Ouvert, pour G7** : Kuiper n'est pas obligatoire. Le §7.8 ne garantit qu'**une ceinture
   au moins, de n'importe quel genre** ; G3 garde la règle de la V1, G7 décidera.
+
+### 7.15 Le climat selon la position — tranché le 2026-11-06
+
+Question de l'utilisateur : une échelle de climat selon la position, *« plus proche
+badlands ou désertique, plus lointaine plus toundra ou montagne et neige »*, qui donne
+des mondes intéressants selon le système et la place de la planète, lunes de géantes
+comprises.
+
+- **Ce qui existe** : six bandes de température dans le tirage (lave, étuve, désert et
+  badlands, tempérée, toundra, gelée). **Ce qui manque** : aucun dégradé dans la zone
+  habitable (255–350 K, une seule recette), le catalogue n'est pas tiré, les lunes sont
+  grises ou glacées.
+- **Décidé** : c'est le rôle de G4 et G6. Chaque modèle du catalogue reçoit une plage de
+  température. Le tirage est **pondéré, pas strict** : surtout le climat attendu, parfois
+  une surprise. Le type d'étoile pèse aussi (les mondes « Eyeball » près des naines
+  rouges). Une géante en zone tempérée peut porter une lune tempérée (Pandora).
+- **Première répartition, à ajuster avec l'utilisateur** (d'après les noms et les classes
+  de `planetes.json`, sans revue des rendus) : très près, Lave et Venus ; près, Badlands,
+  Mesa, Desert, Dune ; bord chaud de la zone, Mediterraneenne, Dry Superhabitable ; cœur,
+  Terre, Forest, Archipelago ; bord froid, Cold Gaia, Cold Superhabitable ; loin, Taiga,
+  Boreal, Alpin, Fjord ; plus loin, Toundra, Glacial, Boule de neige.
+- **Pas de double pénalité** (précise le §7.13, point 1) : un modèle **dans sa plage** de
+  température ne perd aucun cran, car sa classe compte déjà ce climat. Les crans des bandes
+  ne s'appliquent que hors plage, ou aux planètes sans modèle.
 
 ## 8. Découpage révisé (2026-11-05)
 
