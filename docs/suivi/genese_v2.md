@@ -36,7 +36,7 @@ sur la V2 (conception §7.12, §7.13).
 | G11 | Étalonnage, la V3 devient principale | |
 
 **Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), `7b166f1`
-(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), `ffd19fa` (G2.2).
+(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), `ffd19fa` (G2.2), `19646a3` (clôture de G2), G3.1 (dernier commit).
 
 ---
 
@@ -561,3 +561,102 @@ foreach ($t in 'v2','v3','v3b','v2','v3','v3b') {
 **Contrepartie acceptée** : si la V3 dépasse la V2 après G3, mesurer aussi `ffd19fa`
 pour séparer G1 de G3. D'ici là, l'absence de surcoût n'est établie que sur la
 machine de dev, et le gain de la qualité basse reste sans mesure.
+
+---
+
+## G3 — l'échelle (ouvert le 2026-11-06)
+
+**Fond.** La genèse produit enfin des systèmes à l'**échelle vraie**, et le
+grossissement devient une affaire d'affichage (conception §7.1, §7.14). C'est le
+lot le plus risqué après G1 : il touche les 29 types d'étoiles et ce que voit le
+joueur.
+
+**Inventaire préalable** :
+
+- **L'éclairage d'une planète ne dépend pas de sa distance** : il vaut
+  `couleur × luminosité`. Une luminosité vraie ne peut donc jamais aller au shader :
+  la luminosité de rendu reste celle d'aujourd'hui.
+- **Le système solaire tourne déjà à distances vraies**, corps ×5 : le moteur connaît
+  ce régime. Les étoiles générées font, elles, ~9 fois leur taille vraie (G : 2 unités),
+  et une Terre générée 300 fois la sienne (0,6 unité).
+- **`√L` avec une luminosité vraie sort du jeu** : Kuiper à 68 000 unités pour une B, à
+  675 000 pour une O, quand la caméra s'arrête à 30 000 (§7.14).
+
+| Sous-lot | Contenu | État |
+|---|---|---|
+| **G3.1** | La table physique des 29 types, avec ses sources | ✅ |
+| **G3.2** | `planifier` sur les vraies valeurs ; le banc doit montrer des écarts voulus | attend Q1 (§7.14) |
+| **G3.3** | `echelle.json` et `instancier` : la vérité dans le plan, grossissement et compression à l'affichage | |
+| **G3.4** | Les contrôles : précision des positions, durée des trajets, cadrage, jugement à l'écran ; passage sur le petit PC | |
+
+---
+
+### G3.1 — les vraies valeurs des étoiles (2026-11-06)
+
+**Fond.** Les calculs (température, étalement, Kepler) vont lire de vraies valeurs. Les
+luminosités du jeu sont comprimées (une O vaut 4 Soleils au lieu de ~100 000) : elles
+restent pour le rendu seulement.
+
+**Forme.** `src/genese_v2/physique.rs` :
+
+- `plages(nom)` : rayon et masse en unités solaires, pour chacun des 29 types ;
+- `stefan_boltzmann(R, T)` et `T_SOLEIL` (5 772 K, valeur de l'UAI) ;
+- `vraies(nom, q, T)` : les valeurs d'une étoile tirée, `q` donnant sa place dans ses
+  plages, en interpolation géométrique.
+
+**Le choix qui structure la table : la luminosité se déduit**, `L = R²(T/T☉)⁴`. Le jeu
+tire déjà la température : une colonne de luminosité aurait été un second avis sur le
+même fait. Seuls les objets sans photosphère en portent une (trou noir, pulsar, étoile à
+neutrons, magnétar, quasi-étoile).
+
+**Sources, et ce qu'elles valent** :
+
+| Types | Source | Fiabilité |
+|---|---|---|
+| M, K, G, F, A, B, O | [table de Mamajek](https://www.pas.rochester.edu/~emamajek/EEM_dwarf_UBVIJHK_colors_Teff.txt) (Pecaut & Mamajek 2013, tenue à jour), bornes de chaque classe | **forte** ; l'auteur dit ses masses provisoires |
+| Géante rouge | [Wikipédia](https://en.wikipedia.org/wiki/Red_giant) : 0,3–8 M☉, jusqu'à ~200 R☉ et ~3 000 L☉ | ordre de grandeur |
+| Supergéante rouge | [HyperPhysics](https://hyperphysics.gsu.edu/hbase/Astro/redsup.html), V354 Cep, μ Cep | ordre de grandeur |
+| Céphéide | [Wikipédia](https://en.wikipedia.org/wiki/Classical_Cepheid_variable) : 4–20 M☉, 1 000–50 000 L☉ | ordre de grandeur |
+| Mira, carbonée | T Cep, S Cep, R Lep, [revue des Miras](https://arxiv.org/pdf/1207.4094) | étoiles nommées |
+| Wolf-Rayet | [Wikipédia](https://en.wikipedia.org/wiki/Wolf%E2%80%93Rayet_star), tables WN et WC | **rayon effectif** (voir plus bas) |
+| Sous-naine sdB | [Wikipédia](https://en.wikipedia.org/wiki/Subdwarf_B_star) : ~0,5 M☉, 0,15–0,25 R☉ | ordre de grandeur |
+| Naines blanches | [Wikipédia](https://en.wikipedia.org/wiki/White_dwarf) : 0,5–0,7 M☉, 0,8–2 % R☉ | bonne |
+| Naine brune | 13–80 masses de Jupiter, rayon ~Jupiter, [exemple à 1/8 000 L☉](https://universetoday.com/107141/when-is-a-star-not-a-star/amp) | ordre de grandeur |
+| Étoile à neutrons | [9–12 km, 1–2 M☉](https://arxiv.org/pdf/1901.01673) | bonne pour R et M |
+| Quasi-étoile | [Wikipédia](https://en.wikipedia.org/wiki/Quasi-star) : 38–189 UA, ≥ 1 000 M☉ | **hypothétique** |
+
+**Valeurs non sourcées, posées à l'ordre de grandeur** (`// ~` dans le code) : rayon de
+l'hypergéante et de la supergéante bleue (les pages ne donnent que leur luminosité), toute
+l'étoile Be (sa page ne donne aucun chiffre), rayon et bornes de T Tauri et Herbig, masse
+du trou noir, luminosités des objets compacts et de la quasi-étoile.
+
+**Écarts et limites.**
+
+- **Wolf-Rayet : rayon effectif.** Leur gabarit dit 38 000–45 000 K, moins chaud que
+  le réel : le rayon publié (0,7–8,7 R☉) donnerait trop peu de lumière. On lui donne
+  8–20 R☉, pour retrouver la luminosité publiée, qui est ce que lisent les calculs.
+- **Le rayon et la température sont tirés séparément** : une O peut être à la fois petite
+  et très chaude. La luminosité reste plausible, sa dispersion dans une classe est un
+  peu large.
+- **À traiter en G3.2** : la quasi-étoile fait 38 à 189 UA pour de vrai, plus que le
+  plafond envisagé, et sa vraie masse (≥ 1 000) écrase la masse de jeu (20, dette du §2).
+
+**Tests** :
+
+| Test | Ce qu'il garde | Sabotage qui le fait rougir |
+|---|---|---|
+| `chaque_type_du_tirage_a_ses_valeurs` | les 29 types, plages valides | un type retiré |
+| `la_loi_retrouve_la_sequence_principale_publiee` | la loi contre neuf lignes de Mamajek | loi en T³ ; T☉ fausse |
+| `le_soleil_tient_dans_sa_classe` | 1 R☉, 1 M☉, 1 L☉ | classe G déplacée |
+| `les_classes_de_la_sequence_principale_montent` | de M à O, sans chevauchement notable | classe K élargie |
+| `les_luminosites_publiees_sont_atteignables` | chaque luminosité publiée, à ×1,5 près, dans ce que le type produit | rayon de céphéide réduit ; rayon mini de supergéante doublé |
+| `la_place_dans_la_plage_est_geometrique` | interpolation ; une luminosité explicite ignore T | interpolation linéaire ; luminosité explicite ignorée |
+
+⚠️ **Un test rouge, et la table n'avait pas tort.** Bételgeuse à 10 000 L☉ pour 370 R☉ ne
+vérifie pas la loi à sa propre température : c'est un chiffre arrondi. Plutôt que d'ajuster
+un rayon pour faire passer le test, celui-ci admet ×1,5, sous l'erreur qu'il vise (un rayon
+faux d'un facteur 2 change L d'un facteur 4).
+
+**Reste.** Module sans consommateur hors des tests (`allow(dead_code)`) : tombe en G3.2.
+
+**Vérifié** : 1 023 tests verts (+ 13 de `mhd`), clippy 0.

@@ -554,6 +554,27 @@ compiler quand le reste bouge) au lieu d'être retirée en G11. La V3 tourne
 seule sur la genèse V2. Coût assumé : ~4 000 lignes qui doivent suivre les
 changements d'API (`Systeme`, `Planete`…) et dont les tests restent.
 
+### 7.14 L'échelle, précisions de G3 — 2026-11-06
+
+- **La taille des étoiles à l'écran** (tranché) : une compression par une puissance, le
+  Soleil gardant sa taille du système solaire. Les **objets compacts** (trou noir,
+  pulsar, magnétar, étoile à neutrons) gardent leur taille de rendu actuelle : leur image
+  est leur disque et leurs jets, proportionnels au rayon.
+- **Le grossissement des planètes** (tranché) : **×5 pour commencer**, comme le système
+  solaire, réglable dans le JSON. Une Terre générée passe de 0,6 à 0,01 unité. Le
+  grossissement croissant avec le recul reste le second mécanisme facultatif du §7.1, à
+  juger à l'écran.
+- **La luminosité de rendu ne change pas** : l'éclairage ne dépend pas de la distance
+  (`couleur × luminosité`), les teintes ressortent comme aujourd'hui.
+- **Abandon d'un point du §7.12** : la « V3 réglée pour imiter la V2 » ne tient plus, les
+  températures et les distances changeant réellement.
+- **Ouvert, Q1 : où vont les planètes d'une étoile très brillante ?** Avec `√L` vraie,
+  Kuiper partirait à 68 000 unités pour une B, 675 000 pour une O (caméra : 30 000).
+  Recommandé : un **plafond** de l'étalement (~5, Kuiper vers 220 UA), la température
+  restant vraie — une O n'a que des mondes brûlés. Sinon : étalement vrai, très compressé.
+- **Ouvert, pour G7** : Kuiper n'est pas obligatoire. Le §7.8 ne garantit qu'**une ceinture
+  au moins, de n'importe quel genre** ; G3 garde la règle de la V1, G7 décidera.
+
 ## 8. Découpage révisé (2026-11-05)
 
 Tiré du §7. Le §6 prévoyait 10 lots ; les décisions en ajoutent (l'échelle,

@@ -9,5 +9,6 @@ pub mod alea;
 pub mod apparences;
 pub mod banc;
 pub mod instancier;
+pub mod physique;
 pub mod plan;
 pub mod planifier;
