@@ -30,7 +30,7 @@ découpage révisé (G0 à G11) : [`conception/genese_v2.md`](docs/conception/ge
 
 `main` n'est **pas poussé** (`origin/main` est à `5af973a`).
 
-**Vérifié (2026-11-06, clôture de G3)** : **1 040 tests verts** (+ 13 du binaire `mhd`),
+**Vérifié (2026-11-06, retour sur G3)** : **1 041 tests verts** (+ 13 du binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
 ### Ce qui a été fait dans la dernière session
@@ -45,10 +45,10 @@ découpage révisé (G0 à G11) : [`conception/genese_v2.md`](docs/conception/ge
 
 ### À faire ensuite, par ordre
 
-1. **Genèse V2, l'utilisateur juge G3 à l'écran** : la quasi-étoile, le ×5, la compression des
-   distances, le grossissement selon le recul, et le **petit PC** (liste : clôture de G3 ;
-   protocole : clôture de G2, dans [`suivi/genese_v2.md`](docs/suivi/genese_v2.md)). **Puis G4**,
-   sur son feu vert (l'accord « G3 sans retour » ne couvre que G3). G1 débloque aussi la part « nombre d'objets » de la
+1. **Genèse V2, le passage sur le petit PC** (l'utilisateur le lance ; protocole : clôture de G2,
+   dans [`suivi/genese_v2.md`](docs/suivi/genese_v2.md)). **Puis G4**, sur son feu vert (l'accord
+   « G3 sans retour » ne couvre que G3). Les autres questions de G3 sont tranchées : ×5, pas de
+   compression, quasi-étoile validée, grossissement selon le recul dans un autre chantier. G1 débloque aussi la part « nombre d'objets » de la
    qualité (O5).
 2. **Les à-coups**, sur le banc d'O8 : le tour ne donne que des moyennes ; y
    ajouter la pire image et le 1 % bas, puis attribuer (relief des
@@ -86,7 +86,7 @@ découpage révisé (G0 à G11) : [`conception/genese_v2.md`](docs/conception/ge
 
 ## Commits
 
-Dernier commit : « Genèse V2, G3.4 et clôture de G3 : les contrôles et le cadrage »
+Dernier commit : « Genèse V2, G3 : l'habillage des étoiles, miniature de l'image de jeu »
 (2026-11-05). `git log` fait foi pour le reste.
 
 **Consigne debout (révisée le 2026-09-26) : un commit par lot ou sous-lot**,

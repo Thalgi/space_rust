@@ -262,8 +262,8 @@ l'ordre :
   **physique** pour les calculs, une de **rendu** pour l'écran. Coût par image
   nul (calculée une fois, à la genèse).
 - **Grossissement selon le recul** : second mécanisme, facultatif ; à juger en
-  comparant V2 / V3, les marqueurs suffisent peut-être. **Pas fait en G3** : à juger par
-  l'utilisateur.
+  comparant V2 / V3, les marqueurs suffisent peut-être. **Tranché le 2026-11-06 : un autre
+  chantier, hors genèse.**
 - **Contrôles, faits en G3.4** (`suivi/genese_v2.md`) : la précision des positions suffit
   jusqu'à la plus lointaine planète (260 UA) ; un trajet moyen s'allonge de 1,7 fois (94 s
   contre 54, à vitesse provisoire). **Limite** : un vaisseau vole la distance affichée, donc
@@ -582,6 +582,10 @@ changements d'API (`Systeme`, `Planete`…) et dont les tests restent.
   du §7.1 viendra avec le premier système nommé qui passera par le plan.
 - **La vraie luminosité ne sert qu'aux calculs (G3.3)** : `Astre::luminosite` (zone habitable,
   fiche) lit la vraie, `Astre::lumiere` (éclairage) celle de rendu.
+- **Valeurs confirmées par l'utilisateur (2026-11-06)** : ×5 ; **pas de compression des distances
+  pour le moment** ; la quasi-étoile et les objets compacts à leur taille de jeu.
+- **L'habillage d'une étoile est une miniature de son image de jeu** : il se règle sur le rayon de
+  jeu, et `DisqueConfig::a_l_echelle` le ramène au rayon affiché, durées et proportions comprises.
 - **Le cadrage par défaut de la V3 (G3.4)** montre les orbites de planètes, pas les comètes :
   à l'échelle vraie, leur apoastre faisait du système intérieur un point.
 - **Ouvert, pour G7** : Kuiper n'est pas obligatoire. Le §7.8 ne garantit qu'**une ceinture

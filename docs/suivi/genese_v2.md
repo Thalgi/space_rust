@@ -36,7 +36,7 @@ sur la V2 (conception §7.12, §7.13).
 | G11 | Étalonnage, la V3 devient principale | |
 
 **Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), `7b166f1`
-(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), `ffd19fa` (G2.2), `19646a3` (clôture de G2), `c49fe15` (G3.1), `5d46e36` (précisions de G0), `a4f35c2` (G3.2), `c525165` (G3.3), G3.4 et clôture de G3 (dernier commit).
+(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), `ffd19fa` (G2.2), `19646a3` (clôture de G2), `c49fe15` (G3.1), `5d46e36` (précisions de G0), `a4f35c2` (G3.2), `c525165` (G3.3), `bed6b65` (G3.4, clôture de G3), retour de l'utilisateur (dernier commit).
 
 ---
 
@@ -698,8 +698,7 @@ les orbites se calculent dessus. L'écran garde sa luminosité de rendu et gross
   **affichée**. C'est `instancier` qui le calcule et qui décide s'il a la place ; le plan
   n'en porte que le bord externe.
 - **La quasi-étoile garde sa taille et sa masse de jeu** (1 UA, 20 masses) : hypothétique, et
-  son rayon théorique (38–189 UA) dépasserait à lui seul le plafond. **Proposition à valider
-  par l'utilisateur.**
+  son rayon théorique (38–189 UA) dépasserait à lui seul le plafond. **Validé par l'utilisateur.**
 
 **Banc sur 5 000 graines** : les écarts avec la V1 sont maintenant **voulus** :
 
@@ -876,7 +875,7 @@ compression à 0,6. Le système intérieur remplit désormais l'écran, et l'ann
   capture V2. À regarder avec le catalogue de G6.
 - **Le second mécanisme du §7.1 (grossir selon le recul) n'est pas fait** : c'était facultatif, à
   juger à l'écran. Au cadrage par défaut, les planètes se repèrent à leurs marqueurs, pas à leur
-  disque. **À juger par l'utilisateur.**
+  disque. **Tranché : un autre chantier, hors genèse.**
 
 **Tests.**
 
@@ -913,14 +912,8 @@ planète selon la fiche :
 | Tempérée | 12,7 % | 11,1 % |
 | Trop froid | 41,9 % | 38,2 % |
 
-**Ce qui reste à l'utilisateur.**
-
-1. **La quasi-étoile** garde sa taille et sa masse de jeu (1 UA, 20 masses) : à valider.
-2. **Le ×5** : lisible ou non ? `grossissement_corps` dans `assets/echelle.json`, sans recompiler.
-3. **`compression_distances`** reste à 1 (distances vraies) : à essayer à l'écran si les systèmes
-   paraissent trop étendus.
-4. **Le grossissement selon le recul** : utile ou non, une fois vu.
-5. **Le passage sur le petit PC.**
+**Ce qui restait à l'utilisateur** : voir plus bas, « Après la clôture ». **Le passage sur le petit
+PC reste à faire.**
 
 **Dettes de G3.**
 
@@ -929,3 +922,42 @@ planète selon la fiche :
 | Surcharge d'échelle par système | `echelle.rs` | au premier système nommé passé par le plan |
 | Particules et vaisseaux suivent la distance affichée si la compression quitte 1 | `config_disque`, `Trajectoire` | si la compression quitte 1 |
 | Aplat gris d'une planète très éclairée | rendu | G6 |
+
+### Après la clôture : le retour de l'utilisateur (2026-11-06)
+
+**Décisions.**
+
+| Question | Réponse |
+|---|---|
+| La quasi-étoile garde sa taille et sa masse de jeu | **Validé** |
+| Le ×5 | **« Ça a l'air correct »** : on garde |
+| `compression_distances` | **Pas de compression pour le moment** : reste à 1 |
+| Le grossissement selon le recul | **Un autre chantier, hors genèse** |
+
+**Le bug remonté : les débris d'une naine polluée vont « absurdement vite », même à ×0,12.**
+
+- **La cause, introduite par G3.2.** Les disques d'une étoile sont réglés à l'œil pour son rayon de
+  jeu. Leurs bornes suivent le rayon, mais **leur vitesse de Kepler et la taille de leurs cailloux
+  sont absolues**. Afficher l'étoile à un autre rayon les décale. La naine polluée passe de 0,59 à
+  0,073 unité : **une orbite à 7 rayons en 0,07 s au lieu de 1,68 s (23 fois trop vite)**, et des
+  cailloux aussi gros qu'elle. On retrouve la leçon déjà écrite sur `debris_planetaire` (« la
+  taille des cailloux suit celle de l'anneau »).
+- **Pas seulement elle** : mesuré sur les 29 types, l'hypergéante tournait 9 fois trop lentement, le
+  Be et les T Tauri 2 fois, les Herbig 1,9 fois trop vite. Sans disque, la naine noire, les autres
+  naines blanches et les étoiles ordinaires ne sont pas concernées ; les objets compacts non plus,
+  à leur taille de rendu.
+- **Le correctif** : l'habillage est une **miniature exacte de l'image de jeu**.
+  `DisqueConfig::a_l_echelle(k)` (`gm` × k³ garde les durées, les tailles × k), appliqué dans
+  `Soleil::avec_disque`, le passage obligé. `k = rayon à l'écran / rayon de jeu`, posé par
+  `instancier` ; il vaut 1 en V1 et en V2, qui ne changent pas.
+- **Écarté** : rendre à la naine polluée sa taille de jeu, comme un objet compact. Son anneau
+  (jusqu'à 13 unités) aurait englouti ses planètes, placées désormais vers 0,1 UA (5 unités).
+- **Le test** : `l_habillage_garde_le_temps_et_les_proportions_de_l_image_de_jeu`, sur tous les types ;
+  rouge avant le correctif (« Naine noire : 0,08 s contre 1,93 s »). Sabotages : k² au lieu de k³ ;
+  tailles non réduites. **Le branchement dans `Soleil` ne se teste pas sans fenêtre** : vu à l'écran,
+  avant et après, sur la taille des cailloux, que le même appel règle avec la vitesse.
+- **Fausse piste notée** : `x0.12` est le minimum de la vitesse (0,125), et seules les touches Haut/Bas
+  la changent ; le jeu ne la baisse jamais seul.
+
+**Vérifié** : 1 041 tests verts (+ 13 de `mhd`), clippy 0, captures de la naine polluée (de près et au
+cadrage par défaut) et d'une étoile Be.

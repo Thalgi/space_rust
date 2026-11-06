@@ -649,6 +649,16 @@ impl DisqueConfig {
         self
     }
 
+    /// **Le disque à l'échelle `k` de l'étoile pour laquelle il a été réglé** : ses bornes
+    /// suivent déjà le rayon de l'étoile ; ce qui reste absolu, c'est la vitesse de Kepler
+    /// (`gm` × k³ garde les durées) et la taille des cailloux.
+    pub fn a_l_echelle(mut self, k: f32) -> Self {
+        self.gm *= k * k * k;
+        self.taille_min *= k;
+        self.taille_max *= k;
+        self
+    }
+
     /// Oriente le plan du disque (anneaux planétaires inclinés).
     pub fn avec_normale(mut self, n: Vec3) -> Self {
         self.normale = n;

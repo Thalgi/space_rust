@@ -101,6 +101,7 @@ pub struct Soleil {
     couleur: Vec3,       // teinte de l'étoile (selon son type spectral)
     luminosite: f32,     // intensité lumineuse relative
     luminosite_vraie: Option<f32>, // en L☉, pour la zone habitable ; sinon, celle du rendu
+    echelle_habillage: f32, // ses disques à l'échelle de son rayon de jeu (`DisqueConfig::a_l_echelle`)
     couronne: f32,       // extension de la couronne (× rayon) selon le type
     couronne_irreg: f32, // irrégularité (rayons/spicules) de la couronne
     couronne_type: f32,  // 0 = halo, 1 = jets bipolaires (pulsar), 2 = vent (WR)
@@ -363,6 +364,7 @@ impl Soleil {
             couleur,
             luminosite,
             luminosite_vraie: None,
+            echelle_habillage: 1.0,
             // Étoile chaude/lumineuse -> couronne plus large et plus irrégulière (vents stellaires).
             couronne: (1.25 + 0.14 * luminosite).min(2.1),
             couronne_irreg: ((luminosite - 0.4) / 3.6).clamp(0.0, 1.0),
@@ -658,6 +660,12 @@ impl Soleil {
         self
     }
 
+    /// **Ses disques à venir, à l'échelle de son rayon de jeu** : à poser avant la variante.
+    pub fn avec_echelle_habillage(mut self, k: f32) -> Self {
+        self.echelle_habillage = k;
+        self
+    }
+
     /// Marque l'étoile comme rémanent compact (pulsar/magnétar/étoile à neutrons) :
     /// aucune zone habitable ne sera tracée (`zone_viable` renvoie `None`).
     pub fn sans_zone_habitable(mut self) -> Self {
@@ -752,7 +760,7 @@ impl Soleil {
     /// Pose un disque autour de l'étoile, dans un plan **dérivé de sa
     /// graine** : deux trous noirs ne présentent pas la même face.
     pub fn avec_disque(mut self, cfg: DisqueConfig) -> Self {
-        let cfg = cfg.avec_normale(normale_disque(self.graine));
+        let cfg = cfg.avec_normale(normale_disque(self.graine)).a_l_echelle(self.echelle_habillage);
         let mut d = Disque::new(cfg);
         d.corps_mut().position = self.base.position;
         d.set_rayon_central(self.base.rayon);

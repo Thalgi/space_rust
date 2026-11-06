@@ -126,13 +126,23 @@ fn rendu(e: &EtoilePlan, ech: &Echelle) -> (ProfilEtoile, f32) {
     (profil, etoile::activite_type(rayon_rendu, luminosite))
 }
 
+/// **L'échelle de l'habillage** : le rayon à l'écran sur le rayon de jeu, pour lequel les
+/// disques ont été réglés à l'œil (`DisqueConfig::a_l_echelle`).
+fn echelle_habillage(e: &EtoilePlan, ech: &Echelle) -> f32 {
+    let g = etoile::gabarit_du_type(&e.type_nom, e.q).unwrap_or_else(|| panic!("type d'étoile inconnu du tirage : {}", e.type_nom));
+    rayon_affiche(g.4, e.rayon, g.2, ech) / g.2
+}
+
 /// Une étoile du plan en `Soleil`, sa variante et son activité appliquées, sa vraie
 /// luminosité posée pour la zone habitable.
-fn soleil(e: &EtoilePlan, p: &ProfilEtoile, activite: f32, graine: u64) -> Soleil {
+fn soleil(e: &EtoilePlan, p: &ProfilEtoile, activite: f32, graine: u64, ech: &Echelle) -> Soleil {
     // ponytail: `Soleil::new` tire sa graine et ses minuteries dans le flux
     // global ; on l'amorce, pour qu'une étoile soit rejouée à l'identique.
     srand(graine);
-    let s = Soleil::new(Vec3::ZERO, p.rayon, p.couleur, p.luminosite).avec_activite(activite).avec_luminosite_vraie(e.luminosite);
+    let s = Soleil::new(Vec3::ZERO, p.rayon, p.couleur, p.luminosite)
+        .avec_activite(activite)
+        .avec_luminosite_vraie(e.luminosite)
+        .avec_echelle_habillage(echelle_habillage(e, ech));
     let s = Variante::de_mode(p.couronne).appliquer(s, p.nom);
     if p.est_remnant() { s.sans_zone_habitable() } else { s }
 }
@@ -153,7 +163,7 @@ fn poser_etoile_seule(sys: &mut Systeme, e: &EtoilePlan, graine: u64, ech: &Eche
             Planete::new(Vec3::ZERO, Vec3::ZERO, p.rayon, e.masse * MASSE_ETOILE, app, Vec::new()).au_centre_du_systeme(p.luminosite).avec_luminosite_vraie(e.luminosite),
         ));
     } else {
-        let s = soleil(e, &p, activite, graine_soleil(graine, 0));
+        let s = soleil(e, &p, activite, graine_soleil(graine, 0), ech);
         pollution = s.pollution();
         sys.ajouter(Box::new(s));
     }
@@ -194,7 +204,7 @@ fn deployer(
     match noeud {
         NoeudEtoiles::Etoile(e) => {
             let (p, activite) = rendu(e, ech);
-            let mut s = soleil(e, &p, activite, graine_soleil(graine, *rang));
+            let mut s = soleil(e, &p, activite, graine_soleil(graine, *rang), ech);
             *rang += 1;
             s.base.masse = e.masse * MASSE_ETOILE; // barycentres justes
             let idx = sys.ajouter(Box::new(s));
@@ -501,6 +511,26 @@ mod tests {
         let (c, _) = orbite_rails(&o, &comprimee).unwrap();
         assert!((c.a - 30.0_f32.sqrt() * etoile::UA).abs() < 1e-2, "{}", c.a);
         assert_eq!(c.n, vraie.n);
+    }
+
+    /// **L'habillage d'une étoile est une miniature de son image de jeu** : ses disques
+    /// mettent le même temps, ses cailloux gardent leur taille par rapport à l'étoile. Sans
+    /// cela, l'anneau d'une naine polluée, 8 fois plus petit, tournait 23 fois trop vite (une
+    /// orbite en 0,07 s) avec des cailloux gros comme elle.
+    #[test]
+    fn l_habillage_garde_le_temps_et_les_proportions_de_l_image_de_jeu() {
+        let ech = Echelle::default();
+        let periode = |c: &DisqueConfig| std::f32::consts::TAU / (c.gm / c.interne.powi(3)).sqrt();
+        for nom in etoile::types_du_tirage() {
+            let Some(plan) = crate::genese_v2::planifier::planifier_autour(1, nom) else { continue };
+            let NoeudEtoiles::Etoile(e) = &plan.etoiles else { continue };
+            let (r_affiche, r_jeu) = (rendu(e, &ech).0.rayon, etoile::gabarit_du_type(&e.type_nom, e.q).unwrap().2);
+            let de_jeu = DisqueConfig::debris_recents(600, r_jeu * 7.0, r_jeu * 16.0, MASSE_ETOILE);
+            let affiche = DisqueConfig::debris_recents(600, r_affiche * 7.0, r_affiche * 16.0, MASSE_ETOILE).a_l_echelle(echelle_habillage(e, &ech));
+            assert!((periode(&affiche) / periode(&de_jeu) - 1.0).abs() < 1e-3, "{nom} : {} s contre {} s", periode(&affiche), periode(&de_jeu));
+            let proportion = |c: &DisqueConfig| c.taille_max / c.interne;
+            assert!((proportion(&affiche) / proportion(&de_jeu) - 1.0).abs() < 1e-3, "{nom}");
+        }
     }
 
     /// Les particules suivent la qualité ; les rayons, eux, ne bougent pas.
