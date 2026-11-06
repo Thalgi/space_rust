@@ -377,20 +377,113 @@ mod tests {
         }
     }
 
-    /// **Aucune étoile à l'écran ne recouvre sa première planète** : c'est la garde qui
-    /// tient la compression des étoiles (lue dans le fichier livré) et le plancher
-    /// d'étalement ensemble.
+    /// Les étoiles d'un arbre, dans l'ordre de leur rang.
+    fn feuilles<'a>(n: &'a NoeudEtoiles, v: &mut Vec<&'a EtoilePlan>) {
+        match n {
+            NoeudEtoiles::Etoile(e) => v.push(e),
+            NoeudEtoiles::Paire { a, b, .. } => {
+                feuilles(a, v);
+                feuilles(b, v);
+            }
+        }
+    }
+
+    /// **Aucune étoile à l'écran ne recouvre ses planètes**, multiples compris : c'est la
+    /// garde qui tient la compression des étoiles (lue dans le fichier livré) et le
+    /// plancher d'étalement ensemble.
     #[test]
     fn l_etoile_a_l_ecran_ne_recouvre_pas_ses_planetes() {
         let ech = echelle::lire();
         for g in 0..2000 {
             let plan = planifier(g);
-            let NoeudEtoiles::Etoile(e) = &plan.etoiles else { continue };
-            let rayon = rendu(e, &ech).0.rayon;
+            let mut etoiles = Vec::new();
+            feuilles(&plan.etoiles, &mut etoiles);
             for c in &plan.corps {
-                if let (Nature::Planete(_), OrbitePlan::Rails { a_ua, e: ex, .. }) = (&c.nature, &c.orbite) {
-                    let periastre = ech.monde(*a_ua) * (1.0 - ex);
+                if let (Nature::Planete(_), OrbitePlan::Rails { foyer, a_ua, e: ex, .. }) = (&c.nature, &c.orbite) {
+                    let e = match foyer {
+                        FoyerPlan::Etoile(k) => etoiles[*k],
+                        FoyerPlan::Barycentre if etoiles.len() == 1 => etoiles[0],
+                        FoyerPlan::Barycentre => continue, // au-delà de toute la paire
+                    };
+                    let (periastre, rayon) = (ech.monde(*a_ua) * (1.0 - ex), rendu(e, &ech).0.rayon);
                     assert!(periastre > rayon, "graine {g}, {} : périastre {periastre}, rayon {rayon}", e.type_nom);
+                }
+            }
+        }
+    }
+
+    /// **Deux étoiles d'une paire ne se touchent jamais à l'écran**, même à leur périastre :
+    /// le plan les écarte selon leurs vrais rayons, l'écran les grossit (une naine rouge
+    /// y est bien plus grosse que pour de vrai).
+    #[test]
+    fn deux_etoiles_ne_se_touchent_pas_a_l_ecran() {
+        fn rayon_max(n: &NoeudEtoiles, ech: &Echelle) -> f32 {
+            let mut v = Vec::new();
+            feuilles(n, &mut v);
+            v.iter().map(|e| rendu(e, ech).0.rayon).fold(0.0, f32::max)
+        }
+        fn verifier(n: &NoeudEtoiles, ech: &Echelle, g: u64, paires: &mut u32) {
+            if let NoeudEtoiles::Paire { a, b, sep, e, .. } = n {
+                *paires += 1;
+                let (periastre, rayons) = (ech.monde(*sep) * (1.0 - e), rayon_max(a, ech) + rayon_max(b, ech));
+                assert!(periastre > rayons, "graine {g} : périastre {periastre}, rayons {rayons}");
+                verifier(a, ech, g, paires);
+                verifier(b, ech, g, paires);
+            }
+        }
+        let (ech, mut paires) = (echelle::lire(), 0);
+        for g in 0..3000 {
+            verifier(&planifier(g).etoiles, &ech, g, &mut paires);
+        }
+        assert!(paires > 1000, "seulement {paires} paires");
+    }
+
+    /// **Une lune reste chez sa planète à l'écran** : son orbite, grossie comme les corps,
+    /// reste loin de l'étoile et des planètes voisines, écartées d'au moins la moitié de la
+    /// plus proche.
+    #[test]
+    fn l_orbite_d_une_lune_a_l_ecran_reste_chez_sa_planete() {
+        let ech = echelle::lire();
+        let mut lunes = 0;
+        for g in 0..3000 {
+            let plan = planifier(g);
+            for c in &plan.corps {
+                if let OrbitePlan::Lune { parent, rayon_orbite, .. } = c.orbite {
+                    let OrbitePlan::Rails { a_ua, e, .. } = plan.corps[parent.0 as usize].orbite else { panic!("le parent est sur rails") };
+                    let (orbite, periastre) = (rayon_orbite * etoile::UA * ech.grossissement_corps, ech.monde(a_ua) * (1.0 - e));
+                    assert!(orbite < 0.4 * periastre, "graine {g} : orbite {orbite}, périastre {periastre}");
+                    lunes += 1;
+                }
+            }
+        }
+        assert!(lunes > 1000, "seulement {lunes} lunes");
+    }
+
+    /// **La précision des positions suffit jusqu'au plus lointain des corps** (§7.1) : à
+    /// son apoastre, le pas d'un `f32` reste petit devant le rayon d'une planète et devant
+    /// l'orbite d'une lune. Vu à l'écran : une planète à 258 UA, cadrée de près, ne tremble
+    /// pas (`suivi/genese_v2.md`, G3.4).
+    #[test]
+    fn la_precision_suffit_jusqu_au_corps_le_plus_lointain() {
+        let ech = echelle::lire();
+        let pas = |c: &CorpsPlan| match c.orbite {
+            OrbitePlan::Rails { a_ua, e, .. } => {
+                let x = ech.monde(a_ua) * (1.0 + e);
+                x.next_up() - x
+            }
+            OrbitePlan::Lune { .. } => 0.0,
+        };
+        for g in 0..3000 {
+            let plan = planifier(g);
+            for c in &plan.corps {
+                match (&c.nature, &c.orbite) {
+                    (Nature::Planete(_), _) => assert!(pas(c) < 0.15 * rayon_corps(c, &ech), "graine {g} : pas {}, rayon {}", pas(c), rayon_corps(c, &ech)),
+                    (Nature::Lune(_), OrbitePlan::Lune { parent, rayon_orbite, .. }) => {
+                        let orbite = rayon_orbite * etoile::UA * ech.grossissement_corps;
+                        let p = pas(&plan.corps[parent.0 as usize]);
+                        assert!(p < 0.1 * orbite, "graine {g} : pas {p}, orbite de lune {orbite}");
+                    }
+                    _ => {}
                 }
             }
         }

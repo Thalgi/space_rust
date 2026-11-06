@@ -68,10 +68,18 @@ fn mesure_v3() -> bool {
 /// La vue système mesurée, sur un système de ce type d'étoile.
 fn vue_sur_astre(t: &'static str) -> Etat {
     if mesure_v3() {
-        Etat::SkymapV3(Box::new(SkymapV3::sur_astre(t)))
+        Etat::SkymapV3(Box::new(cadre_v3(SkymapV3::sur_astre(t))))
     } else {
         Etat::SkymapV2(Box::new(SkymapV2::sur_astre(t)))
     }
+}
+
+/// `FOCUS=<astre>` sur la V3 : cadré de près (`FOCUS_RAYONS`, 4 par défaut).
+fn cadre_v3(mut v: SkymapV3) -> SkymapV3 {
+    if let Ok(f) = std::env::var("FOCUS") {
+        v.cadrer(&f, std::env::var("FOCUS_RAYONS").ok().and_then(|r| r.parse().ok()).unwrap_or(4.0));
+    }
+    v
 }
 
 /// **Les graines du tour des systèmes** (`DIAG=systemes`) : réparties, et non
@@ -207,6 +215,10 @@ async fn main() {
         } else if let Some(n) =crate::etoile::types_du_tirage().into_iter().find(|t| *t == nom) {
             etat = vue_sur_astre(n);
         }
+    }
+    // `GRAINE=<n>` : la V3 sur le système de cette graine (captures, G3.4).
+    if let Some(g) = std::env::var("GRAINE").ok().and_then(|g| g.parse().ok()) {
+        etat = Etat::SkymapV3(Box::new(cadre_v3(SkymapV3::sur_graine(g))));
     }
     // `TABLEUR` : le tableur d'habitabilité (captures).
     if std::env::var("TABLEUR").is_ok() {

@@ -262,10 +262,12 @@ l'ordre :
   **physique** pour les calculs, une de **rendu** pour l'écran. Coût par image
   nul (calculée une fois, à la genèse).
 - **Grossissement selon le recul** : second mécanisme, facultatif ; à juger en
-  comparant V2 / V3, les marqueurs suffisent peut-être.
-- **À vérifier en G1** (contrôles, pas décisions) : précision des positions à
-  30 UA hors affichage ; durée des trajets à l'échelle vraie ; un vaisseau
-  vole dans le monde affiché avec des durées du monde vrai.
+  comparant V2 / V3, les marqueurs suffisent peut-être. **Pas fait en G3** : à juger par
+  l'utilisateur.
+- **Contrôles, faits en G3.4** (`suivi/genese_v2.md`) : la précision des positions suffit
+  jusqu'à la plus lointaine planète (260 UA) ; un trajet moyen s'allonge de 1,7 fois (94 s
+  contre 54, à vitesse provisoire). **Limite** : un vaisseau vole la distance affichée, donc
+  elle ne vaut « durée du monde vrai » que tant que `compression_distances` reste à 1.
 
 ### 7.2 Les ceintures comme sites — tranché le 2026-11-04
 
@@ -580,6 +582,8 @@ changements d'API (`Systeme`, `Planete`…) et dont les tests restent.
   du §7.1 viendra avec le premier système nommé qui passera par le plan.
 - **La vraie luminosité ne sert qu'aux calculs (G3.3)** : `Astre::luminosite` (zone habitable,
   fiche) lit la vraie, `Astre::lumiere` (éclairage) celle de rendu.
+- **Le cadrage par défaut de la V3 (G3.4)** montre les orbites de planètes, pas les comètes :
+  à l'échelle vraie, leur apoastre faisait du système intérieur un point.
 - **Ouvert, pour G7** : Kuiper n'est pas obligatoire. Le §7.8 ne garantit qu'**une ceinture
   au moins, de n'importe quel genre** ; G3 garde la règle de la V1, G7 décidera.
 

@@ -800,8 +800,10 @@ impl SkymapV3 {
             }
             None => {
                 self.cam.reset_focus();
-                // Plancher bas : un système de naine rouge ne fait que quelques UA (G3.2).
-                self.cam.set_dist((self.sys.rayon_englobant() * 1.5).clamp(30.0, 30000.0));
+                // Les planètes, pas les comètes : leur apoastre ferait du système intérieur un
+                // point. Plancher bas : un système de naine rouge ne fait que quelques UA.
+                let etendue = self.sys.rayon_des_planetes().unwrap_or_else(|| self.sys.rayon_englobant());
+                self.cam.set_dist((etendue * 1.5).clamp(30.0, 30000.0));
             }
         }
     }

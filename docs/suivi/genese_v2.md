@@ -25,7 +25,7 @@ sur la V2 (conception §7.12, §7.13).
 | G0 | Les décisions | ✅ 2026-11-05 (conception §7) |
 | G1 | Les fondations : hasard, plan, planifier, instancier, Skymap V3 | ✅ 2026-11-05 |
 | G2 | Banc statistique, outils de mesure, coût par image V2 / V3 | ✅ 2026-11-05, petit PC reporté |
-| **G3** | **L'échelle vraie et le réglage d'affichage** | **en cours** |
+| G3 | L'échelle vraie et le réglage d'affichage | ✅ 2026-11-06, petit PC à passer |
 | G4 | Un seul modèle de température, habitabilité par bandes | |
 | G5 | Les étoiles : âge, anomalies, table de rareté | |
 | G6 | Planètes et lunes : catalogue, espacement, naines, noms | |
@@ -36,7 +36,7 @@ sur la V2 (conception §7.12, §7.13).
 | G11 | Étalonnage, la V3 devient principale | |
 
 **Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), `7b166f1`
-(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), `ffd19fa` (G2.2), `19646a3` (clôture de G2), `c49fe15` (G3.1), `5d46e36` (précisions de G0), `a4f35c2` (G3.2), G3.3 (dernier commit).
+(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), `ffd19fa` (G2.2), `19646a3` (clôture de G2), `c49fe15` (G3.1), `5d46e36` (précisions de G0), `a4f35c2` (G3.2), `c525165` (G3.3), G3.4 et clôture de G3 (dernier commit).
 
 ---
 
@@ -564,7 +564,7 @@ machine de dev, et le gain de la qualité basse reste sans mesure.
 
 ---
 
-## G3 — l'échelle (ouvert le 2026-11-06)
+## G3 — l'échelle (2026-11-06, clos)
 
 **Fond.** La genèse produit enfin des systèmes à l'**échelle vraie**, et le
 grossissement devient une affaire d'affichage (conception §7.1, §7.14). C'est le
@@ -586,8 +586,8 @@ joueur.
 |---|---|---|
 | **G3.1** | La table physique des 29 types, avec ses sources | ✅ `c49fe15` |
 | **G3.2** | `planifier` sur les vraies valeurs ; le banc doit montrer des écarts voulus | ✅ `a4f35c2` |
-| **G3.3** | La zone habitable vraie ; `echelle.json` et `instancier` : grossissement et compression à l'affichage | ✅ |
-| **G3.4** | Les contrôles : précision des positions, durée des trajets, cadrage, jugement à l'écran ; passage sur le petit PC | |
+| **G3.3** | La zone habitable vraie ; `echelle.json` et `instancier` : grossissement et compression à l'affichage | ✅ `c525165` |
+| **G3.4** | Les contrôles : précision des positions, durée des trajets, cadrage, jugement à l'écran ; passage sur le petit PC | ✅ ; petit PC à passer |
 
 ---
 
@@ -748,7 +748,7 @@ sans erreur.
 
 ---
 
-### G3.3 — la zone habitable vraie et le réglage d'affichage (2026-11-06)
+### G3.3 — la zone habitable vraie et le réglage d'affichage (2026-11-06, `c525165`)
 
 **Fond.** Deux choses. La zone habitable de la V3, fausse depuis G3.2, lit enfin la vraie
 luminosité. Et la conversion du plan vers l'écran, écrite en dur en G3.2, se règle
@@ -816,3 +816,116 @@ avec `compression_distances` à 0,6, anneaux et orbites se déplacent ensemble.
 **Reste.** G3.4 : les contrôles et le cadrage.
 
 **Vérifié** : 1 036 tests verts (+ 13 de `mhd`), clippy 0, banc et captures sans erreur.
+
+---
+
+### G3.4 — les contrôles et le cadrage (2026-11-06)
+
+**Fond.** Vérifier que l'échelle vraie tient : ce qui se chevauche à l'écran, la précision des
+positions loin du centre, la durée des trajets. Et corriger le cadrage, qui visait les comètes.
+
+**Forme.**
+
+- **Le cadrage** : `Systeme::rayon_des_planetes`, et `appliquer_vue` de la V3 cadre les orbites de
+  planètes (×1,5), sans les comètes. Couvre les étoiles seules et les circumbinaires ; les
+  multiples gardent leur `vue`. Sans planète, l'ancien cadrage.
+- **`GRAINE=<n>`** (`main.rs`) : la V3 sur le système d'une graine, pour capturer un cas précis.
+  **`FOCUS` et `FOCUS_RAYONS`** valent maintenant pour tout système de la V3.
+
+**Les contrôles.**
+
+| Contrôle | Mesure (3 000 graines) | Verdict |
+|---|---|---|
+| Étoile à l'écran sur ses planètes, multiples compris | aucune sur 3 069 planètes de multiples | ✅ test |
+| Deux étoiles qui se touchent à l'écran | aucune sur 2 041 paires ; **pire cas à 92 % du périastre** | ✅ test ; c'est serré |
+| Orbite de lune à l'écran contre le périastre de sa planète | au plus 31 %, sur 9 674 lunes | ✅ test |
+| Précision à l'apoastre (pas d'un `f32`) | plus lointaine planète : 260 UA (12 500 unités), pas 0,001 pour un rayon de 0,01 ; 99 % des planètes sous 49 UA, pas 0,00024 | ✅ test : sous 15 % du rayon, sous 10 % de l'orbite d'une lune |
+
+**La précision, à l'écran** : graine 2364, planète II à 258 UA, cadrée à 4 rayons : silhouette
+stable entre deux captures. **Limites de ce contrôle** : jugé à l'œil, sur six images d'écart ;
+aucune lune aussi loin n'a été regardée de près. Le pas de l'anomalie (`f32` dans
+`Orbite::etat`) donne à cette distance un pas le long de l'orbite d'environ 0,006 unité, plus
+grand que celui de la position : sans effet sur le corps que la caméra suit, à revoir si un corps
+lointain doit un jour être vu de très près depuis un voisin.
+
+**La durée des trajets**, à la vitesse actuelle d'un Starship (4 unités/s, soit 12 s par UA,
+vitesse de simulation ×1 ; chiffre marqué provisoire dans `vaisseau::vol`) :
+
+| Trajet depuis le centre | Durée |
+|---|---:|
+| 1 UA | 12 s |
+| Dernière planète, moyenne des étoiles seules : V1 4,5 UA | 54 s |
+| Dernière planète, moyenne des étoiles seules : **V2 7,8 UA** | **94 s** |
+| 30 UA | 6 min |
+| 49 UA (99 % des planètes en deçà) | ~10 min |
+| 260 UA (la plus lointaine) | 52 min |
+
+**Verdict** : tenable, un trajet moyen s'allonge de 1,7 fois. Rien à changer maintenant : aucun
+vaisseau ne vole encore dans un système généré, et la vitesse est à équilibrer de toute façon.
+**Une limite si l'on comprime les distances** : un vaisseau vole la distance **affichée**, donc
+plus vite que la vraie (`Trajectoire::nouvelle`). À traiter seulement si la compression quitte 1.
+
+**Vu à l'écran** : G, O, naine rouge, circumbinaire (graine 9), planète lointaine (graine 2364),
+compression à 0,6. Le système intérieur remplit désormais l'écran, et l'anneau vert se lit.
+
+**Deux remarques, sans suite pour l'instant.**
+
+- **Une planète très éclairée vire à l'aplat gris** : la planète II de la graine 2364, autour d'une
+  paire brillante, a toute sa face éclairée d'un seul gris. L'éclairage n'ayant pas changé
+  (`lumiere()`, luminosité de rendu), c'est **sans doute hérité** de la V2 ; **non vérifié** sur une
+  capture V2. À regarder avec le catalogue de G6.
+- **Le second mécanisme du §7.1 (grossir selon le recul) n'est pas fait** : c'était facultatif, à
+  juger à l'écran. Au cadrage par défaut, les planètes se repèrent à leurs marqueurs, pas à leur
+  disque. **À juger par l'utilisateur.**
+
+**Tests.**
+
+| Test | Ce qu'il garde | Sabotage qui le fait rougir |
+|---|---|---|
+| `l_etoile_a_l_ecran_ne_recouvre_pas_ses_planetes` (étendu aux multiples) | rayon affiché sous le périastre | étoiles ×8 |
+| `deux_etoiles_ne_se_touchent_pas_a_l_ecran` | au périastre de chaque paire | étoiles ×2 |
+| `l_orbite_d_une_lune_a_l_ecran_reste_chez_sa_planete` | sous 40 % du périastre | corps ×25 |
+| `la_precision_suffit_jusqu_au_corps_le_plus_lointain` | le pas d'un `f32`, à l'apoastre | corps ×0,5 ; plafond d'étalement retiré |
+| `l_etendue_des_planetes_ignore_les_cometes_et_les_lunes` | ce que vise le cadrage | comètes comptées |
+
+**Vérifié** : 1 040 tests verts (+ 13 de `mhd`), clippy 0.
+
+### Clôture de G3 (2026-11-06)
+
+**Coût par image, machine de dev**, `DIAG=systemes`, 60 graines, en alternance :
+
+| Tour | V2 | V3 |
+|---|---:|---:|
+| 1 | 0,938 ms (± 0,028) | 0,967 ms (± 0,030) |
+| 2 | 1,283 ms (± 0,039) | 1,241 ms (± 0,039) |
+
+**Aucun écart décelable** : ±3 % d'un côté puis de l'autre, quand la même version varie de 37 %
+d'un tour à l'autre. **Le petit PC reste la seule mesure qui tranche** : le passage prévu après G3
+est à faire (protocole : clôture de G2 ; à mesurer sur `SKYMAP=v2` et `SKYMAP=v3`). Si la V3 dépasse
+la V2, mesurer aussi `ffd19fa` pour séparer G1 de G3.
+
+**Banc final, 5 000 graines** : voir G3.2 pour les écarts voulus, inchangés ; en plus, zone d'une
+planète selon la fiche :
+
+| Zone | V1 | V2 |
+|---|---:|---:|
+| Trop chaud | 45,4 % | 50,7 % |
+| Tempérée | 12,7 % | 11,1 % |
+| Trop froid | 41,9 % | 38,2 % |
+
+**Ce qui reste à l'utilisateur.**
+
+1. **La quasi-étoile** garde sa taille et sa masse de jeu (1 UA, 20 masses) : à valider.
+2. **Le ×5** : lisible ou non ? `grossissement_corps` dans `assets/echelle.json`, sans recompiler.
+3. **`compression_distances`** reste à 1 (distances vraies) : à essayer à l'écran si les systèmes
+   paraissent trop étendus.
+4. **Le grossissement selon le recul** : utile ou non, une fois vu.
+5. **Le passage sur le petit PC.**
+
+**Dettes de G3.**
+
+| Dette | Où | Quand |
+|---|---|---|
+| Surcharge d'échelle par système | `echelle.rs` | au premier système nommé passé par le plan |
+| Particules et vaisseaux suivent la distance affichée si la compression quitte 1 | `config_disque`, `Trajectoire` | si la compression quitte 1 |
+| Aplat gris d'une planète très éclairée | rendu | G6 |

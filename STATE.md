@@ -22,15 +22,15 @@ worktree `.claude/worktrees/astres-v2`. G0 (les décisions) tranché ; **G1 clos
 (hasard en flux nommés, plan, planifier, instancier, **Skymap V3 visible**,
 jugée comparable à la V2) ; **G2 clos** (banc statistique :
 aucun écart entre les genèses ; la V3 ne coûte pas plus cher que la V2 sur la
-machine de dev ; petit PC reporté) ; **G3 en cours, G3.1 à G3.3 faits** (les vraies valeurs
-des étoiles, le plan sur la vérité physique, la zone habitable vraie, `assets/echelle.json`) — journal
+machine de dev ; petit PC reporté) ; **G3 clos** (systèmes à l'échelle vraie, zone
+habitable vraie, réglage `assets/echelle.json`, cadrage sur les planètes ; petit PC à passer) — journal
 [`suivi/genese_v2.md`](docs/suivi/genese_v2.md). Les décisions et le
 découpage révisé (G0 à G11) : [`conception/genese_v2.md`](docs/conception/genese_v2.md)
 §7 et §8.
 
 `main` n'est **pas poussé** (`origin/main` est à `5af973a`).
 
-**Vérifié (2026-11-06, G3.3)** : **1 036 tests verts** (+ 13 du binaire `mhd`),
+**Vérifié (2026-11-06, clôture de G3)** : **1 040 tests verts** (+ 13 du binaire `mhd`),
 `cargo clippy --all-targets` à **0 avertissement**.
 
 ### Ce qui a été fait dans la dernière session
@@ -39,14 +39,16 @@ découpage révisé (G0 à G11) : [`conception/genese_v2.md`](docs/conception/ge
 |---|---|---|
 | **Opti-v2** | clos et fusionné dans `main` (O8 : le banc du petit PC) | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) |
 | **Dette de `vaisseau/`, chantier 1** | découpage de `generateur.rs` commité (`77f6cfb`) après revérification ligne à ligne ; c'est un découpage, pas une refonte | [`suivi/dette_vaisseau.md`](docs/suivi/dette_vaisseau.md) |
+| **Genèse V2, G3** (clos) | plan sur la vérité physique (table des 29 types, sources comprises), étalement plafonné, climat selon la position, zone habitable vraie, réglage `assets/echelle.json`, cadrage sur les planètes ; contrôles de chevauchement, de précision et de durée | [`suivi/genese_v2.md`](docs/suivi/genese_v2.md) |
 | **Genèse V2, G1** (clos) | flux de hasard nommés, plan sérialisable, `planifier` pur et testé sur des milliers de graines, `instancier` (particules selon la qualité), Skymap V3 et colonne SKYMAP de l'accueil ; journal réécrit pour la revue (fond, forme, écarts, tests, reste) | [`suivi/genese_v2.md`](docs/suivi/genese_v2.md) |
 | **Genèse V2, G0** | 12 points tranchés : échelle vraie + réglage d'affichage, Lagrange, ceintures-sites, 3 ressources, entretien à la place des PV, noms, plan sauvegardé, Skymap V3 | [`conception/genese_v2.md`](docs/conception/genese_v2.md) §7, [`concept_jeu.md`](docs/conception/concept_jeu.md) §5, §6 bis |
 
 ### À faire ensuite, par ordre
 
-1. **Genèse V2, G3.4** : les contrôles (précision, durée des trajets) et le cadrage
-   ([`suivi/genese_v2.md`](docs/suivi/genese_v2.md)). **Petit PC à passer après G3
-   et après G7** (protocole : même journal, clôture de G2). G1 débloque aussi la part « nombre d'objets » de la
+1. **Genèse V2, l'utilisateur juge G3 à l'écran** : la quasi-étoile, le ×5, la compression des
+   distances, le grossissement selon le recul, et le **petit PC** (liste : clôture de G3 ;
+   protocole : clôture de G2, dans [`suivi/genese_v2.md`](docs/suivi/genese_v2.md)). **Puis G4**,
+   sur son feu vert (l'accord « G3 sans retour » ne couvre que G3). G1 débloque aussi la part « nombre d'objets » de la
    qualité (O5).
 2. **Les à-coups**, sur le banc d'O8 : le tour ne donne que des moyennes ; y
    ajouter la pire image et le 1 % bas, puis attribuer (relief des
@@ -84,7 +86,7 @@ découpage révisé (G0 à G11) : [`conception/genese_v2.md`](docs/conception/ge
 
 ## Commits
 
-Dernier commit : « Genèse V2, G3.3 : la zone habitable vraie et le reglage d'affichage »
+Dernier commit : « Genèse V2, G3.4 et clôture de G3 : les contrôles et le cadrage »
 (2026-11-05). `git log` fait foi pour le reste.
 
 **Consigne debout (révisée le 2026-09-26) : un commit par lot ou sous-lot**,
@@ -102,7 +104,7 @@ sur un fichier contenant du travail non commité (`docs/suivi/stations.md`
 | Chantier | Où on en est | Journal · conception |
 |---|---|---|
 | **Opti-v2** | **clos** (2026-11-02), fusionné : O1 à O10 ; les à-coups passent au chantier suivant | [`suivi/opti_v2.md`](docs/suivi/opti_v2.md) · [`conception/opti_v2.md`](docs/conception/opti_v2.md) |
-| **Genèse V2** | **en cours** : G0 tranché (2026-11-05), découpage révisé G0 à G11 ; **G1 clos**, Skymap V3 visible ; **G2 clos** ; G3 en cours, G3.1 à G3.3 faits | [`suivi/genese_v2.md`](docs/suivi/genese_v2.md) · [`conception/genese_v2.md`](docs/conception/genese_v2.md) |
+| **Genèse V2** | **en cours** : G0 tranché (2026-11-05), découpage révisé G0 à G11 ; **G1 clos**, Skymap V3 visible ; **G2 clos** ; **G3 clos**, petit PC à passer | [`suivi/genese_v2.md`](docs/suivi/genese_v2.md) · [`conception/genese_v2.md`](docs/conception/genese_v2.md) |
 | **Planètes** (type, habitabilité) | P1 à P3 livrés, habitabilité des presets ajustée à la main ; réglage fin avec la genèse | [`suivi/planetes.md`](docs/suivi/planetes.md) · [`conception/planetes.md`](docs/conception/planetes.md) |
 | **Astres V2** | **clos** (2026-10-26) : lots 0 à 15 livrés et validés, le 8 abandonné ; reste la passe de relecture | [`suivi/astres_v2.md`](docs/suivi/astres_v2.md) · [`conception/astres_v2.md`](docs/conception/astres_v2.md) |
 | **Trajectoires** | lots A à D faits (un Starship vole en jeu) ; lot E à faire | [`suivi/trajectoires.md`](docs/suivi/trajectoires.md) · [`conception/trajectoires.md`](docs/conception/trajectoires.md) |

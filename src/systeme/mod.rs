@@ -126,6 +126,16 @@ impl Systeme {
         crate::etoile::ua_de_monde(monde, self.compression_distances)
     }
 
+    /// **L'étendue des orbites de planètes** : ce que le cadrage de la V3 veut montrer, sans
+    /// les comètes. `None` sans planète sur rails.
+    pub fn rayon_des_planetes(&self) -> Option<f32> {
+        self.astres
+            .iter()
+            .filter(|a| a.categorie() == Categorie::Planete)
+            .flat_map(|a| a.orbite().iter().map(|p| p.length()))
+            .max_by(f32::total_cmp)
+    }
+
     /// Rayon englobant approximatif (unités monde), pour cadrer la caméra sur un
     /// système dont l'étendue varie beaucoup (mono-étoile compact ↔ multiple large).
     pub fn rayon_englobant(&self) -> f32 {
@@ -674,6 +684,39 @@ mod tests_designation {
     // mais le fait que le preset solaire porte bien « Mercure », « Titan », etc.
     // se verifie **a l'ecran** (etape I.2). C'est la meme limite que 6.6 sur le
     // rendu — ce qui ne se teste pas doit au moins etre dit.
+
+    /// **Le cadrage de la V3 montre les planètes** : une comète à l'apoastre lointain et une
+    /// lune n'y comptent pas ; sans planète, il n'y a rien à dire.
+    #[test]
+    fn l_etendue_des_planetes_ignore_les_cometes_et_les_lunes() {
+        struct Corps(CorpsBase, Categorie, Vec<Vec3>);
+        impl Astre for Corps {
+            fn categorie(&self) -> Categorie {
+                self.1
+            }
+            fn corps(&self) -> &CorpsBase {
+                &self.0
+            }
+            fn corps_mut(&mut self) -> &mut CorpsBase {
+                &mut self.0
+            }
+            fn orbite(&self) -> &[Vec3] {
+                &self.2
+            }
+            fn update(&mut self, _dt: f32) {}
+            fn draw(&mut self, _cam: &CameraInfo) {}
+        }
+        let mut sys = Systeme::new();
+        let mut poser = |cat, x: f32| {
+            sys.ajouter(Box::new(Corps(CorpsBase::new(Vec3::ZERO, 1.0, 1.0), cat, vec![vec3(x, 0.0, 0.0), vec3(0.0, 0.0, -x / 2.0)])));
+        };
+        poser(Categorie::Comete, 9000.0);
+        poser(Categorie::Lune, 5000.0);
+        poser(Categorie::Planete, 40.0);
+        poser(Categorie::Planete, 300.0);
+        assert_eq!(sys.rayon_des_planetes(), Some(300.0));
+        assert_eq!(Systeme::new().rayon_des_planetes(), None);
+    }
 
     /// Corps minimal : juste ce qu'il faut pour que `Systeme` le classe et le
     /// situe. Ne dessine rien, ne tire aucun aleatoire.
