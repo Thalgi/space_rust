@@ -36,7 +36,7 @@ sur la V2 (conception §7.12, §7.13).
 | G11 | Étalonnage, la V3 devient principale | |
 
 **Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), `7b166f1`
-(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), `ffd19fa` (G2.2), `19646a3` (clôture de G2), G3.1 (dernier commit).
+(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), `ffd19fa` (G2.2), `19646a3` (clôture de G2), `c49fe15` (G3.1), G3.2 (dernier commit).
 
 ---
 
@@ -584,14 +584,14 @@ joueur.
 
 | Sous-lot | Contenu | État |
 |---|---|---|
-| **G3.1** | La table physique des 29 types, avec ses sources | ✅ |
-| **G3.2** | `planifier` sur les vraies valeurs ; le banc doit montrer des écarts voulus | en cours |
+| **G3.1** | La table physique des 29 types, avec ses sources | ✅ `c49fe15` |
+| **G3.2** | `planifier` sur les vraies valeurs ; le banc doit montrer des écarts voulus | ✅ |
 | **G3.3** | `echelle.json` et `instancier` : la vérité dans le plan, grossissement et compression à l'affichage | |
 | **G3.4** | Les contrôles : précision des positions, durée des trajets, cadrage, jugement à l'écran ; passage sur le petit PC | |
 
 ---
 
-### G3.1 — les vraies valeurs des étoiles (2026-11-06)
+### G3.1 — les vraies valeurs des étoiles (2026-11-06, `c49fe15`)
 
 **Fond.** Les calculs (température, étalement, Kepler) vont lire de vraies valeurs. Les
 luminosités du jeu sont comprimées (une O vaut 4 Soleils au lieu de ~100 000) : elles
@@ -623,7 +623,7 @@ neutrons, magnétar, quasi-étoile).
 | Naines blanches | [Wikipédia](https://en.wikipedia.org/wiki/White_dwarf) : 0,5–0,7 M☉, 0,8–2 % R☉ | bonne |
 | Naine brune | 13–80 masses de Jupiter, rayon ~Jupiter, [exemple à 1/8 000 L☉](https://universetoday.com/107141/when-is-a-star-not-a-star/amp) | ordre de grandeur |
 | Étoile à neutrons | [9–12 km, 1–2 M☉](https://arxiv.org/pdf/1901.01673) | bonne pour R et M |
-| Quasi-étoile | [Wikipédia](https://en.wikipedia.org/wiki/Quasi-star) : 38–189 UA, ≥ 1 000 M☉ | **hypothétique** |
+| Quasi-étoile | [Wikipédia](https://en.wikipedia.org/wiki/Quasi-star) : 38–189 UA, ≥ 1 000 M☉ | **hypothétique** ; garde sa taille de jeu (G3.2) |
 
 **Valeurs non sourcées, posées à l'ordre de grandeur** (`// ~` dans le code) : rayon de
 l'hypergéante et de la supergéante bleue (les pages ne donnent que leur luminosité), toute
@@ -638,8 +638,7 @@ du trou noir, luminosités des objets compacts et de la quasi-étoile.
 - **Le rayon et la température sont tirés séparément** : une O peut être à la fois petite
   et très chaude. La luminosité reste plausible, sa dispersion dans une classe est un
   peu large.
-- **À traiter en G3.2** : la quasi-étoile fait 38 à 189 UA pour de vrai, plus que le
-  plafond envisagé, et sa vraie masse (≥ 1 000) écrase la masse de jeu (20, dette du §2).
+- **La quasi-étoile** faisait 38 à 189 UA dans cette table : G3.2 lui rend sa taille de jeu.
 
 **Tests** :
 
@@ -660,3 +659,89 @@ faux d'un facteur 2 change L d'un facteur 4).
 **Reste.** Module sans consommateur hors des tests (`allow(dead_code)`) : tombe en G3.2.
 
 **Vérifié** : 1 023 tests verts (+ 13 de `mhd`), clippy 0.
+
+---
+
+### G3.2 — planifier sur les vraies valeurs (2026-11-06)
+
+**Fond.** Le plan porte désormais la **vérité physique** : distances en UA, étoiles en
+unités solaires, planètes et lunes en unités terrestres. Les températures, l'étalement,
+les orbites se calculent dessus. L'écran garde sa luminosité de rendu et grossit le reste.
+**C'est le premier lot où la V3 cesse d'imiter la V2.**
+
+**Forme.**
+
+- `plan.rs` : `EtoilePlan` gagne `q`, sa place dans son type. `rayon`, `luminosite`, `masse`
+  sont les vraies valeurs, **figées dans le plan** : un système découvert ne change pas si
+  la table bouge (§7.11).
+- `planifier.rs` :
+  - `etalement(L)` = `√L` entre **0,05 et 5** (§7.14) ; la première orbite passe au-delà de
+    la **vraie** surface de l'étoile ;
+  - `sphere_de_hill` : les lunes se placent entre Roche et **le tiers de la sphère de
+    Hill**, avec la période de Kepler du système solaire (`omega_lune`) ;
+  - en multiple : `sep_ecartee` (deux étoiles restent à deux fois la somme de leurs vrais
+    rayons), `a_min_s` et `zone_s_possible` (une zone commence au-delà de la surface).
+- `apparences.rs` : rayon et masse en unités terrestres, la masse déduite du rayon.
+- `instancier.rs` : la conversion vers l'écran, en dur jusqu'à G3.3. `rayon_corps` (×5 comme
+  le système solaire), `rayon_affiche` (compression en puissance 0,6 pour les étoiles, taille
+  de rendu pour les objets compacts), `rendu` (luminosité et activité lues dans le gabarit).
+- `skymap_v3.rs` : le cadrage par défaut descend à 30 unités au lieu de 350.
+
+**Ce que l'échelle vraie a obligé à changer**, au-delà des nombres :
+
+- **Plus de glace chaude** : la règle par distance relative aurait posé des mondes de
+  glace à 900 K autour d'une O. Au-delà de 250 K, un monde de glace devient rocheux.
+- **Le garde-fou anti-collision est retiré** : mis à l'échelle, il ne servait plus jamais
+  (son test le disait : `serrees` restait à 0). Les rayons sont négligeables devant l'écart
+  entre orbites. La propriété reste gardée par un test.
+- **Le grand disque** : son bord interne suit le petit disque de l'étoile, donc la taille
+  **affichée**. C'est `instancier` qui le calcule et qui décide s'il a la place ; le plan
+  n'en porte que le bord externe.
+- **La quasi-étoile garde sa taille et sa masse de jeu** (1 UA, 20 masses) : hypothétique, et
+  son rayon théorique (38–189 UA) dépasserait à lui seul le plafond. **Proposition à valider
+  par l'utilisateur.**
+
+**Banc sur 5 000 graines** : les écarts avec la V1 sont maintenant **voulus** :
+
+| Grandeur | V1 | V2 | Pourquoi |
+|---|---:|---:|---|
+| Planètes inhabitables | 2,2 % | 12,7 % | les étoiles chaudes brûlent leurs mondes |
+| Planètes habitables | 18,5 % | 14,0 % | idem |
+| Planètes dangereuses | 18,4 % | 22,8 % | étoiles faibles, mondes froids |
+| Gazeuses sans lune | 34,5 % | 2,2 % | la vraie sphère de Hill est bien plus large que la règle des 14 % |
+| Multiples sans planète | 0 % | 0,6 % | une géante près de sa compagne n'a pas de zone |
+| Rayon moyen d'une planète (unités) | 0,898 | 0,029 | ×5 au lieu de ~×300 |
+| Périastre de la 1re planète | 0,635 UA | 1,103 UA | étoiles brillantes plus étalées, sous le plafond |
+
+**Vu à l'écran, sur des captures** (`SKYMAP=v3 SYSTEME=… CAPTURE=…`, G, O, naine rouge,
+supergéante) : le rendu est propre, les icônes vont dans le bon sens (mondes tempérés autour
+de la G, lave autour de la O et de la supergéante). **Défauts relevés** :
+
+- ⚠️ **L'anneau de zone habitable et la ligne de zone de la fiche sont faux en V3** : ils
+  lisent la luminosité de rendu (`Soleil::zone_viable`, `systeme/rendu.rs`,
+  `ecran/fiche.rs`). À corriger en premier en G3.3.
+- **Le cadrage par défaut vise les comètes** : leur apoastre occupe l'écran, le système
+  intérieur est un point. Comme en V2, mais plus marqué. À juger en G3.4.
+- **Toutes les étoiles d'un même type de graine se ressemblent à ce cadrage** : même graine,
+  donc même tirage de planètes, à l'échelle près. C'est normal (voir G2.2).
+
+**Tests** (les tests de G1.3 sont repris sur les vraies unités) :
+
+| Test | Ce qu'il garde | Sabotage qui le fait rougir |
+|---|---|---|
+| `tout_systeme_tient_dans_le_champ_de_la_camera` | apoastres et disques sous `DIST_MAX`, multiples compris | plafond retiré |
+| `le_plafond_laisse_les_etoiles_chaudes_sans_monde_tempere` | > 350 K autour d'une O ; étalement ~1 pour une G ; les bornes | plafond à 40 ; température sur une luminosité comprimée |
+| `les_vraies_valeurs_ne_produisent_rien_d_absurde` | pas de glace chaude, de planète dans son étoile, de compagne dans une géante | chacun des trois |
+| `les_lunes_restent_dans_le_domaine_de_leur_planete` | entre Roche et la sphère de Hill | lunes à 3 sphères |
+| `la_sphere_de_hill_retrouve_celles_du_systeme_solaire` | Terre 0,01 UA, Jupiter 0,355 UA (valeurs publiées) | formule fausse |
+| `les_planetes_voisines_ne_se_chevauchent_pas` | la propriété, sans le garde-fou | orbites collées |
+| `un_corps_a_le_rayon_du_systeme_solaire` | une Terre vaut celle du preset ; la comète garde le sien | sans grossissement ; comète grossie |
+| `la_taille_des_etoiles_a_l_ecran` | Soleil, supergéante ~1 UA, naine blanche visible, compacts | sans compression ; quasi-étoile compressée |
+| `le_rendu_d_une_etoile_ne_lit_pas_ses_vraies_valeurs` | luminosité et activité de rendu inchangées | vraie luminosité au rendu ; activité sur le rayon affiché |
+| `l_etoile_a_l_ecran_ne_recouvre_pas_ses_planetes` | rayon affiché < périastre | étoile affichée trop grosse |
+
+**Reste.** G3.3 : la zone habitable vraie, puis `echelle.json` et la compression des
+distances. G3.4 : les contrôles et le jugement à l'écran.
+
+**Vérifié** : 1 031 tests verts (+ 13 de `mhd`), clippy 0, banc de 5 000 graines et captures
+sans erreur.

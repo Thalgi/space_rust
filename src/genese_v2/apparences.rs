@@ -3,9 +3,9 @@
 //! Les règles sont celles de la V1, tirage pour tirage ; G4 et G6 les
 //! remplaceront par le catalogue filtré par la température.
 //!
-//! Chaque fonction rend `(rayon, masse, apparence)`. Le plan stocke le rayon
-//! et la masse, et la **recette** de l'apparence ; `refaire` la rejoue à la
-//! construction — même graine, même flux, donc la même planète
+//! Chaque fonction rend `(rayon, masse, apparence)`, le rayon et la masse en **unités
+//! terrestres** (G3.2). Le plan les stocke, avec la **recette** de l'apparence ; la
+//! construction la rejoue — même graine, même flux, donc la même planète
 //! (`la_recette_refait_le_meme_corps`).
 
 use super::alea::Alea;
@@ -14,6 +14,28 @@ use crate::genese::taille::ClasseTaille;
 use crate::planete::{Apparence, TypePlanete};
 use macroquad::prelude::*;
 use std::f32::consts::TAU;
+
+/// Un rayon en rayons terrestres, à la place `u` dans la classe de taille.
+fn rayon_terrestre(classe: ClasseTaille, u: f32) -> f32 {
+    let (lo, hi) = classe.bornes_terrestres();
+    lo + (hi - lo) * u
+}
+
+/// **La masse d'après le rayon**, en masses terrestres. Ordres de grandeur : Mars
+/// 0,1, Neptune 15, Saturne 88. Jupiter sort à 121 au lieu de 318 : le rayon d'une
+/// géante ne croît presque plus avec sa masse. Elle ne sert qu'à sa sphère de Hill
+/// et à ses lunes, à la racine cubique ou carrée.
+pub fn masse_rocheuse(rayon: f32) -> f32 {
+    rayon.powf(3.7)
+}
+
+fn masse_glacee(rayon: f32) -> f32 {
+    rayon.powi(3)
+}
+
+fn masse_gazeuse(rayon: f32) -> f32 {
+    rayon.powi(2)
+}
 
 /// Le flux d'une apparence : dérivé de la graine de sa recette.
 fn flux(recette: &RecetteApparence) -> Alea {
@@ -216,9 +238,9 @@ pub fn tellurique(t: f32, a: &mut Alea) -> (f32, f32, Apparence) {
             ClasseTaille::SuperTerre
         }
     };
-    let rayon = classe.rayon_pour(a.unite());
+    let rayon = rayon_terrestre(classe, a.unite());
     app.taille = rayon;
-    (rayon, a.entre(1.0, 3.0), app)
+    (rayon, masse_rocheuse(rayon), app)
 }
 
 /// Construit un preset de géante gazeuse à partir de paramètres explicites.
@@ -335,9 +357,9 @@ pub fn gazeuse(a: &mut Alea) -> (f32, f32, Apparence) {
     } else {
         ClasseTaille::GeanteGaz
     };
-    let rayon = classe.rayon_pour(a.unite());
+    let rayon = rayon_terrestre(classe, a.unite());
     app.taille = rayon;
-    (rayon, a.entre(8.0, 20.0), app)
+    (rayon, masse_gazeuse(rayon), app)
 }
 
 pub fn glacee(a: &mut Alea) -> (f32, f32, Apparence) {
@@ -350,7 +372,7 @@ pub fn glacee(a: &mut Alea) -> (f32, f32, Apparence) {
     } else {
         ClasseTaille::Glacee
     };
-    let rayon = classe.rayon_pour(a.unite());
+    let rayon = rayon_terrestre(classe, a.unite());
     let mut app = Apparence::new(TypePlanete::Glacee, c1, c2, Vec3::ZERO, 0.0)
         .avec_atmo(vec3(0.7, 0.85, 1.0) * 0.25)
         .avec_taille(rayon);
@@ -358,7 +380,7 @@ pub fn glacee(a: &mut Alea) -> (f32, f32, Apparence) {
     // partagent la même géographie, contrairement aux telluriques et gazeuses
     // (voisines ci-dessus) qui tirent chacune la leur.
     app.seed = a.entre(0.0, 1000.0);
-    (rayon, a.entre(2.0, 5.0), app)
+    (rayon, masse_glacee(rayon), app)
 }
 
 /// HSV -> RGB (h, s, v dans [0,1]).

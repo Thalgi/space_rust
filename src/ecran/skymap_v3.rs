@@ -800,7 +800,8 @@ impl SkymapV3 {
             }
             None => {
                 self.cam.reset_focus();
-                self.cam.set_dist((self.sys.rayon_englobant() * 1.5).clamp(350.0, 30000.0));
+                // Plancher bas : un système de naine rouge ne fait que quelques UA (G3.2).
+                self.cam.set_dist((self.sys.rayon_englobant() * 1.5).clamp(30.0, 30000.0));
             }
         }
     }

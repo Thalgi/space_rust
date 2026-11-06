@@ -13,9 +13,9 @@
 //!   décident à la construction, selon le réglage de qualité
 //!   (`aucun_nombre_de_rendu_dans_le_plan`).
 //!
-//! Unités : les distances au foyer en **UA** ; l'orbite d'une lune en
-//! **unités du monde**, comme la genèse V1 qu'on reprend telle quelle en G1.
-//! L'échelle (G3) refera ces conventions.
+//! **Le plan porte la vérité physique** (G3.2, §7.1) : distances et orbites de lunes
+//! en **UA**, étoiles en unités solaires, planètes et lunes en unités terrestres. Ce
+//! que l'écran dessine, grossi ou compressé, se décide à la construction.
 
 use serde::{Deserialize, Serialize};
 
@@ -65,14 +65,20 @@ pub enum NoeudEtoiles {
 
 /// Une étoile : ce que le tirage a fixé.
 ///
-/// Le **type** est le nom du catalogue d'`etoile.rs` (« Naine rouge »,
-/// « Pulsar », « Naine brune »…) ; s'en déduisent la couleur (avec la
-/// température), la variante (avec `couronne`), le rémanent, et le cas de la
-/// naine brune, qui se construit en géante gazeuse au centre du système.
+/// Le **type** est le nom du catalogue d'`etoile.rs` (« Pulsar », « Naine
+/// brune »…) ; s'en déduisent la couleur (avec la température), la variante (avec
+/// `couronne`), le rémanent, et le cas de la naine brune, qui se construit en géante
+/// gazeuse au centre du système.
+///
+/// `rayon`, `luminosite` et `masse` sont les **vraies valeurs**, en unités solaires
+/// (`physique`) : figées ici, un système découvert ne change pas si la table bouge.
+/// Celles du rendu se relisent dans le gabarit du type, à la place `q`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EtoilePlan {
     pub type_nom: String,
     pub temperature: f32,
+    /// Sa place dans les plages de son type, de 0 à 1.
+    pub q: f32,
     pub rayon: f32,
     pub luminosite: f32,
     /// Mode de couronne (0 halo, 1 jets, 2 vent, 3 pulsar, 4 magnétar…).
@@ -81,6 +87,10 @@ pub struct EtoilePlan {
 }
 
 /// Une planète, une lune ou une comète.
+///
+/// `rayon` et `masse` en unités terrestres. **Sauf le rayon d'une comète**, en unités
+/// du monde : un noyau de 10 km est invisible à toute échelle, et on vient voir sa
+/// queue. C'est une exagération assumée, la même que dans le système solaire.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CorpsPlan {
     pub nature: Nature,
@@ -120,7 +130,7 @@ pub enum TypeCorps {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum OrbitePlan {
     /// Sur rails autour d'un foyer (planètes, comètes) : Kepler, départ au
-    /// périastre.
+    /// périastre. `masse_centrale` en masses solaires.
     Rails {
         foyer: FoyerPlan,
         masse_centrale: f32,
@@ -133,7 +143,7 @@ pub enum OrbitePlan {
     /// Cercle autour d'une planète.
     Lune {
         parent: IdCorps,
-        /// Rayon de l'orbite, en unités du monde.
+        /// Rayon de l'orbite, en UA.
         rayon_orbite: f32,
         /// Vitesse angulaire, signée (négative : rétrograde).
         omega: f32,
@@ -153,8 +163,11 @@ pub enum FoyerPlan {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DisquePlan {
     pub genre: GenreDisque,
+    /// Vaut 0 pour le grand disque : son bord interne suit le petit disque de
+    /// l'étoile, dont la taille est celle de l'affichage (`instancier`).
     pub interne_ua: f32,
     pub externe_ua: f32,
+    /// En masses solaires.
     pub masse_centrale: f32,
     /// Amorce les tirages internes du disque à sa construction.
     pub graine: u64,
@@ -194,6 +207,7 @@ mod tests {
         NoeudEtoiles::Etoile(EtoilePlan {
             type_nom: type_nom.to_string(),
             temperature: 5200.0,
+            q: 0.5,
             rayon: 1.3,
             luminosite: 0.8,
             couronne: 0.0,
@@ -226,7 +240,7 @@ mod tests {
         let geante = plan.ajouter(planete(FoyerPlan::Etoile(0), 3.2, TypeCorps::Gazeuse));
         plan.ajouter(CorpsPlan {
             nature: Nature::Lune(RecetteApparence { type_corps: TypeCorps::Glacee, temperature: 120.0, graine: 9 }),
-            orbite: OrbitePlan::Lune { parent: geante, rayon_orbite: 1.7, omega: -0.4, incl: 0.05, phase: 3.0 },
+            orbite: OrbitePlan::Lune { parent: geante, rayon_orbite: 0.03, omega: -0.4, incl: 0.05, phase: 3.0 },
             rayon: 0.05,
             masse: 0.05,
         });

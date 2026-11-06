@@ -14,11 +14,14 @@
 //! - le reste : Wikipédia en anglais et étoiles nommées, **ordres de grandeur** ;
 //!   `// ~` marque une plage que les sources n'encadrent pas entièrement.
 
-// ponytail: `planifier` s'en sert en G3.2 ; l'allow tombe alors.
-#![allow(dead_code)]
-
 /// Température effective du Soleil (K), valeur nominale de l'UAI.
 pub const T_SOLEIL: f32 = 5772.0;
+
+/// Rayon de la Terre et du Soleil en UA (6 371 et 695 700 km pour 149 597 870).
+pub const UA_PAR_RAYON_TERRE: f32 = 4.2588e-5;
+pub const UA_PAR_RAYON_SOLEIL: f32 = 0.0046505;
+/// Masses terrestres dans une masse solaire.
+pub const TERRES_PAR_SOLEIL: f32 = 333_000.0;
 
 /// Plages `(min, max)` d'un type, en unités solaires.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -93,9 +96,11 @@ pub fn plages(nom: &str) -> Option<Plages> {
         "Magnetar" => compact(R_NEUTRONS, (1.0, 2.0), (0.26, 26.0)), // ~
         // Rayon de Schwarzschild, ~2,95 km par masse solaire.
         "Trou noir" => compact((2.1e-5, 6.4e-5), (5.0, 15.0), (0.01, 1.0)), // ~
-        // Hypothétique : 38 à 189 UA, au moins 1 000 masses, « aussi lumineuse
-        // qu'une petite galaxie ».
-        "Quasi-etoile" => compact((8200.0, 40700.0), (1000.0, 10000.0), (1e8, 1e10)), // ~
+        // **Fantaisie assumée, comme la naine noire.** Hypothétique : 38 à 189 UA et
+        // au moins 1 000 masses en théorie, « aussi lumineuse qu'une petite galaxie ».
+        // Elle garde sa taille et sa masse de jeu (1 UA, 20 masses) : son rayon
+        // théorique dépasserait à lui seul le plafond des systèmes (G3.2).
+        "Quasi-etoile" => compact((215.0, 215.0), (20.0, 20.0), (1e8, 1e10)), // ~
         _ => None,
     }
 }
