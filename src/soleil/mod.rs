@@ -100,6 +100,7 @@ pub struct Soleil {
     activite: f32,
     couleur: Vec3,       // teinte de l'étoile (selon son type spectral)
     luminosite: f32,     // intensité lumineuse relative
+    luminosite_vraie: Option<f32>, // en L☉, pour la zone habitable ; sinon, celle du rendu
     couronne: f32,       // extension de la couronne (× rayon) selon le type
     couronne_irreg: f32, // irrégularité (rayons/spicules) de la couronne
     couronne_type: f32,  // 0 = halo, 1 = jets bipolaires (pulsar), 2 = vent (WR)
@@ -361,6 +362,7 @@ impl Soleil {
             activite: 1.0,
             couleur,
             luminosite,
+            luminosite_vraie: None,
             // Étoile chaude/lumineuse -> couronne plus large et plus irrégulière (vents stellaires).
             couronne: (1.25 + 0.14 * luminosite).min(2.1),
             couronne_irreg: ((luminosite - 0.4) / 3.6).clamp(0.0, 1.0),
@@ -649,6 +651,13 @@ impl Soleil {
         self.avec_surface(echelle, contraste, bord)
     }
 
+    /// **Sa vraie luminosité**, en L☉ : la zone habitable et les fiches la lisent, le rendu
+    /// jamais (`conception/genese_v2.md` §7.14).
+    pub fn avec_luminosite_vraie(mut self, l: f32) -> Self {
+        self.luminosite_vraie = Some(l);
+        self
+    }
+
     /// Marque l'étoile comme rémanent compact (pulsar/magnétar/étoile à neutrons) :
     /// aucune zone habitable ne sera tracée (`zone_viable` renvoie `None`).
     pub fn sans_zone_habitable(mut self) -> Self {
@@ -897,7 +906,7 @@ impl Astre for Soleil {
         Some(self.couleur * self.luminosite * self.variation_eclat())
     }
     fn luminosite(&self) -> Option<f32> {
-        Some(self.luminosite * self.variation_eclat())
+        Some(self.luminosite_vraie.unwrap_or(self.luminosite) * self.variation_eclat())
     }
     fn type_etoile(&self) -> Option<&'static str> {
         self.type_etoile
@@ -911,7 +920,7 @@ impl Astre for Soleil {
         if !self.zone_hab {
             return None; // rémanent : pas de zone habitable à tracer
         }
-        let (i, o) = crate::etoile::zone_habitable(self.luminosite);
+        let (i, o) = crate::etoile::zone_habitable(self.luminosite_vraie.unwrap_or(self.luminosite));
         Some((i * crate::etoile::UA, o * crate::etoile::UA)) // UA -> unités monde
     }
 }

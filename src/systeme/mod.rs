@@ -15,6 +15,8 @@ pub struct Systeme {
     lumiere_manuelle: Option<(Vec3, Vec3)>,
     /// Temps de simulation cumulé (secondes) : sert à l'évaluation analytique `f(t)`.
     temps: f64,
+    /// Exposant de compression des distances à l'écran ; 1 = distances vraies (§7.1).
+    compression_distances: f32,
     /// Arbre stellaire hiérarchique (systèmes multiples). Absent = étoile unique fixe.
     arbre: Option<ArbreStellaire>,
     /// Vue par défaut suggérée : (astre à focaliser, distance caméra). Utilisé pour
@@ -88,6 +90,7 @@ impl Systeme {
             astres: Vec::new(),
             lumiere_manuelle: None,
             temps: 0.0,
+            compression_distances: 1.0,
             arbre: None,
             vue: None,
         }
@@ -106,6 +109,21 @@ impl Systeme {
     /// Vue par défaut suggérée, si présente : (astre à focaliser, distance caméra).
     pub fn vue(&self) -> Option<(usize, f32)> {
         self.vue
+    }
+
+    /// Les distances de ce système sont comprimées à l'écran (`etoile::monde_de_ua`).
+    pub fn definir_compression_distances(&mut self, p: f32) {
+        self.compression_distances = p;
+    }
+
+    /// Une vraie distance, en position à l'écran.
+    pub fn monde_de_ua(&self, ua: f32) -> f32 {
+        crate::etoile::monde_de_ua(ua, self.compression_distances)
+    }
+
+    /// Une position à l'écran, en vraie distance : ce que la fiche et l'habitabilité lisent.
+    pub fn ua_de_monde(&self, monde: f32) -> f32 {
+        crate::etoile::ua_de_monde(monde, self.compression_distances)
     }
 
     /// Rayon englobant approximatif (unités monde), pour cadrer la caméra sur un
@@ -369,7 +387,7 @@ impl Systeme {
         (0..self.astres.len())
             .filter_map(|i| {
                 let t = self.astres[i].type_etoile()?;
-                Some((t, (self.position(i) - p).length() / crate::etoile::UA))
+                Some((t, self.ua_de_monde((self.position(i) - p).length())))
             })
             .collect()
     }

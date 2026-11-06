@@ -110,8 +110,9 @@ impl Systeme {
                 }
                 if let Some((interne, externe)) = a.zone_viable() {
                     let c = a.corps().position;
-                    dessiner_cercle(c, interne, vert, cam);
-                    dessiner_cercle(c, externe, vert, cam);
+                    let ua = crate::etoile::UA;
+                    dessiner_cercle(c, self.monde_de_ua(interne / ua), vert, cam);
+                    dessiner_cercle(c, self.monde_de_ua(externe / ua), vert, cam);
                 }
                 if let Some(l) = a.luminosite() {
                     l_tot += l;
@@ -121,7 +122,7 @@ impl Systeme {
             }
             if nb_et >= 2 {
                 let (i, o) = crate::etoile::zone_habitable(l_tot);
-                let (iw, ow) = (i * crate::etoile::UA, o * crate::etoile::UA);
+                let (iw, ow) = (self.monde_de_ua(i), self.monde_de_ua(o));
                 if iw > 2.0 * r_max {
                     let cyan = Color::new(0.3, 0.85, 0.85, 0.4);
                     dessiner_cercle(Vec3::ZERO, iw, cyan, cam);

@@ -160,7 +160,7 @@ pub fn fiche(sys: &Systeme, idx: usize) -> Option<Fiche> {
     // La distance qui compte est celle du corps **hôte** : pour une lune, sa
     // planète.
     let porteur = sys.parent_de(idx).unwrap_or(idx);
-    let distance_ua = sys.position(porteur).length() / crate::etoile::UA;
+    let distance_ua = sys.ua_de_monde(sys.position(porteur).length());
     let hab = habitabilite(sys, categorie, distance_ua);
     let classe_base = sys.classe_planete_de(idx);
     let (classe, raisons) = match classe_base {
@@ -289,6 +289,18 @@ mod tests {
             let f = fiche(&sys, i).expect("fiche");
             assert_eq!(f.habitabilite, attendu, "à {ua:.3} UA");
         }
+    }
+
+    // **La fiche donne la vraie distance**, et juge sur elle, même si l'écran comprime :
+    // à 4 UA vraies, affichées à 2, une planète de notre Soleil reste trop froide.
+    #[test]
+    fn la_fiche_lit_la_vraie_distance_quand_l_ecran_comprime() {
+        let mut sys = avec_soleil();
+        sys.definir_compression_distances(0.5);
+        let i = poser(&mut sys, Categorie::Planete, 2.0, None, None);
+        let f = fiche(&sys, i).expect("fiche");
+        assert!((f.distance_ua - 4.0).abs() < 1e-3, "{}", f.distance_ua);
+        assert_eq!(f.habitabilite, Habitabilite::TropFroid);
     }
 
     // **La zone suit la luminosité.** Une étoile quatre fois plus lumineuse

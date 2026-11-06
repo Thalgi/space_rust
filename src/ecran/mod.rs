@@ -10,7 +10,7 @@ mod defilement;
 mod clic;
 mod designation;
 mod enveloppes;
-mod fiche;
+pub(crate) mod fiche;
 mod fils;
 mod icone;
 mod marqueur;

@@ -73,6 +73,8 @@ pub struct Planete {
     // Ce corps tient la place d'une étoile, et rayonne cette luminosité.
     // Voir [`Planete::au_centre_du_systeme`].
     role_central: Option<f32>,
+    // Sa vraie luminosité, pour la zone habitable : voir `Soleil::avec_luminosite_vraie`.
+    luminosite_vraie: Option<f32>,
     // Ce corps est une comète. Voir [`Planete::en_comete`].
     comete: bool,
     // Maillage du noyau cométaire, en rayon unité. Vide pour tout le reste.
@@ -143,6 +145,7 @@ impl Planete {
             orbite_kep: None,
             foyer: Foyer::Barycentre,
             role_central: None,
+            luminosite_vraie: None,
             comete: false,
             noyau: (Vec::new(), Vec::new()),
             preset_comete: 0,
@@ -210,6 +213,12 @@ impl Planete {
     /// fiche de planète y annonçait **0 K**.
     pub fn au_centre_du_systeme(mut self, luminosite: f32) -> Self {
         self.role_central = Some(luminosite);
+        self
+    }
+
+    /// Sa vraie luminosité, en L☉, quand il tient la place d'une étoile.
+    pub fn avec_luminosite_vraie(mut self, l: f32) -> Self {
+        self.luminosite_vraie = Some(l);
         self
     }
 
@@ -391,7 +400,7 @@ impl Astre for Planete {
     /// d'une étoile ([`Planete::au_centre_du_systeme`]). C'est elle que somment
     /// `luminosite_totale`, la zone habitable et la fiche d'astre.
     fn luminosite(&self) -> Option<f32> {
-        self.role_central
+        self.luminosite_vraie.or(self.role_central)
     }
     /// Lumière jetée sur le système, dérivée de la **teinte réelle** du corps —
     /// jamais d'une couleur posée à côté, sinon retoucher son apparence

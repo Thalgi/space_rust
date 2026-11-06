@@ -142,8 +142,8 @@ pub trait Astre {
         None
     }
 
-    /// Luminosité scalaire (intensité relative) si l'astre est une étoile. Sert au
-    /// calcul de la zone habitable combinée (circumbinaire) des systèmes multiples.
+    /// Luminosité scalaire si l'astre est une étoile. **Physique, pas de rendu** : elle ne
+    /// sert qu'à la zone habitable et à la fiche ; l'éclairage passe par [`Astre::lumiere`].
     fn luminosite(&self) -> Option<f32> {
         None
     }

@@ -10,7 +10,6 @@
 use super::instancier::instancier;
 use super::planifier::planifier;
 use crate::astre::Categorie;
-use crate::etoile;
 use crate::systeme::Systeme;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -56,12 +55,15 @@ impl Bilan {
             let rayon = sys.rayon_de(i).unwrap_or(0.0);
             match sys.categorie_de(i) {
                 Some(Categorie::Planete) => {
-                    let d = sys.position(i).length() / etoile::UA;
+                    let d = sys.ua_de_monde(sys.position(i).length());
                     if d < 1e-4 {
                         continue; // la naine brune au centre du système
                     }
                     planetes += 1;
                     distances.push(d);
+                    if let Some(f) = crate::ecran::fiche::fiche(sys, i) {
+                        self.compter("zone d'une planete (fiche)", f.habitabilite.libelle());
+                    }
                     self.ajouter("rayon d'une planete", rayon);
                     if let Some(c) = sys.classe_planete_de(i) {
                         self.compter("classe d'une planete", format!("{c:?}"));

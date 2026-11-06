@@ -36,7 +36,7 @@ sur la V2 (conception §7.12, §7.13).
 | G11 | Étalonnage, la V3 devient principale | |
 
 **Commits du chantier** : `da0a091` (G1.1), `c812051` (G1.2), `7b166f1`
-(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), `ffd19fa` (G2.2), `19646a3` (clôture de G2), `c49fe15` (G3.1), G3.2 (dernier commit).
+(G1.3), `c054c6f` (G1.4), `abc7366` (G1.5), `635d555` (clôture de G1), `2b6ef58` (G2.1), `ffd19fa` (G2.2), `19646a3` (clôture de G2), `c49fe15` (G3.1), `5d46e36` (précisions de G0), `a4f35c2` (G3.2), G3.3 (dernier commit).
 
 ---
 
@@ -585,8 +585,8 @@ joueur.
 | Sous-lot | Contenu | État |
 |---|---|---|
 | **G3.1** | La table physique des 29 types, avec ses sources | ✅ `c49fe15` |
-| **G3.2** | `planifier` sur les vraies valeurs ; le banc doit montrer des écarts voulus | ✅ |
-| **G3.3** | `echelle.json` et `instancier` : la vérité dans le plan, grossissement et compression à l'affichage | |
+| **G3.2** | `planifier` sur les vraies valeurs ; le banc doit montrer des écarts voulus | ✅ `a4f35c2` |
+| **G3.3** | La zone habitable vraie ; `echelle.json` et `instancier` : grossissement et compression à l'affichage | ✅ |
 | **G3.4** | Les contrôles : précision des positions, durée des trajets, cadrage, jugement à l'écran ; passage sur le petit PC | |
 
 ---
@@ -662,7 +662,7 @@ faux d'un facteur 2 change L d'un facteur 4).
 
 ---
 
-### G3.2 — planifier sur les vraies valeurs (2026-11-06)
+### G3.2 — planifier sur les vraies valeurs (2026-11-06, `a4f35c2`)
 
 **Fond.** Le plan porte désormais la **vérité physique** : distances en UA, étoiles en
 unités solaires, planètes et lunes en unités terrestres. Les températures, l'étalement,
@@ -719,7 +719,7 @@ de la G, lave autour de la O et de la supergéante). **Défauts relevés** :
 
 - ⚠️ **L'anneau de zone habitable et la ligne de zone de la fiche sont faux en V3** : ils
   lisent la luminosité de rendu (`Soleil::zone_viable`, `systeme/rendu.rs`,
-  `ecran/fiche.rs`). À corriger en premier en G3.3.
+  `ecran/fiche.rs`). **Corrigé en G3.3.**
 - **Le cadrage par défaut vise les comètes** : leur apoastre occupe l'écran, le système
   intérieur est un point. Comme en V2, mais plus marqué. À juger en G3.4.
 - **Toutes les étoiles d'un même type de graine se ressemblent à ce cadrage** : même graine,
@@ -745,3 +745,74 @@ distances. G3.4 : les contrôles et le jugement à l'écran.
 
 **Vérifié** : 1 031 tests verts (+ 13 de `mhd`), clippy 0, banc de 5 000 graines et captures
 sans erreur.
+
+---
+
+### G3.3 — la zone habitable vraie et le réglage d'affichage (2026-11-06)
+
+**Fond.** Deux choses. La zone habitable de la V3, fausse depuis G3.2, lit enfin la vraie
+luminosité. Et la conversion du plan vers l'écran, écrite en dur en G3.2, se règle
+désormais **sans recompiler** dans `assets/echelle.json`.
+
+**Forme.**
+
+- **La vraie luminosité** : `Soleil` et `Planete` (naine brune au centre) gagnent
+  `luminosite_vraie: Option<f32>` et `avec_luminosite_vraie`. `Astre::luminosite` et
+  `zone_viable` la lisent, sinon celle du rendu : la V1 et la V2, qui ne la posent pas, ne
+  changent pas. C'est sûr parce que **seuls l'anneau et la fiche lisent `Astre::luminosite`** ;
+  l'éclairage passe par `lumiere()`, qui garde la luminosité de rendu.
+- **`src/genese_v2/echelle.rs` et `assets/echelle.json`** :
+
+  | Clé | Valeur | Effet |
+  |---|---:|---|
+  | `grossissement_corps` | 5,0 | rayons des planètes et des lunes, orbites des lunes |
+  | `compression_etoiles` | 0,6 | exposant du rayon vrai des étoiles (les objets compacts gardent leur taille de rendu) |
+  | `compression_distances` | 1,0 | exposant des distances autour de 1 UA ; 1 = distances vraies |
+
+  Relu à chaque système construit : le réglage vaut dès le système suivant (touche G). Un
+  fichier absent ou illisible retombe sur les valeurs par défaut (illisible : message en
+  console). `deny_unknown_fields` : une faute de frappe dans une clé ne passe pas en silence.
+- **`etoile::monde_de_ua` et `ua_de_monde`** : la seule formule de compression, utilisée
+  par `Echelle` et par `Systeme`. `Systeme` retient l'exposant (1 par défaut, donc V1 et V2
+  inchangées) : la **fiche** (`distance_ua`), `etoiles_exposees` et les **anneaux** repassent
+  par lui.
+- **`instancier.rs`** : tout passe par `&Echelle`. Une orbite comprimée garde **la période de
+  sa vraie distance** (`Orbite { a: ech.monde(a_ua), ..vraie }`), pour les planètes comme pour
+  les paires d'étoiles.
+- **`banc.rs`** : nouvelle section « zone d'une planete (fiche) », lue dans la vraie fiche.
+
+**Écarts avec ce qui était prévu.**
+
+- **« Réglable par système » (§7.1) n'est pas fait** : un seul fichier, pour tous les systèmes
+  générés. Aucun système nommé ne passe encore par le plan ; une surcharge par système
+  viendra avec le premier (voir §7.14).
+- **`omega_lune` garde la constante `ECHELLE_CORPS`** dans `planifier` : elle y cale la période
+  de Kepler sur notre Lune, ce n'est pas un réglage d'affichage. Changer le grossissement ne
+  change donc pas la période des lunes.
+- **Limite connue de la compression** : les particules de ceinture tournent selon Kepler à
+  leur distance **affichée**, les planètes selon leur vraie distance. Sans effet à
+  `compression_distances = 1`, la valeur livrée.
+
+**Ce que dit le banc** (zone d'une planète, 3 000 graines) : 11,2 % en zone tempérée, contre
+12,6 % en V1 (les vraies températures, voulu). **Le branchement ne se teste pas sans fenêtre** :
+`Soleil::new` charge des matériaux GPU. Il a été vérifié au banc, jeu lancé, par sabotage :
+sans `.avec_luminosite_vraie`, la part tombe à **7,9 %**.
+
+**Vu à l'écran** : autour d'une G, l'anneau vert encadre 1 UA ; autour d'une O, il sort du champ
+(vers 240 UA pour 100 000 L☉, bien au-delà des planètes : il n'y a pas de monde tempéré) ;
+avec `compression_distances` à 0,6, anneaux et orbites se déplacent ensemble.
+
+**Tests.**
+
+| Test | Ce qu'il garde | Sabotage qui le fait rougir |
+|---|---|---|
+| `le_fichier_livre_vaut_le_defaut` | le fichier se lit et vaut le défaut | fichier modifié |
+| `un_champ_inconnu_est_refuse` | une faute de frappe ne passe pas | `deny_unknown_fields` retiré |
+| `la_compression_tourne_autour_d_une_ua` | l'aller-retour ; 1 UA fixe ; exposant 1 sans effet | pas de compression ; retour faux |
+| `la_fiche_lit_la_vraie_distance_quand_l_ecran_comprime` | distance et verdict de la fiche, vrais | fiche sur la distance affichée ; sans conversion |
+| `comprimer_les_distances_ne_change_pas_les_periodes` | la période ; l'orbite comprimée ; égale à la V1 sans compression | période de la distance affichée ; orbite non comprimée |
+| `la_taille_des_etoiles_a_l_ecran`, `un_corps_a_le_rayon_du_systeme_solaire` (repris) | les réglages sont lus | réglage ignoré, pour chacun |
+
+**Reste.** G3.4 : les contrôles et le cadrage.
+
+**Vérifié** : 1 036 tests verts (+ 13 de `mhd`), clippy 0, banc et captures sans erreur.

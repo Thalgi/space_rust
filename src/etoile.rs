@@ -323,6 +323,17 @@ pub fn temp_equilibre(luminosite: f32, distance_ua: f32) -> f32 {
     278.0 * luminosite.powf(0.25) / distance_ua.max(0.01).sqrt()
 }
 
+/// **Une distance vraie à l'écran**, comprimée par l'exposant `p` autour de 1 UA.
+/// `p = 1` : les distances vraies (`conception/genese_v2.md` §7.1).
+pub fn monde_de_ua(ua: f32, p: f32) -> f32 {
+    ua.powf(p) * UA
+}
+
+/// L'inverse de [`monde_de_ua`] : la vraie distance d'une position à l'écran.
+pub fn ua_de_monde(monde: f32, p: f32) -> f32 {
+    (monde / UA).powf(1.0 / p)
+}
+
 /// Bornes (interne, externe) de la zone habitable **en UA** : eau liquide
 /// (~320 K → ~260 K). Se déplace avec la luminosité de l'étoile.
 pub fn zone_habitable(luminosite: f32) -> (f32, f32) {

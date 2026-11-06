@@ -8,6 +8,7 @@
 pub mod alea;
 pub mod apparences;
 pub mod banc;
+pub mod echelle;
 pub mod instancier;
 pub mod physique;
 pub mod plan;

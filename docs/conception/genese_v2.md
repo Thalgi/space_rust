@@ -573,6 +573,13 @@ changements d'API (`Systeme`, `Planete`…) et dont les tests restent.
   Kuiper partirait à 68 000 unités pour une B, 675 000 pour une O (caméra : 30 000). Une
   O n'a donc que des mondes brûlés : du minerai et des habitats en Lagrange, jamais de
   planète tempérée.
+- **Où cela se règle (G3.3)** : `assets/echelle.json`, relu à chaque système construit.
+  `grossissement_corps` (5), `compression_etoiles` (0,6), `compression_distances` (1 : distances
+  vraies). La compression tourne autour de 1 UA et ne touche ni les périodes, ni les
+  températures, ni la fiche. **Un seul fichier pour l'instant** : la surcharge « par système »
+  du §7.1 viendra avec le premier système nommé qui passera par le plan.
+- **La vraie luminosité ne sert qu'aux calculs (G3.3)** : `Astre::luminosite` (zone habitable,
+  fiche) lit la vraie, `Astre::lumiere` (éclairage) celle de rendu.
 - **Ouvert, pour G7** : Kuiper n'est pas obligatoire. Le §7.8 ne garantit qu'**une ceinture
   au moins, de n'importe quel genre** ; G3 garde la règle de la V1, G7 décidera.
 
